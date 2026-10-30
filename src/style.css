@@ -520,3 +520,11 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
   font-size: 1.7rem; font-weight: 900; color: var(--ink-2);
 }
 .symwrap.more .sym-more { display: flex; }
+.ins-after { display: flex; gap: 8px; align-items: flex-start; font-weight: 700; color: var(--teal-deep); background: var(--teal-soft); border-radius: 12px; padding: 10px 12px; }
+.ins-after .ic { margin-top: 2px; }
+.offline-status { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; font-size: .92rem; font-weight: 700; }
+.offline-status .ic { flex: none; margin-top: 1px; }
+.offline-status.ready { background: var(--teal-soft); color: var(--teal-deep); }
+.offline-status.wait { background: var(--sun-soft); color: var(--sun-ink); }
+/* 안내가 길어져도 「알겠어요」는 늘 보이게 */
+.modal.install #ins-ok { position: sticky; bottom: 0; box-shadow: 0 4px 0 var(--teal-deep), 0 -10px 14px 4px var(--card); }

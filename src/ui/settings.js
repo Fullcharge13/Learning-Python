@@ -1,6 +1,7 @@
 // 설정: 소리, 하루 목표, 이름, 저장 내보내기·가져오기, 판 번호
 import { DAILY_GOALS } from "../rules.js";
-import { esc, toast, dialog, celebrate } from "./dom.js";
+import { esc, toast, dialog, celebrate, icon } from "./dom.js";
+import { collectOfflineStatus } from "../offline.js";
 import { applyGoalChange } from "../finish.js";
 import { newSave } from "../save.js";
 import { tabBar, bindTabs, statusBar } from "./nav.js";
@@ -43,6 +44,7 @@ export function render(root, ctx) {
           <label class="btn ghost" for="import">저장 가져오기</label>
           <input id="import" type="file" accept="application/json,.json" class="sr">
         </div>
+        <p class="offline-status wait" id="offline" role="status" aria-live="polite">${icon("review")}<span>오프라인 준비 상태를 확인하는 중…</span></p>
       </section>
       <section class="panel">
         <h2>홈 화면에 추가</h2>
@@ -54,6 +56,17 @@ export function render(root, ctx) {
     ${tabBar("settings")}
   </div>`;
   bindTabs(root, ctx);
+
+  // 오프라인 준비 상태(판정 C32): 서비스 작업자 + Pyodide 저장본. 색만이 아니라 아이콘과 글로 알림
+  const off = root.querySelector("#offline");
+  collectOfflineStatus().then((r) => {
+    if (!off.isConnected) return;
+    off.className = "offline-status " + (r.ready ? "ready" : "wait");
+    off.innerHTML = r.ready
+      ? `${icon("check")}<span>오프라인 준비 완료 ✓</span>`
+      : `${icon("review")}<span>아직 준비 중이에요 — 인터넷이 될 때 직접 작성 문제를 한 번 실행하면 준비돼요</span>`;
+    off.dataset.ready = String(r.ready);
+  });
 
   const setSettings = (patch) => {
     const cur = ctx.save;

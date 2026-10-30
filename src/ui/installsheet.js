@@ -1,6 +1,7 @@
 // 「홈 화면에 추가」 안내 시트: 리아 + 그림 3단계 + 이유
 import { riaSVG } from "../ria.js";
-import { el, esc } from "./dom.js";
+import { el, esc, icon } from "./dom.js";
+import { INSTALL_AFTER_TEXT } from "../install.js";
 
 const SHARE = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><rect x="6" y="6" width="36" height="36" rx="10" fill="#fff" stroke="#22304A" stroke-width="2.5"/><path d="M24 12v17M18 18l6-6 6 6" fill="none" stroke="#2F7BE0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 23h-2v13h18V23h-2" fill="none" stroke="#2F7BE0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ADD = `<svg viewBox="0 0 48 48" width="48" height="48" aria-hidden="true"><rect x="6" y="6" width="36" height="36" rx="10" fill="#fff" stroke="#22304A" stroke-width="2.5"/><rect x="14" y="14" width="20" height="20" rx="5" fill="none" stroke="#22304A" stroke-width="2.5"/><path d="M24 19v10M19 24h10" stroke="#22304A" stroke-width="2.5" stroke-linecap="round"/></svg>`;
@@ -21,6 +22,7 @@ function safariBody(outfit) {
         </div>
         <h2 id="ins-title">홈 화면에 추가하기</h2>
         <ol class="ins-steps">${STEPS.map(([svg, text], i) => `<li><span class="ins-no" aria-hidden="true">${i + 1}</span>${svg}<span>${esc(text)}</span></li>`).join("")}</ol>
+        <p class="ins-after">${icon("play")}<span>${esc(INSTALL_AFTER_TEXT)}</span></p>
         <p class="ins-why">${esc(WHY)}</p>`;
 }
 

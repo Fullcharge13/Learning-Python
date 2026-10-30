@@ -7,8 +7,8 @@
 // - 게임 저장본 이름에 판 번호와 내용 지문이 들어 있어, 새 판을 올리면 활성화 때 옛 저장본을 지운다.
 //   Pyodide 저장본은 Pyodide 버전으로만 이름이 바뀐다(판을 올려도 10MB를 다시 받지 않게).
 
-const VERSION = "v0.1";
-const GAME_CACHE = "ria-game-v0.1-f4693fddf8";
+const VERSION = "v0.2";
+const GAME_CACHE = "ria-game-v0.2-51342a6e3f";
 const PY_CACHE = "ria-pyodide-314.0.7";
 const PYODIDE_PREFIX = new URL("https://cdn.jsdelivr.net/npm/pyodide@314.0.7/", self.location.href).href;
 const GAME_FILES = ["./", "index.html", "manifest.webmanifest", "icons/apple-touch-icon.png", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];

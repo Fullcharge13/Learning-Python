@@ -5,6 +5,7 @@ import { riaSVG } from "../ria.js";
 import { esc, icon, bar, codeBlock, dialog } from "./dom.js";
 import { mountWrite } from "./write.js";
 import { shuffleChoices, shuffleOrder, newSeed } from "../shuffle.js";
+import { isCodey } from "../textkind.js";
 
 const TOUCH = new Set(["choice", "blank", "order", "check"]);
 const GUARD_MS = 400;
@@ -36,7 +37,6 @@ function stdinNote(stdin) {
   return `<p class="stdin-note">${icon("send")}<span>입력하는 값: ${vals.map((v) => `<code>${esc(v)}</code>`).join(" ")}</span></p>`;
 }
 
-const isCodey = (s) => /[()"'=+*<>#]|print/.test(s);
 
 export function render(root, ctx, params = {}) {
   const review = !!params.review;

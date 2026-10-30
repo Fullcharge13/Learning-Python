@@ -4,7 +4,7 @@
 
 1. 배포용 빌드(python3 build.py → dist/)를 검사한다.
    - dist/index.html에 <script src=·<link rel="stylesheet">가 없음(Pyodide는 작업자 안에서 동적으로 받음)
-   - 압축 전 700KB 이하(판정 C28), 버전 문자열 v0.1, 배포용 Pyodide 주소(C19)
+   - 압축 전 700KB 이하(판정 C28), 버전 문자열(src/app.js의 VERSION), 배포용 Pyodide 주소(C19)
    - manifest.webmanifest 필수 칸, 아이콘 PNG가 있고 크기가 맞음, sw.js
    - 빌드가 자기 파일만 지우고 새로 씀, docs/img/는 --update-docs-icons 때만 바뀜
    - node가 없으면 알아보기 쉬운 오류로 멈춤, app.js가 RIA_WORKER_URL을 안 읽으면 멈춤
@@ -22,6 +22,7 @@ import http.server
 import importlib.util
 import json
 import os
+import re
 import shutil
 import socketserver
 import struct
@@ -31,6 +32,8 @@ import threading
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+APP_VERSION = re.search(r'VERSION = "(v[0-9.]+)"', open(os.path.join(ROOT, "src", "app.js"), encoding="utf-8").read()).group(1)
+
 DIST = os.path.join(ROOT, "dist")
 OUT = os.path.join(ROOT, "tests", "out")
 DEV_OUT = os.path.join(OUT, "dist-dev")
@@ -87,7 +90,7 @@ def test_html_static():
     assert "<script src=" not in html and "<script type=\"module\" src=" not in html
     assert 'rel="stylesheet"' not in html, "CSS must be inlined"
     assert raw <= MAX_RAW, "too big: %d bytes" % raw
-    assert "v0.1" in html
+    assert APP_VERSION in html
     assert CDN in html, "deploy build must point Pyodide at the CDN (C19)"
     assert "/node_modules/" not in html
     assert "RIA_WORKER_URL" in html and "RIA_RUNNER_SRC" in html
@@ -124,7 +127,7 @@ def test_sw_static():
     sw = _read(os.path.join(DIST, "sw.js"))
     assert CDN in sw
     assert "__RIA_" not in sw, "placeholders left in sw.js"
-    assert "v0.1" in sw
+    assert APP_VERSION in sw
     assert "NETWORK_TIMEOUT_MS = 4000" in sw
 
 
@@ -246,7 +249,7 @@ class _Browser:
     def home(self):
         pg = self.page
         pg.wait_for_selector(".screen.splash #go", timeout=20_000)
-        assert "v0.1" in pg.inner_text(".screen.splash .ver")
+        assert APP_VERSION in pg.inner_text(".screen.splash .ver")
         pg.click("#go")
         pg.wait_for_selector("#app[data-screen=home]", timeout=10_000)
 

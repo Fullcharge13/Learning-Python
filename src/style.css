@@ -551,3 +551,5 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .ls-main { display: grid; font-size: .9rem; line-height: 1.4; }
 .ls-main small { font-size: .78rem; }
 .course-next { margin: 4px 0 0; }
+/* 정답 공개: 코드·여러 줄 정답은 줄바꿈 그대로 한 덩어리로 */
+.answer .mono { display: block; margin-top: 4px; white-space: pre-wrap; font-weight: 700; }

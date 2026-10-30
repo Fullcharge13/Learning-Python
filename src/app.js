@@ -20,9 +20,11 @@ import * as badges from "./ui/badges.js";
 import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 
-export const VERSION = "v0.1";
+export const VERSION = "v0.2";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings };
-const CHAPTER_FILES = [1, 2, 3];
+// 있는 장 파일만 불러온다(없는 번호는 건너뜀). chN.js를 더해도 여기는 그대로 둔다.
+const MAX_CHAPTERS = 30;
+const CHAPTER_FILES = Array.from({ length: MAX_CHAPTERS }, (_, i) => i + 1);
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
 function pickStorage() {

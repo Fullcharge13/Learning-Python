@@ -18,4 +18,20 @@ export const CONCEPTS = [
   { id: "elif", name: "elif로 여러 갈래", chapter: 3 },
   { id: "compare", name: "비교 연산", chapter: 3 },
   { id: "logic", name: "and·or·not 논리 연산", chapter: 3 },
+  // 4장 함수
+  { id: "call", name: "함수 부르기", chapter: 4 },
+  { id: "def", name: "함수 만들기", chapter: 4 },
+  { id: "param", name: "매개변수", chapter: 4 },
+  { id: "return", name: "반환값", chapter: 4 },
+  // 5장 반복문
+  { id: "while", name: "while 반복", chapter: 5 },
+  { id: "for", name: "for 반복", chapter: 5 },
+  { id: "range", name: "range로 범위 만들기", chapter: 5 },
+  { id: "accum", name: "누적 패턴", chapter: 5 },
+  { id: "break", name: "break·continue로 멈추기·건너뛰기", chapter: 5 },
+  // 6장 문자열 다루기
+  { id: "index", name: "인덱스", chapter: 6 },
+  { id: "slice", name: "슬라이싱", chapter: 6 },
+  { id: "strmethod", name: "문자열 메서드", chapter: 6 },
+  { id: "strloop", name: "문자열 반복", chapter: 6 },
 ];

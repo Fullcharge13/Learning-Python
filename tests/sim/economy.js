@@ -9,11 +9,12 @@
 //   직접 작성은 첫 제출 오류 30% → 고쳐서 통과(fixed_error_pass). 첫 제출 오류도 실수로 보아 실수 없는 레슨이 아님.
 //   힌트 없이 통과 50%(오류 여부와 따로).
 //   틀린 문제는 markConcept(wrong) 후 다시 풀어 맞힘(재도전은 복습 퀘스트에 세지 않음). 맞힌 문제는 markConcept(right).
-// - 15개 레슨(장마다 5개, 마지막은 장 평가)을 차례로. 다 끝낸 뒤 한 판은 복습 목록이 있으면 복습(5문제, 5 XP),
+// - 실제 레슨 표(data/lessons/ch*.js)를 차례로(--lessons N 이면 앞의 N개; 15면 v0.1 재현). 다 끝낸 뒤 한 판은 복습 목록이 있으면 복습(5문제, 5 XP),
 //   없으면 처음 레슨부터 다시 하기(XP 절반, 바이트 0).
-// - 2·3장 레슨 데이터는 아직 없어서 레슨 id와 개념만 흉내 낸다(경제에는 id·장 평가 여부·개념만 쓰임).
+// - 레슨마다 id, isExam, 쓰기 문제의 개념만 읽어 쓴다(터치 문제도 그 개념으로 표시).
 // - 쇼핑은 학습한 날 끝에: 보호권이 0개이고 200바이트 이상이면 보호권 1개를 먼저, 그다음 살 수 있는 가장 싼 의상.
 //   (「strict」 방식: 보호권이 0개면 의상을 사지 않고 보호권 값을 먼저 모음 — 비교용으로만 계산)
+import { readdirSync } from "node:fs";
 import { newSave } from "../../src/save.js";
 import { lessonReward, reviewReward, earnXp, rollDay, buyFreeze, markConcept, FREEZE_PRICE } from "../../src/rules.js";
 import { ensureQuests, tick } from "../../src/quests.js";
@@ -28,18 +29,26 @@ const TOUCH_ITEMS = 6;
 const HINTFREE_P = 0.5;
 const WRITE_ERROR_P = 0.3;
 
-const CONCEPTS = {
-  1: ["print", "string", "arith", "comment"],
-  2: ["variable", "input", "convert", "fstring"],
-  3: ["compare", "if", "elif", "logic"],
-};
-const COURSE = [];
-for (let ch = 1; ch <= 3; ch++) {
-  for (let n = 1; n <= 5; n++) {
-    const isExam = n === 5;
-    COURSE.push({ id: `${ch}-${n}`, isExam, concepts: isExam ? CONCEPTS[ch] : [CONCEPTS[ch][n - 1]] });
+// 실제 레슨 표(data/lessons/ch*.js)를 장 번호순으로 읽는다. 경제에는 id·장 평가 여부·쓰기 문제의 개념만 쓰인다.
+async function loadCourse() {
+  const dir = new URL("../../data/lessons/", import.meta.url);
+  const files = readdirSync(dir).filter((f) => /^ch\d+\.js$/.test(f))
+    .sort((a, b) => parseInt(a.slice(2)) - parseInt(b.slice(2)));
+  const course = [];
+  for (const f of files) {
+    try {
+      const mod = await import(new URL(f, dir).href);
+      for (const l of mod.LESSONS) {
+        const w = (l.items || []).find((it) => it.type === "write");
+        course.push({ id: l.id, isExam: !!l.isExam, concepts: [w ? w.concept : "print"] });
+      }
+    } catch (e) {
+      console.error(`(건너뜀: ${f} — ${e.message})`);
+    }
   }
+  return course;
 }
+const FULL_COURSE = await loadCourse();
 
 function mulberry32(a) {
   return function () {
@@ -77,7 +86,8 @@ function cheapestOutfit(save) {
   return forSale[0] || null;
 }
 
-export function runSim(seed, { policy = "plan" } = {}) {
+export function runSim(seed, { policy = "plan", lessons = null } = {}) {
+  const COURSE = lessons ? FULL_COURSE.slice(0, lessons) : FULL_COURSE;
   const rng = mulberry32(seed);
   const skips = pickSkips(rng);
   let s = newSave();
@@ -212,6 +222,7 @@ export function runSim(seed, { policy = "plan" } = {}) {
 
   return {
     seed,
+    courseLength: COURSE.length,
     activeDays,
     bytesPerActiveDay: Math.round((earned / activeDays) * 10) / 10,
     bytesPerNewLessonDay: Math.round((newPhaseEarned / newPhaseDays) * 10) / 10,
@@ -239,9 +250,12 @@ function median(xs) {
 }
 
 function main() {
+  const li = process.argv.indexOf("--lessons");
+  const lessons = li > 0 ? parseInt(process.argv[li + 1]) : null;
+  console.log(`레슨 ${lessons ? Math.min(lessons, FULL_COURSE.length) : FULL_COURSE.length}개로 시뮬레이션 (불러온 전체 ${FULL_COURSE.length}개)\n`);
   const seeds = Array.from({ length: 12 }, (_, i) => i + 1);
-  const runs = seeds.map((sd) => runSim(sd));
-  const strict = seeds.map((sd) => runSim(sd, { policy: "strict" }));
+  const runs = seeds.map((sd) => runSim(sd, { lessons }));
+  const strict = seeds.map((sd) => runSim(sd, { policy: "strict", lessons }));
   const med = (f, rs = runs) => { const m = median(rs.map(f)); return m === null ? "-" : Math.round(m * 10) / 10; };
   const head = ["seed", "B/active day", "B/day (new lessons)", "course done day", "1st outfit day", "1st outfit (strict)",
     "freezes bought/used", "goal-miss days", "streak broken", "final streak", "outfits", "milestones", "skip days", "bytes lesson/quest/milestone"];

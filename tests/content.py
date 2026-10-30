@@ -2,7 +2,8 @@
 """레슨 내용 자동 점검 (계획 작업 6, 설계서 4장).
 
 실행: python3 tests/content.py          있는 장(data/lessons/ch*.js)만 점검
-      python3 tests/content.py --full   1~3장 15개 레슨이 모두 있어야 통과
+      python3 tests/content.py --full N 정확히 1~N장(N×5개 레슨)이 있어야 통과
+                                        (N을 빼면 있는 장 파일 수. 장 파일은 늘 1장부터 이어져야 함)
 
 데이터는 node로 ES 모듈을 import해 JSON으로 꺼낸다(실행 기록 C8).
 코드는 src/py/runner.py의 run()으로 CPython에서 실제로 돌린다(앱의 Pyodide 작업자와 같은 파일).
@@ -35,7 +36,6 @@ from runner import run  # noqa: E402
 
 LESSON_DIR = os.path.join(ROOT, "data", "lessons")
 CONCEPTS_FILE = os.path.join(ROOT, "data", "concepts.js")
-CHAPTERS_EXPECTED = 3
 LESSONS_PER_CHAPTER = 5
 RUN_SECONDS = 5       # 점검기에서 실행 한 번의 제한 시간
 
@@ -64,29 +64,49 @@ TOUCH = {"choice", "blank", "order"}
 
 # ── 장마다 아직 배우지 않은 문법 막기 ─────────────────────────────────────
 # 레슨 코드(카드·문제·정답·시작 코드)에서 문법 오류 없이 읽히는 것만 검사한다.
-# 모든 장(1~3)에서 금지: 반복문·함수 정의·import·목록/사전·예외 처리 등(4장 이후 내용).
+# FORBID_ALL: 장 표에 없는 장의 기본값(가장 엄격). 반복문·함수 정의·import·목록/사전·예외 처리 등.
+# "ForNonRange"는 ast 마디가 아닌 가짜 이름: range(…)가 아닌 것(문자열, split() 결과)을 for로 도는 것.
 FORBID_ALL = {
     "For", "While", "FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef", "Import", "ImportFrom",
     "List", "Dict", "Set", "Tuple", "ListComp", "DictComp", "SetComp", "GeneratorExp",
     "Try", "With", "Return", "Yield", "Global", "Nonlocal", "Delete", "Assert", "Raise", "Match",
+    "ForNonRange", "Slice",
 }
-FORBID_BY_CHAPTER = {
+# 장마다 새로 허용하는 것만 적는다. 뒤 장은 앞 장이 허용한 것을 모두 허용한다(누적).
+#   allow: 금지에서 빼는 문법, calls: 새로 부를 수 있는 내장 함수, names: None이면 이름 제한 해제
+# 7장부터는 여기에 한 줄씩 더한다(예: 7: {"allow": {"List"}, "calls": {"sorted", "sum"}}).
+CHAPTER_RULES = {
     # 1장: 변수·조건·비교 없음. 이름은 print 하나만, f-문자열·메서드·인덱싱 없음.
-    1: FORBID_ALL | {"Assign", "AugAssign", "AnnAssign", "NamedExpr", "If", "IfExp", "Compare",
-                     "BoolOp", "JoinedStr", "Attribute", "Subscript"},
-    2: FORBID_ALL | {"If", "IfExp"},
-    3: FORBID_ALL,
+    1: {"forbid": FORBID_ALL | {"Assign", "AugAssign", "AnnAssign", "NamedExpr", "If", "IfExp", "Compare",
+                                "BoolOp", "JoinedStr", "Attribute", "Subscript"},
+        "names": {"print"}, "calls": {"print"}},
+    # 2장: 변수·표현식·입력. (v0.2: Attribute·Subscript는 6장으로 옮김 — 인덱스·메서드는 6장에서 처음 배움)
+    2: {"allow": {"Assign", "AugAssign", "AnnAssign", "NamedExpr", "Compare", "BoolOp", "JoinedStr"},
+        "names": None, "calls": {"input", "int", "float", "str", "bool", "type", "round"}},
+    3: {"allow": {"If", "IfExp"}, "calls": {"len", "abs", "max", "min"}},
+    4: {"allow": {"FunctionDef", "Return"}, "calls": {"len", "max", "min", "abs", "round"}},
+    5: {"allow": {"For", "While"}, "calls": {"range"}},          # for는 range(…)만 돈다
+    # 6장: 인덱스·슬라이싱·문자열 메서드(s.upper() 등), 문자열·split() 결과를 for로 돌기
+    6: {"allow": {"Attribute", "Subscript", "Slice", "ForNonRange"}, "calls": {"len"}},
 }
-NAMES_BY_CHAPTER = {  # 쓸 수 있는 이름(None이면 제한 없음: 변수를 배운 뒤)
-    1: {"print"},
-    2: None,
-    3: None,
-}
-CALLS_BY_CHAPTER = {  # 부를 수 있는 내장 함수
-    1: {"print"},
-    2: {"print", "input", "int", "float", "str", "bool", "type", "round"},
-    3: {"print", "input", "int", "float", "str", "bool", "type", "round", "len", "abs", "max", "min"},
-}
+
+
+def _build_tables(rules):
+    forbid, names, calls = {}, {}, {}
+    cur_forbid, cur_names, cur_calls = set(FORBID_ALL), set(), set()
+    for ch in sorted(rules):
+        r = rules[ch]
+        if "forbid" in r:
+            cur_forbid = set(r["forbid"])
+        cur_forbid = cur_forbid - set(r.get("allow", ()))
+        if "names" in r:
+            cur_names = None if r["names"] is None else set(r["names"])
+        cur_calls = cur_calls | set(r.get("calls", ()))
+        forbid[ch], names[ch], calls[ch] = set(cur_forbid), cur_names, set(cur_calls)
+    return forbid, names, calls
+
+
+FORBID_BY_CHAPTER, NAMES_BY_CHAPTER, CALLS_BY_CHAPTER = _build_tables(CHAPTER_RULES)
 INPUT_FROM_CHAPTER = 2  # input()은 2장부터
 
 # 앱이 채우는 자리 표시가 그대로 남은 것만 막는다(f-문자열 예시의 { }는 허용, 판정 C23).
@@ -218,10 +238,17 @@ def check_code_shape(rep, where, code, chapter):
     forbid = FORBID_BY_CHAPTER.get(chapter, FORBID_ALL)
     names = NAMES_BY_CHAPTER.get(chapter)
     calls = CALLS_BY_CHAPTER.get(chapter, set())
+    if "FunctionDef" not in forbid:  # 직접 만든 함수는 부를 수 있음(4장부터)
+        calls = calls | {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
     for node in ast.walk(tree):
         kind = type(node).__name__
         if kind in forbid:
             rep.err(where, "%d장에서 아직 배우지 않은 문법 %s (%s줄)" % (chapter, kind, getattr(node, "lineno", "?")))
+        elif (kind == "For" and "ForNonRange" in forbid
+              and not (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name)
+                       and node.iter.func.id == "range")):
+            rep.err(where, "%d장에서 아직 배우지 않은 문법 ForNonRange: for는 range(…)만 돎(%s줄)"
+                    % (chapter, node.lineno))
         if isinstance(node, ast.Name) and names is not None and node.id not in names:
             rep.err(where, "%d장에서 쓸 수 없는 이름 %r(변수는 2장부터)" % (chapter, node.id))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id not in calls:
@@ -551,15 +578,15 @@ def check_exam_coverage(rep, lessons):
 
 
 def main(argv):
-    full = "--full" in argv
+    full = parse_full(argv)  # None | 0(있는 장 수) | N
     failed = 0
 
     # 개념 목록
     if not os.path.exists(CONCEPTS_FILE):
         print("✗ data/concepts.js 가 없음")
         return 1
-    files = sorted(f for f in os.listdir(LESSON_DIR) if re.fullmatch(r"ch\d+\.js", f)) \
-        if os.path.isdir(LESSON_DIR) else []
+    files = sorted((f for f in os.listdir(LESSON_DIR) if re.fullmatch(r"ch\d+\.js", f)),
+                   key=lambda f: int(f[2:-3])) if os.path.isdir(LESSON_DIR) else []
     paths = [CONCEPTS_FILE] + [os.path.join(LESSON_DIR, f) for f in files]
     try:
         mods = load_modules(paths)
@@ -589,6 +616,8 @@ def main(argv):
         print("    - " + e)
     failed += len(cerr)
 
+    if full == 0:
+        full = len(files)
     total = 0
     found = []
     for f in files:
@@ -635,19 +664,36 @@ def main(argv):
                 print("       - " + e)
             failed += len(rep.errors)
 
-    want = list(range(1, CHAPTERS_EXPECTED + 1))
-    if found != want[:len(found)]:
-        print("\n✗ 장 파일이 1장부터 빠짐없이 이어져야 함: %s" % files)
+    for e in chapter_file_errors(found, full):
+        print("\n✗ " + e)
         failed += 1
-    absent = [c for c in want if c not in found]
-    note = ""
-    if absent:
-        note = " (아직 없음: %s)" % ", ".join("ch%d.js" % c for c in absent)
-        if full:
-            print("\n✗ --full: 1~%d장이 모두 있어야 함" % CHAPTERS_EXPECTED)
-            failed += 1
-    print("\n합계: 레슨 %d/%d%s, 오류 %d" % (total, CHAPTERS_EXPECTED * LESSONS_PER_CHAPTER, note, failed))
+    planned = full if full is not None else len(found)
+    absent = [c for c in range(1, planned + 1) if c not in found]
+    note = " (아직 없음: %s)" % ", ".join("ch%d.js" % c for c in absent) if absent else ""
+    print("\n합계: 레슨 %d/%d%s, 오류 %d" % (total, planned * LESSONS_PER_CHAPTER, note, failed))
     return 1 if failed else 0
+
+
+def chapter_file_errors(found, full=None):
+    """있는 장 번호 목록 검사. 1장부터 빠짐없이 이어져야 하고, full=N이면 정확히 1~N장이어야 함."""
+    errs = []
+    found = sorted(found)
+    if found != list(range(1, len(found) + 1)):
+        errs.append("장 파일이 1장부터 빠짐없이 이어져야 함: %s" % ", ".join("ch%d.js" % c for c in found))
+    if full is not None and found != list(range(1, full + 1)):
+        errs.append("--full %d: 1~%d장이 정확히 있어야 함(지금 %s)"
+                    % (full, full, ", ".join("ch%d.js" % c for c in found) or "없음"))
+    return errs
+
+
+def parse_full(argv):
+    """--full [N]. 없으면 None, N을 빼면 있는 장 파일 수를 쓰도록 0을 돌려줌(main에서 바꿈)."""
+    if "--full" not in argv:
+        return None
+    i = argv.index("--full")
+    if i + 1 < len(argv) and argv[i + 1].isdigit() and int(argv[i + 1]) >= 1:
+        return int(argv[i + 1])
+    return 0
 
 
 if __name__ == "__main__":

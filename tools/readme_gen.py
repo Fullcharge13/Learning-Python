@@ -29,7 +29,10 @@ NODE_SCRIPT = r"""
 const root = process.argv[1];
 const imp = (p) => import(new URL(p, root));
 const chapters = [];
-for (const n of [1, 2, 3]) {
+const fs = await import("node:fs");
+const nums = fs.readdirSync(new URL("data/lessons/", root))
+  .map((f) => /^ch(\d+)\.js$/.exec(f)).filter(Boolean).map((m) => +m[1]).sort((a, b) => a - b);
+for (const n of nums) {
   const m = await imp("data/lessons/ch" + n + ".js");
   chapters.push({ chapter: m.CHAPTER, lessons: m.LESSONS });
 }
@@ -122,7 +125,7 @@ def build(d):
     w("|---|---|")
     w("| `npm test` | 규칙 단위 시험: 저장·옛 저장 옮기기, 연속 기록 날짜 계산, XP·바이트, 퀘스트·배지·상점, 채점 비교, 대사, 그림 |")
     w("| `python3 -m pytest tests/py -q` | 채점기(`runner.py`)를 일반 Python으로 시험: `input()` 값, 오류 줄 번호, 코드 구조 조건 |")
-    w(f"| `python3 tests/content.py --full` | 레슨 {n_lessons}개 전체 점검: 정답 코드가 시험을 통과하는지, 시작 코드는 통과하지 않는지, 힌트 4개 등 |")
+    w(f"| `python3 tests/content.py --full {len(d['chapters'])}` | 레슨 {n_lessons}개 전체 점검: 정답 코드가 시험을 통과하는지, 시작 코드는 통과하지 않는지, 힌트 4개 등 |")
     w("| `python3 tests/grader_browser.py` | 실제 브라우저(Chromium) 안 Pyodide 작업자: 실행, 입력, 3초 시간 초과 뒤 재시작 |")
     w("| `python3 tests/build_test.py` | 배포 파일: 한 장인지, 크기 상한, 버전 표시, 오프라인 열기 |")
     w("| `python3 tests/flow.py` | 아이폰 17 크기 화면 순회: 넘침·콘솔 오류·터치 크기·첫 레슨 끝까지·옛 저장 |")
@@ -139,7 +142,7 @@ def build(d):
     structure = [
         ("src/", "화면·규칙 코드, 리아 교수 그림(SVG), 소리, Pyodide 작업자"),
         ("src/py/runner.py", "학습자 코드를 실행·채점하는 Python 코드(Pyodide 안에서 돎)"),
-        ("data/lessons/", "1~3장 레슨 표 (ch1.js, ch2.js, ch3.js)"),
+        ("data/lessons/", f"1~{len(d['chapters'])}장 레슨 표 (ch1.js … ch{len(d['chapters'])}.js)"),
         ("data/", "개념·대사·퀘스트·배지·의상·오류 설명 표"),
         ("build.py", "모든 것을 HTML 한 장(dist/index.html)으로 합치기"),
         ("tools/", "개발 서버, README 생성, 그림 시트·아이콘 만들기"),
@@ -277,7 +280,12 @@ def build(d):
 
 
 def main():
-    check = "--check" in sys.argv[1:]
+    args = sys.argv[1:]
+    unknown = [x for x in args if x != "--check"]
+    if unknown:
+        print("사용법: python3 tools/readme_gen.py [--check]  (알 수 없는 인자: %s)" % " ".join(unknown))
+        sys.exit(2)
+    check = "--check" in args
     text, n = build(load_data())
     summary = (f"레슨 {n['lessons']} · 문제 {n['items']} · 퀘스트 {n['quests']} · "
                f"배지 {n['badges']} · 의상 {n['outfits']} · 판 {n['version']}")

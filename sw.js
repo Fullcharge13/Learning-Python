@@ -8,7 +8,7 @@
 //   Pyodide 저장본은 Pyodide 버전으로만 이름이 바뀐다(판을 올려도 10MB를 다시 받지 않게).
 
 const VERSION = "v0.1";
-const GAME_CACHE = "ria-game-v0.1-f3a94a70df";
+const GAME_CACHE = "ria-game-v0.1-f4693fddf8";
 const PY_CACHE = "ria-pyodide-314.0.7";
 const PYODIDE_PREFIX = new URL("https://cdn.jsdelivr.net/npm/pyodide@314.0.7/", self.location.href).href;
 const GAME_FILES = ["./", "index.html", "manifest.webmanifest", "icons/apple-touch-icon.png", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];

@@ -2,6 +2,7 @@
 import { DAILY_GOALS } from "../rules.js";
 import { esc, toast, dialog, celebrate, icon } from "./dom.js";
 import { collectOfflineStatus } from "../offline.js";
+import { curriculum } from "../curriculum.js";
 import { applyGoalChange } from "../finish.js";
 import { newSave } from "../save.js";
 import { tabBar, bindTabs, statusBar } from "./nav.js";
@@ -14,6 +15,35 @@ export function cleanName(v) {
   return Array.from(s).slice(0, 8).join("");
 }
 
+const ST = {
+  done: ["check", "완료"], current: ["play", "지금"], open: ["play", "열림"], locked: ["lock", "잠김"],
+};
+
+/** 학습 내용 카드 (C33): 요약 한 줄, 장마다 펼치기, 다음 업데이트 예정 */
+function courseCard(ctx) {
+  const c = curriculum({ chapters: ctx.chapters, completed: ctx.save.completed_lessons, currentId: ctx.currentLessonId() });
+  const first = c.upcoming.slice(0, 3);
+  const rest = c.upcoming.slice(3);
+  const upName = (u) => `${u.no}장 ${u.title}`;
+  return `<section class="panel course" aria-labelledby="course-title">
+    <h2 id="course-title">학습 내용</h2>
+    <p class="course-sum">${c.total}개 레슨 중 <b>${c.done}개</b> 완료${c.current ? ` · 지금: ${esc(c.current.id)} ${esc(c.current.title)}` : ""}</p>
+    <ul class="course-chapters">${c.chapters.map((ch) => `<li>
+      <button class="ch-row" aria-expanded="false" aria-controls="ch-${ch.id}">
+        <span class="ch-no">${ch.id}장</span>
+        <span class="ch-main"><b>${esc(ch.title)}</b><small>${esc(ch.topics)}</small></span>
+        <span class="ch-count${ch.done === ch.total ? " full" : ""}">${ch.done}/${ch.total} 완료</span>
+      </button>
+      <ol class="ch-lessons" id="ch-${ch.id}" hidden>${ch.lessons.map((l) => `<li class="ls ${l.status}">
+        <span class="ls-st">${icon(ST[l.status][0])}<span>${ST[l.status][1]}</span></span>
+        <span class="ls-main"><b>${esc(l.id)} ${esc(l.title)}</b><small>${esc(l.goal)}</small></span>
+      </li>`).join("")}</ol>
+    </li>`).join("")}</ul>
+    ${c.upcoming.length ? `<p class="muted course-next">다음 업데이트 예정: ${esc(first.map(upName).join(" · "))}${rest.length ? `<span id="up-rest" hidden> · ${esc(rest.map(upName).join(" · "))}</span><span id="up-dots"> …</span>` : ""}</p>
+      ${rest.length ? `<button class="link" id="up-all" aria-expanded="false" aria-controls="up-rest">전체 보기</button>` : ""}` : ""}
+  </section>`;
+}
+
 export function render(root, ctx) {
   const s = ctx.save;
   const goal = DAILY_GOALS.includes(s.settings.dailyGoal) ? s.settings.dailyGoal : 20;
@@ -21,6 +51,7 @@ export function render(root, ctx) {
     ${statusBar(s)}
     <main>
       <h1 class="page-title">설정</h1>
+      ${courseCard(ctx)}
       <section class="panel">
         <div class="row">
           <label for="snd" class="row-label">소리<small>정답·오답 효과음</small></label>
@@ -57,13 +88,28 @@ export function render(root, ctx) {
   </div>`;
   bindTabs(root, ctx);
 
+  // 학습 내용 펼치기
+  root.querySelectorAll(".ch-row").forEach((b) => b.addEventListener("click", () => {
+    const open = b.getAttribute("aria-expanded") !== "true";
+    b.setAttribute("aria-expanded", String(open));
+    root.querySelector("#" + b.getAttribute("aria-controls")).hidden = !open;
+  }));
+  const upAll = root.querySelector("#up-all");
+  if (upAll) upAll.addEventListener("click", () => {
+    const open = upAll.getAttribute("aria-expanded") !== "true";
+    upAll.setAttribute("aria-expanded", String(open));
+    root.querySelector("#up-rest").hidden = !open;
+    root.querySelector("#up-dots").hidden = open;
+    upAll.textContent = open ? "접기" : "전체 보기";
+  });
+
   // 오프라인 준비 상태(판정 C32): 서비스 작업자 + Pyodide 저장본. 색만이 아니라 아이콘과 글로 알림
   const off = root.querySelector("#offline");
   collectOfflineStatus().then((r) => {
     if (!off.isConnected) return;
     off.className = "offline-status " + (r.ready ? "ready" : "wait");
     off.innerHTML = r.ready
-      ? `${icon("check")}<span>오프라인 준비 완료 ✓</span>`
+      ? `${icon("check")}<span>오프라인 준비 완료</span>`
       : `${icon("review")}<span>아직 준비 중이에요 — 인터넷이 될 때 직접 작성 문제를 한 번 실행하면 준비돼요</span>`;
     off.dataset.ready = String(r.ready);
   });

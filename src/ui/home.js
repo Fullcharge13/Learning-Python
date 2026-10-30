@@ -4,6 +4,7 @@ import { CONCEPTS } from "../../data/concepts.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, bar, riaSays, dialog, toast } from "./dom.js";
 import { tabBar, bindTabs, statusBar } from "./nav.js";
+import { pathEndText } from "../curriculum.js";
 
 const ROW = 112;          // 레슨 한 칸 높이
 const W = 320;            // 길 폭
@@ -110,7 +111,7 @@ export function render(root, ctx) {
       ${reviewCard(save)}
       ${questCard(save)}
       ${sections || '<p class="panel">레슨을 불러오지 못했어요. 새로고침해 주세요.</p>'}
-      <p class="path-end">다음 장은 준비 중이에요</p>
+      <p class="path-end">${esc(pathEndText({ chapters: ctx.chapters, completed: save.completed_lessons }))}</p>
     </main>
     ${tabBar("home")}
   </div>`;

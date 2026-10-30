@@ -103,14 +103,16 @@ export function render(root, ctx) {
     upAll.textContent = open ? "접기" : "전체 보기";
   });
 
-  // 오프라인 준비 상태(판정 C32): 서비스 작업자 + Pyodide 저장본. 색만이 아니라 아이콘과 글로 알림
+  // 오프라인 준비 상태(판정 C32): 서비스 작업자 + Pyodide 저장본 + 장 파일 전부(v0.3). 색만이 아니라 아이콘과 글로 알림
   const off = root.querySelector("#offline");
-  collectOfflineStatus().then((r) => {
+  collectOfflineStatus(ctx.chapterFiles).then((r) => {
     if (!off.isConnected) return;
     off.className = "offline-status " + (r.ready ? "ready" : "wait");
     off.innerHTML = r.ready
       ? `${icon("check")}<span>오프라인 준비 완료</span>`
-      : `${icon("review")}<span>아직 준비 중이에요 — 인터넷이 될 때 직접 작성 문제를 한 번 실행하면 준비돼요</span>`;
+      : r.reason === "missing-chapters"
+        ? `${icon("review")}<span>아직 준비 중이에요 — 인터넷이 될 때 앱을 한 번 다시 열면 레슨을 모두 받아 둬요</span>`
+        : `${icon("review")}<span>아직 준비 중이에요 — 인터넷이 될 때 직접 작성 문제를 한 번 실행하면 준비돼요</span>`;
     off.dataset.ready = String(r.ready);
   });
 

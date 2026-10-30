@@ -254,6 +254,10 @@ main { padding: 16px calc(16px + var(--sar)) 0 calc(16px + var(--sal)); }
 
 /* ---------- 레슨 ---------- */
 .lesson { min-height: 100dvh; }
+/* 장 파일을 기다리는 동안·못 받았을 때 (v0.3 작업 1) */
+.lesson-wait { min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; }
+.lesson-wait .btn-row.one { grid-template-columns: 1fr; }
+.lesson-wait main { display: grid; gap: 16px; padding-bottom: calc(24px + var(--sab)); max-width: 520px; width: 100%; margin: 0 auto; }
 .lesson-top {
   position: sticky; top: 0; z-index: 20;
   display: grid; grid-template-columns: 44px 1fr auto; align-items: center; gap: 10px;

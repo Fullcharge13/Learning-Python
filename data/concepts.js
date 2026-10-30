@@ -34,4 +34,24 @@ export const CONCEPTS = [
   { id: "slice", name: "슬라이싱", chapter: 6 },
   { id: "strmethod", name: "문자열 메서드", chapter: 6 },
   { id: "strloop", name: "문자열 반복", chapter: 6 },
+  // 7장 리스트
+  { id: "list", name: "리스트 만들기", chapter: 7 },
+  { id: "listmod", name: "리스트 바꾸기", chapter: 7 },
+  { id: "listloop", name: "리스트 반복", chapter: 7 },
+  { id: "listfunc", name: "리스트와 내장 함수", chapter: 7 },
+  // 8장 딕셔너리
+  { id: "dict", name: "딕셔너리", chapter: 8 },
+  { id: "dictmod", name: "딕셔너리 바꾸기", chapter: 8 },
+  { id: "dictget", name: "get으로 안전하게", chapter: 8 },
+  { id: "count", name: "세기 패턴", chapter: 8 },
+  // 9장 튜플과 집합
+  { id: "tuple", name: "튜플", chapter: 9 },
+  { id: "unpack", name: "묶고 풀기", chapter: 9 },
+  { id: "items", name: "items와 정렬", chapter: 9 },
+  { id: "set", name: "집합", chapter: 9 },
+  // 10장 예외 처리
+  { id: "exc", name: "오류 읽기", chapter: 10 },
+  { id: "try", name: "try와 except", chapter: 10 },
+  { id: "excmulti", name: "여러 오류 나누기", chapter: 10 },
+  { id: "raise", name: "raise로 오류 내기", chapter: 10 },
 ];

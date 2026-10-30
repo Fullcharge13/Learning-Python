@@ -188,7 +188,8 @@ class App:
         self.dismiss()
 
     def lesson(self, lid):
-        return self.js("(id) => window.__ria.ctx.lessonById(id)", lid)
+        # 레슨 목록(index.html)에는 문제가 없어 장 파일에서 받는다(v0.3 작업 1)
+        return self.js("(id) => window.__ria.ctx.getLesson(id)", lid)
 
     def wait_py(self):
         self.page.wait_for_function("() => window.__ria.app.pyStatus === 'ready'", timeout=PY_READY_MS)

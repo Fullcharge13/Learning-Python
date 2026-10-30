@@ -8,14 +8,19 @@
 
 쓰기 전에 out 폴더에서 빌드가 만드는 것(index.html, manifest.webmanifest, sw.js, icons/)만 지운다.
 
+    python3 build.py --lessons-dir 다른/폴더              # 장 파일을 다른 폴더에서(시험용, 기본 data/lessons)
+
 결과물 (out 폴더):
-  index.html              CSS·앱·작업자·runner.py가 모두 들어간 한 장. 외부 <script src> 없음
+  index.html              CSS·앱·작업자·runner.py·레슨 목록이 들어간 한 장. 외부 <script src> 없음
+  lessons/chN-<지문>.json  장 하나의 레슨 전체(v0.3 작업 1). 지문 = 파일 내용 sha256 앞 8자
   manifest.webmanifest    홈 화면 앱 설명
   sw.js                   서비스 작업자(판 번호·내용 지문·Pyodide 주소를 채움)
   icons/*.png             리아 얼굴 아이콘(tools/icon.py)
 
 합치는 방법
-- src/app.js → esbuild로 묶고 줄임(IIFE). 장 파일(data/lessons/chN.js)의 import()도 함께 묶인다.
+- src/app.js → esbuild로 묶고 줄임(IIFE). src/lessondev.js(개발판의 data/lessons import)는 빈 모듈로 바꿔 끼워
+  레슨 내용이 index.html에 들어가지 않는다. 대신 레슨 목록(window.RIA_LESSON_INDEX)과 장 파일 이름표
+  (window.RIA_CHAPTER_FILES)를 넣고, 앱은 레슨을 열 때 장 파일을 받는다. sw.js는 설치 때 장 파일을 모두 미리 받는다.
 - src/worker.js → 따로 묶고 줄여(ES 모듈) 글자로 넣고, 실행할 때 Blob 주소로 만든다(window.RIA_WORKER_URL).
 - src/py/runner.py → 글자 그대로 window.RIA_RUNNER_SRC로 넣는다.
 - Pyodide 주소: 배포는 jsDelivr(판정 C19), --dev-pyodide는 /node_modules/pyodide/.
@@ -46,15 +51,49 @@ const [esbuildPath, argsJson] = process.argv.slice(1);
 const esbuild = (await import(esbuildPath)).default;
 const a = JSON.parse(argsJson);
 const common = { bundle: true, minify: true, write: false, target: a.target, legalComments: "none", logLevel: "warning", charset: "utf8" };
-const app = await esbuild.build({ ...common, entryPoints: [a.app], format: "iife",
+// 배포판에는 개발용 레슨 import(src/lessondev.js)를 빈 모듈로 (레슨 내용은 장 파일로 따로 나감)
+const noDevLessons = { name: "ria-no-dev-lessons", setup(b) {
+  b.onResolve({ filter: /(^|\/)lessondev\.js$/ }, () => ({ path: "lessondev", namespace: "ria-stub" }));
+  b.onLoad({ filter: /.*/, namespace: "ria-stub" }, () => ({ contents: "export async function loadDevChapters() { return []; }", loader: "js" }));
+} };
+const app = await esbuild.build({ ...common, entryPoints: [a.app], format: "iife", plugins: [noDevLessons],
   define: { "import.meta.url": "location.href" } });
 const worker = await esbuild.build({ ...common, entryPoints: [a.worker], format: "esm" });
 const css = await esbuild.build({ ...common, entryPoints: [a.css], loader: { ".css": "css" } });
 process.stdout.write(JSON.stringify({ app: app.outputFiles[0].text, worker: worker.outputFiles[0].text, css: css.outputFiles[0].text }));
 """
 
+# 장 파일 나누기: data/lessons/chN.js → 레슨 목록 + lessons/chN-<지문>.json (목록·이름은 src/lessondata.js가 만듦)
+NODE_LESSONS = r"""
+const [dir, libUrl] = process.argv.slice(1);
+const fs = await import("node:fs"); const path = await import("node:path");
+const url = await import("node:url"); const crypto = await import("node:crypto");
+const lib = await import(libUrl);
+const names = fs.readdirSync(dir).filter((f) => /^ch[1-9]\d*\.js$/.test(f));
+const mods = [];
+for (const f of names) {
+  const m = await import(url.pathToFileURL(path.join(dir, f)).href);
+  const n = Number(f.slice(2, -3));
+  const id = m.CHAPTER ? m.CHAPTER.id : (m.LESSONS && m.LESSONS[0] && m.LESSONS[0].chapter);
+  if (id !== n) throw new Error(`${f}: chapter id ${id} does not match file name`);
+  mods.push({ n, CHAPTER: m.CHAPTER || { id: n, title: "" }, LESSONS: m.LESSONS });
+}
+mods.sort((a, b) => a.n - b.n);
+const index = lib.buildLessonIndex(mods);
+const files = {}, contents = {}, tasks = [];
+for (const m of mods) {
+  const text = JSON.stringify({ CHAPTER: m.CHAPTER, LESSONS: m.LESSONS });
+  const hash = crypto.createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex").slice(0, 8);
+  const name = lib.chapterFileName(m.n, hash);
+  files[m.n] = name;
+  contents[name] = text;
+  for (const l of m.LESSONS) for (const it of l.items || []) if (it && it.task) tasks.push(it.task);
+}
+process.stdout.write(JSON.stringify({ index, files, contents, tasks }));
+"""
 
-OWNED = ("index.html", "manifest.webmanifest", "sw.js", "icons")
+
+OWNED = ("index.html", "manifest.webmanifest", "sw.js", "icons", "lessons")
 HOOKS = ("RIA_WORKER_URL", "RIA_RUNNER_SRC")
 
 
@@ -104,6 +143,34 @@ def bundle():
     return json.loads(r.stdout)
 
 
+def split_lessons(lessons_dir):
+    """장 파일 나누기 결과: {index, files: {n: 이름}, contents: {이름: JSON 글자}, tasks: [문제 문장]}"""
+    lib = "file://" + os.path.join(SRC, "lessondata.js")
+    r = subprocess.run(["node", "--input-type=module", "-e", NODE_LESSONS, lessons_dir, lib],
+                       cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr)
+        raise SystemExit("build: could not read lessons from %s" % lessons_dir)
+    out = json.loads(r.stdout)
+    if not out["files"]:
+        raise SystemExit("build: no chN.js lesson files in %s" % lessons_dir)
+    return out
+
+
+def check_no_lesson_text(html, tasks):
+    """index.html에 문제 문장이 남지 않았는지 (장 파일로만 나가야 함)"""
+    leaked = [t for t in tasks if t and t in html]
+    if leaked:
+        raise SystemExit("build: lesson text leaked into index.html (e.g. %r)" % leaked[0][:60])
+
+
+def js_value(v):
+    """<script> 안에 넣을 수 있는 JSON 값"""
+    return js_string(v) if isinstance(v, str) else (
+        json.dumps(v, ensure_ascii=False, separators=(",", ":"))
+        .replace("</", "<\\/").replace("<!--", "<\\!--").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
+
+
 def app_version(src):
     m = re.search(r'export const VERSION = "([^"]+)"', src)
     if not m:
@@ -146,6 +213,8 @@ CONFIG = """<script>
 window.RIA_VERSION = {version};
 window.RIA_PYODIDE_URL = {pyodide};
 window.RIA_RUNNER_SRC = {runner};
+window.RIA_LESSON_INDEX = {lesson_index};
+window.RIA_CHAPTER_FILES = {chapter_files};
 (function () {{
   try {{
     window.RIA_WORKER_URL = URL.createObjectURL(new Blob([{worker}], {{ type: "text/javascript" }}));
@@ -159,13 +228,14 @@ window.RIA_RUNNER_SRC = {runner};
 </script>"""
 
 
-def build(out, dev_pyodide=False, update_docs_icons=False, build_id=""):
+def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_dir=None):
     need_node()
     with open(os.path.join(SRC, "app.js"), encoding="utf-8") as f:
         app_src = f.read()
     check_app_hooks(app_src)
     version = app_version(app_src)
     pyodide_url = PYODIDE_DEV if dev_pyodide else PYODIDE_CDN
+    split = split_lessons(lessons_dir or os.path.join(ROOT, "data", "lessons"))
     b = bundle()
     if not all(h in b["app"] for h in HOOKS):
         raise SystemExit("build: bundled app lost %s" % "/".join(HOOKS))
@@ -180,12 +250,14 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id=""):
     if 'rel="manifest"' not in html:
         raise SystemExit("build: could not insert head links after <title>")
     config = CONFIG.format(version=js_string(version), pyodide=js_string(pyodide_url),
-                           runner=js_string(runner), worker=js_string(b["worker"]))
+                           runner=js_string(runner), worker=js_string(b["worker"]),
+                           lesson_index=js_value(split["index"]), chapter_files=js_value(split["files"]))
     if "<!-- RIA:CONFIG -->" not in html:
         raise SystemExit("build: marker CONFIG not found in src/index.html")
     html = html.replace("<!-- RIA:CONFIG -->", config, 1)
     html = replace_block(html, "SCRIPT", "<script>" + inline_script(b["app"]) + "</script>")
     check_output(html)
+    check_no_lesson_text(html, split["tasks"])
 
     os.makedirs(out, exist_ok=True)
     clean(out)
@@ -193,6 +265,16 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id=""):
     with open(os.path.join(out, "index.html"), "wb") as f:
         f.write(data)
     shutil.copy(os.path.join(ROOT, "manifest.webmanifest"), os.path.join(out, "manifest.webmanifest"))
+    os.makedirs(os.path.join(out, "lessons"))
+    chapter_sizes = []
+    for n, name in sorted(split["files"].items(), key=lambda kv: int(kv[0])):
+        body = split["contents"][name].encode("utf-8")
+        if hashlib.sha256(body).hexdigest()[:8] != re.search(r"-([0-9a-f]{8})\.json$", name).group(1):
+            raise SystemExit("build: chapter file hash mismatch for " + name)
+        with open(os.path.join(out, name), "wb") as f:
+            f.write(body)
+        chapter_sizes.append((name, len(body)))
+    chapter_files = [name for name, _ in chapter_sizes]
 
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     import icon  # noqa: E402  (Playwright가 필요해서 쓸 때만 불러옴)
@@ -210,7 +292,8 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id=""):
         sw = f.read()
     sw = (sw.replace("__RIA_VERSION__", version).replace("__RIA_HASH__", h.hexdigest()[:10])
             .replace("__RIA_PYODIDE_VERSION__", PYODIDE_VERSION).replace("__RIA_PYODIDE_URL__", pyodide_url)
-            .replace("__RIA_GAME_FILES__", json.dumps(game_files)))
+            .replace("__RIA_GAME_FILES__", json.dumps(game_files))
+            .replace("__RIA_CHAPTER_FILES__", json.dumps(chapter_files)))
     if "__RIA_" in sw:
         raise SystemExit("build: placeholder left in sw.js")
     with open(os.path.join(out, "sw.js"), "w", encoding="utf-8") as f:
@@ -224,6 +307,9 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id=""):
         len(b["css"].encode()) / 1024))
     print("sw cache %s" % re.search(r'GAME_CACHE = "([^"]+)"', sw).group(1))
     print("index.html raw %.1f KB (limit %d KB), gzip %.1f KB" % (raw / 1024, MAX_RAW // 1024, gz / 1024))
+    print("lessons: %d chapter files, %.1f KB total" % (len(chapter_sizes), sum(sz for _, sz in chapter_sizes) / 1024))
+    for name, sz in chapter_sizes:
+        print("  %s %.1f KB" % (name, sz / 1024))
     if raw > MAX_RAW:
         raise SystemExit("build: index.html is over %d KB" % (MAX_RAW // 1024))
 
@@ -234,9 +320,10 @@ def main():
     ap.add_argument("--dev-pyodide", action="store_true", help="Pyodide를 /node_modules/pyodide/에서 받음(시험용)")
     ap.add_argument("--update-docs-icons", action="store_true", help="docs/img/ 아이콘 복사본도 갱신")
     ap.add_argument("--build-id", default="", help="빌드 표시(meta ria-build). 바꾸면 게임 저장본 이름도 바뀜")
+    ap.add_argument("--lessons-dir", default=None, help="장 파일(chN.js) 폴더. 기본 data/lessons (시험용)")
     a = ap.parse_args()
     build(os.path.abspath(a.out), dev_pyodide=a.dev_pyodide, update_docs_icons=a.update_docs_icons,
-          build_id=a.build_id)
+          build_id=a.build_id, lessons_dir=os.path.abspath(a.lessons_dir) if a.lessons_dir else None)
 
 
 if __name__ == "__main__":

@@ -189,3 +189,15 @@ def test_require_name_read():
 def test_require_mixed_kinds_order_kept():
     r = run("print(1)", [], ["If", "Call:int", "Name:n", "Call"])
     assert r["missing"] == ["If", "Call:int", "Name:n"]
+
+
+# --- C34: Method:<이름> ---
+
+def test_require_method():
+    assert run('d = {"a": 1}\nprint(d.get("a", 0))', [], ["Method:get"])["missing"] == []
+    assert run('d = {"a": 1}\nprint(d["a"])', [], ["Method:get"])["missing"] == ["Method:get"]
+    assert run("x = []\nx.append(1)\nprint(x)", [], ["Method:append"])["missing"] == []
+    r = run("def append(v):\n    return v\nappend(1)", [], ["Method:append"])
+    assert r["missing"] == ["Method:append"]
+    # 호출 없이 속성만 읽는 것은 메서드 호출이 아님
+    assert run("x = []\nf = x.append\nprint(1)", [], ["Method:append"])["missing"] == ["Method:append"]

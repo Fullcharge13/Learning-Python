@@ -2,13 +2,17 @@
 // 진행 순서는 lessonflow.js 상태 기계가 정하고, 이 파일은 그리기와 채점만 한다.
 import { startFlow, current, nextCard, answer, summary } from "../lessonflow.js";
 import { riaSVG } from "../ria.js";
-import { esc, icon, bar, codeBlock, dialog } from "./dom.js";
+import { esc, icon, bar, codeBlock, dialog, riaSays } from "./dom.js";
 import { mountWrite } from "./write.js";
 import { shuffleChoices, shuffleOrder, newSeed } from "../shuffle.js";
 import { isCodey } from "../textkind.js";
 
 const TOUCH = new Set(["choice", "blank", "order", "check"]);
 const GUARD_MS = 400;
+const WAIT_MS = 300;    // 장 파일이 이보다 늦으면 「준비 중」 (v0.3 작업 1)
+const LOAD_TIMEOUT_MS = 12000;  // 이보다 오래 걸리면 「준비 중」을 그만두고 안내
+export const OFFLINE_LINE = "이 장은 인터넷이 될 때 한 번 열어 주세요";
+export const STALE_LINE = "새 판이 나왔어요. 눌러서 새로 고쳐요";
 
 function shuffle(arr) {
   const a = arr.slice();
@@ -19,15 +23,23 @@ function shuffle(arr) {
   return a;
 }
 
-/** 복습 묶음: review_queue 개념의 터치 문제 5개 */
-function buildReview(ctx) {
-  const queue = new Set(ctx.save.review_queue || []);
+/** 복습 묶음: review_queue 개념의 터치 문제 5개. 그 개념이 든 장만 받는다.
+ *  일부 장만 받아져도 문제가 있으면 진행하고, 하나도 못 받았으면 실패로 알린다. */
+async function buildReview(ctx) {
+  const concepts = ctx.save.review_queue || [];
+  const queue = new Set(concepts);
+  const got = await Promise.allSettled(ctx.chaptersForConcepts(concepts).map((n) => ctx.getChapter(n)));
   const pool = [];
-  for (const l of ctx.lessons) {
-    for (const it of l.items) {
-      if (TOUCH.has(it.type) && queue.has(it.concept)) pool.push({ ...it, type: it.type === "check" ? "choice" : it.type, from: l.id });
+  for (const r of got) {
+    if (r.status !== "fulfilled") continue;
+    for (const l of r.value.LESSONS) {
+      for (const it of l.items) {
+        if (TOUCH.has(it.type) && queue.has(it.concept)) pool.push({ ...it, type: it.type === "check" ? "choice" : it.type, from: l.id });
+      }
     }
   }
+  const failed = got.find((r) => r.status === "rejected");
+  if (!pool.length && failed) throw failed.reason;
   return { id: "review", title: "복습", cards: [], items: shuffle(pool).slice(0, 5) };
 }
 
@@ -38,11 +50,92 @@ function stdinNote(stdin) {
 }
 
 
+/** 장 파일을 기다리는 동안·못 받았을 때 화면.
+ *  state: blank(0.3초 전) · wait(준비 중) · error. kind(error일 때): offline · stale(새 판) · broken(그리다 실패) */
+function waitScreen(root, ctx, state, kind = "offline") {
+  const err = state === "error";
+  const face = (f) => riaSays({ outfit: ctx.save.outfit, face: f, text: err ? ERROR_LINES[kind].say : "준비 중… 레슨을 펼치고 있어요", size: 92 });
+  const body = err
+    ? `<h1 class="sr">레슨을 열지 못했어요</h1>${face("think")}
+       <p class="muted center">${esc(ERROR_LINES[kind].note)}</p>
+       <div class="btn-row"><button class="btn ghost" id="to-home">학습 길로</button><button class="btn primary" id="retry">${esc(ERROR_LINES[kind].btn)}</button></div>`
+    : state === "wait"
+      ? `${face("smile")}<div class="btn-row one"><button class="btn ghost" id="to-home">학습 길로</button></div>`
+      : "";
+  root.innerHTML = `<div class="screen lesson-wait" data-state="${state}"${err ? ` data-kind="${kind}"` : ""} aria-busy="${err ? "false" : "true"}">
+    <main role="status" aria-live="polite">${body}</main>
+  </div>`;
+  const home = root.querySelector("#to-home");
+  if (home) home.addEventListener("click", () => ctx.show("home"));
+}
+
+const ERROR_LINES = {
+  offline: { say: OFFLINE_LINE, note: "인터넷에 연결된 뒤 「다시 시도」를 눌러 주세요. 지금까지의 진행은 그대로예요.", btn: "다시 시도" },
+  stale: { say: STALE_LINE, note: "새로 고쳐도 지금까지의 진행은 그대로예요.", btn: "새로 고치기" },
+  broken: { say: "레슨을 펼치다가 문제가 생겼어요", note: "「다시 시도」를 눌러 주세요. 지금까지의 진행은 그대로예요.", btn: "다시 시도" },
+};
+
+/** 레슨 화면: 장 파일을 받은 뒤 run()으로. 늦으면 「준비 중」(학습 길로 나갈 수 있음), 12초 넘거나 실패하면 안내와 다시 시도 */
 export function render(root, ctx, params = {}) {
   const review = !!params.review;
-  const lesson = review ? buildReview(ctx) : ctx.lessonById(params.id);
-  if (!lesson || !lesson.items.length) { ctx.show("home"); return; }
+  let alive = true, timers = [], inner = null, token = 0;
+  const clear = () => { timers.forEach(clearTimeout); timers = []; };
+  function fail(kind, err) {
+    clear();
+    if (err) console.warn("lesson load", err);
+    waitScreen(root, ctx, "error", kind);
+    root.querySelector("#retry").addEventListener("click", () => {
+      // 새 판(장 파일 404, 새 서비스 작업자) → 새로고침해야 새 장 파일 이름표를 받는다
+      if (kind === "stale") { location.reload(); return; }
+      attempt();
+    });
+    const h = root.querySelector("h1");
+    if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); }
+  }
+  function attempt() {
+    const my = ++token;
+    const live = () => alive && my === token;
+    clear();
+    waitScreen(root, ctx, "blank");
+    timers.push(setTimeout(() => { if (live()) waitScreen(root, ctx, "wait"); }, WAIT_MS));
+    const timeout = new Promise((_, reject) => {
+      timers.push(setTimeout(() => reject(Object.assign(new Error("chapter load timeout"), { timeout: true })), LOAD_TIMEOUT_MS));
+    });
+    let load;
+    try {
+      load = review ? buildReview(ctx) : ctx.getLesson(params.id);
+    } catch (e) {
+      load = Promise.reject(e);
+    }
+    Promise.race([load, timeout]).then((lesson) => {
+      if (!live()) return;
+      clear();
+      if (!lesson || !lesson.items || !lesson.items.length) { ctx.show("home"); return; }
+      try {
+        inner = run(root, ctx, lesson, review);
+      } catch (e) {
+        // 반쯤 그린 화면을 남기지 않음
+        if (typeof inner === "function") { try { inner(); } catch { /* 무시 */ } }
+        inner = null;
+        document.body.classList.remove("result-open");
+        console.error(e);
+        fail("broken");
+      }
+    }, (err) => {
+      if (!live()) return;
+      const stale = (err && err.stale) || (ctx.swChanged && ctx.swChanged());
+      fail(stale ? "stale" : "offline", err);
+    });
+  }
+  attempt();
+  return () => {
+    alive = false;
+    clear();
+    if (typeof inner === "function") inner();
+  };
+}
 
+function run(root, ctx, lesson, review) {
   const S = {
     flow: startFlow(lesson), combo: 0, marks: [], logs: [], marked: {},
     write: null, reviewCorrect: 0, itemsSolved: 0, guardUntil: 0, onContinue: null, cleanupItem: null,

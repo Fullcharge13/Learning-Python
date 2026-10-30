@@ -114,7 +114,7 @@ def build(d):
     w("| 하고 싶은 일 | 명령 | 설명 |")
     w("|---|---|---|")
     w("| 개발하면서 열어 보기 | `python3 tools/dev.py` | 코드를 묶어 `http://127.0.0.1:8765/dev/`로 열어 줘요 |")
-    w(f"| 배포 파일 만들기 | `python3 build.py` | `dist/`에 `index.html` 한 장 + `manifest.webmanifest` + `sw.js` + 아이콘. "
+    w(f"| 배포 파일 만들기 | `python3 build.py` | `dist/`에 `index.html`(앱과 레슨 목록) + `lessons/`(장마다 문제 파일) + `manifest.webmanifest` + `sw.js` + 아이콘. **`lessons/` 폴더까지 함께** "
       f"이 폴더를 그대로 웹에 올리면 돼요 (Pyodide 제외 {max_kb}KB 이하) |")
     w("| README 다시 만들기 | `python3 tools/readme_gen.py` | 데이터 표를 바꾼 뒤 실행. `--check`는 어긋남만 검사 |")
     w("| 리아 그림 시트 다시 뽑기 | `python3 tools/ria_sheet.py` | `docs/img/ria-sheet.png`, `ria-hero.png` |")

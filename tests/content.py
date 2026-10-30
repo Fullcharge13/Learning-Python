@@ -66,15 +66,15 @@ TOUCH = {"choice", "blank", "order"}
 # 레슨 코드(카드·문제·정답·시작 코드)에서 문법 오류 없이 읽히는 것만 검사한다.
 # FORBID_ALL: 장 표에 없는 장의 기본값(가장 엄격). 반복문·함수 정의·import·목록/사전·예외 처리 등.
 # "ForNonRange"는 ast 마디가 아닌 가짜 이름: range(…)가 아닌 것(문자열, split() 결과)을 for로 도는 것.
+# "ForTupleTarget"도 가짜 이름: for의 대상 자리에서만 튜플로 풀기(for k, v in d.items():). 튜플 일반은 9장.
 FORBID_ALL = {
     "For", "While", "FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef", "Import", "ImportFrom",
     "List", "Dict", "Set", "Tuple", "ListComp", "DictComp", "SetComp", "GeneratorExp",
     "Try", "With", "Return", "Yield", "Global", "Nonlocal", "Delete", "Assert", "Raise", "Match",
-    "ForNonRange", "Slice",
+    "ForNonRange", "Slice", "ForTupleTarget",
 }
 # 장마다 새로 허용하는 것만 적는다. 뒤 장은 앞 장이 허용한 것을 모두 허용한다(누적).
 #   allow: 금지에서 빼는 문법, calls: 새로 부를 수 있는 내장 함수, names: None이면 이름 제한 해제
-# 7장부터는 여기에 한 줄씩 더한다(예: 7: {"allow": {"List"}, "calls": {"sorted", "sum"}}).
 CHAPTER_RULES = {
     # 1장: 변수·조건·비교 없음. 이름은 print 하나만, f-문자열·메서드·인덱싱 없음.
     1: {"forbid": FORBID_ALL | {"Assign", "AugAssign", "AnnAssign", "NamedExpr", "If", "IfExp", "Compare",
@@ -88,6 +88,16 @@ CHAPTER_RULES = {
     5: {"allow": {"For", "While"}, "calls": {"range"}},          # for는 range(…)만 돈다
     # 6장: 인덱스·슬라이싱·문자열 메서드(s.upper() 등), 문자열·split() 결과를 for로 돌기
     6: {"allow": {"Attribute", "Subscript", "Slice", "ForNonRange"}, "calls": {"len"}},
+    # 7장: 리스트 리터럴, 메서드(append·remove·pop·sort·index·insert — 메서드는 6장부터 Attribute로 허용),
+    #      cart[0] = … 로 바꾸기(Subscript는 6장부터). 컴프리헨션은 계속 금지.
+    7: {"allow": {"List"}, "calls": {"sorted", "sum", "list"}},
+    # 8장: 딕셔너리 리터럴, get·keys·values·items, in. 튜플은 for k, v in d.items(): 의 풀기만.
+    8: {"allow": {"Dict", "ForTupleTarget"}},
+    # 9장: 튜플 리터럴·묶고 풀기 전부, 집합 리터럴, 교집합 & · 합집합 | · 차집합 -
+    9: {"allow": {"Tuple", "Set"}, "calls": {"set", "tuple"}},
+    # 10장: try/except/else/finally, raise. raise ValueError("…")처럼 오류를 만들어 부르는 것도 허용
+    10: {"allow": {"Try", "Raise"},
+         "calls": {"Exception", "ValueError", "TypeError", "ZeroDivisionError", "IndexError", "KeyError"}},
 }
 
 
@@ -240,9 +250,16 @@ def check_code_shape(rep, where, code, chapter):
     calls = CALLS_BY_CHAPTER.get(chapter, set())
     if "FunctionDef" not in forbid:  # 직접 만든 함수는 부를 수 있음(4장부터)
         calls = calls | {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    # for 대상 자리의 튜플(for k, v in …:) — ForTupleTarget이 허용된 장에서는 Tuple 금지에서 뺀다
+    for_targets = set()
+    if "ForTupleTarget" not in forbid:
+        for_targets = {id(n.target) for n in ast.walk(tree)
+                       if isinstance(n, ast.For) and isinstance(n.target, ast.Tuple)}
     for node in ast.walk(tree):
         kind = type(node).__name__
-        if kind in forbid:
+        if kind == "Tuple" and id(node) in for_targets:
+            pass
+        elif kind in forbid:
             rep.err(where, "%d장에서 아직 배우지 않은 문법 %s (%s줄)" % (chapter, kind, getattr(node, "lineno", "?")))
         elif (kind == "For" and "ForNonRange" in forbid
               and not (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name)
@@ -394,16 +411,18 @@ def uses_input(code):
                for n in ast.walk(tree))
 
 
-REQUIRE_PREFIXES = ("Call", "Name")  # 판정 C26: "Call:print" = print(…)를 부름, "Name:price" = 이름 price를 씀
+# 판정 C26: "Call:print" = print(…)를 부름, "Name:price" = 이름 price를 씀
+# 판정 C34: "Method:get" = 메서드 .get(…)을 부름(d.get(…), s.upper() 등)
+REQUIRE_PREFIXES = ("Call", "Name", "Method")
 
 
 def check_require(rep, where, req):
-    """require 항목: ast 마디 이름(예: "If", "Mult") 또는 "Call:<이름>"·"Name:<이름>"."""
+    """require 항목: ast 마디 이름(예: "If", "Mult") 또는 "Call:<이름>"·"Name:<이름>"·"Method:<이름>"."""
     for name in req:
         if isinstance(name, str) and ":" in name:
             kind, _, ident = name.partition(":")
             if kind not in REQUIRE_PREFIXES or not ident.isidentifier() or keyword.iskeyword(ident):
-                rep.err(where, "require %r 형식이 틀림(Call:이름 또는 Name:이름, 이름은 Python 식별자)" % (name,))
+                rep.err(where, "require %r 형식이 틀림(Call:이름, Name:이름, Method:이름 중 하나, 이름은 Python 식별자)" % (name,))
             continue
         node = getattr(ast, name, None) if isinstance(name, str) else None
         if not (isinstance(node, type) and issubclass(node, ast.AST)):

@@ -10,7 +10,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import content  # noqa: E402
-from content import Lesson, check_code_shape, check_write, chapter_file_errors  # noqa: E402
+from content import Lesson, check_code_shape, check_write, check_require, chapter_file_errors  # noqa: E402
 
 
 def shape_errors(code, chapter):
@@ -150,6 +150,154 @@ def test_ch6_forbids_list_literal():
 def test_ch6_forbids_dict_literal():
     e = shape_errors('d = {"a": 1}\nprint(d)', 6)
     assert has(e, "Dict")
+
+
+# ── 7장 리스트 ───────────────────────────────────────────────────────────
+CH7_OK = """cart = ["사과", "우유"]
+cart.append("빵")
+cart.insert(0, "물")
+cart.remove("우유")
+last = cart.pop()
+cart[0] = "주스"
+nums = [3, 1, 2]
+nums.sort()
+print(cart, last, nums.index(2))
+print(sorted(nums), sum(nums))
+print(list("ab"))
+for n in nums:
+    print(n)"""
+
+
+def test_ch7_allowed():
+    assert shape_errors(CH7_OK, 7) == []
+
+
+def test_ch7_forbids_dict_literal():
+    e = shape_errors('d = {"a": 1}\nprint(d)', 7)
+    assert has(e, "Dict")
+
+
+def test_ch7_forbids_try():
+    e = shape_errors("try:\n    print(1)\nexcept ValueError:\n    print(2)", 7)
+    assert has(e, "Try")
+
+
+def test_ch7_forbids_comprehension():
+    e = shape_errors("print([n * 2 for n in [1, 2]])", 7)
+    assert has(e, "ListComp")
+
+
+# ── 8장 딕셔너리 ─────────────────────────────────────────────────────────
+CH8_OK = """menu = {"라테": 4500, "차": 3000}
+menu["쿠키"] = 2000
+print(menu.get("빵", "품절"))
+print("차" in menu, list(menu.keys()))
+print(sum(menu.values()))
+for k, v in menu.items():
+    print(k, v)
+votes = {}
+for w in "a b a".split():
+    votes[w] = votes.get(w, 0) + 1
+print(votes)"""
+
+
+def test_ch8_allowed():
+    assert shape_errors(CH8_OK, 8) == []
+
+
+def test_ch8_forbids_tuple_literal():
+    e = shape_errors("t = (1, 2)\nprint(t)", 8)
+    assert has(e, "Tuple")
+
+
+def test_ch8_forbids_tuple_unpack_assign():
+    # for 대상이 아닌 곳의 묶고 풀기(a, b = …)는 9장
+    e = shape_errors("a, b = 1, 2\nprint(a, b)", 8)
+    assert has(e, "Tuple")
+
+
+def test_ch8_forbids_set_literal():
+    e = shape_errors("s = {1, 2}\nprint(s)", 8)
+    assert has(e, "Set")
+
+
+# ── 9장 튜플과 집합 ──────────────────────────────────────────────────────
+CH9_OK = """def low_high(nums):
+    return min(nums), max(nums)
+
+p = (3, 4)
+a, b = 1, 2
+a, b = b, a
+lo, hi = low_high([5, 1, 9])
+print(p[0], a, b, lo, hi)
+print(tuple([1, 2]))
+x = {"수영", "축구"}
+y = set(["축구", "바둑"])
+print(x & y, x | y, x - y)"""
+
+
+def test_ch9_allowed():
+    assert shape_errors(CH9_OK, 9) == []
+
+
+def test_ch9_forbids_try():
+    e = shape_errors("try:\n    print(1)\nexcept ValueError:\n    print(2)", 9)
+    assert has(e, "Try")
+
+
+def test_ch9_forbids_raise():
+    e = shape_errors('raise ValueError("음수")', 9)
+    assert has(e, "Raise")
+
+
+# ── 10장 예외 처리 ───────────────────────────────────────────────────────
+CH10_OK = """def check_age(n):
+    if n < 0:
+        raise ValueError("음수 나이")
+    return n
+
+try:
+    n = int(input())
+    print(10 / n)
+except ValueError:
+    print("숫자로 입력해 주세요")
+except ZeroDivisionError:
+    print("0으로 못 나눠요")
+else:
+    print(check_age(n))
+finally:
+    print("끝")"""
+
+
+def test_ch10_allowed():
+    assert shape_errors(CH10_OK, 10) == []
+
+
+def test_ch10_forbids_comprehension():
+    e = shape_errors("print([i for i in range(3)])", 10)
+    assert has(e, "ListComp")
+
+
+def test_ch10_forbids_class():
+    e = shape_errors("class Cat:\n    pass", 10)
+    assert has(e, "ClassDef")
+
+
+# ── require 형식 (판정 C34: Method:이름) ─────────────────────────────────
+def require_errors(req):
+    rep = Lesson("t")
+    check_require(rep, "require", req)
+    return rep.errors
+
+
+def test_require_method_ok():
+    assert require_errors(["Method:get", "Call:print", "Name:x", "For"]) == []
+
+
+def test_require_method_bad_format():
+    assert has(require_errors(["Method:"]), "형식이 틀림")
+    assert has(require_errors(["Method:1x"]), "형식이 틀림")
+    assert has(require_errors(["Attr:get"]), "형식이 틀림")
 
 
 # ── 장 파일 연속성 ───────────────────────────────────────────────────────

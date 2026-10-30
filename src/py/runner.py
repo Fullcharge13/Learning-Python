@@ -156,11 +156,14 @@ def _missing(tree, require):
     #   "If"          — 그 종류의 ast 마디가 있음
     #   "Call:type"   — 이름으로 부르는 호출 type(...) (obj.type(...)은 아님)
     #   "Name:count"  — 변수 count를 어딘가에서 읽음(ast.Name, Load)
+    #   "Method:get"  — 점으로 부르는 호출 d.get(...) (판정 C34, 그냥 get(...)은 아님)
     found = set()
     for node in ast.walk(tree):
         found.add(type(node).__name__)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
             found.add("Call:" + node.func.id)
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            found.add("Method:" + node.func.attr)
         elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
             found.add("Name:" + node.id)
     return [name for name in require if name not in found]

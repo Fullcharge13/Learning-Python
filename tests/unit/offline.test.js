@@ -43,3 +43,28 @@ test("offline_any_pyodide_cache: 필수 파일이 여러 ria-pyodide- 저장본�
     urlsByCache: { "ria-pyodide-a": ALL.slice(0, 2), "ria-pyodide-b": ALL.slice(2) } });
   assert.equal(r.ready, true);
 });
+
+// v0.3 작업 1: 장 파일도 모두 저장돼야 오프라인 준비 완료
+const ORIGIN = "https://x.test/app/";
+const CH = ["lessons/ch1-11111111.json", "lessons/ch2-22222222.json"];
+
+test("offline_chapters_needed: 장 파일 하나가 게임 저장본에 없으면 준비 안 됨", () => {
+  const r = offlineStatus({ controlled: true, cacheNames: ["ria-pyodide-1", "ria-game-v0.3-a"], chapterFiles: CH,
+    urlsByCache: { "ria-pyodide-1": ALL, "ria-game-v0.3-a": [ORIGIN + "index.html", ORIGIN + CH[0]] } });
+  assert.equal(r.ready, false);
+  assert.deepEqual(r.missing, [CH[1]]);
+  assert.equal(r.reason, "missing-chapters");
+});
+
+test("offline_chapters_all: 장 파일 전부 + Pyodide면 준비, 다른 저장본에 있는 장 파일은 세지 않음", () => {
+  const ok = offlineStatus({ controlled: true, cacheNames: ["ria-pyodide-1", "ria-game-v0.3-a"], chapterFiles: CH,
+    urlsByCache: { "ria-pyodide-1": ALL, "ria-game-v0.3-a": CH.map((c) => ORIGIN + c) } });
+  assert.equal(ok.ready, true);
+  const other = offlineStatus({ controlled: true, cacheNames: ["ria-pyodide-1", "other"], chapterFiles: CH,
+    urlsByCache: { "ria-pyodide-1": ALL, other: CH.map((c) => ORIGIN + c) } });
+  assert.equal(other.ready, false);
+  // 이름 끝만 같은 다른 파일(ch11-…이 ch1-…로 착각되지 않게)
+  const near = offlineStatus({ controlled: true, cacheNames: ["ria-pyodide-1", "ria-game-x"], chapterFiles: [CH[0]],
+    urlsByCache: { "ria-pyodide-1": ALL, "ria-game-x": [ORIGIN + "lessons/xch1-11111111.json"] } });
+  assert.equal(near.ready, false);
+});

@@ -14,10 +14,18 @@
    - Pyodide 주소가 막혀도 sw.js 설치는 끝나고, 오프라인 새로고침에 앱이 뜸
    - 서버가 느리면(8초) 4초 뒤 저장본으로 뜸
    - 내용이 바뀐 빌드 → 새 게임 저장본 이름, 활성화 뒤 옛 저장본은 지워짐
+3. 장 따로 불러오기 (v0.3 작업 1)
+   - index.html에 문제 문장·카드 글이 없음, 크기가 v0.2(651.8KB)보다 작음
+   - lessons/chN-<지문8자>.json 6개 이상, 지문은 내용으로 정해짐(같은 내용 → 같은 이름·같은 바이트)
+   - 온라인으로 한 번 연 뒤 오프라인 → 6장 레슨 열기·직접 작성 실행, 설정 「오프라인 준비 완료」
+   - 장 파일 요청을 막음 → 안내와 「다시 시도」·「학습 길로」, 막기를 풀고 다시 시도 → 열림, 느리면 「준비 중」
+   - 장 내용이 바뀐 빌드 → 옛 장 파일은 저장본·배포 폴더에서 사라짐
+   - 복습은 review_queue 개념이 든 장만 받음
 """
 
 import functools
 import gzip
+import hashlib
 import http.server
 import importlib.util
 import json
@@ -39,6 +47,8 @@ OUT = os.path.join(ROOT, "tests", "out")
 DEV_OUT = os.path.join(OUT, "dist-dev")
 CDN = "https://cdn.jsdelivr.net/npm/pyodide@314.0.7/"
 MAX_RAW = 700 * 1024
+V02_RAW = 667397  # v0.2 dist/index.html (651.8 KB). v0.3부터 이보다 작아야 함
+CHAPTER_FILE = re.compile(r"^ch(\d+)-([0-9a-f]{8})\.json$")
 ICON_SIZES = {"icons/icon-180.png": 180, "icons/icon-192.png": 192, "icons/icon-512.png": 512,
               "icons/icon-maskable-512.png": 512, "icons/apple-touch-icon.png": 180}
 DOC_ICONS = ("icon-180.png", "icon-512.png", "icon-maskable-512.png")
@@ -188,7 +198,8 @@ def test_guards():
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
     """dist-dev와 /node_modules/를 함께 준다. 시험이 STATE로 네트워크 상태를 흉내 낸다."""
-    STATE = {"block_pyodide": False, "slow_s": 0}
+    STATE = {"block_pyodide": False, "slow_s": 0, "block_chapters": False, "slow_chapter_s": 0,
+             "chapter_404": False, "block_names": (), "block_sw": False}
     extensions_map = {
         **http.server.SimpleHTTPRequestHandler.extensions_map,
         ".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm",
@@ -201,6 +212,20 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if p.startswith("/node_modules/pyodide/") and self.STATE["block_pyodide"]:
             self.close_connection = True  # 답 없이 끊음(막힌 CDN 흉내)
             return
+        if p.startswith("/lessons/") and self.STATE["block_chapters"]:
+            self.close_connection = True  # 장 파일만 끊음(비행기 모드·막힌 망 흉내)
+            return
+        if p.startswith("/lessons/") and p.rsplit("/", 1)[-1] in self.STATE["block_names"]:
+            self.close_connection = True  # 이 장 파일만 끊음
+            return
+        if p.startswith("/lessons/") and self.STATE["chapter_404"]:
+            self.send_error(404)  # 새 판을 올려 옛 이름의 장 파일이 없어진 서버 흉내
+            return
+        if p == "/sw.js" and self.STATE["block_sw"]:
+            self.send_error(404)  # 새 서비스 작업자 설치 실패 흉내
+            return
+        if p.startswith("/lessons/") and self.STATE["slow_chapter_s"]:
+            time.sleep(self.STATE["slow_chapter_s"])
         if p in ("/", "/index.html") and self.STATE["slow_s"]:
             time.sleep(self.STATE["slow_s"])
         try:
@@ -231,16 +256,20 @@ class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
 class _Browser:
     """빌드 폴더 하나를 새 서버·새 브라우저 문맥으로 연다(서비스 작업자가 시험끼리 섞이지 않게)."""
 
-    def __init__(self, folder):
+    def __init__(self, folder, service_workers="allow", init_save=None):
         from playwright.sync_api import sync_playwright
-        _Handler.STATE.update(block_pyodide=False, slow_s=0)
+        _Handler.STATE.update(block_pyodide=False, slow_s=0, block_chapters=False, slow_chapter_s=0,
+                              chapter_404=False, block_names=(), block_sw=False)
         self.httpd = _Server(("127.0.0.1", 0), functools.partial(_Handler, directory=folder))
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.url = "http://127.0.0.1:%d/" % self.httpd.server_address[1]
         self.pw = sync_playwright().start()
         self.browser = self.pw.chromium.launch()
         device = {k: v for k, v in self.pw.devices["iPhone 17"].items() if k != "default_browser_type"}
-        self.context = self.browser.new_context(**device)
+        self.context = self.browser.new_context(service_workers=service_workers, **device)
+        if init_save is not None:
+            self.context.add_init_script("if (!sessionStorage.getItem('seeded')) { localStorage.setItem('ria-python.save', %s); sessionStorage.setItem('seeded', '1'); }"
+                                         % json.dumps(json.dumps(init_save)))
         self.page = self.context.new_page()
         self.errors = []
         self.page.on("pageerror", lambda e: self.errors.append("pageerror: " + str(e)))
@@ -385,6 +414,466 @@ def test_cache_rotation():
     finally:
         b.close()
         shutil.rmtree(folder, ignore_errors=True)
+
+
+# ---------------------------------------------------------------- 장 따로 불러오기 (v0.3 작업 1)
+
+DUMP_LESSONS = r"""
+const fs = await import("node:fs"); const path = await import("node:path"); const url = await import("node:url");
+const dir = process.argv[1];
+const out = {};
+for (const f of fs.readdirSync(dir).filter((f) => /^ch\d+\.js$/.test(f))) {
+  const m = await import(url.pathToFileURL(path.join(dir, f)).href);
+  out[f] = { CHAPTER: m.CHAPTER, LESSONS: m.LESSONS };
+}
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def _source_lessons(folder=None):
+    folder = folder or os.path.join(ROOT, "data", "lessons")
+    r = subprocess.run(["node", "--input-type=module", "-e", DUMP_LESSONS, folder], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+SNAP = os.path.join(OUT, "lessons-snap")
+SPLIT_OUT = os.path.join(OUT, "dist-split")
+
+
+def _snapshot():
+    """data/lessons를 한 번 복사해 둔다(다른 작업이 장 파일을 고치는 중이어도 시험끼리 같은 내용을 보게)"""
+    if not _built.get("snap"):
+        shutil.rmtree(SNAP, ignore_errors=True)
+        shutil.copytree(os.path.join(ROOT, "data", "lessons"), SNAP)
+        _built["snap"] = True
+    return SNAP
+
+
+def _lesson_texts():
+    """index.html에 있으면 안 되는 글: 직접 작성 문제 문장, 카드 설명, 문제 해설"""
+    texts = set()
+    for mod in _source_lessons(_snapshot()).values():
+        for l in mod["LESSONS"]:
+            for c in l.get("cards", []):
+                texts.add(c["say"])
+            for it in l.get("items", []):
+                for k in ("task", "explain"):
+                    if it.get(k):
+                        texts.add(it[k])
+    return sorted(t for t in texts if len(t) >= 8)  # 아주 짧은 글은 앱 글자와 우연히 겹칠 수 있어 뺀다
+
+
+DEV_SPLIT = os.path.join(OUT, "dist-dev-split")
+
+
+def _dev_split():
+    """장 따로 불러오기 브라우저 시험용 빌드: 스냅숏 내용, Pyodide는 /node_modules/"""
+    _build("--dev-pyodide", "--out", DEV_SPLIT, "--lessons-dir", _snapshot())
+    return DEV_SPLIT
+
+
+def _chapter_table(html):
+    m = re.search(r"window\.RIA_CHAPTER_FILES = (\{[^}]*\});", html)
+    assert m, "RIA_CHAPTER_FILES table not in index.html"
+    return {int(k): v for k, v in json.loads(m.group(1)).items()}
+
+
+def _chapter_files(folder):
+    d = os.path.join(folder, "lessons")
+    return sorted(f for f in os.listdir(d) if CHAPTER_FILE.match(f)) if os.path.isdir(d) else []
+
+
+def test_split_static():
+    out = _build("--out", SPLIT_OUT, "--lessons-dir", _snapshot())
+    DIST = SPLIT_OUT  # noqa: N806 (아래는 스냅숏으로 만든 빌드를 본다)
+    html = _read(os.path.join(DIST, "index.html"))
+    raw = len(html.encode("utf-8"))
+    files = _chapter_files(DIST)
+    print("    index.html %.1f KB (v0.2 %.1f KB); chapter files: %s" % (
+        raw / 1024, V02_RAW / 1024,
+        ", ".join("%s %.1f KB" % (f, os.path.getsize(os.path.join(DIST, "lessons", f)) / 1024) for f in files)))
+    assert raw < V02_RAW, "index.html must be smaller than v0.2: %d >= %d" % (raw, V02_RAW)
+    assert len(files) >= 6, files
+    src = _source_lessons(_snapshot())
+    table = _chapter_table(html)
+    assert sorted(table.values()) == sorted("lessons/" + f for f in files), (table, files)
+    for f in files:
+        n, h = CHAPTER_FILE.match(f).groups()
+        with open(os.path.join(DIST, "lessons", f), "rb") as fh:
+            data = fh.read()
+        assert hashlib.sha256(data).hexdigest()[:8] == h, "file name hash must come from content: " + f
+        got = json.loads(data)
+        assert got == src["ch%s.js" % n], "chapter file content differs from data/lessons/ch%s.js" % n
+        assert table[int(n)] == "lessons/" + f
+    leaked = [t for t in _lesson_texts() if t in html]
+    assert not leaked, "lesson text found in index.html: %r" % leaked[:3]
+    assert "lessons/" in out and "KB" in out
+
+
+def test_split_deterministic():
+    _build("--out", SPLIT_OUT, "--lessons-dir", _snapshot())
+    other = os.path.join(OUT, "dist-det")
+    r = _run_build("--out", other, "--lessons-dir", _snapshot())
+    assert r.returncode == 0, r.stdout + r.stderr
+    a, b = _chapter_files(SPLIT_OUT), _chapter_files(other)
+    assert a == b, (a, b)
+    for f in a:
+        with open(os.path.join(SPLIT_OUT, "lessons", f), "rb") as x, open(os.path.join(other, "lessons", f), "rb") as y:
+            assert x.read() == y.read(), f
+    shutil.rmtree(other, ignore_errors=True)
+
+
+def test_sw_chapter_files():
+    _build("--out", SPLIT_OUT, "--lessons-dir", _snapshot())
+    sw = _read(os.path.join(SPLIT_OUT, "sw.js"))
+    files = _chapter_files(SPLIT_OUT)
+    assert len(files) >= 6, files
+    for f in files:
+        assert '"lessons/%s"' % f in sw, "sw.js must precache " + f
+
+
+def _flow_module():
+    spec = importlib.util.spec_from_file_location("ria_flow", os.path.join(ROOT, "tests", "flow.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _driver(page):
+    """flow.py의 레슨 풀기 도우미를 이 page에 빌려 씀"""
+    App = _flow_module().App
+
+    class Drv:
+        def __init__(self, pg):
+            self.page = pg
+        js = App.js
+        lesson = App.lesson
+        which_item = App.which_item
+        answer_touch = App.answer_touch
+        wait_py = App.wait_py
+        set_code = App.set_code
+        submit_write = App.submit_write
+        cont = App.cont
+    return Drv(page)
+
+
+def _play_to_write(d, lid):
+    """lid 레슨을 직접 작성 문제까지 정답으로 풀고, 직접 작성을 정답으로 제출한다. 결과 창 클래스를 돌려줌."""
+    items = d.lesson(lid)["items"]
+    for _ in range(40):
+        d.page.wait_for_timeout(80)
+        if d.page.query_selector(".card-view"):
+            d.page.click("#act")
+            continue
+        if d.page.query_selector(".item.write"):
+            it = next(x for x in items if x["type"] == "write")
+            d.submit_write(it["solution"])
+            return d.page.get_attribute("#result", "class")
+        if d.page.query_selector("article.item"):
+            d.answer_touch(items[d.which_item(items)])
+            d.page.wait_for_selector("#result:not([hidden])")
+            d.cont()
+    raise AssertionError("write item not reached in " + lid)
+
+
+def _wait_chapters_cached(b, files, timeout=30):
+    deadline = time.monotonic() + timeout
+    while True:
+        urls = b.cached_urls()
+        missing = [f for f in files if not any(u.endswith("/" + f) for u in urls)]
+        if not missing or time.monotonic() > deadline:
+            return missing
+        b.page.wait_for_timeout(200)
+
+
+def test_offline_chapter_write():
+    folder = _dev_split()
+    b = _Browser(folder)
+    try:
+        pg = b.page
+        pg.goto(b.url)
+        b.home()
+        b.wait_controlled()
+        files = pg.evaluate("() => Object.values(window.RIA_CHAPTER_FILES)")
+        assert len(files) >= 6, files
+        missing = _wait_chapters_cached(b, files)
+        assert not missing, "chapter files not precached: %r" % missing
+        r = pg.evaluate("() => window.__ria.ctx.py.run('print(1)')")  # Pyodide 저장본 채우기
+        assert r["stdout"] == "1\n", r
+        b.context.set_offline(True)
+        resp = pg.reload()
+        assert resp is not None and resp.from_service_worker
+        b.home()
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { id: '6-1' })")
+        pg.wait_for_selector(".card-view", timeout=10_000)
+        cls = _play_to_write(_driver(pg), "6-1")
+        assert "ok" in (cls or ""), cls
+        print("    offline: 6-1 opened from cached chapter file, write task passed")
+        pg.evaluate("() => window.__ria.ctx.show('settings')")
+        pg.wait_for_selector("#offline[data-ready]", timeout=10_000)
+        assert pg.get_attribute("#offline", "data-ready") == "true", pg.inner_text("#offline")
+        b.context.set_offline(False)
+        assert not [e for e in b.errors if e.startswith("pageerror")], b.errors
+    finally:
+        b.close()
+
+
+def test_chapter_blocked_retry():
+    folder = _dev_split()
+    b = _Browser(folder)
+    try:
+        pg = b.page
+        _Handler.STATE["block_chapters"] = True
+        pg.goto(b.url)
+        b.home()
+        b.wait_controlled()  # 장 파일을 못 받아도 설치는 끝남
+        assert not [u for u in b.cached_urls() if "/lessons/" in u]
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { id: '2-1' })")
+        pg.wait_for_selector(".lesson-wait[data-state=error]", timeout=15_000)
+        txt = pg.inner_text(".lesson-wait")
+        assert "이 장은 인터넷이 될 때 한 번 열어 주세요" in txt, txt
+        assert pg.is_visible("#retry") and pg.is_visible("#to-home")
+        pg.screenshot(path=os.path.join(OUT, "build_chapter_blocked.png"))
+        pg.click("#to-home")
+        pg.wait_for_selector("#app[data-screen=home] .screen.home")
+        st = pg.evaluate("() => window.__ria.ctx.save.completed_lessons.length")
+        assert st == 0
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { id: '2-1' })")
+        pg.wait_for_selector(".lesson-wait[data-state=error]", timeout=15_000)
+        pg.click("#retry")
+        pg.wait_for_selector(".lesson-wait[data-state=error]", timeout=15_000)  # 아직 막힘 → 다시 안내
+        _Handler.STATE["block_chapters"] = False
+        pg.click("#retry")
+        pg.wait_for_selector(".card-view", timeout=15_000)
+        print("    blocked chapter: guidance shown, retry after unblocking opened 2-1")
+        # 느린 장 파일: 0.3초 넘으면 「준비 중」
+        _Handler.STATE["slow_chapter_s"] = 1.5
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { id: '3-1' })")
+        pg.wait_for_selector(".lesson-wait[data-state=wait]:has-text('준비 중')", timeout=5_000)
+        pg.wait_for_selector(".card-view", timeout=15_000)
+        _Handler.STATE["slow_chapter_s"] = 0
+        assert not [e for e in b.errors if e.startswith("pageerror")], b.errors
+    finally:
+        _Handler.STATE.update(block_chapters=False, slow_chapter_s=0)
+        b.close()
+
+
+def test_chapter_cache_rotation():
+    folder = os.path.join(OUT, "dist-rotate-ch")
+    alt = os.path.join(OUT, "lessons-alt")
+    shutil.rmtree(alt, ignore_errors=True)
+    shutil.copytree(_snapshot(), alt)
+    p = os.path.join(alt, "ch1.js")
+    src = _read(p)
+    changed = re.sub(r'(export const CHAPTER = \{[^}]*title: ")', r"\1(시험판) ", src, count=1)
+    assert changed != src
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(changed)
+    r = _run_build("--dev-pyodide", "--out", folder, "--lessons-dir", alt)
+    assert r.returncode == 0, r.stdout + r.stderr
+    old_files = _chapter_files(folder)
+    b = _Browser(folder)
+    try:
+        b.page.goto(b.url)
+        b.home()
+        b.wait_controlled()
+        old_table = b.page.evaluate("() => window.RIA_CHAPTER_FILES")
+        assert not _wait_chapters_cached(b, list(old_table.values()))
+        old_game = [k for k in b.cache_keys() if k.startswith("ria-game-")]
+        r = _run_build("--dev-pyodide", "--out", folder, "--lessons-dir", _snapshot())
+        assert r.returncode == 0, r.stdout + r.stderr
+        new_files = _chapter_files(folder)
+        gone = sorted(set(old_files) - set(new_files))
+        assert len(gone) == 1 and gone[0].startswith("ch1-"), (old_files, new_files)
+        assert not os.path.exists(os.path.join(folder, "lessons", gone[0])), "old chapter file left in out folder"
+        b.page.evaluate("async () => { const r = await navigator.serviceWorker.getRegistration(); await r.update(); }")
+        deadline = time.monotonic() + 30
+        while True:
+            keys = [k for k in b.cache_keys() if k.startswith("ria-game-")]
+            if (keys and old_game[0] not in keys) or time.monotonic() > deadline:
+                break
+            b.page.wait_for_timeout(200)
+        urls = b.cached_urls()
+        assert not [u for u in urls if u.endswith("/lessons/" + gone[0])], "old chapter file still cached"
+        new_ch1 = next(f for f in new_files if f.startswith("ch1-"))
+        assert [u for u in urls if u.endswith("/lessons/" + new_ch1)], "new chapter file not precached"
+        print("    chapter rotation: %s -> %s, cache %s -> %s" % (gone[0], new_ch1, old_game[0], keys[0]))
+    finally:
+        b.close()
+        shutil.rmtree(folder, ignore_errors=True)
+        shutil.rmtree(alt, ignore_errors=True)
+
+
+def test_review_lazy():
+    folder = _dev_split()
+    seed = {"saveVer": 1, "review_queue": ["slice", "def"], "completed_lessons": ["1-1"]}
+    b = _Browser(folder, service_workers="block", init_save=seed)
+    try:
+        pg = b.page
+        asked = []
+        pg.on("request", lambda req: asked.append(req.url.rsplit("/", 1)[-1]) if "/lessons/" in req.url else None)
+        pg.goto(b.url)
+        b.home()
+        table = pg.evaluate("() => window.RIA_CHAPTER_FILES")
+        assert asked == [], "home must not load chapter files: %r" % asked
+        pg.click("#review")
+        pg.wait_for_selector("article.item", timeout=15_000)
+        need = pg.evaluate("() => window.__ria.ctx.chaptersForConcepts(['slice', 'def'])")
+        assert 0 < len(need) < len(table), need
+        want = sorted(table[str(k)].rsplit("/", 1)[-1] for k in need)
+        assert sorted(asked) == want, (asked, want)
+        tag = pg.inner_text(".tag")
+        m = re.match(r"^(\d+)-\d+ 복습$", tag.strip())
+        assert m and int(m.group(1)) in need, tag
+        n = pg.evaluate("() => document.querySelectorAll('.lesson-tag').length")
+        assert n == 1
+        print("    review: loaded only %s, first item tag %r" % (", ".join(asked), tag))
+        assert not [e for e in b.errors if e.startswith("pageerror")], b.errors
+    finally:
+        b.close()
+
+
+def _rotate_alt():
+    """스냅숏을 복사해 ch1 제목만 바꾼 폴더(내용이 바뀐 판 흉내)"""
+    alt = os.path.join(OUT, "lessons-alt2")
+    shutil.rmtree(alt, ignore_errors=True)
+    shutil.copytree(_snapshot(), alt)
+    p = os.path.join(alt, "ch1.js")
+    src = _read(p)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(re.sub(r'(export const CHAPTER = \{[^}]*title: ")', r"\1(시험판) ", src, count=1))
+    return alt
+
+
+def test_new_index_not_cached_without_new_sw():
+    """새 판 index.html을 네트워크로 받아도, 새 서비스 작업자 설치가 실패하면 저장본은 옛 판 그대로여야 한다
+    (새 index가 저장되면 오프라인에서 저장 안 된 새 장 파일을 찾다가 실패한다)."""
+    folder = os.path.join(OUT, "dist-sw-fail")
+    alt = _rotate_alt()
+    r = _run_build("--dev-pyodide", "--out", folder, "--lessons-dir", alt)
+    assert r.returncode == 0, r.stdout + r.stderr
+    b = _Browser(folder)
+    try:
+        pg = b.page
+        pg.goto(b.url)
+        b.home()
+        b.wait_controlled()
+        assert not _wait_chapters_cached(b, list(pg.evaluate("() => window.RIA_CHAPTER_FILES").values()))
+        r = _run_build("--dev-pyodide", "--out", folder, "--lessons-dir", _snapshot())
+        assert r.returncode == 0, r.stdout + r.stderr
+        _Handler.STATE["block_sw"] = True
+        pg.reload()
+        b.home()
+        new_ch1 = pg.evaluate("() => window.RIA_CHAPTER_FILES['1']")
+        assert new_ch1.rsplit("/", 1)[-1] in _chapter_files(folder), "online reload should show the new build"
+        pg.wait_for_timeout(500)
+        b.context.set_offline(True)
+        pg.reload()
+        b.home()
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { id: '1-1' })")
+        pg.wait_for_selector(".card-view, .lesson-wait[data-state=error]", timeout=15_000)
+        assert pg.query_selector(".card-view"), "offline launch after failed sw update cannot open 1-1: " + pg.inner_text("#app")
+        print("    failed sw update: offline launch still uses a consistent cached build")
+    finally:
+        _Handler.STATE["block_sw"] = False
+        b.close()
+        shutil.rmtree(folder, ignore_errors=True)
+        shutil.rmtree(alt, ignore_errors=True)
+
+
+def test_chapter_wait_timeout():
+    folder = _dev_split()
+    b = _Browser(folder, service_workers="block")
+    try:
+        pg = b.page
+        pg.goto(b.url)
+        b.home()
+        _Handler.STATE["slow_chapter_s"] = 60
+        t0 = time.monotonic()
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { id: '2-1' })")
+        pg.wait_for_selector(".lesson-wait[data-state=wait]:has-text('준비 중')", timeout=5_000)
+        assert pg.is_visible("#to-home"), "waiting screen needs a way back"
+        pg.wait_for_selector(".lesson-wait[data-state=error]", timeout=20_000)
+        dt = time.monotonic() - t0
+        print("    slow chapter (60 s): error screen after %.1f s" % dt)
+        assert 11 <= dt < 16, dt
+        _Handler.STATE["slow_chapter_s"] = 0
+        pg.click("#to-home")
+        pg.wait_for_selector("#app[data-screen=home] .screen.home")
+        # 기다리는 중에도 학습 길로 나갈 수 있음
+        _Handler.STATE["slow_chapter_s"] = 60
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { id: '3-1' })")
+        pg.wait_for_selector(".lesson-wait[data-state=wait] #to-home", timeout=5_000)
+        pg.click("#to-home")
+        pg.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert not [e for e in b.errors if e.startswith("pageerror")], b.errors
+    finally:
+        _Handler.STATE["slow_chapter_s"] = 0
+        b.close()
+
+
+def test_chapter_404_reload():
+    folder = _dev_split()
+    b = _Browser(folder, service_workers="block")
+    try:
+        pg = b.page
+        pg.goto(b.url)
+        b.home()
+        _Handler.STATE["chapter_404"] = True
+        pg.evaluate("() => { window.__marker = 1; window.__ria.ctx.show('lesson', { id: '2-1' }); }")
+        pg.wait_for_selector(".lesson-wait[data-state=error]", timeout=15_000)
+        txt = pg.inner_text(".lesson-wait")
+        assert "새 판이 나왔어요. 눌러서 새로 고쳐요" in txt, txt
+        _Handler.STATE["chapter_404"] = False
+        with pg.expect_navigation(timeout=15_000):
+            pg.click("#retry")
+        pg.wait_for_selector(".screen.splash #go", timeout=20_000)
+        assert pg.evaluate("() => window.__marker") is None, "retry must reload the page"
+        print("    404 chapter: new-version message, retry reloaded the page")
+    finally:
+        _Handler.STATE["chapter_404"] = False
+        b.close()
+
+
+def test_review_one_chapter_fails():
+    folder = _dev_split()
+    b = _Browser(folder, service_workers="block")
+    try:
+        pg = b.page
+        pg.goto(b.url)
+        b.home()
+        # 두 장에서 그 장에만 있는 개념 하나씩
+        pick = pg.evaluate("""() => {
+            const ctx = window.__ria.ctx, out = [];
+            for (const ch of ctx.chapters) {
+                const c = ch.lessons.flatMap((l) => l.concepts).find((k) => ctx.chaptersForConcepts([k]).length === 1);
+                if (c) out.push([ch.id, c]);
+                if (out.length === 2) break;
+            }
+            return out;
+        }""")
+        assert len(pick) == 2, pick
+        (bad_ch, bad_c), (good_ch, good_c) = pick
+        table = pg.evaluate("() => window.RIA_CHAPTER_FILES")
+        _Handler.STATE["block_names"] = (table[str(bad_ch)].rsplit("/", 1)[-1],)
+        pg.evaluate("(q) => { const ctx = window.__ria.ctx; ctx.commit({ ...ctx.save, review_queue: q }); ctx.show('lesson', { review: true }); }",
+                    [bad_c, good_c])
+        pg.wait_for_selector("article.item, .lesson-wait[data-state=error]", timeout=15_000)
+        assert pg.query_selector("article.item"), pg.inner_text("#app")
+        tag = pg.inner_text(".tag").strip()
+        assert tag.startswith("%d-" % good_ch), tag
+        print("    review with chapter %d blocked: items from chapter %d (%s)" % (bad_ch, good_ch, tag))
+        # 둘 다 막히면 안내
+        _Handler.STATE["block_names"] = tuple(table[str(k)].rsplit("/", 1)[-1] for k in (bad_ch, good_ch))
+        pg.reload()
+        b.home()
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { review: true })")
+        pg.wait_for_selector(".lesson-wait[data-state=error]", timeout=15_000)
+        assert not [e for e in b.errors if e.startswith("pageerror")], b.errors
+    finally:
+        _Handler.STATE["block_names"] = ()
+        b.close()
 
 
 def main():

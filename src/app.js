@@ -7,6 +7,8 @@ import { PyRun, PYODIDE_CDN } from "./pyrun.js";
 import { OUTFITS } from "../data/outfits.js";
 import { localDate, daysSince } from "./today.js";
 import { finishLesson } from "./finish.js";
+import { createLessonData, chaptersForConcepts } from "./lessondata.js";
+import { loadDevChapters } from "./lessondev.js";
 import { createSound } from "./sound.js";
 import { toast } from "./ui/dom.js";
 import { statusBar } from "./ui/nav.js";
@@ -20,11 +22,8 @@ import * as badges from "./ui/badges.js";
 import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 
-export const VERSION = "v0.2";
+export const VERSION = "v0.3";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings };
-// 있는 장 파일만 불러온다(없는 번호는 건너뜀). chN.js를 더해도 여기는 그대로 둔다.
-const MAX_CHAPTERS = 30;
-const CHAPTER_FILES = Array.from({ length: MAX_CHAPTERS }, (_, i) => i + 1);
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
 function pickStorage() {
@@ -39,26 +38,20 @@ function pickStorage() {
 }
 const storage = pickStorage();
 
-// esbuild는 이 꼴의 import를 있는 파일만 묶는다. 없는 장은 여기서 거부되고 건너뛴다.
-async function loadChapter(n) {
-  return import(`../data/lessons/ch${n}.js`);
-}
-
-async function loadLessons() {
-  const got = await Promise.allSettled(CHAPTER_FILES.map((n) => loadChapter(n)));
-  const chapters = [];
-  for (const r of got) {
-    if (r.status !== "fulfilled" || !r.value || !Array.isArray(r.value.LESSONS)) continue;
-    const ch = r.value.CHAPTER || { id: r.value.LESSONS[0]?.chapter, title: "" };
-    chapters.push({ id: ch.id, title: ch.title, lessons: r.value.LESSONS });
+// 레슨 목록과 장 가져오기(v0.3 작업 1). 배포판: build.py가 넣은 목록·장 파일 이름표 → 장은 열 때 받음.
+// 개발판: 둘 다 없음 → data/lessons/chN.js를 전부 import(lessondev.js, 배포판에서는 빈 모듈).
+async function initLessonData() {
+  if (window.RIA_CHAPTER_FILES && window.RIA_LESSON_INDEX) {
+    return createLessonData({ index: window.RIA_LESSON_INDEX, files: window.RIA_CHAPTER_FILES, base: location.href });
   }
-  chapters.sort((a, b) => a.id - b.id);
-  return chapters;
+  return createLessonData({ modules: await loadDevChapters() });
 }
 
 const app = {
   save: null, screen: null, params: null, modal: null,
-  chapters: [], lessons: [],
+  chapters: [], lessons: [],   // 레슨 목록(문제·카드 없음). 전체는 ctx.getLesson / getChapter
+  data: null,
+  swChanged: false,      // 이 페이지를 다루던 서비스 작업자가 새 판으로 바뀜 → 장 파일 이름표가 옛것일 수 있음
   cleanup: null,
   greetOverride: null,   // 다음 홈 인사 한 번: "welcome_back" | "streak_broken"
   lastLine: {},          // 대사 상황별 직전 줄 번호
@@ -219,6 +212,11 @@ const ctx = {
   get chapters() { return app.chapters; },
   get lessons() { return app.lessons; },
   lessonById: (id) => app.lessons.find((l) => l.id === id),
+  getLesson: (id) => (app.data ? app.data.getLesson(id) : Promise.resolve(null)),
+  getChapter: (n) => app.data.getChapter(n),
+  chaptersForConcepts: (concepts) => chaptersForConcepts(app.chapters, concepts),
+  swChanged: () => app.swChanged,
+  get chapterFiles() { return app.data ? app.data.fileList() : []; },
   lessonState, currentLessonId,
   today: () => localDate(),
   get py() { return app.py; },
@@ -236,7 +234,13 @@ async function boot() {
   if (readFailed) toast("저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.", "warn");
   initPy();
   try {
-    app.chapters = await loadLessons();
+    // 처음 설치(작업자 없음 → 생김)는 새 판이 아님. 다루던 작업자가 바뀔 때만
+    const sw = navigator.serviceWorker;
+    if (sw && sw.controller) sw.addEventListener("controllerchange", () => { app.swChanged = true; });
+  } catch { /* 지원 안 함 */ }
+  try {
+    app.data = await initLessonData();
+    app.chapters = app.data.index;
   } catch (e) {
     console.error(e);
     app.chapters = [];

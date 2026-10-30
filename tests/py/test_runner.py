@@ -201,3 +201,165 @@ def test_require_method():
     assert r["missing"] == ["Method:append"]
     # 호출 없이 속성만 읽는 것은 메서드 호출이 아님
     assert run("x = []\nf = x.append\nprint(1)", [], ["Method:append"])["missing"] == ["Method:append"]
+
+
+# ── v0.4 E1 가상 파일 ─────────────────────────────────────────────
+import os  # noqa: E402
+import socket  # noqa: E402
+
+import pytest  # noqa: E402
+
+
+def test_files_readable():
+    r = run('f = open("memo.txt", encoding="utf-8")\nprint(f.read())\nf.close()\n', "", [],
+            files={"memo.txt": "우유\n빵\n"})
+    assert r["error"] is None, r
+    assert r["stdout"] == "우유\n빵\n\n"
+
+
+def test_files_readable_default_encoding_and_with():
+    r = run('with open("a.txt") as f:\n    for line in f:\n        print(line.strip())\n', "", [],
+            files={"a.txt": "하나\n둘\n"})
+    assert r["error"] is None, r
+    assert r["stdout"] == "하나\n둘\n"
+
+
+def test_write_then_read_same_run():
+    code = ('with open("out.txt", "w") as f:\n    f.write("저장")\n'
+            'with open("out.txt") as f:\n    print(f.read())\n')
+    r = run(code, "", [])
+    assert r["error"] is None, r
+    assert r["stdout"] == "저장\n"
+
+
+def test_file_gone_next_run():
+    run('open("left.txt", "w").write("x")\n', "", [], files={"given.txt": "y"})
+    r = run('open("left.txt")\n', "", [])
+    assert r["error"]["type"] == "FileNotFoundError", r
+    r2 = run('open("given.txt")\n', "", [])
+    assert r2["error"]["type"] == "FileNotFoundError", r2
+
+
+def test_cwd_restored_and_dir_removed():
+    before = os.getcwd()
+    r = run("import os\nprint(os.getcwd())\nos.chdir('/')\n", "", [], files={"m.txt": "1"})
+    assert r["error"] is None, r
+    run_dir = r["stdout"].strip()
+    assert run_dir != before
+    assert os.getcwd() == before
+    assert not os.path.exists(run_dir)
+
+
+def test_cwd_restored_after_error():
+    before = os.getcwd()
+    r = run("open('m.txt')\n1/0\n", "", [], files={"m.txt": "1"})
+    assert r["error"]["type"] == "ZeroDivisionError"
+    assert os.getcwd() == before
+
+
+def test_missing_file_error_line():
+    r = run("x = 1\nopen('nope.txt')\n", "", [], files={"m.txt": "1"})
+    assert r["error"]["type"] == "FileNotFoundError"
+    assert r["error"]["line"] == 2
+
+
+# ── v0.4 E2 연습 서버 ─────────────────────────────────────────────
+SERVER = {
+    "https://ria.example/menu": {"status": 200, "body": "김밥 3000\n라면 4000", "type": "text/plain"},
+    "https://ria.example/api/cat": {"status": 200, "body": '{"name": "리아"}', "type": "application/json"},
+    "https://ria.example/secret": {"status": 404, "body": "없어요"},
+}
+
+
+@pytest.fixture
+def no_socket(monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("socket used")
+    monkeypatch.setattr(socket, "socket", boom)
+    monkeypatch.setattr(socket, "create_connection", boom)
+    monkeypatch.setattr(socket, "getaddrinfo", boom)
+
+
+def test_server_200(no_socket):
+    code = ("import urllib.request\n"
+            "r = urllib.request.urlopen('https://ria.example/menu')\n"
+            "print(r.status, r.getcode())\n"
+            "print(r.read().decode('utf-8'))\n")
+    r = run(code, "", [], server=SERVER)
+    assert r["error"] is None, r
+    assert r["stdout"] == "200 200\n김밥 3000\n라면 4000\n"
+
+
+def test_server_with_and_from_import(no_socket):
+    code = ("from urllib.request import urlopen\n"
+            "import json\n"
+            "with urlopen('https://ria.example/api/cat') as r:\n"
+            "    data = json.loads(r.read())\n"
+            "    print(r.headers['Content-Type'])\n"
+            "print(data['name'])\n")
+    r = run(code, "", [], server=SERVER)
+    assert r["error"] is None, r
+    assert r["stdout"] == "application/json; charset=utf-8\n리아\n"
+
+
+def test_server_404_http_error(no_socket):
+    code = ("import urllib.request\n"
+            "import urllib.error\n"
+            "try:\n"
+            "    urllib.request.urlopen('https://ria.example/secret')\n"
+            "except urllib.error.HTTPError as e:\n"
+            "    print(e.code, e.read().decode())\n"
+            "urllib.request.urlopen('https://ria.example/secret')\n")
+    r = run(code, "", [], server=SERVER)
+    assert r["stdout"] == "404 없어요\n", r
+    assert r["error"]["type"] == "HTTPError", r
+    assert r["error"]["line"] == 7
+    assert "404" in r["error"]["msg"]
+
+
+def test_server_unknown_url_error(no_socket):
+    code = ("import urllib.request\n"
+            "import urllib.error\n"
+            "try:\n"
+            "    urllib.request.urlopen('https://naver.com')\n"
+            "except urllib.error.URLError as e:\n"
+            "    print(e.reason)\n")
+    r = run(code, "", [], server=SERVER)
+    assert r["error"] is None, r
+    assert r["stdout"] == "연습 서버에 없는 주소예요\n"
+    r2 = run("import urllib.request\nurllib.request.urlopen('https://naver.com')\n", "", [], server=SERVER)
+    assert r2["error"]["type"] == "URLError", r2
+    assert r2["error"]["line"] == 2
+
+
+def test_server_request_object(no_socket):
+    code = ("import urllib.request\n"
+            "req = urllib.request.Request('https://ria.example/menu')\n"
+            "print(urllib.request.urlopen(req, timeout=5).status)\n")
+    r = run(code, "", [], server=SERVER)
+    assert r["error"] is None, r
+    assert r["stdout"] == "200\n"
+
+
+def test_real_urlopen_restored():
+    import urllib.request
+    real = urllib.request.urlopen
+    run("import urllib.request\nurllib.request.urlopen = None\n", "", [], server=SERVER)
+    assert urllib.request.urlopen is real
+    run("import urllib.request\n1/0\n", "", [], server=SERVER)
+    assert urllib.request.urlopen is real
+
+
+def test_server_and_files_together(no_socket):
+    code = ("from urllib.request import urlopen\n"
+            "text = urlopen('https://ria.example/menu').read().decode()\n"
+            "with open('menu.txt', 'w') as f:\n    f.write(text)\n"
+            "print(open('menu.txt').read().split()[0], open('note.txt').read())\n")
+    r = run(code, "", [], files={"note.txt": "메모"}, server=SERVER)
+    assert r["error"] is None, r
+    assert r["stdout"] == "김밥 메모\n"
+
+
+def test_backward_compatible_positional():
+    r = run("print(1)", "", [])
+    assert r["stdout"] == "1\n"

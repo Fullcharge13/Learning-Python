@@ -213,7 +213,7 @@ class App:
         code = self.page.eval_on_selector_all("article.item > pre.code", "es => es.map(e => e.innerText).join('')")
 
         def keyset(x):
-            return sorted(x.get("options") or x.get("chips") or x.get("lines") or [])
+            return sorted(str(v).strip() for v in (x.get("options") or x.get("chips") or x.get("lines") or []))
         cands = [i for i, x in enumerate(items) if x["type"] != "write" and norm(x.get("q")) == norm(q) and keyset(x) == shown]
         if len(cands) > 1:
             cands = [i for i in cands if norm(items[i].get("code")) == norm(code)] or cands
@@ -240,7 +240,7 @@ class App:
             lines = list(it["lines"]) if correct else list(reversed(it["lines"]))
             for line in lines:
                 for b in self.page.query_selector_all("#op .line:not([disabled])"):
-                    if b.inner_text().strip() == line:
+                    if b.inner_text().strip() == line.strip():
                         b.click()
                         break
         self.page.click("#act")

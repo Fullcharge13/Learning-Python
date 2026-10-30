@@ -1,7 +1,7 @@
 """학습자 코드를 실행하고 결과를 dict로 돌려준다.
 
 CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다.
-스레드·시그널·네트워크·파일을 쓰지 않는다. 시간 제한은 바깥(작업자 종료)에서 건다.
+스레드·시그널·네트워크를 쓰지 않는다. 시간 제한은 바깥(작업자 종료)에서 건다.
 
 격리(검토 C18 I2): 실행마다 builtins 전체·재귀 한도·sys.modules 목록을 저장해 두었다가 되돌린다.
 알려진 한계:
@@ -15,7 +15,15 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
 학습자 코드가 도는 동안 불리는 runner 코드는 아래 _len·_str 같은 모듈 변수만 쓰고,
 결과(dict) 만들기는 finally에서 builtins를 되돌린 뒤에 한다.
 
-run(code, stdin, require) -> {
+가상 파일·연습 서버(v0.4 E1·E2):
+- 실행마다 새 임시 폴더를 만들어 작업 위치(cwd)로 삼고, files(이름 → 글자)를 UTF-8로 써 둔다.
+  끝나면 원래 위치로 돌아가고 폴더를 통째로 지운다(학습자가 만든 파일도). 실행 사이에 흔적이 없다.
+  files가 없어도 빈 폴더에서 돈다. 절대 경로로 다른 곳에 쓰는 것까지 막지는 않는다.
+- server(주소 → {"status": int, "body": str, "type"?: str})가 있으면 실행 동안
+  urllib.request.urlopen이 이 표에서 답한다(소켓을 열지 않음). 표에 없는 주소는 URLError,
+  status 400 이상은 HTTPError. 끝나면 진짜 urlopen으로 되돌린다. server가 None이면 손대지 않는다.
+
+run(code, stdin, require, files=None, server=None) -> {
     "stdout": str, "stderr": str,
     "error": None | {"type": str, "line": int | None, "msg": str},
     "missing": [str, ...],   # require 중 코드에 없는 ast 마디 이름
@@ -28,7 +36,10 @@ import ast
 import builtins
 import io
 import linecache
+import os
+import shutil
 import sys
+import tempfile
 import traceback
 
 USER_FILE = "<user>"
@@ -39,6 +50,14 @@ _len = len
 _str = str
 _BaseException = BaseException
 _StringIO_write = io.StringIO.write
+_isinstance = isinstance
+_getattr = getattr
+_chdir = os.chdir
+_getcwd = os.getcwd
+_rmtree = shutil.rmtree
+_BytesIO = io.BytesIO
+
+NO_SUCH_URL = "연습 서버에 없는 주소예요"
 
 
 class InputMissing(BaseException):
@@ -169,7 +188,69 @@ def _missing(tree, require):
     return [name for name in require if name not in found]
 
 
-def run(code, stdin=None, require=None):
+def _make_run_dir(files):
+    """새 임시 폴더를 만들고 files를 써 둔 뒤 그 경로를 돌려준다."""
+    d = tempfile.mkdtemp(prefix="ria-run-")
+    root = os.path.realpath(d)
+    for name, text in (files or {}).items():
+        path = os.path.realpath(os.path.join(root, str(name)))
+        if os.path.dirname(path) != root and not path.startswith(root + os.sep):
+            continue  # 폴더 밖을 가리키는 이름은 쓰지 않는다(점검기가 막는 형식)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            f.write("" if text is None else str(text))
+    return root
+
+
+def _make_urlopen(server):
+    """연습 서버 표로 답하는 가짜 urlopen. 진짜 네트워크(소켓)는 쓰지 않는다."""
+    import email.message
+    import http
+    import urllib.error
+    import urllib.response
+
+    class PracticeResponse(urllib.response.addinfourl):
+        def getheader(self, name, default=None):
+            return self.headers.get(name, default)
+
+        @property
+        def reason(self):
+            return _phrase(self.code)
+
+    def _phrase(code):
+        try:
+            return http.HTTPStatus(code).phrase
+        except ValueError:
+            return ""
+
+    table = {}
+    for url, resp in (server or {}).items():
+        resp = resp or {}
+        status = int(resp.get("status", 200))
+        body = resp.get("body", "")
+        body = body.encode("utf-8") if _isinstance(body, str) else bytes(body or b"")
+        ctype = str(resp.get("type") or "text/plain")
+        if "charset" not in ctype:
+            ctype += "; charset=utf-8"
+        table[str(url)] = (status, body, ctype)
+
+    def urlopen(url, data=None, timeout=None, *args, **kwargs):
+        full = _getattr(url, "full_url", url)
+        full = _str(full)
+        if full not in table:
+            raise urllib.error.URLError(NO_SUCH_URL)
+        status, body, ctype = table[full]
+        headers = email.message.Message()
+        headers["Content-Type"] = ctype
+        headers["Content-Length"] = _str(_len(body))
+        if status >= 400:
+            raise urllib.error.HTTPError(full, status, _phrase(status), headers, _BytesIO(body))
+        return PracticeResponse(_BytesIO(body), headers, full, status)
+
+    return urlopen
+
+
+def run(code, stdin=None, require=None, files=None, server=None):
     code = "" if code is None else str(code)
     stdin = _split_stdin(stdin)
     require = list(require or [])
@@ -204,6 +285,17 @@ def run(code, stdin=None, require=None):
     except BaseException:  # noqa: BLE001 — compile이 통과했으면 드묾
         result["missing"] = []
 
+    # 연습 서버: 학습자가 import하기 전에 urllib.request를 올려 두고 urlopen을 바꿔 끼운다.
+    # (미리 올린 모듈은 sys.modules 목록에 들어가 실행 뒤에도 남는다 → 학습자 import가 같은 모듈을 받음)
+    urlreq = real_urlopen = None
+    if server is not None:
+        import urllib.request as urlreq
+        real_urlopen = urlreq.urlopen
+        fake_urlopen = _make_urlopen(server)
+
+    old_cwd = _getcwd()
+    run_dir = _make_run_dir(files)
+
     old_out, old_err = sys.stdout, sys.stderr
     old_builtins = dict(builtins.__dict__)
     old_limit = sys.getrecursionlimit()
@@ -213,6 +305,9 @@ def run(code, stdin=None, require=None):
     user_globals = {"__name__": "__main__", "__builtins__": builtins}
     caught = None
     try:
+        _chdir(run_dir)
+        if urlreq is not None:
+            urlreq.urlopen = fake_urlopen
         exec(compiled, user_globals)
     except _BaseException as e:  # noqa: BLE001 — 어떤 오류든 결과로 돌려준다. 분류는 builtins를 되돌린 뒤에.
         caught = e
@@ -223,6 +318,13 @@ def run(code, stdin=None, require=None):
         sys.setrecursionlimit(old_limit)
         for name in set(sys.modules) - old_modules:
             del sys.modules[name]
+        if urlreq is not None:
+            urlreq.urlopen = real_urlopen
+        try:
+            _chdir(old_cwd)
+        except OSError:
+            pass
+        _rmtree(run_dir, ignore_errors=True)
 
     if isinstance(caught, SystemExit):
         # exit()·sys.exit()는 종료 코드와 상관없이 정상 종료로 친다(판정 C10).

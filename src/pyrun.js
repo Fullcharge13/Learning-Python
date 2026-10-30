@@ -5,6 +5,8 @@
 //   py.preload();                       // 앱을 열자마자 미리 받기 시작(선택)
 //   const r = await py.run(code, "12\n30", ["If"]);
 //   // r = { stdout, stderr, error: null | {type, line, msg}, missing: [], timeout, ms }
+//   py.run(code, "", [], { files: { "memo.txt": "…" }, server: { "https://ria.example/a": { status: 200, body: "…" } } });
+//   // 넷째 인자는 제한 시간(ms) 숫자 또는 { timeoutMs?, files?, server? } (v0.4 E1·E2)
 //
 // - 실행은 한 번에 하나씩 차례로 돈다(대기열).
 // - 제한 시간(기본 3초)을 넘으면 작업자를 끝내고(terminate) 새로 띄운다. 그 실행은
@@ -37,6 +39,10 @@ function failResult(type, msg, extra = {}) {
 
 function errMsg(e) {
   return e && e.message ? e.message : String(e);
+}
+
+function plainObj(v) {
+  return v && typeof v === "object" && !Array.isArray(v) ? v : null;
 }
 
 function cleanResult(r) {
@@ -79,8 +85,11 @@ export class PyRun {
     return this._readyP || this._spawn();
   }
 
-  run(code, stdin = "", require = [], timeoutMs = DEFAULT_TIMEOUT_MS) {
-    const job = this._queue.then(() => this._runOne(code, stdin, require, timeoutMs));
+  run(code, stdin = "", require = [], opts = DEFAULT_TIMEOUT_MS) {
+    const o = typeof opts === "number" ? { timeoutMs: opts } : (opts || {});
+    const timeoutMs = typeof o.timeoutMs === "number" ? o.timeoutMs : DEFAULT_TIMEOUT_MS;
+    const env = { files: plainObj(o.files), server: plainObj(o.server) };
+    const job = this._queue.then(() => this._runOne(code, stdin, require, timeoutMs, env));
     this._queue = job.then(() => {}, () => {});
     return job;
   }
@@ -203,7 +212,7 @@ export class PyRun {
     this._spawn();
   }
 
-  async _runOne(code, stdin, require, timeoutMs) {
+  async _runOne(code, stdin, require, timeoutMs, env = {}) {
     for (let attempt = 0; ; attempt++) {
       try {
         await this.preload();
@@ -243,6 +252,7 @@ export class PyRun {
           code: code == null ? "" : String(code),
           stdin: Array.isArray(stdin) ? stdin.map(String) : (stdin == null ? "" : String(stdin)),
           require: Array.from(require || [], String),
+          files: env.files, server: env.server,
         });
       } catch (e) {
         finish(failResult("WorkerError", errMsg(e)));

@@ -46,3 +46,27 @@ test("path_end_text: 남은 레슨이 있을 때와 모두 끝냈을 때", () =>
   assert.equal(pathEndText({ chapters: [...CH, mk(4, "함수")], completed: [] }),
     "4장까지가 지금 판의 전부예요. 5장(반복문)부터는 다음 업데이트에서 열려요");
 });
+
+import { chapterWindow } from "../../src/curriculum.js";
+const IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+test("window_middle: 지금 장과 앞뒤 하나씩", () => {
+  assert.deepEqual(chapterWindow({ chapterIds: IDS, currentChapter: 5 }), { shown: [4, 5, 6], hidden: [1, 2, 3, 7, 8, 9, 10] });
+});
+
+test("window_start_end: 처음이면 1~3, 마지막이면 끝 셋", () => {
+  assert.deepEqual(chapterWindow({ chapterIds: IDS, currentChapter: 1 }).shown, [1, 2, 3]);
+  assert.deepEqual(chapterWindow({ chapterIds: IDS, currentChapter: 10 }).shown, [8, 9, 10]);
+});
+
+test("window_all_done: 지금 장이 없으면(모두 끝냄) 끝 셋", () => {
+  const w = chapterWindow({ chapterIds: IDS, currentChapter: null });
+  assert.deepEqual(w.shown, [8, 9, 10]);
+  assert.equal(w.hidden.length, 7);
+});
+
+test("window_few: 장이 3개 이하면 모두 보이고 숨김 없음", () => {
+  assert.deepEqual(chapterWindow({ chapterIds: [1, 2], currentChapter: 2 }), { shown: [1, 2], hidden: [] });
+  assert.deepEqual(chapterWindow({ chapterIds: [1, 2, 3], currentChapter: 1 }), { shown: [1, 2, 3], hidden: [] });
+  assert.deepEqual(chapterWindow({ chapterIds: [], currentChapter: null }), { shown: [], hidden: [] });
+});

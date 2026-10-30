@@ -17,10 +17,12 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 ```
 | type | 필수 칸 | 선택 칸 |
 |---|---|---|
-| choice / check | concept, q, options(3~4), answer, explain | code, stdin |
-| blank | concept, q, code(`___` 정확히 1개), chips(3~4), answer, explain | stdin |
-| order | concept, q, lines(3~6, **정답 순서대로**), expect, explain | stdin |
-| write | concept, task, starter, tests, require, hints(4), solution, explain | — |
+| choice / check | concept, q, options(3~4), answer, explain | code, stdin, files, server |
+| blank | concept, q, code(`___` 정확히 1개), chips(3~4), answer, explain | stdin, files, server |
+| order | concept, q, lines(3~6, **정답 순서대로**), expect, explain | stdin, files, server |
+| write | concept, task, starter, tests, require, hints(4), solution, explain | files, server |
+
+카드도 `files`·`server`를 둘 수 있다. `files`·`server`는 3-1절.
 
 모르는 칸 이름은 오류다(오타 방지). `concept`는 `data/concepts.js`에 있는 id이고, 그 개념의 장이 레슨의 장보다 뒤면 안 된다.
 
@@ -41,11 +43,22 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 - **write**:
   - `input()`이 있으면 시험 2~4개(그중 공개 1개), 없으면 공개 시험 1개(C20). 형식은 `{ stdin, expect, public }`.
   - `starter`는 시험에 떨어져야 하고 `solution`은 모두 통과해야 한다.
-  - **하드코딩 막기**: 정답 숫자를 그대로 `print`해도 통과하면 안 된다. `require`에 문법 마디 이름(`If`, `For`, `FunctionDef`, `Return`, `Mult` …) 또는 `Call:함수이름`, `Name:변수이름`(그 변수를 읽음)을 넣는다(C26).
+  - **하드코딩 막기**: 정답 숫자를 그대로 `print`해도 통과하면 안 된다. `require`에 문법 마디 이름(`If`, `For`, `FunctionDef`, `Return`, `Mult` …) 또는 `Call:함수이름`, `Name:변수이름`(그 변수를 읽음)을 넣는다(C26). 점이 붙은 호출(`json.loads`, `re.search`, `csv.reader`)은 `Method:loads`처럼 `Method:`로 쓴다. `Call:`은 `urlopen(...)`처럼 이름만으로 부를 때만 맞는다.
   - 숨은 시험에는 **경계값**(딱 기준값, 최솟값, n=1, 0회 반복)을 넣는다.
   - 과제 문장에 **예시 입출력**을 한 줄 넣는다(「3을 입력하면 「…」」).
   - 과제 문장에 없는 조건을 `require`로 요구하지 않는다(예: and를 요구하면 문장에 「and로 묶어」라고 쓴다).
   - **힌트 4단계**: ① 문제 다시 읽기 → ② 배운 개념 떠올리기 → ③ 방향(답 코드를 쓰지 않음) → ④ 뼈대 코드(`___` 포함).
+
+## 3-1. 파일·연습 서버·import (11~14장)
+
+- **files** (11장~): `{"memo.txt": "우유\n빵\n"}` 이름 → 내용(문자열). 실행마다 빈 폴더에 이 파일들을 만들고 그 폴더에서 돈다. 이름은 폴더 없는 파일 이름(`/` `\` 없음, `.`으로 시작 안 함, 40자 이하), 1~5개. 쓰기도 그 폴더 안에서만 되고 실행이 끝나면 지워진다(다음 실행에 남지 않음).
+- write의 시험마다 `files`를 따로 둘 수 있다(`{ stdin, expect, public, files }`, 없으면 문제의 `files`). 시험별 `files`가 있으면 input이 없어도 시험 2~4개 — 파일 내용을 바꾼 숨은 시험으로 하드코딩을 막는다.
+- **server** (13장~): `{"https://ria.example/menu": {"status": 200, "body": "…", "type": "text/html"}}` 주소 → 응답. status는 100~599 정수, body는 문자열, type은 선택. 실행 동안 `urllib.request.urlopen`이 이 표로 답한다. 표에 없는 주소는 `URLError`, status 400 이상은 `HTTPError`. 실제 인터넷은 쓰지 않는다.
+- **주소 규칙**: 연습 서버 주소는 언제나 `https://ria.example/…`(실존 사이트 주소 금지). 경로는 짧게(`/menu`, `/bus?stop=101`).
+- **import**: 장마다 정해진 모듈만(누적). 11장 `csv` · 12장 `re` · 13장 `urllib.request`·`urllib.parse`·`urllib.error` · 14장 `json`. 그 밖의 모듈(`os`, `sys`, `requests` …)은 오류. 모듈에서 쓸 수 있는 이름과 `open()`의 모드(`"r"`·`"w"`·`"a"`만, `encoding=`·`newline=` 허용)는 `tests/content.py`의 `MODULE_MEMBERS`·`CALL_KWARGS`가 정한다.
+- **38칸**: `urllib.request.urlopen("https://ria.example/x")`는 한 줄에 안 들어간다. `from urllib.request import urlopen`과 `url = "…"` 변수로 나눈다.
+- **JSON 출력(14장)**: 딕셔너리를 통째로 `print`하거나 `json.dumps`를 그냥 출력하지 말고 **특정 값을 꺼내 출력**한다. 꼭 dumps 결과를 보여야 하면 `sort_keys=True`, `indent=2`, `ensure_ascii=False`를 명시해 키 순서·공백이 하나로 정해지게 하고, 과제 문장에도 그 인자를 적는다.
+- **정규표현식(12장)**: 패턴 글자를 채점하지 말고 **출력**을 채점한다. 맞는 패턴이 여러 개(`\d+`·`[0-9]+`)일 수 있으므로 시험 데이터는 어느 맞는 패턴에도 같은 출력이 나오게 고르고, blank 오답 칩은 실제로 다른 출력이나 오류를 내야 한다. 패턴은 `r"…"`로 쓴다.
 
 ## 4. 말투와 용어
 

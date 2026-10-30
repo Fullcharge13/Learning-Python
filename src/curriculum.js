@@ -55,3 +55,18 @@ export function pathEndText({ chapters, completed }) {
   if (!next) return "다음 장은 준비 중이에요";
   return `${last}장까지가 지금 판의 전부예요. ${next.no}장(${next.title})부터는 다음 업데이트에서 열려요`;
 }
+
+/**
+ * 학습 내용 카드에 처음부터 보일 장 (판정 C35): 지금 장과 앞뒤, 모두 끝냈으면(지금 장 없음) 끝 셋.
+ * 처음·끝에서는 창을 안쪽으로 밀어 늘 size개를 채운다. 나머지는 「더 보기」로.
+ * @returns {{ shown: number[], hidden: number[] }} 둘 다 장 번호 순
+ */
+export function chapterWindow({ chapterIds, currentChapter, size = 3 }) {
+  const ids = [...(chapterIds || [])];
+  if (ids.length <= size) return { shown: ids, hidden: [] };
+  let at = ids.indexOf(currentChapter);
+  if (at < 0) at = ids.length - 1;
+  const start = Math.min(Math.max(0, at - Math.floor(size / 2)), ids.length - size);
+  const shown = ids.slice(start, start + size);
+  return { shown, hidden: ids.filter((id) => !shown.includes(id)) };
+}

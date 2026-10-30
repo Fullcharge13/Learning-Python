@@ -332,6 +332,308 @@ def test_loop_timeout():
     assert has(rep.errors, "Timeout"), rep.errors
 
 
+# ── v0.4 E1·E2: files·server 칸 (작업 1) ─────────────────────────────
+from content import files_of, server_of, check_choice  # noqa: E402
+
+
+def _env_errors(fn, obj):
+    rep = Lesson("t")
+    v = fn(rep, "x", obj)
+    return v, rep.errors
+
+
+def test_files_shape():
+    assert _env_errors(files_of, {}) == (None, [])
+    assert _env_errors(files_of, {"files": {"memo.txt": "우유"}}) == ({"memo.txt": "우유"}, [])
+    for bad in ({}, [], "memo.txt", {"a/b.txt": "x"}, {".hidden": "x"}, {"m.txt": 3},
+                {"x" * 41: ""}, {str(i): "" for i in range(6)}):
+        v, errs = _env_errors(files_of, {"files": bad})
+        assert v is None and has(errs, "files"), (bad, errs)
+
+
+def test_server_shape():
+    ok = {"https://ria.example/menu": {"status": 200, "body": "김밥", "type": "text/plain"},
+          "http://ria.example/x": {"status": 404, "body": ""}}
+    assert _env_errors(server_of, {"server": ok}) == (ok, [])
+    for bad in ({}, {"ria.example": {"status": 200, "body": ""}},
+                {"https://a.b/c": {"status": "200", "body": ""}},
+                {"https://a.b/c": {"status": True, "body": ""}},
+                {"https://a.b/c": {"status": 700, "body": ""}},
+                {"https://a.b/c": {"status": 200}},
+                {"https://a.b/c": {"status": 200, "body": b"x"}},
+                {"https://a.b/c": {"status": 200, "body": "", "headers": {}}},
+                {"https://a b/c": {"status": 200, "body": ""}}):
+        v, errs = _env_errors(server_of, {"server": bad})
+        assert v is None and has(errs, "server"), (bad, errs)
+
+
+def _run_errors(errors):
+    """장 문법 규칙(open·import 금지 등, 작업 2 몫)을 뺀 실행 관련 오류만."""
+    return [e for e in errors if "실제 출력" in e or "통과하지" in e or "다름" in e or "files" in e or "server" in e
+            or "시험" in e]
+
+
+def test_choice_runs_with_files_and_server():
+    item = {"type": "choice", "concept": "print", "q": "출력은?",
+            "code": "print(open('m.txt').read())\nimport urllib.request\n"
+                    "print(urllib.request.urlopen('https://ria.example/a').read().decode())",
+            "options": ["우유\n김밥", "우유", "오류"], "answer": 0, "explain": "파일과 서버에서 읽어요.",
+            "files": {"m.txt": "우유"}, "server": {"https://ria.example/a": {"status": 200, "body": "김밥"}}}
+    rep = Lesson("t")
+    check_choice(rep, "items[0]", item, 10)
+    assert _run_errors(rep.errors) == [], rep.errors
+    item["answer"] = 1
+    rep = Lesson("t")
+    check_choice(rep, "items[0]", item, 10)
+    assert has(rep.errors, "실제 출력"), rep.errors
+
+
+def test_write_test_level_files_override():
+    item = {
+        "type": "write", "concept": "print", "task": "memo.txt의 줄 수를 출력해요.", "starter": "",
+        "tests": [{"stdin": "", "expect": "2", "public": True},
+                  {"stdin": "", "expect": "3", "public": False, "files": {"memo.txt": "a\nb\nc\n"}}],
+        "require": [], "files": {"memo.txt": "a\nb\n"},
+        "hints": ["다시 봐요.", "파일을 읽어요.", "줄로 나눠요.", "print(len(___))"],
+        "solution": "print(len(open('memo.txt').read().splitlines()))", "explain": "줄 수예요.",
+    }
+    rep = Lesson("t")
+    check_write(rep, "items[0] write", item, 10)
+    assert _run_errors(rep.errors) == [], rep.errors
+    # 시험별 files가 없으면 입력 없는 문제라 시험은 1개만
+    item2 = dict(item, tests=[dict(item["tests"][0]), {"stdin": "", "expect": "2", "public": False}])
+    rep = Lesson("t")
+    check_write(rep, "items[0] write", item2, 10)
+    assert has(rep.errors, "tests는 1~1개"), rep.errors
+    # 시험 칸 오타
+    item3 = dict(item, tests=[dict(item["tests"][0], file={"memo.txt": "x"})])
+    rep = Lesson("t")
+    check_write(rep, "items[0] write", item3, 10)
+    assert has(rep.errors, "선택 files"), rep.errors
+
+
+def test_card_with_files():
+    lesson_like = {"say": "파일을 읽어요.", "code": "print(open('m.txt').read())", "out": "리아", "files": {"m.txt": "리아"}}
+    from content import ITEM_KEYS, CARD_OPT
+    assert {"files", "server"} <= CARD_OPT
+    for kind in ("choice", "check", "blank", "order", "write"):
+        assert {"files", "server"} <= ITEM_KEYS[kind][1], kind
+    r = content.safe_run(Lesson("t"), "c", lesson_like["code"], "", files=lesson_like["files"])
+    assert r["stdout"] == "리아\n" and r["error"] is None, r
+
+
+# ── v0.4 작업 2: 11~14장 문법·import 허용 ─────────────────────────────
+def rule_errors(code, chapter):
+    """줄 폭(38칸) 오류를 뺀 문법 규칙 오류만(긴 예시 코드를 한곳에 모아 시험하려고)."""
+    return [e for e in shape_errors(code, chapter) if "넓음" not in e]
+
+
+def test_modules_cumulative():
+    m = content.MODULES_BY_CHAPTER
+    assert m[10] == set()
+    assert m[11] == {"csv"}
+    assert m[12] == {"csv", "re"}
+    assert m[13] == {"csv", "re", "urllib.request", "urllib.parse", "urllib.error"}
+    assert m[14] == m[13] | {"json"}
+
+
+# 11장 파일
+CH11_OK = """import csv
+
+with open("memo.txt", encoding="utf-8") as f:
+    text = f.read()
+f = open("memo.txt", "r")
+first = f.readline()
+rest = f.readlines()
+f.close()
+count = 0
+with open("memo.txt") as f:
+    for line in f:
+        count += 1
+        print(line.strip().split(","))
+with open("todo.txt", "w") as f:
+    f.write("우유\\n")
+with open("todo.txt", mode="a") as f:
+    f.write("빵\\n")
+try:
+    open("없음.txt")
+except FileNotFoundError:
+    print("없어요")
+with open("book.csv") as f:
+    for row in csv.reader(f):
+        print(row[0])
+with open("out.csv", "w", newline="") as f:
+    w = csv.writer(f)
+    w.writerow(["a", 1])
+print(text, first, rest, count)"""
+
+
+def test_ch11_allowed():
+    assert rule_errors(CH11_OK, 11) == []
+
+
+def test_ch10_forbids_with_open():
+    e = shape_errors('with open("m.txt") as f:\n    print(f.read())', 10)
+    assert has(e, "With") and has(e, "open()"), e
+
+
+def test_ch10_forbids_import_csv():
+    e = shape_errors("import csv\nprint(1)", 10)
+    assert has(e, "Import"), e
+
+
+def test_ch11_forbids_other_modules():
+    for code, mod in (("import os", "os"), ("import re", "re"), ("import sys", "sys"),
+                      ("from json import loads", "json"), ("import csv, os", "os"),
+                      ("import urllib", "urllib")):
+        e = shape_errors(code + "\nprint(1)", 11)
+        assert has(e, "쓸 수 없는 모듈 %s" % mod), (code, e)
+
+
+def test_ch11_forbids_star_and_unknown_member():
+    assert has(shape_errors("from csv import *", 11), "*")
+    assert has(shape_errors("import csv\nr = csv.DictWriter", 11), "csv.DictWriter")
+
+
+def test_ch11_open_modes():
+    for mode in ("rb", "x", "w+", "r+"):
+        e = shape_errors('f = open("m.txt", "%s")' % mode, 11)
+        assert has(e, "모드"), (mode, e)
+    assert has(shape_errors('m = "w"\nf = open("m.txt", m)', 11), "모드")
+    assert has(shape_errors('f = open("m.txt", buffering=1)', 11), "buffering")
+
+
+def test_ch11_still_forbids_comprehension_lambda_class():
+    assert has(shape_errors('print([l for l in open("m.txt")])', 11), "ListComp")
+    assert has(shape_errors("f = lambda x: x", 11), "Lambda")
+    assert has(shape_errors("class A:\n    pass", 11), "ClassDef")
+
+
+# 12장 정규표현식
+CH12_OK = r"""import re
+
+s = "주문 3개, 12시 30분"
+m = re.search(r"\d+", s)
+if m:
+    print(m.group(), m.group(0))
+m2 = re.match(r"(\w+)@(\w+)", "ria@cafe")
+print(m2.group(1))
+print(re.fullmatch(r"\d{3}", "123") is not None)
+print(re.findall(r"\d+", s))
+print(re.sub(r"\d", "*", s))
+print(re.split(r",\s*", "a, b,c"))
+p = re.compile(r"(\d+)시")
+print(p.search(s).group(1), p.findall(s))"""
+
+
+def test_ch12_allowed():
+    assert rule_errors(CH12_OK, 12) == []
+
+
+def test_ch11_forbids_import_re():
+    assert has(shape_errors("import re\nprint(re.findall('a', 'aa'))", 11), "쓸 수 없는 모듈 re")
+
+
+def test_ch12_forbids():
+    assert has(shape_errors("import json", 12), "쓸 수 없는 모듈 json")
+    assert has(shape_errors("import urllib.request", 12), "쓸 수 없는 모듈 urllib.request")
+    assert has(shape_errors('import re\nprint(re.escape("."))', 12), "re.escape")
+    assert has(shape_errors('import re\nprint(re.sub("a", lambda m: "b", "a"))', 12), "Lambda")
+
+
+# 13장 네트워크 기초
+CH13_OK = """import urllib.request
+import urllib.parse
+import urllib.error
+from urllib.request import urlopen, Request
+
+url = "https://ria.example/search?q=" + urllib.parse.quote("김밥")
+parts = urllib.parse.urlparse(url)
+print(parts.netloc, urllib.parse.parse_qs(parts.query)["q"][0])
+print(urllib.parse.unquote("%EA%B9%80"))
+q = urllib.parse.urlencode({"q": "라면", "n": 3})
+with urllib.request.urlopen("https://ria.example/menu") as r:
+    print(r.status, r.read().decode())
+req = Request("https://ria.example/menu")
+r = urlopen(req)
+html = r.read().decode("utf-8")
+print(html.find("<title>"))
+try:
+    urllib.request.urlopen("https://ria.example/x")
+except urllib.error.HTTPError as e:
+    print(e.code)
+except urllib.error.URLError as e:
+    print(e.reason)"""
+
+
+def test_ch13_allowed():
+    assert rule_errors(CH13_OK, 13) == []
+
+
+def test_ch13_from_import_names_callable():
+    code = "from urllib.parse import quote, urlencode\nprint(quote('a'), urlencode({'a': 1}))"
+    assert rule_errors(code, 13) == []
+    code = "from urllib.error import HTTPError, URLError\nprint(HTTPError, URLError)"
+    assert rule_errors(code, 13) == []
+
+
+def test_ch13_forbids():
+    for code, word in (("import socket", "쓸 수 없는 모듈 socket"),
+                       ("import requests", "쓸 수 없는 모듈 requests"),
+                       ("import json", "쓸 수 없는 모듈 json"),
+                       ("from urllib import request", "쓸 수 없는 모듈 urllib"),
+                       ("import http.client", "쓸 수 없는 모듈 http.client"),
+                       ("from urllib.request import urlretrieve", "urllib.request.urlretrieve"),
+                       ("import urllib.request\nurllib.request.urlretrieve('x')", "urllib.request.urlretrieve")):
+        e = shape_errors(code, 13)
+        assert has(e, word), (code, e)
+
+
+def test_ch12_forbids_urllib_from_import():
+    assert has(shape_errors("from urllib.request import urlopen", 12), "쓸 수 없는 모듈 urllib.request")
+
+
+# 14장 웹 API와 JSON
+CH14_OK = """import json
+import urllib.request
+import urllib.parse
+
+text = '{"stop": "시청", "buses": [{"no": 7, "min": 3}]}'
+data = json.loads(text)
+for bus in data["buses"]:
+    print(bus["no"], bus["min"])
+print(data["buses"][0]["no"])
+print(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True))
+q = urllib.parse.urlencode({"stop": 101})
+with urllib.request.urlopen("https://ria.example/bus?" + q) as r:
+    info = json.loads(r.read().decode())
+print(info.get("stop"))"""
+
+
+def test_ch14_allowed():
+    assert rule_errors(CH14_OK, 14) == []
+
+
+def test_ch13_forbids_import_json():
+    assert has(shape_errors("import json\nprint(json.loads('1'))", 13), "쓸 수 없는 모듈 json")
+
+
+def test_ch14_forbids():
+    for code, word in (("import subprocess", "쓸 수 없는 모듈 subprocess"),
+                       ("import os", "쓸 수 없는 모듈 os"),
+                       ("import json\nprint(json.load(open('a.json')))", "json.load"),
+                       ("import json\nprint(json.dumps({}, default=str))", "default"),
+                       ("print({k: 1 for k in 'ab'})", "DictComp"),
+                       ("class Bus:\n    pass", "ClassDef")):
+        e = shape_errors(code, 14)
+        assert has(e, word), (code, e)
+
+
+def test_module_alias():
+    assert shape_errors("import json as j\nprint(j.loads('1'))", 14) == []
+    assert has(shape_errors("import json as j\nprint(j.load(1))", 14), "json.load")
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     bad = 0

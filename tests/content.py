@@ -16,6 +16,8 @@
     items = 터치 문제(choice/blank/order) 4~6개(장 평가는 4~8개) → write 1개 → check 1개, 이 순서.
 아래 ITEM_KEYS가 문제 형태별로 허용하는 칸이다(오타를 잡으려고 모르는 칸은 오류).
 카드·choice·blank·order·check는 stdin 칸("\n"으로 나눈 문자열, 판정 C23)을 둘 수 있다. 없으면 "".
+카드·choice·check·blank·order·write는 선택 칸 files·server를 둘 수 있다(v0.4 E1·E2, 뜻은 FILES_SERVER_DOC).
+write의 시험(tests[i])은 files를 따로 둘 수 있고, 있으면 문제의 files 대신 쓴다.
 실행 한 번은 RUN_SECONDS초까지만 기다리고, 넘으면 오류로 알린다.
 """
 
@@ -52,14 +54,30 @@ HINT_MAX = 120
 
 LESSON_KEYS = {"id", "chapter", "title", "goal", "summary", "isExam", "cards", "items"}
 CARD_KEYS = {"say", "code", "out"}
-CARD_OPT = {"stdin"}
+ENV_KEYS = {"files", "server"}   # v0.4 가상 파일·연습 서버
+CARD_OPT = {"stdin"} | ENV_KEYS
 ITEM_KEYS = {
-    "choice": ({"type", "concept", "q", "options", "answer", "explain"}, {"code", "stdin"}),
-    "check": ({"type", "concept", "q", "options", "answer", "explain"}, {"code", "stdin"}),
-    "blank": ({"type", "concept", "q", "code", "chips", "answer", "explain"}, {"stdin"}),
-    "order": ({"type", "concept", "q", "lines", "expect", "explain"}, {"stdin"}),
-    "write": ({"type", "concept", "task", "starter", "tests", "require", "hints", "solution", "explain"}, set()),
+    "choice": ({"type", "concept", "q", "options", "answer", "explain"}, {"code", "stdin"} | ENV_KEYS),
+    "check": ({"type", "concept", "q", "options", "answer", "explain"}, {"code", "stdin"} | ENV_KEYS),
+    "blank": ({"type", "concept", "q", "code", "chips", "answer", "explain"}, {"stdin"} | ENV_KEYS),
+    "order": ({"type", "concept", "q", "lines", "expect", "explain"}, {"stdin"} | ENV_KEYS),
+    "write": ({"type", "concept", "task", "starter", "tests", "require", "hints", "solution", "explain"}, ENV_KEYS),
 }
+TEST_KEYS = {"stdin", "expect", "public"}
+TEST_OPT = {"files"}
+
+FILES_SERVER_DOC = """
+files:  {"memo.txt": "우유\\n빵\\n"}  이름 → 내용(글자). 실행마다 빈 폴더에 이 파일들을 만들고 그 폴더에서 돈다.
+        이름은 폴더 없는 파일 이름(/ \\ 없음, .으로 시작하지 않음, 40자 이하). 1~5개.
+server: {"https://ria.example/menu": {"status": 200, "body": "…", "type": "text/plain"}}
+        주소(http:// 또는 https://) → 응답. status는 100~599 정수, body는 글자, type은 선택(글자).
+        실행 동안 urllib.request.urlopen이 이 표로 답한다(표에 없는 주소는 URLError, 400 이상은 HTTPError).
+"""
+FILES_MAX = 5
+FILE_NAME_MAX = 40
+SERVER_MAX = 8
+RESPONSE_KEYS = {"status", "body"}
+RESPONSE_OPT = {"type"}
 TOUCH = {"choice", "blank", "order"}
 
 # ── 장마다 아직 배우지 않은 문법 막기 ─────────────────────────────────────
@@ -98,12 +116,34 @@ CHAPTER_RULES = {
     # 10장: try/except/else/finally, raise. raise ValueError("…")처럼 오류를 만들어 부르는 것도 허용
     10: {"allow": {"Try", "Raise"},
          "calls": {"Exception", "ValueError", "TypeError", "ZeroDivisionError", "IndexError", "KeyError"}},
+    # 11장: with, open()(모드 "r"·"w"·"a"만), 파일 메서드 read·readline·readlines·write·close,
+    #       for line in f. import는 이 장부터지만 modules에 적은 모듈만(장마다 누적).
+    11: {"allow": {"With", "Import", "ImportFrom"}, "calls": {"open"}, "modules": {"csv"}},
+    12: {"modules": {"re"}},                                              # 정규표현식, r"…"
+    13: {"modules": {"urllib.request", "urllib.parse", "urllib.error"}},  # 연습 서버(E2)
+    14: {"modules": {"json"}},
+}
+# import한 모듈에서 쓸 수 있는 이름(모듈.이름 또는 from 모듈 import 이름). 모르는 이름은 오류.
+MODULE_MEMBERS = {
+    "csv": {"reader", "writer"},
+    "re": {"search", "match", "fullmatch", "findall", "sub", "split", "compile"},
+    "urllib.request": {"urlopen", "Request"},
+    "urllib.parse": {"urlencode", "quote", "unquote", "urlparse", "parse_qs"},
+    "urllib.error": {"HTTPError", "URLError"},
+    "json": {"loads", "dumps"},
+}
+OPEN_MODES = ("r", "w", "a")
+# 이름 붙은 인자(키워드)를 제한하는 함수: 함수 → 쓸 수 있는 키워드
+CALL_KWARGS = {
+    "open": {"mode", "encoding", "newline"},
+    "json.dumps": {"ensure_ascii", "indent", "sort_keys"},
+    "json.loads": set(),
 }
 
 
 def _build_tables(rules):
-    forbid, names, calls = {}, {}, {}
-    cur_forbid, cur_names, cur_calls = set(FORBID_ALL), set(), set()
+    forbid, names, calls, modules = {}, {}, {}, {}
+    cur_forbid, cur_names, cur_calls, cur_mods = set(FORBID_ALL), set(), set(), set()
     for ch in sorted(rules):
         r = rules[ch]
         if "forbid" in r:
@@ -112,11 +152,12 @@ def _build_tables(rules):
         if "names" in r:
             cur_names = None if r["names"] is None else set(r["names"])
         cur_calls = cur_calls | set(r.get("calls", ()))
-        forbid[ch], names[ch], calls[ch] = set(cur_forbid), cur_names, set(cur_calls)
-    return forbid, names, calls
+        cur_mods = cur_mods | set(r.get("modules", ()))
+        forbid[ch], names[ch], calls[ch], modules[ch] = set(cur_forbid), cur_names, set(cur_calls), set(cur_mods)
+    return forbid, names, calls, modules
 
 
-FORBID_BY_CHAPTER, NAMES_BY_CHAPTER, CALLS_BY_CHAPTER = _build_tables(CHAPTER_RULES)
+FORBID_BY_CHAPTER, NAMES_BY_CHAPTER, CALLS_BY_CHAPTER, MODULES_BY_CHAPTER = _build_tables(CHAPTER_RULES)
 INPUT_FROM_CHAPTER = 2  # input()은 2장부터
 
 # 앱이 채우는 자리 표시가 그대로 남은 것만 막는다(f-문자열 예시의 { }는 허용, 판정 C23).
@@ -174,12 +215,12 @@ def _on_alarm(signum, frame):
     raise CheckTimeout("over %d seconds" % RUN_SECONDS)
 
 
-def safe_run(rep, where, code, stdin="", require=None):
+def safe_run(rep, where, code, stdin="", require=None, files=None, server=None):
     """runner.run + 시간 제한. 시간을 넘기면 rep에 오류를 적고 error.type = "Timeout"인 결과를 준다."""
     old = signal.signal(signal.SIGALRM, _on_alarm)
     signal.setitimer(signal.ITIMER_REAL, RUN_SECONDS)
     try:
-        r = run(code, stdin, require or [])
+        r = run(code, stdin, require or [], files=files, server=server)
     except CheckTimeout:
         r = {"stdout": "", "stderr": "", "error": {"type": "CheckTimeout", "line": None, "msg": ""}, "missing": []}
     finally:
@@ -198,6 +239,62 @@ def stdin_of(rep, where, obj):
         rep.err(where, "stdin은 문자열이어야 함(여러 값은 \\n으로 나눔)")
         return ""
     return v
+
+
+def files_of(rep, where, obj):
+    """files 칸(없으면 None). 형식이 틀리면 오류를 적고 None."""
+    v = obj.get("files")
+    if v is None and "files" not in obj:
+        return None
+    if not isinstance(v, dict) or not (1 <= len(v) <= FILES_MAX):
+        rep.err(where, "files는 {이름: 내용} 객체, 1~%d개" % FILES_MAX)
+        return None
+    ok = True
+    for name, text in v.items():
+        if (not isinstance(name, str) or not name or len(name) > FILE_NAME_MAX or "/" in name or "\\" in name
+                or name.startswith(".") or name != name.strip()):
+            rep.err(where, "files 이름 %r 이 틀림(폴더 없는 파일 이름, .으로 시작 안 함, %d자 이하)"
+                    % (name, FILE_NAME_MAX))
+            ok = False
+        if not isinstance(text, str):
+            rep.err(where, "files[%r] 내용은 글자여야 함" % (name,))
+            ok = False
+    return v if ok else None
+
+
+def server_of(rep, where, obj):
+    """server 칸(없으면 None). 형식이 틀리면 오류를 적고 None."""
+    v = obj.get("server")
+    if v is None and "server" not in obj:
+        return None
+    if not isinstance(v, dict) or not (1 <= len(v) <= SERVER_MAX):
+        rep.err(where, "server는 {주소: 응답} 객체, 1~%d개" % SERVER_MAX)
+        return None
+    ok = True
+    for url, resp in v.items():
+        if not isinstance(url, str) or not re.match(r"^https?://[^\s/]+(/\S*)?$", url):
+            rep.err(where, "server 주소 %r 는 http:// 또는 https://로 시작하는 공백 없는 주소" % (url,))
+            ok = False
+        if not isinstance(resp, dict) or not (RESPONSE_KEYS <= set(resp) <= RESPONSE_KEYS | RESPONSE_OPT):
+            rep.err(where, "server[%r] 응답 칸은 status, body (+ 선택 type)" % (url,))
+            ok = False
+            continue
+        st = resp["status"]
+        if not isinstance(st, int) or isinstance(st, bool) or not (100 <= st <= 599):
+            rep.err(where, "server[%r].status는 100~599 정수" % (url,))
+            ok = False
+        if not isinstance(resp["body"], str):
+            rep.err(where, "server[%r].body는 글자여야 함" % (url,))
+            ok = False
+        if "type" in resp and not isinstance(resp["type"], str):
+            rep.err(where, "server[%r].type은 글자여야 함" % (url,))
+            ok = False
+    return v if ok else None
+
+
+def env_of(rep, where, obj):
+    """safe_run에 넘길 files·server(kwargs)."""
+    return {"files": files_of(rep, where, obj), "server": server_of(rep, where, obj)}
 
 
 def same_outcome(a, b):
@@ -255,6 +352,10 @@ def check_code_shape(rep, where, code, chapter):
     if "ForTupleTarget" not in forbid:
         for_targets = {id(n.target) for n in ast.walk(tree)
                        if isinstance(n, ast.For) and isinstance(n.target, ast.Tuple)}
+    from_names = {}
+    if "Import" not in forbid:
+        from_names = check_imports(rep, where, tree, chapter)
+        calls = calls | set(from_names)
     for node in ast.walk(tree):
         kind = type(node).__name__
         if kind == "Tuple" and id(node) in for_targets:
@@ -270,6 +371,92 @@ def check_code_shape(rep, where, code, chapter):
             rep.err(where, "%d장에서 쓸 수 없는 이름 %r(변수는 2장부터)" % (chapter, node.id))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id not in calls:
             rep.err(where, "%d장에서 아직 배우지 않은 함수 %s()" % (chapter, node.func.id))
+
+
+def _dotted(node):
+    """a.b.c 꼴 속성 사슬 → ["a", "b", "c"]. 맨 앞이 이름이 아니면 None."""
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return parts[::-1]
+
+
+def check_imports(rep, where, tree, chapter):
+    """11장부터: import는 그 장까지 배운 모듈만, 모듈에서는 MODULE_MEMBERS에 있는 이름만.
+    open()의 모드, CALL_KWARGS의 키워드도 여기서 본다. from … import로 들여온 {이름: "모듈.이름"}을 돌려준다."""
+    modules = MODULES_BY_CHAPTER.get(chapter, set())
+    allowed = ", ".join(sorted(modules)) or "없음"
+
+    def bad_module(name, line):
+        rep.err(where, "%d장에서 쓸 수 없는 모듈 %s (%s줄) — 이 장까지 쓸 수 있는 모듈: %s"
+                % (chapter, name, line, allowed))
+
+    bound, from_names = {}, {}   # 코드 안 이름 → 모듈 경로
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                if a.name not in modules:
+                    bad_module(a.name, node.lineno)
+                elif a.asname:
+                    bound[a.asname] = a.name
+                else:
+                    bound[a.name.split(".")[0]] = a.name.split(".")[0]
+        elif isinstance(node, ast.ImportFrom):
+            mod = "." * node.level + (node.module or "")
+            if mod not in modules:
+                bad_module(mod, node.lineno)
+                continue
+            for a in node.names:
+                if a.name == "*":
+                    rep.err(where, "from %s import * 는 쓰지 않음(필요한 이름만 적음, %s줄)" % (mod, node.lineno))
+                elif a.name not in MODULE_MEMBERS.get(mod, ()):
+                    rep.err(where, "%s.%s 은 %d장에서 쓸 수 없는 이름 (%s줄) — 쓸 수 있는 것: %s"
+                            % (mod, a.name, chapter, node.lineno, ", ".join(sorted(MODULE_MEMBERS.get(mod, ())))))
+                else:
+                    from_names[a.asname or a.name] = mod + "." + a.name
+
+    inner = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    qual = {}   # id(속성 마디) → "모듈.이름"
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute) or id(node) in inner:
+            continue
+        parts = _dotted(node)
+        if not parts or parts[0] not in bound:
+            continue
+        parts = bound[parts[0]].split(".") + parts[1:]
+        cut = max((i for i in range(1, len(parts) + 1) if ".".join(parts[:i]) in MODULE_MEMBERS), default=0)
+        mod = ".".join(parts[:cut])
+        if not cut or mod not in modules:
+            bad_module(mod or ".".join(parts[:2]), node.lineno)
+        elif cut < len(parts) and parts[cut] not in MODULE_MEMBERS[mod]:
+            rep.err(where, "%s.%s 은 %d장에서 쓸 수 없는 이름 (%s줄) — 쓸 수 있는 것: %s"
+                    % (mod, parts[cut], chapter, node.lineno, ", ".join(sorted(MODULE_MEMBERS[mod]))))
+        elif cut < len(parts):
+            qual[id(node)] = mod + "." + parts[cut]
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        f = node.func
+        name = (from_names.get(f.id, f.id) if isinstance(f, ast.Name) else qual.get(id(f)))
+        if name in CALL_KWARGS:
+            for kw in node.keywords:
+                if kw.arg not in CALL_KWARGS[name]:
+                    rep.err(where, "%s()에는 %s 를 쓰지 않음(%s줄) — 쓸 수 있는 이름 인자: %s"
+                            % (name, "**" if kw.arg is None else kw.arg + "=", node.lineno,
+                               ", ".join(sorted(CALL_KWARGS[name])) or "없음"))
+        if name == "open":
+            mode = node.args[1] if len(node.args) > 1 else next(
+                (k.value for k in node.keywords if k.arg == "mode"), None)
+            if len(node.args) > 2:
+                rep.err(where, "open()에는 파일 이름과 모드만 차례로 씀(%s줄)" % node.lineno)
+            if mode is not None and not (isinstance(mode, ast.Constant) and mode.value in OPEN_MODES):
+                rep.err(where, "open()의 모드는 \"r\"·\"w\"·\"a\" 중 하나를 글자 그대로 씀(%s줄)" % node.lineno)
+    return from_names
 
 
 def check_index(rep, where, item, key="options", lo=3, hi=4):
@@ -295,15 +482,16 @@ def check_choice(rep, where, item, chapter):
     q = item.get("q") if isinstance(item.get("q"), str) else ""
     code = item.get("code")
     stdin = stdin_of(rep, where, item)
+    env = env_of(rep, where, item)
     if code is None:
         if ok:
-            check_codeless_error(rep, where, item, q)
+            check_codeless_error(rep, where, item, q, env)
         return
     if not isinstance(code, str):
         rep.err(where, "code가 문자열이 아님")
         return
     check_code_shape(rep, where + ".code", code, chapter)
-    r = safe_run(rep, where, code, stdin)
+    r = safe_run(rep, where, code, stdin, **env)
     if not ok:
         return
     if r["error"]:
@@ -324,7 +512,7 @@ def check_choice(rep, where, item, chapter):
         rep.err(where, "실제 출력 %r 와 같은 보기가 정답이 아님" % out)
 
 
-def check_codeless_error(rep, where, item, q):
+def check_codeless_error(rep, where, item, q, env=None):
     """코드 없는 「오류가 나는 코드는?」·「오류 없이 … 코드는?」 문제.
 
     보기가 모두 print( 를 담은 코드일 때만 실행해 본다(보기가 설명 문장이면 건너뜀).
@@ -338,7 +526,7 @@ def check_codeless_error(rep, where, item, q):
         want_error = False
     else:
         return
-    errs = [bool(safe_run(rep, where, o, stdin_of(rep, where, item))["error"]) for o in opts]
+    errs = [bool(safe_run(rep, where, o, stdin_of(rep, where, item), **(env or {}))["error"]) for o in opts]
     picked = [i for i, e in enumerate(errs) if e == want_error]
     if picked != [item["answer"]]:
         rep.err(where, "보기를 실행해 보니 %s 보기는 %s 인데 정답은 %d"
@@ -357,16 +545,17 @@ def check_blank(rep, where, item, chapter):
     if any("___" in c for c in chips):
         rep.err(where, "칩에 ___ 가 들어 있음")
     stdin = stdin_of(rep, where, item)
+    env = env_of(rep, where, item)
     right = code.replace("___", chips[item["answer"]])
     check_code_shape(rep, where + ".code(정답)", right, chapter)
-    good = safe_run(rep, where, right, stdin)
+    good = safe_run(rep, where, right, stdin, **env)
     if good["error"]:
         rep.err(where, "정답 칩을 넣은 코드가 오류: %s %s" % (good["error"]["type"], good["error"]["msg"]))
         return
     for i, c in enumerate(chips):
         if i == item["answer"]:
             continue
-        if same_outcome(safe_run(rep, where, code.replace("___", c), stdin), good):
+        if same_outcome(safe_run(rep, where, code.replace("___", c), stdin, **env), good):
             rep.err(where, "오답 칩 %r 도 정답과 같은 출력을 냄(정답이 둘)" % c)
 
 
@@ -383,12 +572,13 @@ def check_order(rep, where, item, chapter):
         rep.err(where, "같은 줄이 두 번 있음(터치로 구분할 수 없음)")
         return
     stdin = stdin_of(rep, where, item)
+    env = env_of(rep, where, item)
     code = "\n".join(lines)
     check_code_shape(rep, where + ".lines", code, chapter)
     if not isinstance(item.get("expect"), str):
         rep.err(where, "expect가 문자열이 아님")
         return
-    r = safe_run(rep, where, code, stdin)
+    r = safe_run(rep, where, code, stdin, **env)
     why = judge(r, item["expect"])
     if why:
         rep.err(where, "정답 순서 실행 결과가 expect와 다름 — " + why)
@@ -396,7 +586,7 @@ def check_order(rep, where, item, chapter):
     # 정답 순서는 딱 하나여야 함(판정 C23): Pyodide가 준비되기 전에는 앱이 저장된 순서와 비교하므로.
     valid = 1
     for perm in itertools.permutations(lines):
-        if list(perm) != lines and judge(safe_run(rep, where, "\n".join(perm), stdin), item["expect"]) is None:
+        if list(perm) != lines and judge(safe_run(rep, where, "\n".join(perm), stdin, **env), item["expect"]) is None:
             valid += 1
     if valid != 1:
         rep.err(where, "expect를 내는 순서가 %d가지(정확히 1가지여야 함)" % valid)
@@ -464,34 +654,42 @@ def check_write(rep, where, item, chapter):
         rep.err(where, "tests가 없음")
         return
     has_input = uses_input(sol)
+    env = env_of(rep, where, item)
+    # 시험마다 다른 파일을 두면 입력이 없어도 결과가 달라지므로 시험을 여러 개 둘 수 있다.
+    test_files = any(isinstance(t, dict) and "files" in t for t in tests)
     if has_input and chapter < INPUT_FROM_CHAPTER:
         rep.err(where, "%d장에서는 input()을 쓰지 않음" % chapter)
     # 입력이 없는 문제는 출력이 늘 같으므로 시험 1개(공개)만 둔다. 입력이 있으면 2~4개.
-    lo, hi = (2, 4) if has_input else (1, 1)
+    lo, hi = (2, 4) if has_input or test_files else (1, 1)
     if not (lo <= len(tests) <= hi):
-        rep.err(where, "tests는 %d~%d개여야 함(input %s, 지금 %d개)"
-                % (lo, hi, "있음" if has_input else "없음", len(tests)))
+        rep.err(where, "tests는 %d~%d개여야 함(input %s, 시험별 files %s, 지금 %d개)"
+                % (lo, hi, "있음" if has_input else "없음", "있음" if test_files else "없음", len(tests)))
     if sum(1 for t in tests if isinstance(t, dict) and t.get("public") is True) != 1:
         rep.err(where, "공개 시험(public: true)은 정확히 1개")
     stdins = []
+    envs = []
     for i, t in enumerate(tests):
         tw = "%s.tests[%d]" % (where, i)
-        if not isinstance(t, dict) or set(t) != {"stdin", "expect", "public"}:
-            rep.err(tw, "시험 칸은 stdin, expect, public 세 개")
+        if not isinstance(t, dict) or not (TEST_KEYS <= set(t) <= TEST_KEYS | TEST_OPT):
+            rep.err(tw, "시험 칸은 stdin, expect, public 세 개 (+ 선택 files)")
+            envs.append(env)
             continue
         if not isinstance(t["stdin"], str) or not isinstance(t["expect"], str) or not isinstance(t["public"], bool):
             rep.err(tw, "stdin·expect는 문자열(여러 값은 \\n으로 나눔), public은 true/false")
             continue
         if not has_input and t["stdin"] != "":
             rep.err(tw, "input()이 없는 문제인데 stdin이 있음")
-        stdins.append(t["stdin"])
-        why = judge(safe_run(rep, tw, sol, t["stdin"], req), t["expect"])
+        tenv = dict(env, files=files_of(rep, tw, t)) if "files" in t else env
+        envs.append(tenv)
+        stdins.append((t["stdin"], json.dumps(tenv["files"], sort_keys=True, ensure_ascii=False)))
+        why = judge(safe_run(rep, tw, sol, t["stdin"], req, **tenv), t["expect"])
         if why:
             rep.err(tw, "solution이 통과하지 못함 — " + why)
     if len(set(stdins)) != len(stdins):
-        rep.err(where, "같은 stdin의 시험이 두 번 있음")
+        rep.err(where, "같은 stdin(과 files)의 시험이 두 번 있음")
     if all(isinstance(t, dict) and isinstance(t.get("stdin"), str) and isinstance(t.get("expect"), str)
-           and judge(safe_run(rep, where, starter, t["stdin"], req), t["expect"]) is None for t in tests):
+           and judge(safe_run(rep, where, starter, t["stdin"], req, **envs[i]), t["expect"]) is None
+           for i, t in enumerate(tests)):
         rep.err(where, "starter만으로 모든 시험을 통과함")
 
 
@@ -556,14 +754,14 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
     for i, c in enumerate(cards):
         w = "cards[%d]" % i
         if not isinstance(c, dict) or not (CARD_KEYS <= set(c) <= CARD_KEYS | CARD_OPT):
-            rep.err(w, "카드 칸은 say, code, out (+ 선택 stdin)")
+            rep.err(w, "카드 칸은 say, code, out (+ 선택 stdin, files, server)")
             continue
         check_text(rep, w + ".say", c["say"], SAY_MAX, one_line=False)
         if not isinstance(c["code"], str) or not isinstance(c["out"], str):
             rep.err(w, "code와 out은 문자열이어야 함")
             continue
         check_code_shape(rep, w + ".code", c["code"], chapter)
-        why = judge(safe_run(rep, w, c["code"], stdin_of(rep, w, c)), c["out"])
+        why = judge(safe_run(rep, w, c["code"], stdin_of(rep, w, c), **env_of(rep, w, c)), c["out"])
         if why:
             rep.err(w, "코드 실행 결과가 out과 다름 — " + why)
 

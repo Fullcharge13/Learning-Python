@@ -1,7 +1,7 @@
 // 직접 작성 문제: 입력창 + 기호 줄 + 「실행」·「제출」, 힌트 4단계, 정답 보기, 오류 설명
 import { normalize, judge, explain } from "../grade.js";
 import { riaSVG } from "../ria.js";
-import { esc, icon, codeBlock } from "./dom.js";
+import { esc, icon, codeBlock, filesNote } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { missingMessage } from "../shuffle.js";
 import { keyboardOpen, nextBaseHeight, SYMBOL_ORDER } from "../kbd.js";
@@ -9,6 +9,11 @@ import { keyboardOpen, nextBaseHeight, SYMBOL_ORDER } from "../kbd.js";
 const SYSTEM_ERRORS = new Set(["LoadError", "WorkerError", "NotReady"]);
 
 function stdinOf(t) { return t && t.stdin != null ? String(t.stdin) : ""; }
+// 가상 파일·연습 서버(v0.4 E1·E2): 시험의 files가 문제의 files보다 앞선다. server는 문제에만.
+export function runEnv(item, t) {
+  const files = t && t.files ? t.files : item.files;
+  return { files: files || null, server: item.server || null };
+}
 
 export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log, showCards }) {
   const tests = Array.isArray(item.tests) ? item.tests : [];
@@ -30,6 +35,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       <div class="expect">
         <p class="ex-label">기대 출력</p>
         <pre class="out">${esc(normalize(pub.expect))}</pre>
+        ${filesNote(runEnv(item, pub).files)}
         ${stdinOf(pub) ? `<p class="stdin-note">${icon("send")}<span>입력하는 값: ${stdinOf(pub).split("\n").map((v) => `<code>${esc(v)}</code>`).join(" ")}</span></p>` : ""}
       </div>
     </div>
@@ -209,7 +215,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     ed.markLine(null);
     showRunning();
     try {
-      const r = await ctx.py.run(ed.getCode(), stdinOf(pub), item.require || []);
+      const r = await ctx.py.run(ed.getCode(), stdinOf(pub), item.require || [], runEnv(item, pub));
       if (st.destroyed) return; // 화면을 떠난 뒤 도착한 결과는 버림
       if (r.error && SYSTEM_ERRORS.has(r.error.type)) { systemError(r); return; }
       const out = normalize(r.stdout);
@@ -233,7 +239,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       const code = ed.getCode();
       const results = [];
       for (const t of tests) {
-        const r = await ctx.py.run(code, stdinOf(t), item.require || []);
+        const r = await ctx.py.run(code, stdinOf(t), item.require || [], runEnv(item, t));
         if (st.destroyed) return;
         if (r.error && SYSTEM_ERRORS.has(r.error.type)) { systemError(r); return; }
         results.push(r);
@@ -267,7 +273,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
         } else {
           const t = tests[v.failedIndex];
           const inp = stdinOf(t);
-          html = `<div class="err-panel soft"><h3>${icon("cross")}다른 경우에서 결과가 달라요</h3><p>${inp ? `입력값이 ${esc(inp.split("\n").join(", "))}일 때` : `숨은 시험 ${v.failedIndex + 1}번에서`} 기대한 출력과 달라요. 입력이 바뀌어도 맞는 코드인지 확인해 봐요.</p></div>`;
+          html = `<div class="err-panel soft"><h3>${icon("cross")}다른 경우에서 결과가 달라요</h3><p>${inp ? `입력값이 ${esc(inp.split("\n").join(", "))}일 때` : t && t.files ? `파일 내용이 다른 숨은 시험 ${v.failedIndex + 1}번에서` : `숨은 시험 ${v.failedIndex + 1}번에서`} 기대한 출력과 달라요. 입력이 바뀌어도 맞는 코드인지 확인해 봐요.</p></div>`;
         }
         html += riaLine("wrong");
       }

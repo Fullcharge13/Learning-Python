@@ -102,6 +102,13 @@ export function codeBlock(code, cls = "") {
   return `<pre class="code ${cls}"><code>${esc(code)}</code></pre>`;
 }
 
+/** 가상 파일 보기(v0.4 E1): 문제의 files { 이름: 내용 }를 「파일 이름」 + 내용 칸으로 보여 준다 */
+export function filesNote(files) {
+  if (!files || typeof files !== "object") return "";
+  return Object.entries(files).map(([name, text]) =>
+    `<div class="file-note"><p class="ex-label">${icon("book")}<span>파일 <code>${esc(name)}</code></span></p><pre class="out">${esc(text)}</pre></div>`).join("");
+}
+
 export const MILESTONE_REWARD = {
   7: "보너스 50바이트를 받았어요",
   30: "우주복 의상을 선물로 받았어요",

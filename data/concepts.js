@@ -54,4 +54,24 @@ export const CONCEPTS = [
   { id: "try", name: "try와 except", chapter: 10 },
   { id: "excmulti", name: "여러 오류 나누기", chapter: 10 },
   { id: "raise", name: "raise로 오류 내기", chapter: 10 },
+  // 11장 파일
+  { id: "fileread", name: "파일 열고 읽기", chapter: 11 },
+  { id: "filelines", name: "파일을 줄 단위로", chapter: 11 },
+  { id: "filewrite", name: "파일에 쓰기", chapter: 11 },
+  { id: "csv", name: "CSV 표 읽기", chapter: 11 },
+  // 12장 정규표현식
+  { id: "re", name: "search로 패턴 찾기", chapter: 12 },
+  { id: "refindall", name: "findall로 모두 찾기", chapter: 12 },
+  { id: "regroup", name: "묶음과 반복 기호", chapter: 12 },
+  { id: "resub", name: "sub로 바꾸기", chapter: 12 },
+  // 13장 네트워크 기초
+  { id: "url", name: "주소(URL) 읽기", chapter: 13 },
+  { id: "http", name: "요청과 응답", chapter: 13 },
+  { id: "html", name: "HTML에서 정보 찾기", chapter: 13 },
+  { id: "crawl", name: "링크 따라가기", chapter: 13 },
+  // 14장 웹 API와 JSON
+  { id: "json", name: "JSON 읽고 쓰기", chapter: 14 },
+  { id: "nested", name: "중첩 구조", chapter: 14 },
+  { id: "api", name: "API 부르기", chapter: 14 },
+  { id: "query", name: "쿼리 문자열 만들기", chapter: 14 },
 ];

@@ -2,7 +2,7 @@
 import { DAILY_GOALS } from "../rules.js";
 import { esc, toast, dialog, celebrate, icon } from "./dom.js";
 import { collectOfflineStatus } from "../offline.js";
-import { curriculum } from "../curriculum.js";
+import { curriculum, chapterWindow } from "../curriculum.js";
 import { applyGoalChange } from "../finish.js";
 import { newSave } from "../save.js";
 import { tabBar, bindTabs, statusBar } from "./nav.js";
@@ -25,10 +25,14 @@ function courseCard(ctx) {
   const first = c.upcoming.slice(0, 3);
   const rest = c.upcoming.slice(3);
   const upName = (u) => `${u.no}장 ${u.title}`;
+  // 처음엔 지금 장과 앞뒤 셋만(C35). 나머지는 「다른 장 N개 더 보기」로
+  const curCh = c.current ? (c.chapters.find((ch) => ch.lessons.some((l) => l.id === c.current.id)) || {}).id : null;
+  const win = chapterWindow({ chapterIds: c.chapters.map((ch) => ch.id), currentChapter: curCh ?? null });
+  const hiddenSet = new Set(win.hidden);
   return `<section class="panel course" aria-labelledby="course-title">
     <h2 id="course-title">학습 내용</h2>
     <p class="course-sum">${c.total}개 레슨 중 <b>${c.done}개</b> 완료${c.current ? ` · 지금: ${esc(c.current.id)} ${esc(c.current.title)}` : ""}</p>
-    <ul class="course-chapters">${c.chapters.map((ch) => `<li>
+    <ul class="course-chapters" id="course-chapters">${c.chapters.map((ch) => `<li${hiddenSet.has(ch.id) ? ' class="ch-extra" hidden' : ""}>
       <button class="ch-row" aria-expanded="false" aria-controls="ch-${ch.id}">
         <span class="ch-no">${ch.id}장</span>
         <span class="ch-main"><b>${esc(ch.title)}</b><small>${esc(ch.topics)}</small></span>
@@ -39,6 +43,7 @@ function courseCard(ctx) {
         <span class="ls-main"><b>${esc(l.id)} ${esc(l.title)}</b><small>${esc(l.goal)}</small></span>
       </li>`).join("")}</ol>
     </li>`).join("")}</ul>
+    ${win.hidden.length ? `<button class="btn ghost small wide" id="ch-more" aria-expanded="false" aria-controls="course-chapters" data-n="${win.hidden.length}">다른 장 ${win.hidden.length}개 더 보기</button>` : ""}
     ${c.upcoming.length ? `<p class="muted course-next">다음 업데이트 예정: ${esc(first.map(upName).join(" · "))}${rest.length ? `<span id="up-rest" hidden> · ${esc(rest.map(upName).join(" · "))}</span><span id="up-dots"> …</span>` : ""}</p>
       ${rest.length ? `<button class="link" id="up-all" aria-expanded="false" aria-controls="up-rest">전체 보기</button>` : ""}` : ""}
   </section>`;
@@ -94,6 +99,13 @@ export function render(root, ctx) {
     b.setAttribute("aria-expanded", String(open));
     root.querySelector("#" + b.getAttribute("aria-controls")).hidden = !open;
   }));
+  const chMore = root.querySelector("#ch-more");
+  if (chMore) chMore.addEventListener("click", () => {
+    const open = chMore.getAttribute("aria-expanded") !== "true";
+    chMore.setAttribute("aria-expanded", String(open));
+    root.querySelectorAll(".ch-extra").forEach((li) => { li.hidden = !open; });
+    chMore.textContent = open ? "접기" : `다른 장 ${chMore.dataset.n}개 더 보기`;
+  });
   const upAll = root.querySelector("#up-all");
   if (upAll) upAll.addEventListener("click", () => {
     const open = upAll.getAttribute("aria-expanded") !== "true";

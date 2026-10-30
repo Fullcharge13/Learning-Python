@@ -180,6 +180,40 @@ def test_isolation():
     assert r2["stdout"] == "ok\n", r2
 
 
+def _run_env(code, env):
+    return _page().evaluate(
+        "([c, e]) => window.runner.run(c, '', [], e)", [code, env])
+
+
+def test_files_in_pyodide():
+    # v0.4 E1: 준 파일을 읽고, 쓴 파일은 다음 실행에 남지 않는다.
+    r = _run_env('with open("memo.txt") as f:\n    print(f.read())\nopen("new.txt", "w").write("x")\n',
+                 {"files": {"memo.txt": "우유 2개"}})
+    assert r["error"] is None and r["stdout"] == "우유 2개\n", r
+    r2 = _run_env('import os\nprint(sorted(os.listdir(".")))\nopen("new.txt")\n', {})
+    assert r2["stdout"] == "[]\n", r2
+    assert r2["error"]["type"] == "FileNotFoundError", r2
+
+
+def test_practice_server_in_pyodide():
+    # v0.4 E2: 연습 서버에서 읽기, 없는 주소는 URLError, 404는 HTTPError.
+    env = {"server": {"https://ria.example/menu": {"status": 200, "body": "김밥 3000"},
+                      "https://ria.example/gone": {"status": 404, "body": ""}}}
+    code = ("import urllib.request\nimport urllib.error\n"
+            "with urllib.request.urlopen('https://ria.example/menu') as r:\n"
+            "    print(r.status, r.read().decode('utf-8'))\n"
+            "for u in ['https://ria.example/gone', 'https://example.com']:\n"
+            "    try:\n        urllib.request.urlopen(u)\n"
+            "    except urllib.error.HTTPError as e:\n        print('HTTP', e.code)\n"
+            "    except urllib.error.URLError as e:\n        print(e.reason)\n")
+    r = _run_env(code, env)
+    assert r["error"] is None, r
+    assert r["stdout"] == "200 김밥 3000\nHTTP 404\n연습 서버에 없는 주소예요\n", r
+    # server 없이 돌리면 손대지 않은 진짜 urlopen(JS null이 Python None이 아닌 jsnull로 가던 회귀 방지)
+    r2 = _run("import urllib.request\nprint(urllib.request.urlopen.__module__)")
+    assert r2["stdout"] == "urllib.request\n", r2
+
+
 def test_queue():
     # 동시에 세 번 불러도 하나씩 차례로 돌고 모두 끝난다.
     outs = _page().evaluate("""async () => {
@@ -384,7 +418,8 @@ def test_idle_worker_error_event():
 
 
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,
-         test_error_line, test_output_limit, test_isolation, test_queue, test_timeout_then_ok,
+         test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
+         test_practice_server_in_pyodide, test_queue, test_timeout_then_ok,
          test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,
          test_load_error_resolves, test_cdn_constant, test_fetch_retry, test_worker_ctor_throws,
          test_load_timeout_retry, test_idle_worker_killed_silently, test_idle_worker_error_event]

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>grader test page</title>
+</head>
+<body>
+<p id="status">loading</p>
+<script type="module">
+  // 시험용 페이지: tests/grader_browser.py가 저장소 뿌리에서 띄운 로컬 서버로 연다.
+  // Pyodide는 node_modules/pyodide/(로컬)에서 받는다. 배포판 주소는 build.py가 고른다.
+  const t0 = performance.now();
+  window.pageErrors = [];
+  try {
+    const { PyRun } = await import("../../src/pyrun.js");
+    const runner = new PyRun({ indexURL: "/node_modules/pyodide/" });
+    window.statusLog = [];
+    runner.onstatus = (s, phase) => {
+      window.statusLog.push(s + ":" + phase);
+      document.getElementById("status").textContent = s + " (" + phase + ")";
+    };
+    window.runner = runner;
+    window.readyPromise = runner.ready.then(
+      () => { window.coldStartMs = performance.now() - t0; return "ready"; },
+      (e) => { window.pageErrors.push(String(e)); return "error"; });
+  } catch (e) {
+    window.pageErrors.push(String(e && e.message || e));
+    window.readyPromise = Promise.resolve("error");
+  }
+</script>
+</body>
+</html>

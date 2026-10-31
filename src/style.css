@@ -578,3 +578,6 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 /* 정답 공개: 코드·여러 줄 정답은 줄바꿈 그대로 한 덩어리로 */
 .answer .mono { display: block; margin-top: 4px; white-space: pre-wrap; font-weight: 700; }
 #ch-more { margin: 0 0 10px; }
+
+/* 설정 맨 아래 「사용한 프로그램」(C43): 손가락으로 누르기 쉬운 44px 높이 */
+.lic-link { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: 0 8px; color: inherit; text-decoration: underline; }

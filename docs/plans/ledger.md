@@ -139,3 +139,4 @@
 ## v0.6
 
 - **C42** (사용자 결정, 2026-10-31) ① 오류 설명 탐정 말투는 **탐험가(`explorer`)** 의상을 입으면 켜진다. 의상 표에 `voice: "detective"` 칸을 두고 `grade.explain`·의상실·README가 이 칸을 본다(옛 id `detective`는 기본 말투). `data/errors.js`의 탐정 문장은 그대로. ② saveVer 1→2 옮기기에서 바이트를 돌려준 경우, 그 금액을 `pending_refund`에 남기고 업데이트 뒤 첫 홈 인사 자리에 리아가 한 번 알린다: 「없어진 옷 값 {n}바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!」. 보여 주는 순간 0으로 저장해 다시 나오지 않음, 0바이트면 안내 없음, 그날 인사(오랜만·기록 끊김)보다 먼저. 시험: `tests/unit/save.test.js`(C42 4개), `grade.test.js` explain_detective, `tests/flow.py` `test_refund_notice_once`.
+- **C43** 라이선스 정리(사용자 결정 「가. 공개 그대로 두고 두 가지만 바로잡기」): 빌드가 묶어 넣은 npm 꾸러미(MIT 15개)의 라이선스 전문과 Pyodide(MPL-2.0, CDN) 안내를 `licenses.txt`로 함께 배포하고 미리 받기·설정 「사용한 프로그램」 링크에 넣는다. 파이썬 로고가 그려진 참고 그림 `docs/ref/ria-outfits-2026-10-31.png`와 `docs/img/ria-compare.png`는 저장소에서 지우고(사용자 허락), 비교 그림은 저장소 밖 `tests/out/`에 만든다. 옛 커밋 기록에는 남는다(기록 다시 쓰기는 하지 않음).

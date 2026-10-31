@@ -87,7 +87,7 @@ export function render(root, ctx) {
         <p class="muted">아이폰 사파리에서는 홈 화면에 추가해 두면 앱처럼 열리고 기록도 더 안전해요.</p>
         <button class="btn ghost wide" id="install">홈 화면에 추가 방법</button>
       </section>
-      <p class="ver center">리아와 파이썬! ${esc(ctx.version)}</p>
+      <p class="ver center">리아와 파이썬! ${esc(ctx.version)} · <a class="lic-link" href="licenses.txt" target="_blank" rel="noopener">사용한 프로그램</a></p>
     </main>
     ${tabBar("settings")}
   </div>`;

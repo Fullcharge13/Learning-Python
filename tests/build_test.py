@@ -905,6 +905,25 @@ def test_review_one_chapter_fails():
         b.close()
 
 
+
+def test_third_party_notices():
+    """판정 C43: 묶어 넣은 npm 꾸러미(MIT)의 저작권 표시를 licenses.txt로 함께 배포하고, 미리 받기·설정 링크에 넣는다."""
+    _build()
+    path = os.path.join(DIST, "licenses.txt")
+    assert os.path.exists(path), "dist/licenses.txt missing"
+    txt = _read(path)
+    for pkg in ("@codemirror/view", "@codemirror/state", "@lezer/python", "@lezer/lr",
+                "crelt", "style-mod", "w3c-keyname"):
+        assert ("== %s " % pkg) in txt, pkg
+    assert "Copyright (C) 2018-2021 by Marijn Haverbeke" in txt
+    assert txt.count("Permission is hereby granted, free of charge") >= 8
+    assert "pyodide" in txt.lower() and "MPL-2.0" in txt and "cdn.jsdelivr.net/npm/pyodide@" in txt
+    assert "esbuild" not in txt, "build tool is not shipped, keep it out"
+    sw = _read(os.path.join(DIST, "sw.js"))
+    assert '"licenses.txt"' in sw, "licenses.txt must be precached for offline"
+    html = _read(os.path.join(DIST, "index.html"))
+    assert "licenses.txt" in html, "settings must link to licenses.txt"
+
 def main():
     tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]
     fails = 0

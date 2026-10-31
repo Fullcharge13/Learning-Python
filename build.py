@@ -50,7 +50,7 @@ NODE_BUNDLE = r"""
 const [esbuildPath, argsJson] = process.argv.slice(1);
 const esbuild = (await import(esbuildPath)).default;
 const a = JSON.parse(argsJson);
-const common = { bundle: true, minify: true, write: false, target: a.target, legalComments: "none", logLevel: "warning", charset: "utf8" };
+const common = { bundle: true, minify: true, write: false, metafile: true, target: a.target, legalComments: "none", logLevel: "warning", charset: "utf8" };
 // 배포판에는 개발용 레슨 import(src/lessondev.js)를 빈 모듈로 (레슨 내용은 장 파일로 따로 나감)
 const noDevLessons = { name: "ria-no-dev-lessons", setup(b) {
   b.onResolve({ filter: /(^|\/)lessondev\.js$/ }, () => ({ path: "lessondev", namespace: "ria-stub" }));
@@ -60,7 +60,8 @@ const app = await esbuild.build({ ...common, entryPoints: [a.app], format: "iife
   define: { "import.meta.url": "location.href" } });
 const worker = await esbuild.build({ ...common, entryPoints: [a.worker], format: "esm" });
 const css = await esbuild.build({ ...common, entryPoints: [a.css], loader: { ".css": "css" } });
-process.stdout.write(JSON.stringify({ app: app.outputFiles[0].text, worker: worker.outputFiles[0].text, css: css.outputFiles[0].text }));
+const inputs = [...Object.keys(app.metafile.inputs), ...Object.keys(worker.metafile.inputs), ...Object.keys(css.metafile.inputs)];
+process.stdout.write(JSON.stringify({ app: app.outputFiles[0].text, worker: worker.outputFiles[0].text, css: css.outputFiles[0].text, inputs }));
 """
 
 # 장 파일 나누기: data/lessons/chN.js → 레슨 목록 + lessons/chN-<지문>.json (목록·이름은 src/lessondata.js가 만듦)
@@ -93,9 +94,40 @@ process.stdout.write(JSON.stringify({ index, files, contents, tasks }));
 """
 
 
-OWNED = ("index.html", "manifest.webmanifest", "sw.js", "icons", "lessons")
+OWNED = ("index.html", "manifest.webmanifest", "sw.js", "icons", "lessons", "licenses.txt")
 HOOKS = ("RIA_WORKER_URL", "RIA_RUNNER_SRC")
 
+
+
+def bundled_packages(inputs):
+    """esbuild가 실제로 묶어 넣은 node_modules 꾸러미 이름(정렬)."""
+    pkgs = set()
+    for p in inputs:
+        m = re.search(r"(?:^|/)node_modules/((?:@[^/]+/)?[^/]+)/", p)
+        if m:
+            pkgs.add(m.group(1))
+    return sorted(pkgs)
+
+
+def third_party_notices(inputs, pyodide_url):
+    """판정 C43: 묶어 넣은 꾸러미의 라이선스 전문 + CDN에서 받는 Pyodide 안내."""
+    parts = ["리아와 파이썬! — 사용한 프로그램과 라이선스 (Third-party notices)", "",
+             "이 앱에는 아래 공개 소프트웨어가 들어 있습니다. 각 저작권자에게 감사드립니다.", ""]
+    for pkg in bundled_packages(inputs):
+        d = os.path.join(ROOT, "node_modules", *pkg.split("/"))
+        with open(os.path.join(d, "package.json"), encoding="utf-8") as f:
+            meta = json.load(f)
+        lic = next((os.path.join(d, n) for n in sorted(os.listdir(d)) if re.match(r"(?i)^licen[cs]e", n)), None)
+        if not lic:
+            raise SystemExit("build: no LICENSE file for bundled package " + pkg)
+        with open(lic, encoding="utf-8") as f:
+            body = f.read().strip()
+        parts += ["== %s %s (%s)" % (pkg, meta.get("version", ""), meta.get("license", "")), "", body, "", ""]
+    parts += ["== pyodide %s (MPL-2.0)" % PYODIDE_VERSION, "",
+              "Python 실행기 Pyodide는 앱에 묶지 않고 실행할 때 아래 주소에서 받습니다(고치지 않은 원본).",
+              pyodide_url, "라이선스: Mozilla Public License 2.0 — https://www.mozilla.org/MPL/2.0/",
+              "소스: https://github.com/pyodide/pyodide", ""]
+    return "\n".join(parts)
 
 def check_app_hooks(src):
     """app.js가 PyRun에 작업자 주소와 runner.py 글자를 넘기는지 확인한다."""
@@ -282,10 +314,12 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     with open(os.path.join(ROOT, "manifest.webmanifest"), encoding="utf-8") as f:
         manifest = json.load(f)
     icon_files = sorted({i["src"] for i in manifest["icons"]} | {"icons/apple-touch-icon.png"})
-    game_files = ["./", "index.html", "manifest.webmanifest"] + icon_files
+    with open(os.path.join(out, "licenses.txt"), "w", encoding="utf-8") as f:
+        f.write(third_party_notices(b["inputs"], pyodide_url))
+    game_files = ["./", "index.html", "manifest.webmanifest", "licenses.txt"] + icon_files
 
     h = hashlib.sha256(data)
-    for rel in icon_files + ["manifest.webmanifest"]:
+    for rel in icon_files + ["manifest.webmanifest", "licenses.txt"]:
         with open(os.path.join(out, rel), "rb") as f:
             h.update(f.read())
     with open(os.path.join(ROOT, "sw.js"), encoding="utf-8") as f:

@@ -4,7 +4,7 @@
 
 - docs/img/ria-sheet.png   : 의상 10(줄) x 표정 8(칸) = 80칸, 이름표 포함
 - docs/img/ria-hero.png    : 기본 의상·미소, 크게
-- docs/img/ria-compare.png : 참고 그림(docs/ref/ria-outfits-2026-10-31.png)과 코드 그림 10벌을 나란히 (v0.6 비교용)
+- tests/out/ria-compare.png : 참고 그림(dev/ref/ria-outfits-2026-10-31.png, 저장소에 올리지 않음)과 코드 그림 10벌을 나란히. 참고 그림에 파이썬 로고가 있어 결과도 저장소 밖에 둔다(판정 C43)
 
 SVG 문자열은 `node`로 src/ria.js를 불러 얻고, Playwright Chromium으로 찍는다.
 """
@@ -55,7 +55,8 @@ def hero_html(d):
 body{{margin:0;background:#FBF7F0}} div{{padding:20px;display:inline-block}} svg{{display:block}}</style><div>{d['hero']}</div>"""
 
 
-REF = ROOT / "docs" / "ref" / "ria-outfits-2026-10-31.png"
+REF = ROOT / "dev" / "ref" / "ria-outfits-2026-10-31.png"
+CMP_OUT = ROOT / "tests" / "out"
 # 참고 그림의 칸 순서(3x3)에 맞춘 차례 + 졸업 가운
 CMP_ORDER = ["basic", "casual", "whitecoat", "hoodie", "gym", "wizard", "explorer", "chef", "uniform", "graduate"]
 
@@ -92,12 +93,13 @@ def main():
                 try:
                     pg.goto(tmp.as_uri())
                     pg.wait_for_load_state("load")
-                    pg.locator("#w").screenshot(path=str(OUT / "ria-compare.png"))
+                    CMP_OUT.mkdir(parents=True, exist_ok=True)
+                    pg.locator("#w").screenshot(path=str(CMP_OUT / "ria-compare.png"))
                 finally:
                     tmp.unlink()
         finally:
             b.close()
-    print("wrote", OUT / "ria-sheet.png", OUT / "ria-hero.png", OUT / "ria-compare.png")
+    print("wrote", OUT / "ria-sheet.png", OUT / "ria-hero.png", CMP_OUT / "ria-compare.png")
 
 
 if __name__ == "__main__":

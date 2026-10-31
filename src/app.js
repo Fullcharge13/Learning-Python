@@ -22,7 +22,7 @@ import * as badges from "./ui/badges.js";
 import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 
-export const VERSION = "v0.4";
+export const VERSION = "v0.5";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----

@@ -13,7 +13,10 @@
 //        files: { 이름: 글자 } (가상 파일, v0.4 E1), server: { 주소: { status, body, type? } } (연습 서버, E2)
 //        둘 다 JSON 글자로 바꿔 Python의 json.loads로 dict를 만든다(toPy의 객체 변환 차이를 피함).
 //   보냄 { type: "started", id }  (받자마자)
-//   보냄 { type: "result", id, result: { stdout, stderr, error, missing } }
+//   보냄 { type: "result", id, result: { stdout, stderr, error, missing, charts } }
+//        charts: chart.show()로 그린 그림 목록(v0.5 E3). 그대로 toJs → 화면 쪽 cleanCharts가 다듬음.
+//   sqlite3(v0.5): Pyodide 314.0.7은 _sqlite3가 핵심(pyodide.asm.wasm)에 들어 있고 sqlite3 모듈은
+//        python_stdlib.zip에 있어 loadPackage가 필요 없다(loadPackage("sqlite3")는 "No known package"로 실패).
 
 let pyodide = null;
 let runFn = null;
@@ -60,7 +63,7 @@ function run(msg) {
   self.postMessage({ type: "started", id: msg.id });
   let result;
   if (!runFn) {
-    result = { stdout: "", stderr: "", error: { type: "NotReady", line: null, msg: "Python is not loaded" }, missing: [] };
+    result = { stdout: "", stderr: "", error: { type: "NotReady", line: null, msg: "Python is not loaded" }, missing: [], charts: [] };
   } else {
     let stdinPy = null;
     let reqPy = null;
@@ -77,7 +80,7 @@ function run(msg) {
       result = out.toJs({ dict_converter: Object.fromEntries });
     } catch (e) {
       // runner.py 자체가 예외를 낸 경우(정상이라면 없음). 매달리지 않고 오류로 돌려준다.
-      result = { stdout: "", stderr: "", error: errInfo(e), missing: [] };
+      result = { stdout: "", stderr: "", error: errInfo(e), missing: [], charts: [] };
     } finally {
       for (const p of [out, reqPy, stdinPy, filesPy, serverPy]) {
         if (p && typeof p.destroy === "function") {

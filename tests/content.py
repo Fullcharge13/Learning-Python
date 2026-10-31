@@ -18,6 +18,8 @@
 카드·choice·blank·order·check는 stdin 칸("\n"으로 나눈 문자열, 판정 C23)을 둘 수 있다. 없으면 "".
 카드·choice·check·blank·order·write는 선택 칸 files·server를 둘 수 있다(v0.4 E1·E2, 뜻은 FILES_SERVER_DOC).
 write의 시험(tests[i])은 files를 따로 둘 수 있고, 있으면 문제의 files 대신 쓴다.
+카드·choice·check·blank·order·write의 시험은 선택 칸 chart를 둘 수 있다(v0.5 E3, 뜻은 CHART_DOC).
+카드는 선택 칸 show_only: true를 둘 수 있다(판정 C38, 뜻은 CHART_DOC).
 실행 한 번은 RUN_SECONDS초까지만 기다리고, 넘으면 오류로 알린다.
 """
 
@@ -55,16 +57,16 @@ HINT_MAX = 120
 LESSON_KEYS = {"id", "chapter", "title", "goal", "summary", "isExam", "cards", "items"}
 CARD_KEYS = {"say", "code", "out"}
 ENV_KEYS = {"files", "server"}   # v0.4 가상 파일·연습 서버
-CARD_OPT = {"stdin"} | ENV_KEYS
+CARD_OPT = {"stdin", "chart", "show_only"} | ENV_KEYS
 ITEM_KEYS = {
-    "choice": ({"type", "concept", "q", "options", "answer", "explain"}, {"code", "stdin"} | ENV_KEYS),
-    "check": ({"type", "concept", "q", "options", "answer", "explain"}, {"code", "stdin"} | ENV_KEYS),
-    "blank": ({"type", "concept", "q", "code", "chips", "answer", "explain"}, {"stdin"} | ENV_KEYS),
-    "order": ({"type", "concept", "q", "lines", "expect", "explain"}, {"stdin"} | ENV_KEYS),
+    "choice": ({"type", "concept", "q", "options", "answer", "explain"}, {"code", "stdin"} | ENV_KEYS | {"chart"}),
+    "check": ({"type", "concept", "q", "options", "answer", "explain"}, {"code", "stdin"} | ENV_KEYS | {"chart"}),
+    "blank": ({"type", "concept", "q", "code", "chips", "answer", "explain"}, {"stdin"} | ENV_KEYS | {"chart"}),
+    "order": ({"type", "concept", "q", "lines", "expect", "explain"}, {"stdin"} | ENV_KEYS | {"chart"}),
     "write": ({"type", "concept", "task", "starter", "tests", "require", "hints", "solution", "explain"}, ENV_KEYS),
 }
 TEST_KEYS = {"stdin", "expect", "public"}
-TEST_OPT = {"files"}
+TEST_OPT = {"files", "chart"}
 
 FILES_SERVER_DOC = """
 files:  {"memo.txt": "우유\\n빵\\n"}  이름 → 내용(글자). 실행마다 빈 폴더에 이 파일들을 만들고 그 폴더에서 돈다.
@@ -73,6 +75,24 @@ server: {"https://ria.example/menu": {"status": 200, "body": "…", "type": "tex
         주소(http:// 또는 https://) → 응답. status는 100~599 정수, body는 글자, type은 선택(글자).
         실행 동안 urllib.request.urlopen이 이 표로 답한다(표에 없는 주소는 URLError, 400 이상은 HTTPError).
 """
+CHART_DOC = """
+chart:  {"kind": "bar", "labels": ["사과", "배"], "values": [3, 5], "title"?: "…", "xlabel"?: "…", "ylabel"?: "…"}
+        또는 그런 그림 1~3개의 목록(그림 수·차례까지 비교). kind는 "bar"·"line", labels는 글자·숫자 1~24개,
+        values는 같은 수의 숫자(true/false 아님). 제목·축 이름은 40자 이하 글자.
+        write 시험: 정답 코드의 chart.show() 그림과 비교(적힌 칸만, 값은 수로 3 == 3.0, 이름은 글자로).
+                    출력과 그림을 둘 다 맞혀야 통과. 정답이 그림을 그리면 chart를 꼭 적는다.
+        카드·터치 문제: 실행하지 않고 이 그림을 화면에 보여 준다. 점검기는 코드를 돌린 그림과 같은지 본다.
+                    카드 코드가 그림을 그리면 chart를 꼭 적는다(안 적으면 학습자가 그림을 못 봄).
+show_only: true (카드만) — 코드를 보여 주기만 하고 돌리지 않는다(matplotlib 비교 카드 등).
+        점검기는 실행·문법·모듈 검사를 건너뛰고 줄 폭만 본다. out은 없거나 ""이어야 하고,
+        stdin·files·server·chart는 함께 쓰지 않는다. 화면에는 「실제 컴퓨터용 코드(여기서는 실행 안 함)」.
+"""
+CHART_KEYS = {"kind", "labels", "values"}
+CHART_OPT = {"title", "xlabel", "ylabel"}
+CHART_KINDS = {"bar": "막대 그래프", "line": "꺾은선 그래프"}
+CHART_MAX = 3
+CHART_POINTS_MAX = 24
+CHART_TEXT_MAX = 40
 FILES_MAX = 5
 FILE_NAME_MAX = 40
 SERVER_MAX = 8
@@ -122,6 +142,13 @@ CHAPTER_RULES = {
     12: {"modules": {"re"}},                                              # 정규표현식, r"…"
     13: {"modules": {"urllib.request", "urllib.parse", "urllib.error"}},  # 연습 서버(E2)
     14: {"modules": {"json"}},
+    # 15장: class(사용자 클래스 하나만 물려받기, metaclass·데코레이터 없음), 메서드와 self,
+    #       특수 메서드는 __init__·__str__만(check_classes), super().__init__(…), isinstance(…).
+    15: {"allow": {"ClassDef"}, "calls": {"isinstance", "super"}},
+    # 16장: sqlite3.connect(":memory:")만(check_sqlite). SQL 글 자체는 검사하지 않음.
+    16: {"modules": {"sqlite3"}},
+    # 17장: 앱 모듈 chart(E3, matplotlib.pyplot과 같은 이름). max·min·round는 앞 장에서 허용됨.
+    17: {"modules": {"chart"}},
 }
 # import한 모듈에서 쓸 수 있는 이름(모듈.이름 또는 from 모듈 import 이름). 모르는 이름은 오류.
 MODULE_MEMBERS = {
@@ -131,6 +158,8 @@ MODULE_MEMBERS = {
     "urllib.parse": {"urlencode", "quote", "unquote", "urlparse", "parse_qs"},
     "urllib.error": {"HTTPError", "URLError"},
     "json": {"loads", "dumps"},
+    "sqlite3": {"connect"},
+    "chart": {"bar", "line", "title", "xlabel", "ylabel", "show"},
 }
 OPEN_MODES = ("r", "w", "a")
 # 이름 붙은 인자(키워드)를 제한하는 함수: 함수 → 쓸 수 있는 키워드
@@ -138,7 +167,14 @@ CALL_KWARGS = {
     "open": {"mode", "encoding", "newline"},
     "json.dumps": {"ensure_ascii", "indent", "sort_keys"},
     "json.loads": set(),
+    "sqlite3.connect": set(),
+    **{"chart." + n: set() for n in ("bar", "line", "title", "xlabel", "ylabel", "show")},
 }
+# 15장: 클래스 안에 정의할 수 있는 특수 메서드, 점 뒤에 쓸 수 있는 __이름__
+CLASS_DUNDERS = {"__init__", "__str__"}
+# 16장: sqlite3.connect(…) 결과(연결)와 그 cursor()/execute(…) 결과(커서)에 쓸 수 있는 메서드
+DB_METHODS = {"execute", "executemany", "fetchall", "fetchone", "commit", "close", "cursor"}
+DB_MEMORY = ":memory:"
 
 
 def _build_tables(rules):
@@ -195,13 +231,97 @@ def load_modules(paths):
     return json.loads(r.stdout)
 
 
-def judge(result, expect):
-    """runner 결과 하나가 기대 출력과 맞는지. 맞으면 None, 아니면 이유 문자열."""
+def _is_num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and v not in (float("inf"), float("-inf"))
+
+
+def same_number(a, b):
+    """src/chart.js sameNumber와 같은 규칙: 3 == 3.0, 아주 작은 소수 오차는 같음"""
+    if not _is_num(a) or not _is_num(b):
+        return False
+    return abs(a - b) <= 1e-9 * max(1, abs(a), abs(b))
+
+
+def _chart_one(exp, got):
+    if exp.get("kind") is not None and exp.get("kind") != got.get("kind"):
+        return "그래프 종류가 달라요(기대: %s)" % CHART_KINDS.get(exp["kind"], exp["kind"])
+    if exp.get("labels") is not None:
+        a, b = [str(x) for x in exp["labels"]], [str(x) for x in got.get("labels") or []]
+        if a != b:
+            return "그래프 이름(가로축 항목)이 달라요"
+    if exp.get("values") is not None:
+        b = got.get("values") or []
+        if len(exp["values"]) != len(b) or not all(same_number(x, y) for x, y in zip(exp["values"], b)):
+            return "그래프 값이 달라요"
+    for k, msg in (("title", "그래프 제목이 달라요"), ("xlabel", "가로축 이름이 달라요"), ("ylabel", "세로축 이름이 달라요")):
+        if exp.get(k) is not None and str(exp[k]).strip() != str(got.get(k) if got.get(k) is not None else "").strip():
+            return msg
+    return None
+
+
+def chart_mismatch(expected, charts):
+    """src/chart.js chartMismatch와 같은 비교. 맞으면 None, 아니면 학습자에게 보이는 말과 같은 한 줄."""
+    want = expected if isinstance(expected, list) else [expected]
+    got = charts if isinstance(charts, list) else []
+    if not got:
+        return "그래프가 그려지지 않았어요. 마지막에 chart.show()를 불렀는지 확인해 봐요"
+    if len(got) != len(want):
+        return "그래프 개수가 달라요(기대 %d개, 내 코드 %d개)" % (len(want), len(got))
+    for i, (w, g) in enumerate(zip(want, got)):
+        why = _chart_one(w or {}, g or {})
+        if why:
+            return "%d번째 %s" % (i + 1, why) if len(want) > 1 else why
+    return None
+
+
+def chart_of(rep, where, obj):
+    """chart 칸(없으면 None). 형식이 틀리면 오류를 적고 None."""
+    if "chart" not in obj:
+        return None
+    v = obj["chart"]
+    figs = v if isinstance(v, list) else [v]
+    if not figs or len(figs) > CHART_MAX:
+        rep.err(where, "chart는 그림 객체 하나 또는 1~%d개 목록" % CHART_MAX)
+        return None
+    ok = True
+    for f in figs:
+        if not isinstance(f, dict) or not (CHART_KEYS <= set(f) <= CHART_KEYS | CHART_OPT):
+            rep.err(where, "chart 칸은 kind, labels, values (+ 선택 title, xlabel, ylabel)")
+            ok = False
+            continue
+        if f["kind"] not in CHART_KINDS:
+            rep.err(where, "chart.kind는 \"bar\" 또는 \"line\"")
+            ok = False
+        labels, values = f["labels"], f["values"]
+        if (not isinstance(labels, list) or not isinstance(values, list) or not (1 <= len(labels) <= CHART_POINTS_MAX)
+                or len(labels) != len(values)):
+            rep.err(where, "chart.labels와 chart.values는 같은 길이의 목록(1~%d개)" % CHART_POINTS_MAX)
+            ok = False
+            continue
+        if not all((isinstance(x, str) or _is_num(x)) and len(str(x)) <= CHART_TEXT_MAX for x in labels):
+            rep.err(where, "chart.labels는 글자나 숫자(%d자 이하)" % CHART_TEXT_MAX)
+            ok = False
+        if not all(_is_num(x) for x in values):
+            rep.err(where, "chart.values는 숫자만(true/false·글자 아님)")
+            ok = False
+        for k in CHART_OPT & set(f):
+            if not isinstance(f[k], str) or not f[k].strip() or len(f[k]) > CHART_TEXT_MAX:
+                rep.err(where, "chart.%s는 비어 있지 않은 글자(%d자 이하)" % (k, CHART_TEXT_MAX))
+                ok = False
+    return v if ok else None
+
+
+def judge(result, expect, chart=None):
+    """runner 결과 하나가 기대 출력(과 chart가 있으면 그림)과 맞는지. 맞으면 None, 아니면 이유 문자열."""
     if result["error"]:
         e = result["error"]
         return "오류 %s(%s줄): %s" % (e["type"], e["line"], e["msg"])
     if normalize(result["stdout"]) != normalize(expect):
         return "출력 %r ≠ 기대 %r" % (normalize(result["stdout"]), normalize(expect))
+    if chart is not None:
+        why = chart_mismatch(chart, result.get("charts"))
+        if why:
+            return "그림: " + why
     if result["missing"]:
         return "구조 조건 빠짐: %s" % ", ".join(result["missing"])
     return None
@@ -298,8 +418,20 @@ def env_of(rep, where, obj):
 
 
 def same_outcome(a, b):
-    """두 실행 결과가 학습자 눈에 같은지(둘 다 같은 출력, 오류 없음)."""
-    return not a["error"] and not b["error"] and normalize(a["stdout"]) == normalize(b["stdout"])
+    """두 실행 결과가 학습자 눈에 같은지(둘 다 같은 출력·같은 그림, 오류 없음)."""
+    if a["error"] or b["error"] or normalize(a["stdout"]) != normalize(b["stdout"]):
+        return False
+    ca, cb = a.get("charts") or [], b.get("charts") or []
+    return (not ca and not cb) or (bool(ca) and chart_mismatch(ca, cb) is None)
+
+
+def check_run_chart(rep, where, expected, result):
+    """카드·터치 문제의 chart(화면에 보여 줄 그림)가 코드를 돌린 그림과 같은지"""
+    if expected is None or result["error"]:
+        return
+    why = chart_mismatch(expected, result.get("charts"))
+    if why:
+        rep.err(where, "chart가 코드를 돌린 그림과 다름 — " + why)
 
 
 class Lesson:
@@ -347,6 +479,9 @@ def check_code_shape(rep, where, code, chapter):
     calls = CALLS_BY_CHAPTER.get(chapter, set())
     if "FunctionDef" not in forbid:  # 직접 만든 함수는 부를 수 있음(4장부터)
         calls = calls | {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    if "ClassDef" not in forbid:     # 직접 만든 클래스로 객체 만들기(15장부터)
+        calls = calls | {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+        check_classes(rep, where, tree, chapter)
     # for 대상 자리의 튜플(for k, v in …:) — ForTupleTarget이 허용된 장에서는 Tuple 금지에서 뺀다
     for_targets = set()
     if "ForTupleTarget" not in forbid:
@@ -371,6 +506,32 @@ def check_code_shape(rep, where, code, chapter):
             rep.err(where, "%d장에서 쓸 수 없는 이름 %r(변수는 2장부터)" % (chapter, node.id))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id not in calls:
             rep.err(where, "%d장에서 아직 배우지 않은 함수 %s()" % (chapter, node.func.id))
+
+
+def check_classes(rep, where, tree, chapter):
+    """15장부터: 물려받기는 같은 코드에서 만든 클래스 하나만, metaclass·데코레이터 없음,
+    특수 메서드(__이름__)는 CLASS_DUNDERS만 정의하고 점 뒤에도 그것만 쓴다."""
+    own = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.decorator_list:
+            rep.err(where, "%d장에서는 데코레이터(@…)를 쓰지 않음(%s줄)" % (chapter, node.decorator_list[0].lineno))
+        if isinstance(node, ast.ClassDef):
+            if len(node.bases) > 1:
+                rep.err(where, "class %s: 여러 클래스를 한꺼번에 물려받지 않음(하나만, %s줄)" % (node.name, node.lineno))
+            for b in node.bases:
+                if not (isinstance(b, ast.Name) and b.id in own and b.id != node.name):
+                    rep.err(where, "class %s: 물려받기는 이 코드에서 만든 클래스만 — %s 은 안 됨(%s줄)"
+                            % (node.name, ast.unparse(b), node.lineno))
+            for k in node.keywords:
+                rep.err(where, "class %s: %s= 은 쓰지 않음(%s줄)" % (node.name, k.arg or "**", node.lineno))
+            for f in node.body:
+                if (isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)) and f.name.startswith("__")
+                        and f.name.endswith("__") and f.name not in CLASS_DUNDERS):
+                    rep.err(where, "특수 메서드 %s 은 %d장에서 쓰지 않음 — 쓸 수 있는 것: %s(%s줄)"
+                            % (f.name, chapter, ", ".join(sorted(CLASS_DUNDERS)), f.lineno))
+        if (isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__")
+                and node.attr not in CLASS_DUNDERS):
+            rep.err(where, ".%s 은 %d장에서 쓰지 않음(%s줄)" % (node.attr, chapter, node.lineno))
 
 
 def _dotted(node):
@@ -456,7 +617,50 @@ def check_imports(rep, where, tree, chapter):
                 rep.err(where, "open()에는 파일 이름과 모드만 차례로 씀(%s줄)" % node.lineno)
             if mode is not None and not (isinstance(mode, ast.Constant) and mode.value in OPEN_MODES):
                 rep.err(where, "open()의 모드는 \"r\"·\"w\"·\"a\" 중 하나를 글자 그대로 씀(%s줄)" % node.lineno)
+        if name == "sqlite3.connect" and not (
+                len(node.args) == 1 and not node.keywords
+                and isinstance(node.args[0], ast.Constant) and node.args[0].value == DB_MEMORY):
+            rep.err(where, "sqlite3.connect()에는 \"%s\" 하나만 글자 그대로 씀 — 실행마다 새 DB, 휴대폰에 파일을 "
+                           "남기지 않아요(%s줄)" % (DB_MEMORY, node.lineno))
+    check_db_methods(rep, where, tree, chapter, from_names, qual)
     return from_names
+
+
+def check_db_methods(rep, where, tree, chapter, from_names, qual):
+    """16장: 연결·커서로 알아볼 수 있는 이름(sqlite3.connect(…), x.cursor(), x.execute(…)의 결과를 담은 변수와
+    그런 호출 바로 뒤)에는 DB_METHODS만 쓴다. 그 밖의 객체 메서드는 보지 않는다(형 추론 없음)."""
+    def qname(call):
+        f = call.func
+        return from_names.get(f.id, f.id) if isinstance(f, ast.Name) else qual.get(id(f))
+
+    db_names = set()
+
+    def is_db(expr):
+        if isinstance(expr, ast.Name):
+            return expr.id in db_names
+        if isinstance(expr, ast.Call):
+            if qname(expr) == "sqlite3.connect":
+                return True
+            f = expr.func
+            return (isinstance(f, ast.Attribute) and f.attr in ("cursor", "execute", "executemany")
+                    and is_db(f.value))
+        return False
+
+    # conn = …; cur = conn.cursor() 처럼 이어진 대입을 더 늘지 않을 때까지 훑는다(함수 안 순서와 무관).
+    while True:
+        before = len(db_names)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and is_db(node.value):
+                db_names.update(t.id for t in node.targets if isinstance(t, ast.Name))
+            elif (isinstance(node, ast.withitem) and is_db(node.context_expr)
+                  and isinstance(node.optional_vars, ast.Name)):
+                db_names.add(node.optional_vars.id)
+        if len(db_names) == before:
+            break
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr not in DB_METHODS and is_db(node.value):
+            rep.err(where, "DB 연결·커서의 %s 은 %d장에서 쓰지 않음(%s줄) — 쓸 수 있는 것: %s"
+                    % (node.attr, chapter, node.lineno, ", ".join(sorted(DB_METHODS))))
 
 
 def check_index(rep, where, item, key="options", lo=3, hi=4):
@@ -492,6 +696,7 @@ def check_choice(rep, where, item, chapter):
         return
     check_code_shape(rep, where + ".code", code, chapter)
     r = safe_run(rep, where, code, stdin, **env)
+    check_run_chart(rep, where, chart_of(rep, where, item), r)
     if not ok:
         return
     if r["error"]:
@@ -552,6 +757,7 @@ def check_blank(rep, where, item, chapter):
     if good["error"]:
         rep.err(where, "정답 칩을 넣은 코드가 오류: %s %s" % (good["error"]["type"], good["error"]["msg"]))
         return
+    check_run_chart(rep, where, chart_of(rep, where, item), good)
     for i, c in enumerate(chips):
         if i == item["answer"]:
             continue
@@ -578,15 +784,16 @@ def check_order(rep, where, item, chapter):
     if not isinstance(item.get("expect"), str):
         rep.err(where, "expect가 문자열이 아님")
         return
+    chart = chart_of(rep, where, item)
     r = safe_run(rep, where, code, stdin, **env)
-    why = judge(r, item["expect"])
+    why = judge(r, item["expect"], chart)
     if why:
         rep.err(where, "정답 순서 실행 결과가 expect와 다름 — " + why)
         return
     # 정답 순서는 딱 하나여야 함(판정 C23): Pyodide가 준비되기 전에는 앱이 저장된 순서와 비교하므로.
     valid = 1
     for perm in itertools.permutations(lines):
-        if list(perm) != lines and judge(safe_run(rep, where, "\n".join(perm), stdin, **env), item["expect"]) is None:
+        if list(perm) != lines and judge(safe_run(rep, where, "\n".join(perm), stdin, **env), item["expect"], chart) is None:
             valid += 1
     if valid != 1:
         rep.err(where, "expect를 내는 순서가 %d가지(정확히 1가지여야 함)" % valid)
@@ -668,10 +875,11 @@ def check_write(rep, where, item, chapter):
         rep.err(where, "공개 시험(public: true)은 정확히 1개")
     stdins = []
     envs = []
+    charts = {}   # 시험 번호 → 기대 그림(없으면 None)
     for i, t in enumerate(tests):
         tw = "%s.tests[%d]" % (where, i)
         if not isinstance(t, dict) or not (TEST_KEYS <= set(t) <= TEST_KEYS | TEST_OPT):
-            rep.err(tw, "시험 칸은 stdin, expect, public 세 개 (+ 선택 files)")
+            rep.err(tw, "시험 칸은 stdin, expect, public 세 개 (+ 선택 files, chart)")
             envs.append(env)
             continue
         if not isinstance(t["stdin"], str) or not isinstance(t["expect"], str) or not isinstance(t["public"], bool):
@@ -682,13 +890,17 @@ def check_write(rep, where, item, chapter):
         tenv = dict(env, files=files_of(rep, tw, t)) if "files" in t else env
         envs.append(tenv)
         stdins.append((t["stdin"], json.dumps(tenv["files"], sort_keys=True, ensure_ascii=False)))
-        why = judge(safe_run(rep, tw, sol, t["stdin"], req, **tenv), t["expect"])
+        charts[i] = chart_of(rep, tw, t)
+        r = safe_run(rep, tw, sol, t["stdin"], req, **tenv)
+        why = judge(r, t["expect"], charts[i])
         if why:
             rep.err(tw, "solution이 통과하지 못함 — " + why)
+        elif r.get("charts") and "chart" not in t:
+            rep.err(tw, "solution이 그림을 그리는데 시험에 chart가 없음(그림을 채점하려면 chart를 적음)")
     if len(set(stdins)) != len(stdins):
         rep.err(where, "같은 stdin(과 files)의 시험이 두 번 있음")
     if all(isinstance(t, dict) and isinstance(t.get("stdin"), str) and isinstance(t.get("expect"), str)
-           and judge(safe_run(rep, where, starter, t["stdin"], req, **envs[i]), t["expect"]) is None
+           and judge(safe_run(rep, where, starter, t["stdin"], req, **envs[i]), t["expect"], charts.get(i)) is None
            for i, t in enumerate(tests)):
         rep.err(where, "starter만으로 모든 시험을 통과함")
 
@@ -753,17 +965,25 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
         cards = cards if isinstance(cards, list) else []
     for i, c in enumerate(cards):
         w = "cards[%d]" % i
+        if isinstance(c, dict) and "show_only" in c:
+            check_show_only_card(rep, w, c)
+            continue
         if not isinstance(c, dict) or not (CARD_KEYS <= set(c) <= CARD_KEYS | CARD_OPT):
-            rep.err(w, "카드 칸은 say, code, out (+ 선택 stdin, files, server)")
+            rep.err(w, "카드 칸은 say, code, out (+ 선택 stdin, files, server, chart / 또는 show_only)")
             continue
         check_text(rep, w + ".say", c["say"], SAY_MAX, one_line=False)
         if not isinstance(c["code"], str) or not isinstance(c["out"], str):
             rep.err(w, "code와 out은 문자열이어야 함")
             continue
         check_code_shape(rep, w + ".code", c["code"], chapter)
-        why = judge(safe_run(rep, w, c["code"], stdin_of(rep, w, c), **env_of(rep, w, c)), c["out"])
+        r = safe_run(rep, w, c["code"], stdin_of(rep, w, c), **env_of(rep, w, c))
+        why = judge(r, c["out"])
         if why:
             rep.err(w, "코드 실행 결과가 out과 다름 — " + why)
+        elif "chart" in c:
+            check_run_chart(rep, w, chart_of(rep, w, c), r)
+        elif r.get("charts"):
+            rep.err(w, "코드가 그림을 그리는데 chart가 없음(카드는 실행하지 않으니 chart를 적어야 그림이 보임)")
 
     items = lesson.get("items")
     if not isinstance(items, list):
@@ -779,6 +999,29 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
         rep.err("items", "터치 문제는 4~%d개(지금 %d개)" % (touch_hi, n_touch))
     for i, item in enumerate(items):
         check_item(rep, "items[%d] %s" % (i, kinds[i]), item, chapter, concepts)
+
+
+def check_show_only_card(rep, w, c):
+    """show_only 카드(판정 C38): 보여 주기만 하는 코드. 실행·문법·모듈 검사 없이 줄 폭만 본다."""
+    if c.get("show_only") is not True:
+        rep.err(w, "show_only는 true만 씀(돌리는 카드면 칸을 지움)")
+        return
+    extra = set(c) - {"say", "code", "out", "show_only"}
+    if extra or not {"say", "code"} <= set(c):
+        rep.err(w, "show_only 카드 칸은 say, code, show_only (+ 빈 out) — 함께 못 쓰는 칸: %s"
+                % ", ".join(sorted(extra)) if extra else "show_only 카드에는 say와 code가 필요함")
+        return
+    if c.get("out", "") != "":
+        rep.err(w, "show_only 카드는 실행하지 않으므로 out을 비움(\"\" 또는 칸 없음)")
+    check_text(rep, w + ".say", c["say"], SAY_MAX, one_line=False)
+    if not isinstance(c["code"], str) or not c["code"].strip():
+        rep.err(w, "code가 비어 있거나 문자열이 아님")
+        return
+    for n, line in enumerate(c["code"].split("\n"), 1):
+        if width(line) > CODE_COLS:
+            rep.err(w + ".code", "%d번째 줄이 휴대폰 화면보다 넓음(%d칸 > %d칸): %s" % (n, width(line), CODE_COLS, line))
+        if "\t" in line:
+            rep.err(w + ".code", "탭 문자 대신 빈칸 4개를 씀")
 
 
 def check_exam_coverage(rep, lessons):

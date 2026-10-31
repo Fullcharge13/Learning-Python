@@ -1,7 +1,7 @@
 // 직접 작성 문제: 입력창 + 기호 줄 + 「실행」·「제출」, 힌트 4단계, 정답 보기, 오류 설명
 import { normalize, judge, explain } from "../grade.js";
 import { riaSVG } from "../ria.js";
-import { esc, icon, codeBlock, filesNote } from "./dom.js";
+import { esc, icon, codeBlock, filesNote, chartNote } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { missingMessage } from "../shuffle.js";
 import { keyboardOpen, nextBaseHeight, SYMBOL_ORDER } from "../kbd.js";
@@ -35,6 +35,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       <div class="expect">
         <p class="ex-label">기대 출력</p>
         <pre class="out">${esc(normalize(pub.expect))}</pre>
+        ${chartNote(pub.chart, "기대 그래프")}
         ${filesNote(runEnv(item, pub).files)}
         ${stdinOf(pub) ? `<p class="stdin-note">${icon("send")}<span>입력하는 값: ${stdinOf(pub).split("\n").map((v) => `<code>${esc(v)}</code>`).join(" ")}</span></p>` : ""}
       </div>
@@ -184,10 +185,12 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     const ex = explain(err, ctx.save.outfit);
     const orig = err.type === "Timeout" ? "Timeout: 3초 안에 끝나지 않음"
       : `${err.type}${err.msg ? ": " + err.msg : ""}`;
+    // 앱이 만든 한국어 오류 문구(차트 등)는 일반 설명보다 먼저 그대로 보여 준다
+    const own = /[가-힣]/.test(err.msg || "") ? `<p class="err-own">${esc(err.msg)}</p>` : "";
     return `<div class="err-panel">
       <p class="err-orig mono" lang="en">${esc(orig)}${err.line ? ` <span lang="ko">(${err.line}번째 줄)</span>` : ""}</p>
       <h3>${icon("cross")}${esc(ex.title)}</h3>
-      <p>${esc(ex.body)}</p>
+      ${own}<p>${esc(ex.body)}</p>
     </div>`;
   }
   function riaLine(situation, sfx) {
@@ -219,7 +222,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       if (st.destroyed) return; // 화면을 떠난 뒤 도착한 결과는 버림
       if (r.error && SYSTEM_ERRORS.has(r.error.type)) { systemError(r); return; }
       const out = normalize(r.stdout);
-      let html = `<p class="ex-label">실행 결과</p><pre class="out${out ? "" : " empty"}">${out ? esc(out) : "(출력 없음)"}</pre>`;
+      let html = `<p class="ex-label">실행 결과</p><pre class="out${out ? "" : " empty"}">${out ? esc(out) : "(출력 없음)"}</pre>${chartNote(r.charts)}`;
       if (r.error) {
         st.hadError = true;
         ed.markLine(r.error.line);
@@ -260,7 +263,14 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
         st.hadError = true;
         ed.markLine(r.error.line, false);
         ctx.sound.play("error");
-        html = (normalize(r.stdout) ? `<p class="ex-label">실행 결과</p><pre class="out">${esc(normalize(r.stdout))}</pre>` : "") + errorHTML(r.error) + riaLine("error", "어라?");
+        html = (normalize(r.stdout) ? `<p class="ex-label">실행 결과</p><pre class="out">${esc(normalize(r.stdout))}</pre>` : "") + chartNote(r.charts) + errorHTML(r.error) + riaLine("error", "어라?");
+      } else if (v.reason === "chart") {
+        // 출력은 맞고 그래프가 다름(v0.5 E3): 쉬운 말 + 기대 그래프와 내 그래프
+        ctx.sound.play("wrong");
+        const t = tests[v.failedIndex];
+        html = `<div class="err-panel soft"><h3>${icon("cross")}${esc(v.chartWhy)}</h3>${t.public ? "" : `<p>숨은 시험 ${v.failedIndex + 1}번에서 그래프가 달라요.</p>`}</div>`
+          + (t.public ? `<div class="chart-diff">${chartNote(t.chart, "기대 그래프")}${chartNote(r.charts, "내 그래프")}</div>` : chartNote(r.charts, "내 그래프"))
+          + riaLine("wrong");
       } else if (v.reason === "missing") {
         ctx.sound.play("wrong");
         html = `<div class="err-panel soft"><h3>${icon("cross")}조건이 하나 남았어요</h3><p>${esc(missingMessage(r.missing))} 같은 결과를 그 방법으로 만들어 볼까요?</p></div>` + riaLine("wrong");

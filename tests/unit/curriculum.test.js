@@ -70,3 +70,19 @@ test("window_few: 장이 3개 이하면 모두 보이고 숨김 없음", () => {
   assert.deepEqual(chapterWindow({ chapterIds: [1, 2, 3], currentChapter: 1 }), { shown: [1, 2, 3], hidden: [] });
   assert.deepEqual(chapterWindow({ chapterIds: [], currentChapter: null }), { shown: [], hidden: [] });
 });
+
+import { courseJustFinished } from "../../src/curriculum.js";
+const FULL = Array.from({ length: 17 }, (_, i) => mk(i + 1, i + 4 <= 17 && i >= 3 ? UPCOMING[i - 3] : `장${i + 1}`));
+const FULL_IDS = FULL.flatMap((c) => c.lessons.map((l) => l.id));
+
+test("course_end_path: 17장 전부 끝내면 과정 완주 문구(다음 업데이트 말 없음)", () => {
+  assert.equal(pathEndText({ chapters: FULL, completed: FULL_IDS }), "과정을 모두 끝냈어요! 복습으로 실력을 다져요");
+  assert.equal(pathEndText({ chapters: FULL, completed: [] }), "17장이 마지막 장이에요. 끝까지 함께 가 봐요");
+});
+
+test("course_just_finished: 처음으로 마지막 레슨까지 끝낸 순간만 참", () => {
+  assert.equal(courseJustFinished({ chapters: FULL, completed: FULL_IDS, firstTime: true }), true);
+  assert.equal(courseJustFinished({ chapters: FULL, completed: FULL_IDS, firstTime: false }), false); // 다시 하기·복습
+  assert.equal(courseJustFinished({ chapters: FULL, completed: FULL_IDS.slice(1), firstTime: true }), false); // 빠진 레슨
+  assert.equal(courseJustFinished({ chapters: CH, completed: CH.flatMap((c) => c.lessons.map((l) => l.id)), firstTime: true }), false); // 다음 장이 남은 판
+});

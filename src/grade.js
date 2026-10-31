@@ -1,6 +1,7 @@
 // 채점 핵심 (설계서 4-3, 4-5). 실행은 runner.py(작업 5에서 Pyodide 작업자)가 하고,
 // 이 파일은 실행 결과를 비교하고 오류를 설명할 뿐이다.
 import { ERRORS, ERROR_ALIASES } from "../data/errors.js";
+import { chartMismatch } from "./chart.js";
 
 // 줄마다 오른쪽 공백 제거, \r\n → \n, 끝 줄바꿈 제거.
 export function normalize(text) {
@@ -13,20 +14,24 @@ export function normalize(text) {
     .replace(/\n+$/, "");
 }
 
-// results[i]는 tests[i]의 실행 결과 { stdout, error, missing, timeout? }.
+// results[i]는 tests[i]의 실행 결과 { stdout, error, missing, charts?, timeout? }.
 // 공개 시험이 틀리면 publicDiff(기대·실제 출력), 숨은 시험이 틀리면 번호만.
+// 시험에 chart가 있으면 출력과 그래프를 둘 다 맞혀야 통과(v0.5 E3). 틀리면 reason "chart", chartWhy(쉬운 말).
 export function judge(results, tests) {
   const list = results || [];
   for (let i = 0; i < tests.length; i++) {
     const r = list[i];
     let reason = null;
+    let chartWhy = null;
     if (!r) reason = "error";
     else if (r.timeout) reason = "timeout";
     else if (r.error) reason = "error";
     else if (normalize(r.stdout) !== normalize(tests[i].expect)) reason = "output";
+    else if (tests[i].chart != null && (chartWhy = chartMismatch(tests[i].chart, r.charts))) reason = "chart";
     else if (r.missing && r.missing.length) reason = "missing";
     if (reason) {
       const out = { pass: false, failedIndex: i, reason };
+      if (chartWhy) out.chartWhy = chartWhy;
       if (tests[i].public) {
         out.publicDiff = { expected: normalize(tests[i].expect), actual: normalize(r && r.stdout) };
       }

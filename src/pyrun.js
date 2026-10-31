@@ -4,7 +4,8 @@
 //   py.onstatus = (status, phase) => { ... };  // phase: "first-load" | "restart"
 //   py.preload();                       // 앱을 열자마자 미리 받기 시작(선택)
 //   const r = await py.run(code, "12\n30", ["If"]);
-//   // r = { stdout, stderr, error: null | {type, line, msg}, missing: [], timeout, ms }
+//   // r = { stdout, stderr, error: null | {type, line, msg}, missing: [], charts: [], timeout, ms }
+//   // charts: chart.show()로 그린 그림(v0.5 E3, src/chart.js가 모양을 다듬음)
 //   py.run(code, "", [], { files: { "memo.txt": "…" }, server: { "https://ria.example/a": { status: 200, body: "…" } } });
 //   // 넷째 인자는 제한 시간(ms) 숫자 또는 { timeoutMs?, files?, server? } (v0.4 E1·E2)
 //
@@ -22,6 +23,8 @@
 // - ms는 화면 쪽에서 잰 왕복 시간(작업자에 보낸 때 → 결과 받은 때)이다. 준비 기다림은 빠진다.
 //   제한 시간도 보낸 때부터 잰다(앞 실행의 시간 초과·재시작 기다림은 들지 않음).
 
+import { cleanCharts } from "./chart.js";
+
 export const PYODIDE_VERSION = "314.0.7";
 // 배포용 고정 주소(npm 패키지를 jsDelivr로 받음, 판정 C19). 시험·개발은 "/node_modules/pyodide/"를 쓴다.
 // 어느 쪽을 쓸지는 build.py가 정한다.
@@ -34,7 +37,7 @@ function baseHref() {
 }
 
 function failResult(type, msg, extra = {}) {
-  return { stdout: "", stderr: "", error: { type, line: null, msg: String(msg || "") }, missing: [], timeout: false, ...extra };
+  return { stdout: "", stderr: "", error: { type, line: null, msg: String(msg || "") }, missing: [], charts: [], timeout: false, ...extra };
 }
 
 function errMsg(e) {
@@ -52,6 +55,7 @@ function cleanResult(r) {
     stderr: typeof r?.stderr === "string" ? r.stderr : "",
     error: e ? { type: String(e.type || "Error"), line: Number.isInteger(e.line) ? e.line : null, msg: e.msg == null ? "" : String(e.msg) } : null,
     missing: Array.isArray(r?.missing) ? r.missing.map(String) : [],
+    charts: cleanCharts(r?.charts),
     timeout: false,
   };
 }

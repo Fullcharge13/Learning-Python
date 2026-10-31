@@ -214,6 +214,44 @@ def test_practice_server_in_pyodide():
     assert r2["stdout"] == "urllib.request\n", r2
 
 
+def test_chart_in_pyodide():
+    # v0.5 E3: chart 모듈이 Pyodide에서도 같은 charts를 돌려주고, 다음 실행에 남지 않는다.
+    r = _run("import chart\nchart.bar(['사과', '배'], [3, 5.5])\nchart.title('과일')\nchart.show()\n"
+             "chart.line([2024, 2025], [1, 2])\nchart.show()\n")
+    assert r["error"] is None, r
+    assert r["charts"] == [{"kind": "bar", "labels": ["사과", "배"], "values": [3, 5.5], "title": "과일"},
+                           {"kind": "line", "labels": ["2024", "2025"], "values": [1, 2]}], r
+    r2 = _run("import chart\nchart.bar(['a', 'b'], [1])\n")
+    assert r2["error"]["type"] == "ValueError" and r2["error"]["msg"] == "이름과 값의 개수가 달라요", r2
+    assert r2["charts"] == [], r2
+    r3 = _run("print(1)")
+    assert r3["charts"] == [], r3
+
+
+SQL = ("import sqlite3\n"
+       "con = sqlite3.connect(':memory:')\n"
+       "con.execute('CREATE TABLE t (name TEXT, n INTEGER)')\n"
+       "con.executemany('INSERT INTO t VALUES (?, ?)', [('사과', 3), ('배', 5)])\n"
+       "print(con.execute('SELECT name FROM t ORDER BY n DESC').fetchall())\n")
+
+
+def test_sqlite3_in_pyodide():
+    # Pyodide 314.0.7은 _sqlite3를 핵심(pyodide.asm.wasm)에, sqlite3 모듈을 python_stdlib.zip에 넣어 둔다.
+    # 따로 받을 꾸러미가 없다 → 실행 중 네트워크 요청이 하나도 없어야 한다(막아 둔 채로 돌려 봄).
+    pg = _page()
+    asked = []
+    pg.on("request", lambda req: asked.append(req.url))
+    pg.route("**/*", lambda route: route.abort())
+    try:
+        r = _run(SQL)
+    finally:
+        pg.unroute("**/*")
+    assert r["error"] is None, r
+    assert r["stdout"] == "[('배',), ('사과',)]\n", r
+    assert r["ms"] < 3000, r
+    assert asked == [], asked
+
+
 def test_queue():
     # 동시에 세 번 불러도 하나씩 차례로 돌고 모두 끝난다.
     outs = _page().evaluate("""async () => {
@@ -419,7 +457,7 @@ def test_idle_worker_error_event():
 
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
-         test_practice_server_in_pyodide, test_queue, test_timeout_then_ok,
+         test_practice_server_in_pyodide, test_chart_in_pyodide, test_sqlite3_in_pyodide, test_queue, test_timeout_then_ok,
          test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,
          test_load_error_resolves, test_cdn_constant, test_fetch_retry, test_worker_ctor_throws,
          test_load_timeout_retry, test_idle_worker_killed_silently, test_idle_worker_error_event]

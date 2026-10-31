@@ -133,6 +133,26 @@ button { cursor: pointer; }
 .stdin-note .ic { width: 18px; height: 18px; }
 .stdin-note code { background: var(--sun-soft); color: var(--ink); padding: 1px 6px; border-radius: 6px; }
 
+/* ---------- 차트 (v0.5 E3, src/chart.js가 그린 SVG) ---------- */
+.chart-note { margin: 0 0 12px; }
+.chart { margin: 0; padding: 10px 8px 8px; background: var(--card); border: 2px dashed var(--line); border-radius: 14px; }
+.chart + .chart { margin-top: 10px; }
+.chart-svg { display: block; width: 100%; height: auto; font-family: var(--sans); }
+.chart-svg .c-title { font-size: 14px; font-weight: 800; fill: var(--ink); }
+.chart-svg .c-axis { font-size: 11px; font-weight: 700; fill: var(--ink-2); }
+.chart-svg .c-yt, .chart-svg .c-xl { font-size: 11px; fill: var(--ink-2); }
+.chart-svg .c-val { font-size: 10px; font-weight: 700; fill: var(--ink); }
+.chart-svg .c-grid { stroke: var(--line); stroke-width: 1; }
+.chart-svg .c-zero { stroke: var(--ink-2); }
+.chart-svg .c-bar { fill: var(--teal); }
+.chart-svg .c-line { fill: none; stroke: var(--teal-ink); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.chart-svg .c-dot { fill: var(--card); stroke: var(--teal-ink); stroke-width: 2; }
+.chart-desc { margin: 6px 4px 0; font-size: .82rem; line-height: 1.45; color: var(--ink-2); }
+.chart-diff .chart-note:last-child .chart { border-color: var(--coral); background: var(--coral-soft); }
+.example.show-only .ex-label { display: flex; gap: 6px; align-items: center; }
+.example.show-only .ex-label .ic { width: 18px; height: 18px; }
+.err-own { font-weight: 700; color: var(--coral-ink); }
+
 /* ---------- 상태 줄과 탭 ---------- */
 .with-tabs { padding-bottom: calc(var(--tab-h) + var(--sab) + 24px); }
 .status {

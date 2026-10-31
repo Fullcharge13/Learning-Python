@@ -2,7 +2,7 @@
 // 진행 순서는 lessonflow.js 상태 기계가 정하고, 이 파일은 그리기와 채점만 한다.
 import { startFlow, current, nextCard, answer, summary } from "../lessonflow.js";
 import { riaSVG } from "../ria.js";
-import { esc, icon, bar, codeBlock, dialog, riaSays, filesNote } from "./dom.js";
+import { esc, icon, bar, codeBlock, dialog, riaSays, filesNote, chartNote, stdinNote, cardExample } from "./dom.js";
 import { mountWrite } from "./write.js";
 import { shuffleChoices, shuffleOrder, newSeed } from "../shuffle.js";
 import { isCodey } from "../textkind.js";
@@ -43,11 +43,6 @@ async function buildReview(ctx) {
   return { id: "review", title: "복습", cards: [], items: shuffle(pool).slice(0, 5) };
 }
 
-function stdinNote(stdin) {
-  if (stdin == null || stdin === "") return "";
-  const vals = String(stdin).split("\n");
-  return `<p class="stdin-note">${icon("send")}<span>입력하는 값: ${vals.map((v) => `<code>${esc(v)}</code>`).join(" ")}</span></p>`;
-}
 
 
 /** 장 파일을 기다리는 동안·못 받았을 때 화면.
@@ -252,8 +247,7 @@ function run(root, ctx, lesson, review) {
         <div class="ria-wrap">${riaSVG({ outfit: ctx.save.outfit, face: first ? "smile" : "think", size: 84 })}</div>
         <p class="bubble">${esc(c.say)}</p>
       </div>
-      ${c.code ? `<div class="example">${filesNote(c.files)}<p class="ex-label">예제</p>${codeBlock(c.code)}${stdinNote(c.stdin)}
-        ${c.out != null ? `<p class="ex-label">실행 결과</p><pre class="out">${esc(c.out)}</pre>` : ""}</div>` : ""}
+      ${cardExample(c)}
     </article>`;
     const b = footButton(cur.index + 1 < lesson.cards.length ? "다음 카드" : "문제 풀기");
     b.addEventListener("click", () => { S.flow = nextCard(S.flow); step(); });
@@ -266,7 +260,7 @@ function run(root, ctx, lesson, review) {
       : it.type === "check" ? `<span class="tag check">이해도 확인</span>`
       : review && it.from ? `<span class="tag">${esc(it.from)} 복습</span>` : "";
     return `${tag}<h1 class="q">${esc(it.q || (it.type === "order" ? "줄을 차례대로 눌러 코드를 완성해 보세요." : "답을 골라 보세요."))}</h1>
-      ${filesNote(it.files)}${it.code && it.type !== "blank" ? codeBlock(it.code) : ""}${stdinNote(it.stdin)}`;
+      ${filesNote(it.files)}${it.code && it.type !== "blank" ? codeBlock(it.code) : ""}${stdinNote(it.stdin)}${chartNote(it.chart)}`;
   }
 
   function renderChoice(cur) {
@@ -388,7 +382,7 @@ function run(root, ctx, lesson, review) {
   function showCardsModal() {
     dialog({
       title: "개념 카드 다시 보기",
-      body: (lesson.cards || []).map((c) => `<p>${esc(c.say)}</p>${c.code ? codeBlock(c.code) : ""}${c.out != null ? `<pre class="out">${esc(c.out)}</pre>` : ""}`).join(""),
+      body: (lesson.cards || []).map((c) => `<p>${esc(c.say)}</p>${cardExample(c)}`).join(""),
       buttons: [{ label: "닫기", value: true, kind: "primary" }],
     });
   }

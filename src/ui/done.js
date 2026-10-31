@@ -4,13 +4,15 @@ import { BADGES } from "../../data/badges.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, celebrate, MILESTONE_REWARD } from "./dom.js";
 import { badgeArt } from "./badges.js";
+import { courseJustFinished } from "../curriculum.js";
 
 export function render(root, ctx, params = {}) {
   const r = params.result;
   if (!r) { ctx.show("home"); return; }
   const lesson = params.lesson;
   const review = r.mode === "review";
-  const line = ctx.say("lesson_done", { xp: r.xp });
+  const finished = !review && courseJustFinished({ chapters: ctx.chapters, completed: ctx.save.completed_lessons, firstTime: r.firstTime });
+  const line = ctx.say(finished ? "course_done" : "lesson_done", { xp: r.xp });
   const streakLine = r.streakUp || r.milestone ? ctx.say("streak_up", { streak: r.streak }) : null;
   const bytes = r.totalBytes ?? (r.lessonBytes + r.questBytes + (r.milestoneBytes || 0));
   const parts = [["레슨", r.lessonBytes], ["퀘스트", r.questBytes], ["연속 기록", r.milestoneBytes || 0]].filter(([, v]) => v > 0);
@@ -22,7 +24,7 @@ export function render(root, ctx, params = {}) {
     <main>
       <div class="done-hero">
         <div class="ria-wrap big jump">${riaSVG({ outfit: ctx.save.outfit, face: line.face, size: 150 })}<span class="sfx" aria-hidden="true">짠!</span></div>
-        <h1>${review ? "복습 완료!" : esc(`${lesson.id} 레슨 완료!`)}</h1>
+        <h1>${review ? "복습 완료!" : finished ? "과정 완주!" : esc(`${lesson.id} 레슨 완료!`)}</h1>
         <p class="bubble center">${esc(line.text)}</p>
       </div>
       ${r.milestone ? `<p class="milestone">${icon("flame")}<span>${esc(`연속 ${r.milestone}일! ${MILESTONE_REWARD[r.milestone] || ""}`)}</span></p>` : ""}

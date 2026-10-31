@@ -363,3 +363,119 @@ def test_server_and_files_together(no_socket):
 def test_backward_compatible_positional():
     r = run("print(1)", "", [])
     assert r["stdout"] == "1\n"
+
+
+# ── v0.5 E3 차트 ─────────────────────────────────────────────────
+def test_chart_bar_recorded():
+    code = ("import chart\n"
+            "chart.bar(['사과', '배'], [3, 5.5])\n"
+            "chart.title('과일')\nchart.xlabel('이름')\nchart.ylabel('개수')\n"
+            "chart.show()\nprint('끝')\n")
+    r = run(code, "", [])
+    assert r["error"] is None, r
+    assert r["stdout"] == "끝\n"
+    assert r["charts"] == [{"kind": "bar", "labels": ["사과", "배"], "values": [3, 5.5],
+                            "title": "과일", "xlabel": "이름", "ylabel": "개수"}]
+
+
+def test_chart_line_alias_and_number_labels():
+    r = run("import chart as plt\nplt.line([2024, 2025], (1, 2))\nplt.show()\n", "", [])
+    assert r["error"] is None, r
+    assert r["charts"] == [{"kind": "line", "labels": ["2024", "2025"], "values": [1, 2]}]
+    r2 = run("from chart import bar, show\nbar(['a'], [1])\nshow()\n", "", [])
+    assert r2["charts"] == [{"kind": "bar", "labels": ["a"], "values": [1]}], r2
+
+
+def test_chart_length_mismatch():
+    r = run("import chart\nx = 1\nchart.bar(['a', 'b'], [1])\n", "", [])
+    assert r["error"]["type"] == "ValueError", r
+    assert r["error"]["line"] == 3
+    assert r["error"]["msg"] == "이름과 값의 개수가 달라요"
+    assert r["charts"] == []
+
+
+def test_chart_non_number_values():
+    for bad in ("['3']", "[None]", "[True]", "[float('nan')]", "[float('inf')]"):
+        r = run("import chart\nchart.bar(['a'], %s)\n" % bad, "", [])
+        assert r["error"]["type"] in ("TypeError", "ValueError"), (bad, r)
+        assert any("가" <= ch <= "힣" for ch in r["error"]["msg"]), (bad, r)
+    r = run("import chart\nchart.bar('ab', [1, 2])\n", "", [])
+    assert r["error"]["type"] == "TypeError", r
+
+
+def test_chart_no_show_no_chart():
+    r = run("import chart\nchart.bar(['a'], [1])\nchart.title('t')\n", "", [])
+    assert r["error"] is None, r
+    assert r["charts"] == []
+    assert run("print(1)", "", [])["charts"] == []
+
+
+def test_chart_show_resets_figure():
+    code = ("import chart\nchart.bar(['a'], [1])\nchart.title('하나')\nchart.show()\n"
+            "chart.line(['b', 'c'], [2, 3])\nchart.show()\n")
+    r = run(code, "", [])
+    assert r["error"] is None, r
+    assert r["charts"] == [{"kind": "bar", "labels": ["a"], "values": [1], "title": "하나"},
+                           {"kind": "line", "labels": ["b", "c"], "values": [2, 3]}]
+
+
+def test_chart_max_three():
+    code = "import chart\nfor i in range(4):\n    chart.bar(['a'], [i])\n    chart.show()\n"
+    r = run(code, "", [])
+    assert r["error"]["type"] == "ValueError", r
+    assert r["error"]["line"] == 4
+    assert "3개" in r["error"]["msg"]
+    assert len(r["charts"]) == 3
+
+
+def test_chart_one_series_per_figure_and_empty_show():
+    r = run("import chart\nchart.bar(['a'], [1])\nchart.line(['a'], [1])\n", "", [])
+    assert r["error"]["type"] == "ValueError" and r["error"]["line"] == 3, r
+    r2 = run("import chart\nchart.title('t')\nchart.show()\n", "", [])
+    assert r2["error"]["type"] == "ValueError" and r2["error"]["line"] == 3, r2
+
+
+def test_chart_no_leak_between_runs():
+    run("import chart\nchart.bar(['a'], [1])\nchart.title('남김')\nchart.zz = 1\n", "", [])
+    r = run("import chart\nprint(hasattr(chart, 'zz'))\nchart.line(['b'], [2])\nchart.show()\n", "", [])
+    assert r["error"] is None, r
+    assert r["stdout"] == "False\n"
+    assert r["charts"] == [{"kind": "line", "labels": ["b"], "values": [2]}]
+    assert "chart" not in sys.modules
+
+
+def test_chart_kept_when_error_after_show():
+    r = run("import chart\nchart.bar(['a'], [1])\nchart.show()\n1/0\n", "", [])
+    assert r["error"]["type"] == "ZeroDivisionError"
+    assert len(r["charts"]) == 1
+
+
+def test_chart_json_safe():
+    import json
+    r = run("import chart\nchart.bar(['a', 'b'], [10**30, 0.1 + 0.2])\nchart.show()\n", "", [])
+    assert r["error"] is None, r
+    json.dumps(r["charts"], allow_nan=False)
+    assert isinstance(r["charts"][0]["values"][0], float)
+
+
+# ── v0.5 sqlite3 (CPython에는 원래 있음, Pyodide 314는 핵심에 들어 있음) ──────────
+def test_sqlite3_memory():
+    code = ("import sqlite3\n"
+            "con = sqlite3.connect(':memory:')\n"
+            "con.execute('CREATE TABLE fruit (name TEXT, n INTEGER)')\n"
+            "con.executemany('INSERT INTO fruit VALUES (?, ?)', [('사과', 3), ('배', 5)])\n"
+            "for row in con.execute('SELECT name, n FROM fruit ORDER BY n DESC'):\n"
+            "    print(row)\n"
+            "con.close()\n")
+    r = run(code, "", [])
+    assert r["error"] is None, r
+    assert r["stdout"] == "('배', 5)\n('사과', 3)\n"
+
+
+def test_chart_positional_only_korean_error():
+    r = run("import chart\nchart.bar(['a'], [1], color='red')\n", "", [])
+    assert r["error"]["type"] == "TypeError", r
+    assert r["error"]["line"] == 2
+    assert "color" in r["error"]["msg"] and any("가" <= ch <= "힣" for ch in r["error"]["msg"]), r
+    r2 = run("import chart\nchart.title(text='t')\n", "", [])
+    assert r2["error"]["type"] == "TypeError" and any("가" <= ch <= "힣" for ch in r2["error"]["msg"]), r2

@@ -141,6 +141,27 @@ def test_sw_static():
     assert "NETWORK_TIMEOUT_MS = 4000" in sw
 
 
+def test_sqlite3_in_precached_core():
+    """v0.5: 16장 sqlite3가 오프라인에서 돌려면 그 파일이 sw.js가 미리 받는 Pyodide 핵심 파일 안에 있어야 한다.
+    Pyodide 314.0.7: _sqlite3는 pyodide.asm.wasm에 내장, sqlite3 모듈은 python_stdlib.zip 안 → 따로 받을 꾸러미 없음.
+    Pyodide를 올렸는데 sqlite3가 따로 받는 꾸러미가 되면 이 시험이 실패한다(그때는 worker.js에서 loadPackage를
+    부르고 그 파일들을 sw.js PY_CORE와 offline.js PYODIDE_REQUIRED에 더해야 함)."""
+    import zipfile
+    pyo = os.path.join(ROOT, "node_modules", "pyodide")
+    with open(os.path.join(pyo, "pyodide-lock.json"), encoding="utf-8") as f:
+        lock = json.load(f)
+    pkgs = {k for k, v in lock["packages"].items() if "sqlite3" in v.get("imports", []) or k in ("sqlite3", "_sqlite3")}
+    assert not pkgs, "sqlite3 became a separate Pyodide package: %r" % pkgs
+    names = zipfile.ZipFile(os.path.join(pyo, "python_stdlib.zip")).namelist()
+    assert "sqlite3/__init__.py" in names and "sqlite3/dbapi2.py" in names
+    _build()
+    sw = _read(os.path.join(DIST, "sw.js"))
+    core = json.loads(re.search(r"const PY_CORE = (\[[^\]]*\]);", sw).group(1))
+    assert {"pyodide.asm.wasm", "python_stdlib.zip"} <= set(core), core
+    offline = _read(os.path.join(ROOT, "src", "offline.js"))
+    assert '"pyodide.asm.wasm"' in offline and '"python_stdlib.zip"' in offline
+
+
 def test_clean_and_docs_icons():
     out = os.path.join(OUT, "dist-clean")
     os.makedirs(os.path.join(out, "icons"), exist_ok=True)
@@ -337,6 +358,14 @@ def test_browser_offline():
         r = pg.evaluate("() => window.__ria.ctx.py.run('print(1)')")
         assert r["stdout"] == "1\n" and r["error"] is None, r
         print("    offline reload: home OK, print(1): %r" % r["stdout"])
+        # v0.5: 16장 sqlite3와 17장 chart도 오프라인에서(sw 저장본만으로) 돈다
+        sql = ("import sqlite3\ncon = sqlite3.connect(':memory:')\ncon.execute('CREATE TABLE t (n INTEGER)')\n"
+               "con.execute('INSERT INTO t VALUES (7)')\nprint(con.execute('SELECT n * 6 FROM t').fetchone()[0])\n"
+               "import chart\nchart.bar(['a'], [1])\nchart.show()\n")
+        r = pg.evaluate("(c) => window.__ria.ctx.py.run(c)", sql)
+        assert r["error"] is None and r["stdout"] == "42\n", r
+        assert r["charts"] == [{"kind": "bar", "labels": ["a"], "values": [1]}], r
+        print("    offline sqlite3 + chart: %r, %d chart" % (r["stdout"], len(r["charts"])))
         b.context.set_offline(False)
         pg.screenshot(path=os.path.join(OUT, "build_offline_home.png"))
         assert b.errors == [], b.errors

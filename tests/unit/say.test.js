@@ -5,6 +5,7 @@ import { OUTFITS } from "../../data/outfits.js";
 import { say } from "../../src/say.js";
 
 const SITUATIONS = [
+  "course_done",
   "greet", "correct", "combo", "wrong", "running", "error", "hint",
   "lesson_done", "streak_up", "streak_broken", "outfit_bought", "welcome_back",
 ];
@@ -41,7 +42,7 @@ test("no_repeat: rng가 항상 같은 칸을 가리켜도 직전 줄은 피함",
   assert.notEqual(r.index, 0);
 });
 
-test("all_situations: 12종 모두 3줄 이상, 표정 이름이 8종 안에 있음", () => {
+test("all_situations: 13종 모두 3줄 이상, 표정 이름이 8종 안에 있음", () => {
   assert.deepEqual(Object.keys(LINES).sort(), [...SITUATIONS].sort());
   for (const s of SITUATIONS) {
     assert.ok(LINES[s].length >= 3, `${s} 줄 수 ${LINES[s].length}`);

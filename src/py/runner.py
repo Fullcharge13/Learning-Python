@@ -23,10 +23,17 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
   urllib.request.urlopen이 이 표에서 답한다(소켓을 열지 않음). 표에 없는 주소는 URLError,
   status 400 이상은 HTTPError. 끝나면 진짜 urlopen으로 되돌린다. server가 None이면 손대지 않는다.
 
+차트(v0.5 E3): 실행마다 새 `chart` 모듈을 sys.modules에 넣는다(끝나면 지워져 실행 사이에 상태가 없다).
+  matplotlib.pyplot과 거의 같은 이름(line만 pyplot에서는 plot): bar(이름들, 값들), line(이름들, 값들), title(글), xlabel(글), ylabel(글), show().
+  show()가 그림 하나를 결과의 charts에 넣고 그림을 비운다. show() 없이 끝나면 그리지 않는다. 한 실행에 CHART_MAX개까지.
+  인자는 차례로만 받는다(color= 같은 이름 붙은 인자는 한국어 TypeError). 그림 하나에 막대 또는 꺾은선 하나만. 이름은 글자로 바꿔 담고, 값은 JSON에 넣을 수 있는 수(int·float, bool·nan·inf 아님).
+
 run(code, stdin, require, files=None, server=None) -> {
     "stdout": str, "stderr": str,
     "error": None | {"type": str, "line": int | None, "msg": str},
     "missing": [str, ...],   # require 중 코드에 없는 ast 마디 이름
+    "charts": [{"kind": "bar" | "line", "labels": [str], "values": [int | float],
+                "title"?: str, "xlabel"?: str, "ylabel"?: str}, ...],
 }
 stdin은 "12\n30" 같은 문자열(레슨 데이터 형식) 또는 문자열 목록.
 
@@ -250,6 +257,120 @@ def _make_urlopen(server):
     return urlopen
 
 
+CHART_MAX = 3          # 한 실행에 그릴 수 있는 그림 수
+CHART_POINTS_MAX = 24  # 그림 하나의 막대·점 수(휴대폰 폭에서 읽을 수 있는 만큼)
+CHART_TEXT_MAX = 40    # 제목·축 이름·항목 이름 글자 수
+_float = float
+_int = int
+_bool = bool
+_list = list
+_tuple = tuple
+_ValueError = ValueError
+_TypeError = TypeError
+_type = type
+_INT_SAFE = 2 ** 53
+
+
+def _make_chart(charts):
+    """실행 하나에 쓰는 새 chart 모듈. 그린 그림은 charts 목록에 쌓인다."""
+    import types
+
+    mod = types.ModuleType("chart")
+    mod.__doc__ = "리아와 파이썬! 차트: bar, line, title, xlabel, ylabel, show (matplotlib.pyplot과 거의 같은 이름, line은 pyplot의 plot)"
+    fig = {}
+
+    def _text(v, what):
+        if _isinstance(v, _bool) or not _isinstance(v, (_str, _int, _float)):
+            raise _TypeError("%s은 글자나 숫자로 줘요(지금 %s)" % (what, _type(v).__name__))
+        s = _str(v)
+        if _len(s) > CHART_TEXT_MAX:
+            raise _ValueError("%s은 %d글자까지 쓸 수 있어요" % (what, CHART_TEXT_MAX))
+        return s
+
+    def _seq(v, what):
+        if not _isinstance(v, (_list, _tuple)):
+            raise _TypeError("%s은 리스트로 줘요(예: [1, 2, 3])" % what)
+        return _list(v)
+
+    def _num(v):
+        if _isinstance(v, _bool) or not _isinstance(v, (_int, _float)):
+            raise _TypeError("값은 숫자여야 해요(지금 %s)" % _type(v).__name__)
+        if _isinstance(v, _int):
+            return v if -_INT_SAFE <= v <= _INT_SAFE else _float(v)
+        if v != v or v in (_float("inf"), _float("-inf")):
+            raise _ValueError("값에 nan이나 inf는 쓸 수 없어요")
+        return v
+
+    def _args(name, args, kw, n, shape):
+        """인자 검사: 이름 붙은 인자 없이 정확히 n개. 틀리면 한국어 TypeError"""
+        if kw:
+            raise _TypeError("chart.%s()에는 %s= 같은 이름 붙은 인자를 쓰지 않아요. 값만 차례로 써요(%s)"
+                             % (name, _list(kw)[0], shape))
+        if _len(args) != n:
+            raise _TypeError("chart.%s()에는 값을 %d개 줘요(%s)" % (name, n, shape) if n
+                             else "chart.%s()에는 아무것도 넣지 않아요(%s)" % (name, shape))
+        return args
+
+    def _plot(kind, labels, values):
+        if fig.get("kind"):
+            raise _ValueError("그림 하나에는 그래프 하나만 그려요. 먼저 chart.show()를 불러요")
+        labels = _seq(labels, "이름들")
+        values = _seq(values, "값들")
+        if _len(labels) != _len(values):
+            raise _ValueError("이름과 값의 개수가 달라요")
+        if not labels:
+            raise _ValueError("그릴 값이 하나도 없어요")
+        if _len(labels) > CHART_POINTS_MAX:
+            raise _ValueError("그래프 하나에 값은 %d개까지 그릴 수 있어요" % CHART_POINTS_MAX)
+        fig["labels"] = [_text(x, "이름") for x in labels]
+        fig["values"] = [_num(x) for x in values]
+        fig["kind"] = kind
+
+    def bar(*args, **kw):
+        """막대 그래프: chart.bar(["사과", "배"], [3, 5])"""
+        labels, values = _args("bar", args, kw, 2, 'chart.bar(이름들, 값들)')
+        _plot("bar", labels, values)
+
+    def line(*args, **kw):
+        """꺾은선 그래프: chart.line(["월", "화"], [12, 15])"""
+        labels, values = _args("line", args, kw, 2, 'chart.line(이름들, 값들)')
+        _plot("line", labels, values)
+
+    def title(*args, **kw):
+        """그림 제목"""
+        text, = _args("title", args, kw, 1, 'chart.title("제목")')
+        fig["title"] = _text(text, "제목")
+
+    def xlabel(*args, **kw):
+        """가로축 이름"""
+        text, = _args("xlabel", args, kw, 1, 'chart.xlabel("가로축 이름")')
+        fig["xlabel"] = _text(text, "가로축 이름")
+
+    def ylabel(*args, **kw):
+        """세로축 이름"""
+        text, = _args("ylabel", args, kw, 1, 'chart.ylabel("세로축 이름")')
+        fig["ylabel"] = _text(text, "세로축 이름")
+
+    def show(*args, **kw):
+        """지금까지 그린 그림을 화면에 보여 주고 새 그림을 시작한다"""
+        _args("show", args, kw, 0, "chart.show()")
+        if not fig.get("kind"):
+            raise _ValueError("그릴 그래프가 없어요. chart.bar()나 chart.line()을 먼저 불러요")
+        if _len(charts) >= CHART_MAX:
+            raise _ValueError("그림은 한 번 실행에 %d개까지 보여 줄 수 있어요" % CHART_MAX)
+        c = {"kind": fig["kind"], "labels": fig["labels"], "values": fig["values"]}
+        for k in ("title", "xlabel", "ylabel"):
+            if k in fig:
+                c[k] = fig[k]
+        charts.append(c)
+        fig.clear()
+
+    for f in (bar, line, title, xlabel, ylabel, show):
+        f.__module__ = "chart"
+        setattr(mod, f.__name__, f)
+    return mod
+
+
 def run(code, stdin=None, require=None, files=None, server=None):
     code = "" if code is None else str(code)
     stdin = _split_stdin(stdin)
@@ -259,7 +380,8 @@ def run(code, stdin=None, require=None, files=None, server=None):
     state = {"used": 0, "input_missing": None, "output_limit": None}
     out = _CappedIO(state)
     err = _CappedIO(state)
-    result = {"stdout": "", "stderr": "", "error": None, "missing": []}
+    charts = []
+    result = {"stdout": "", "stderr": "", "error": None, "missing": [], "charts": charts}
 
     # 오류 원문(Traceback)에 학습자 코드 줄이 보이도록 등록한다.
     linecache.cache[USER_FILE] = (len(code), None, code.splitlines(True), USER_FILE)
@@ -300,6 +422,8 @@ def run(code, stdin=None, require=None, files=None, server=None):
     old_builtins = dict(builtins.__dict__)
     old_limit = sys.getrecursionlimit()
     old_modules = set(sys.modules)
+    old_modules.discard("chart")
+    sys.modules["chart"] = _make_chart(charts)  # 목록 뒤에 넣어 실행이 끝나면 지워지게
     sys.stdout, sys.stderr = out, err
     builtins.input = _make_input(stdin, out, state)
     user_globals = {"__name__": "__main__", "__builtins__": builtins}

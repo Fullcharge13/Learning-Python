@@ -49,10 +49,12 @@ export function curriculum({ chapters, completed, currentId }) {
 export function pathEndText({ chapters, completed }) {
   const doneSet = new Set(completed || []);
   const all = (chapters || []).flatMap((c) => c.lessons);
-  if (all.length && all.every((l) => doneSet.has(l.id))) return "지금 판의 레슨을 모두 끝냈어요! 복습으로 실력을 다져요";
   const last = (chapters || []).reduce((m, c) => Math.max(m, c.id), 0);
   const next = upcomingChapters(chapters)[0];
-  if (!next) return "다음 장은 준비 중이에요";
+  if (all.length && all.every((l) => doneSet.has(l.id))) {
+    return next ? "지금 판의 레슨을 모두 끝냈어요! 복습으로 실력을 다져요" : "과정을 모두 끝냈어요! 복습으로 실력을 다져요";
+  }
+  if (!next) return `${last}장이 마지막 장이에요. 끝까지 함께 가 봐요`;
   return `${last}장까지가 지금 판의 전부예요. ${next.no}장(${next.title})부터는 다음 업데이트에서 열려요`;
 }
 
@@ -69,4 +71,12 @@ export function chapterWindow({ chapterIds, currentChapter, size = 3 }) {
   const start = Math.min(Math.max(0, at - Math.floor(size / 2)), ids.length - size);
   const shown = ids.slice(start, start + size);
   return { shown, hidden: ids.filter((id) => !shown.includes(id)) };
+}
+
+/** 과정 완주(판정 C39): 다음 장 예정이 없고, 이번이 처음 끝낸 레슨이며, 모든 레슨을 끝냈을 때만 참 */
+export function courseJustFinished({ chapters, completed, firstTime }) {
+  if (!firstTime || upcomingChapters(chapters).length) return false;
+  const doneSet = new Set(completed || []);
+  const all = (chapters || []).flatMap((c) => c.lessons);
+  return all.length > 0 && all.every((l) => doneSet.has(l.id));
 }

@@ -58,6 +58,11 @@ export const LINES = {
     { text: "수고했어요. {xp} XP만큼 한 뼘 자랐네요.", face: "smile" },
     { text: "완주! 다음 레슨도 준비해 둘게요.", face: "cheer" },
   ],
+  course_done: [
+    { text: "{name}님, print 한 줄에서 그래프까지 전부 왔어요. 정말 자랑스러워요!", face: "sparkle" },
+    { text: "과정 완주! 이제 배운 걸로 나만의 프로그램을 만들어 봐요.", face: "joy" },
+    { text: "끝까지 해냈어요. 이제 어엿한 파이썬 사용자예요.", face: "cheer" },
+  ],
   streak_up: [
     { text: "연속 {streak}일째! 꾸준함이 제일 센 기술이에요.", face: "sparkle" },
     { text: "{name}님, {streak}일째예요. 습관이 자라고 있어요.", face: "joy" },

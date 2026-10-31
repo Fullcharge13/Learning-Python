@@ -1,5 +1,6 @@
 // 화면 공용 도우미: 글자 이스케이프, 요소 만들기, 리아 말풍선, 아이콘, 창(modal)
 import { riaSVG } from "../ria.js";
+import { chartsHTML } from "../chart.js";
 
 export function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -107,6 +108,30 @@ export function filesNote(files) {
   if (!files || typeof files !== "object") return "";
   return Object.entries(files).map(([name, text]) =>
     `<div class="file-note"><p class="ex-label">${icon("book")}<span>파일 <code>${esc(name)}</code></span></p><pre class="out">${esc(text)}</pre></div>`).join("");
+}
+
+/** 그래프 보기(v0.5 E3): 그림(객체·목록) 앞에 이름표. 그림이 없으면 "" */
+export function chartNote(chart, label = "그래프") {
+  const html = chartsHTML(chart);
+  return html ? `<div class="chart-note"><p class="ex-label">${esc(label)}</p>${html}</div>` : "";
+}
+
+/** 입력값 보기: "12\n30" → 「입력하는 값: 12 30」 */
+export function stdinNote(stdin) {
+  if (stdin == null || stdin === "") return "";
+  const vals = String(stdin).split("\n");
+  return `<p class="stdin-note">${icon("send")}<span>입력하는 값: ${vals.map((v) => `<code>${esc(v)}</code>`).join(" ")}</span></p>`;
+}
+
+/** 개념 카드의 예제 칸. 카드는 실행하지 않고 저장된 out·chart를 보여 준다.
+ *  show_only 카드(판정 C38)는 코드만 보여 주고 「실행 안 함」 이름표를 단다(출력 칸 없음). */
+export function cardExample(c) {
+  if (!c || !c.code) return "";
+  if (c.show_only) {
+    return `<div class="example show-only"><p class="ex-label">${icon("eye")}<span>실제 컴퓨터용 코드(여기서는 실행 안 함)</span></p>${codeBlock(c.code)}</div>`;
+  }
+  return `<div class="example">${filesNote(c.files)}<p class="ex-label">예제</p>${codeBlock(c.code)}${stdinNote(c.stdin)}
+        ${c.out != null ? `<p class="ex-label">실행 결과</p><pre class="out">${esc(c.out)}</pre>` : ""}${chartNote(c.chart)}</div>`;
 }
 
 export const MILESTONE_REWARD = {

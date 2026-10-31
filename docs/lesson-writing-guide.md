@@ -60,6 +60,26 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 - **JSON 출력(14장)**: 딕셔너리를 통째로 `print`하거나 `json.dumps`를 그냥 출력하지 말고 **특정 값을 꺼내 출력**한다. 꼭 dumps 결과를 보여야 하면 `sort_keys=True`, `indent=2`, `ensure_ascii=False`를 명시해 키 순서·공백이 하나로 정해지게 하고, 과제 문장에도 그 인자를 적는다.
 - **정규표현식(12장)**: 패턴 글자를 채점하지 말고 **출력**을 채점한다. 맞는 패턴이 여러 개(`\d+`·`[0-9]+`)일 수 있으므로 시험 데이터는 어느 맞는 패턴에도 같은 출력이 나오게 고르고, blank 오답 칩은 실제로 다른 출력이나 오류를 내야 한다. 패턴은 `r"…"`로 쓴다.
 
+## 3-2. 객체지향·SQL·차트 (15~17장)
+
+- **import(누적)**: 15장 새 모듈 없음 · 16장 `sqlite3`(이름은 `connect`만) · 17장 `chart`(앱이 주는 모듈, `bar`·`line`·`title`·`xlabel`·`ylabel`·`show`만, 이름 붙은 인자 없음).
+- **15장 class**: `class Dog(Pet):`처럼 **이 코드에서 만든 클래스 하나만** 물려받는다(`object`·`Exception`·여러 클래스·`metaclass=` 금지). 데코레이터(`@…`) 금지. 특수 메서드는 `__init__`·`__str__`만(다른 `__이름__`은 정의도, `obj.__dict__`처럼 점 뒤에 쓰는 것도 금지). `super().__init__(…)`, `isinstance(x, Pet)`, 클래스 변수(`kind = "동물"`)는 된다. 컴프리헨션·lambda는 여전히 금지.
+- **self 빠뜨림 설명**: `def bark():`로 쓰고 `d.bark()`를 부르면 `TypeError: Dog.bark() takes 0 positional arguments but 1 was given`이 난다. 해설은 쉬운 말로: 「`d.bark()`라고 부르면 Python이 `d`를 첫 번째 값으로 몰래 넘겨요. 받을 자리(`self`)가 없어서 『0개 받는데 1개가 왔다』는 단서가 나와요. 메서드의 첫 매개변수는 언제나 `self`예요.」 이런 틀린 예는 점검기가 막지 않으므로 choice 문제의 code로 쓸 수 있다(정답 보기에 「오류」).
+- **클래스와 객체 혼동**: `Dog`(설계도)와 `d = Dog("초코")`(만든 물건)를 말로 구분한다. 「클래스 = 붕어빵 틀, 객체 = 붕어빵」처럼 한 번 비유하고 용어를 바꾸지 않는다.
+- **16장 sqlite3**: 언제나 `sqlite3.connect(":memory:")` — 인자는 이 글자 하나만(변수·파일 이름·이름 붙은 인자는 점검기 오류). 실행마다 새 빈 DB이므로 코드 안에서 `CREATE TABLE` → `INSERT` → `SELECT` 순서로 다 한다. 연결·커서에는 `cursor`·`execute`·`executemany`·`fetchall`·`fetchone`·`commit`·`close`만 쓴다(`executescript` 등 금지). SQL 글 자체는 점검기가 보지 않으니 직접 실행해 확인한다.
+- **ORDER BY**: 여러 줄이 나오는 `SELECT`의 출력을 채점하거나 보기로 비교하면 **반드시 `ORDER BY`**를 붙인다(없으면 순서가 우연에 기댐). `GROUP BY` 집계도 `ORDER BY`를 함께 쓴다.
+- **`?` 자리 표시**: 값은 SQL 글에 f-문자열·`+`로 끼워 넣지 않고 `cur.execute("… WHERE y > ?", (2020,))`처럼 `?`와 튜플로 넘긴다(값 하나도 `(값,)` 쉼표). 16-4에서 「글을 이어 붙이면 위험해요(SQL 주입)」를 한 줄로 말한다.
+- **17장 차트**: `chart.bar(이름들, 값들)`/`chart.line(…)` → `chart.title`·`xlabel`·`ylabel` → `chart.show()`. `show()`가 없으면 그림이 없다. 한 그림에 막대·꺾은선 하나만, 한 실행에 그림 3개까지. 이름과 값의 개수가 다르면 `ValueError`.
+- **차트 채점(`chart` 칸)**: write의 시험과 터치 문제에 선택 칸 `chart: {"kind": "bar"|"line", "labels": [...], "values": [...], "title"?, "xlabel"?, "ylabel"?}`을 둔다. 적힌 칸만 비교하고, 값은 숫자로 비교한다(`3`과 `3.0`은 같음). 출력(`expect`)과 차트를 둘 다 맞혀야 통과한다. 하드코딩을 막으려면 `require`에 `Method:bar`처럼 쓰고, 값은 리스트·딕셔너리에서 계산해 넣게 한다.
+- **matplotlib 비교 카드(17-5, 판정 C38)**: 카드에 `show_only: true`를 두면 코드를 **실행하지 않고 보여 주기만** 한다(화면에 「실제 컴퓨터용 코드(여기서는 실행 안 함)」 표시, 출력 칸 없음). 그래서 주석이 아닌 진짜 코드로 쓴다. 점검기는 너비(38칸)만 보고, `out`은 없거나 `""`, stdin·files·server·chart는 같이 쓸 수 없다. 카드에만 쓸 수 있다. 예:
+  ```python
+  import matplotlib.pyplot as plt
+  plt.plot(days, mins)
+  plt.title("나의 공부 기록")
+  plt.show()
+  ```
+  말풍선: 「`chart`를 `plt`로 바꾸면 돼요. 꺾은선만 이름이 `line` → `plot`으로 달라요. 컴퓨터에 matplotlib을 설치하면 진짜 그림 창이 떠요.」
+
 ## 4. 말투와 용어
 
 - 리아 교수: 존댓말 「~해요」체. 차분하고 가벼운 유머를 쓴다. 칭찬은 구체적으로 한다(「`elif`로 경우를 나눈 게 깔끔해요」). 실수를 부끄럽게 하지 않는다. 연애 느낌·친밀함을 넘는 표현은 금지(「오늘부터 1일」 같은 관용구도 금지).

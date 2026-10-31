@@ -634,6 +634,188 @@ def test_module_alias():
     assert has(shape_errors("import json as j\nprint(j.load(1))", 14), "json.load")
 
 
+# ── v0.5 작업 2: 15~17장 ─────────────────────────────────────────────
+def test_modules_cumulative_v05():
+    m = content.MODULES_BY_CHAPTER
+    assert m[15] == m[14]
+    assert m[16] == m[15] | {"sqlite3"}
+    assert m[17] == m[16] | {"chart"}
+    for ch in (15, 16, 17):
+        assert {"max", "min", "round", "isinstance", "super"} <= content.CALLS_BY_CHAPTER[ch], ch
+
+
+# 15장 객체지향
+CH15_OK = """class Pet:
+    kind = "동물"
+
+    def __init__(self, name):
+        self.name = name
+        self.hunger = 0
+
+    def __str__(self):
+        return "펫 " + self.name
+
+    def eat(self, n):
+        self.hunger -= n
+        return self.hunger
+
+
+class Dog(Pet):
+    def __init__(self, name, trick):
+        super().__init__(name)
+        self.trick = trick
+
+    def show(self):
+        print(self.name, self.trick)
+
+
+d = Dog("초코", "손")
+d.show()
+d.eat(2)
+d.hunger = 5
+print(d, Pet.kind, d.kind)
+print(isinstance(d, Pet), str(d))
+pets = [Pet("나비"), d]
+for p in pets:
+    print(p.name)"""
+
+
+def test_ch15_allowed():
+    assert rule_errors(CH15_OK, 15) == []
+
+
+def test_ch15_missing_self_is_not_a_rule_error():
+    # self를 빠뜨린 코드는 실행 때 TypeError가 나는 「틀린 예」로 쓸 수 있어야 함
+    code = "class Cat:\n    def meow():\n        print(1)\n\nCat().meow()"
+    assert rule_errors(code, 15) == []
+
+
+def test_ch14_forbids_class():
+    e = shape_errors("class Cat:\n    pass\nc = Cat()", 14)
+    assert has(e, "ClassDef") and has(e, "Cat()"), e
+
+
+def test_ch15_forbids_bad_classes():
+    for code, word in (
+        ("class A:\n    pass\nclass B:\n    pass\nclass C(A, B):\n    pass", "여러 클래스"),
+        ("class A(object):\n    pass", "object"),
+        ("class E(Exception):\n    pass", "Exception"),
+        ("class A:\n    pass\nclass B(A, metaclass=type):\n    pass", "metaclass"),
+        ("def deco(c):\n    return c\n\n@deco\nclass A:\n    pass", "@"),
+        ("class A:\n    @staticmethod\n    def f():\n        return 1", "@"),
+        ("class A:\n    def __eq__(self, o):\n        return True", "__eq__"),
+        ("class A:\n    def __len__(self):\n        return 1", "__len__"),
+        ("class A:\n    pass\nprint(A().__dict__)", "__dict__"),
+        ("class A:\n    pass\nprint(A.__name__)", "__name__"),
+        ("class A:\n    def f(self):\n        return [x for x in 'ab']", "ListComp"),
+        ("class A:\n    f = lambda self: 1", "Lambda"),
+    ):
+        e = shape_errors(code, 15)
+        assert has(e, word), (code, e)
+
+
+def test_ch15_forbids_sqlite3():
+    assert has(shape_errors("import sqlite3", 15), "쓸 수 없는 모듈 sqlite3")
+
+
+# 16장 데이터베이스와 SQL
+CH16_OK = """import sqlite3
+
+conn = sqlite3.connect(":memory:")
+cur = conn.cursor()
+cur.execute("CREATE TABLE book (t TEXT, y INT)")
+rows = [("하늘", 2021), ("바다", 2019)]
+cur.executemany("INSERT INTO book VALUES (?, ?)", rows)
+conn.commit()
+cur.execute("SELECT t FROM book WHERE y > ?", (2020,))
+for row in cur.fetchall():
+    print(row[0])
+one = conn.execute("SELECT COUNT(*) FROM book").fetchone()
+print(one[0])
+for t, y in conn.execute("SELECT * FROM book ORDER BY y"):
+    print(t, y)
+cur.close()
+conn.close()"""
+
+
+def test_ch16_allowed():
+    assert rule_errors(CH16_OK, 16) == []
+
+
+def test_ch16_connect_memory_only():
+    for code in ('import sqlite3\nconn = sqlite3.connect("lib.db")',
+                 'import sqlite3\nname = ":memory:"\nconn = sqlite3.connect(name)',
+                 'import sqlite3\nconn = sqlite3.connect()',
+                 'import sqlite3\nconn = sqlite3.connect(":memory:", timeout=1)',
+                 'from sqlite3 import connect\nconn = connect("a.db")'):
+        e = shape_errors(code, 16)
+        assert has(e, ":memory:"), (code, e)
+
+
+def test_ch16_forbids():
+    for code, word in (("import sqlite3\nprint(sqlite3.Row)", "sqlite3.Row"),
+                       ('import sqlite3\nc = sqlite3.connect(":memory:")\nc.executescript("x")', "executescript"),
+                       ('import sqlite3\nc = sqlite3.connect(":memory:")\nc.create_function("f", 1, len)',
+                        "create_function"),
+                       ("import chart", "쓸 수 없는 모듈 chart"),
+                       ("import os", "쓸 수 없는 모듈 os")):
+        e = shape_errors(code, 16)
+        assert has(e, word), (code, e)
+
+
+# 17장 데이터 시각화
+CH17_OK = """import chart
+
+months = ["1월", "2월", "3월"]
+cost = {"1월": 30, "2월": 45, "3월": 38}
+values = []
+for m in months:
+    values.append(cost[m])
+print(max(values), min(values), round(sum(values) / 3, 1))
+chart.bar(months, values)
+chart.title("월별 지출")
+chart.xlabel("달")
+chart.ylabel("만 원")
+chart.show()
+chart.line(months, values)
+chart.show()"""
+
+
+def test_ch17_allowed():
+    assert rule_errors(CH17_OK, 17) == []
+
+
+def test_ch17_comment_only_matplotlib_card_ok():
+    code = "# import matplotlib.pyplot as plt\n# plt.bar(names, values)\n# plt.show()"
+    assert rule_errors(code, 17) == []
+
+
+def test_ch17_forbids():
+    for code, word in (("import chart\nchart.pie([1], [2])", "chart.pie"),
+                       ("import matplotlib.pyplot as plt", "쓸 수 없는 모듈 matplotlib.pyplot"),
+                       ("import chart\nchart.bar([1], [2], color='red')", "color"),
+                       ("import chart\nchart.bar([n for n in 'ab'], [1, 2])", "ListComp"),
+                       ('import sqlite3\nc = sqlite3.connect("x.db")', ":memory:")):
+        e = shape_errors(code, 17)
+        assert has(e, word), (code, e)
+
+
+def test_ch16_forbids_chart():
+    assert has(shape_errors("import chart\nchart.show()", 16), "쓸 수 없는 모듈 chart")
+
+
+def test_concepts_v05():
+    mods = content.load_modules([content.CONCEPTS_FILE])
+    cs = mods[content.CONCEPTS_FILE]["CONCEPTS"]
+    by = {c["id"]: c["chapter"] for c in cs}
+    want = {15: ["class", "init", "method", "inherit"], 16: ["sqlcreate", "sqlselect", "sqlagg", "sqlpy"],
+            17: ["vizdata", "bar", "line", "vizstyle"]}
+    for ch, ids in want.items():
+        for i in ids:
+            assert by.get(i) == ch, (i, by.get(i))
+    assert len(by) == len(cs)
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     bad = 0

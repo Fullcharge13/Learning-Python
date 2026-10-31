@@ -4,6 +4,8 @@
 
 export const PYODIDE_CACHE_PREFIX = "ria-pyodide-";
 export const GAME_CACHE_PREFIX = "ria-game-";
+// v0.5: 16장 sqlite3는 따로 받을 꾸러미가 없다(Pyodide 314.0.7은 _sqlite3를 pyodide.asm.wasm에, sqlite3 모듈을
+// python_stdlib.zip에 넣어 둠). 그래서 이 네 파일이 있으면 sqlite3도 오프라인에서 돈다(tests/build_test.py가 지킴).
 export const PYODIDE_REQUIRED = ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide.mjs", "pyodide.asm.mjs"];
 
 // URL 마지막 조각이 정확히 그 파일 이름인지 (pyodide.asm.mjs를 pyodide.mjs로 착각하지 않게)

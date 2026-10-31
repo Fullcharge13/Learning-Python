@@ -94,8 +94,9 @@ export function render(root, ctx) {
   const save = ctx.save;
   const currentId = ctx.currentLessonId();
   const cur = currentId ? ctx.lessonById(currentId) : null;
-  const special = ctx.takeGreeting();
-  const line = ctx.say(special || "greet");
+  const notice = ctx.takeNotice ? ctx.takeNotice() : null; // 환불 안내가 있으면 그날 인사보다 먼저(판정 C42)
+  const special = notice ? null : ctx.takeGreeting();
+  const line = notice || ctx.say(special || "greet");
   const allDone = ctx.lessons.length > 0 && ctx.lessons.every((l) => save.completed_lessons.includes(l.id));
   let start = 0;
   const sections = ctx.chapters.map((c) => { const html = pathSection(ctx, c, start, currentId); start += c.lessons.length; return html; }).join("");
@@ -104,7 +105,7 @@ export function render(root, ctx) {
     <main>
       <h1 class="sr">학습 길</h1>
       <section class="hello">
-        ${riaSays({ outfit: save.outfit, face: line.face, text: line.text, size: 92 })}
+        ${riaSays({ outfit: save.outfit, face: line.face, text: line.text, size: 92, cls: notice ? "refund-notice" : "" })}
         ${cur && !allDone ? `<button class="btn primary wide" id="continue">${icon("play")}<span>${save.completed_lessons.length ? "이어서 하기" : "첫 레슨 시작"} · ${esc(cur.id)} ${esc(cur.title)}</span></button>` : ""}
         ${allDone ? `<p class="all-done">준비된 레슨을 모두 끝냈어요. 다시 풀거나 복습하며 XP를 모아 봐요.</p>` : ""}
       </section>

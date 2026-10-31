@@ -55,7 +55,7 @@ test("explain_unknown", () => {
   assert.match(r.body, /처음 보는 오류예요/);
   assert.equal(r.line, 2);
   assert.doesNotThrow(() => explain(null, undefined));
-  assert.doesNotThrow(() => explain({}, "detective"));
+  assert.doesNotThrow(() => explain({}, "explorer"));
 });
 
 test("explain_known_and_line", () => {
@@ -66,10 +66,16 @@ test("explain_known_and_line", () => {
   assert.ok(r.title.length > 0);
 });
 
-test("explain_detective", () => {
+test("explain_detective: 탐정 말투는 탐험가 의상에서 (판정 C42)", () => {
   const a = explain({ type: "TypeError", line: 1 }, "basic");
-  const b = explain({ type: "TypeError", line: 1 }, "detective");
+  const b = explain({ type: "TypeError", line: 1 }, "explorer");
   assert.notEqual(a.body, b.body);
+  assert.equal(b.body, explain({ type: "TypeError", line: 1 }, "explorer").body);
+  assert.match(b.body, /단서/);
+  assert.equal(b.body.replace(/1/g, ""), ERRORS.TypeError.detective.replace(/\{line\}/g, "").replace(/1/g, ""));
+  // 없어진 옛 의상 id와 다른 의상은 기본 말투
+  for (const o of ["detective", "basic", "whitecoat", "wizard", "graduate"])
+    assert.equal(explain({ type: "TypeError", line: 1 }, o).body, a.body, o);
 });
 
 test("errors_table_complete", () => {
@@ -98,8 +104,8 @@ test("explain_alias: TabError → 들여쓰기, UnboundLocalError → 이름", (
   assert.equal(tab.body, ind.body);
   assert.match(tab.title, /TabError/);
   assert.doesNotMatch(tab.title, /IndentationError/);
-  const nm = explain({ type: "NameError", line: 4 }, "detective");
-  const ub = explain({ type: "UnboundLocalError", line: 4 }, "detective");
+  const nm = explain({ type: "NameError", line: 4 }, "explorer");
+  const ub = explain({ type: "UnboundLocalError", line: 4 }, "explorer");
   assert.equal(ub.body, nm.body);
 });
 
@@ -116,14 +122,14 @@ test("timeout_seconds: {seconds} 자리 표시", () => {
   assert.match(ERRORS.Timeout.body, /\{seconds\}/);
   assert.match(ERRORS.Timeout.detective, /\{seconds\}/);
   assert.match(explain({ type: "Timeout" }, "basic").body, /3초/);
-  const r = explain({ type: "Timeout" }, "detective", { seconds: 5 });
+  const r = explain({ type: "Timeout" }, "explorer", { seconds: 5 });
   assert.match(r.body, /5초/);
   assert.doesNotMatch(r.body, /\{seconds\}/);
 });
 
 test("output_limit: OutputLimit 설명", () => {
   const a = explain({ type: "OutputLimit", line: 2 }, "basic");
-  const b = explain({ type: "OutputLimit", line: 2 }, "detective");
+  const b = explain({ type: "OutputLimit", line: 2 }, "explorer");
   assert.doesNotMatch(a.body, /처음 보는/);
   assert.notEqual(a.body, b.body);
   assert.match(a.body, /2번째 줄/);
@@ -139,7 +145,7 @@ test("grammar_all: 모든 오류 × 줄 있음/없음 × 기본/탐정 → 어�
   const types = [...Object.keys(ERRORS).filter((k) => k !== "_default"), "TabError", "UnboundLocalError", "ZeroDivisionError"];
   for (const type of types) {
     for (const line of [null, 3]) {
-      for (const outfit of ["basic", "detective"]) {
+      for (const outfit of ["basic", "explorer"]) {
         const r = explain({ type, line }, outfit);
         const where = `${type}/${line}/${outfit}`;
         for (const text of [r.title, r.body]) {

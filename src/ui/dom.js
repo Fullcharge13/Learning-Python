@@ -136,7 +136,7 @@ export function cardExample(c) {
 
 export const MILESTONE_REWARD = {
   7: "보너스 50바이트를 받았어요",
-  30: "우주복 의상을 선물로 받았어요",
+  30: "졸업 가운과 학사모를 선물로 받았어요",
   100: "「연속 100일」 배지를 받았어요",
 };
 

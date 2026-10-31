@@ -521,8 +521,64 @@ def test_old_save():
         s = a.save()
         a.shot("old-save-home.png")
         assert xp == "30", xp
-        assert s["saveVer"] == 1 and s["xp"] == 30 and s["bytes"] == 0, s
+        assert s["saveVer"] == 2 and s["xp"] == 30 and s["bytes"] == 0, s
         assert a.page.is_visible("#continue")
+        assert not a.errors, a.errors
+
+
+def test_v06_outfit_migration_and_closet():
+    """v0.6: 옛 의상(lab·detective·camping)을 입던 saveVer 1 저장 → 새 id·환불, 의상실 10벌 모두 그려짐(아이폰 17)."""
+    old = {"saveVer": 1, "xp": 40, "bytes": 5, "outfits": ["basic", "lab", "detective", "camping"], "outfit": "lab"}
+    with App("iPhone 17", save=old) as a:
+        a.start()
+        s = a.save()
+        assert s["saveVer"] == 2, s
+        assert s["outfits"] == ["basic", "whitecoat", "explorer"], s["outfits"]
+        assert s["outfit"] == "whitecoat" and s["bytes"] == 5 + 180, s
+        a.dismiss()
+        a.page.click('[data-go="closet"]')
+        a.page.wait_for_selector(".screen.closet")
+        tiles = a.page.query_selector_all(".outfit-grid [data-o]")
+        assert len(tiles) == 10, len(tiles)
+        ids = [x.get_attribute("data-o") for x in tiles]
+        a.shot("v06-closet-grid.png", full=True)
+        descs = {}
+        for oid in ids:
+            a.page.click('[data-o="%s"]' % oid)
+            a.page.wait_for_selector('[data-o="%s"][aria-pressed="true"]' % oid)
+            descs[oid] = a.page.inner_text(".stage-info")
+            assert a.page.query_selector(".stage .ria-wrap svg.ria"), oid
+            a.page.locator(".stage").screenshot(path=os.path.join(OUT, "v06-closet-%s.png" % oid))
+        assert "언제나 친절한 리아 교수!" in descs["basic"], descs["basic"]
+        assert "30일 연속 기록 보상" in descs["graduate"], descs["graduate"]
+        assert "입고 있어요" in descs["whitecoat"], descs["whitecoat"]
+        print("    closet ids %s" % ",".join(ids))
+        assert not a.errors, a.errors
+
+
+def test_refund_notice_once():
+    """판정 C42: detective를 가졌던 saveVer 1 저장 → 첫 홈에서 환불 안내 한 번, 새로 고침하면 다시 안 나옴."""
+    old = {"saveVer": 1, "xp": 10, "bytes": 3, "outfits": ["basic", "detective"], "outfit": "detective"}
+    msg = "없어진 옷 값 180바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!"
+    with App("iPhone 17", save=old) as a:
+        a.start()
+        a.page.wait_for_selector(".hello .refund-notice .bubble")
+        assert a.page.inner_text(".hello .refund-notice .bubble").strip() == msg
+        a.shot("v06-refund-notice.png")
+        s = a.save()
+        assert s["pending_refund"] == 0 and s["bytes"] == 183 and s["outfit"] == "basic", s
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.start()
+        assert a.save()["saveVer"] == 2
+        assert not a.page.query_selector(".refund-notice"), "새로 고침 뒤 다시 나오면 안 됨"
+        assert msg not in a.page.inner_text(".screen.home")
+        assert a.save()["bytes"] == 183
+        assert not a.errors, a.errors
+    # 환불이 없던 v1 저장(lab만)은 안내 없음
+    with App("iPhone 17", save={"saveVer": 1, "outfits": ["basic", "lab"], "outfit": "lab"}) as a:
+        a.start()
+        assert not a.page.query_selector(".refund-notice")
         assert not a.errors, a.errors
 
 

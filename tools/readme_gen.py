@@ -219,15 +219,15 @@ def build(d):
     w("")
     w(f"### 리아 교수 의상 {n_outfits}벌")
     w("")
-    w("| 의상 | 얻는 법 |")
-    w("|---|---|")
+    w("| 의상 | 얻는 법 | 의상실 설명 |")
+    w("|---|---|---|")
     for o in d["OUTFITS"]:
         if o.get("price") is not None:
             how = f"{o['price']}바이트"
         else:
             how = UNLOCK_KO.get(o.get("unlock"), cell(o.get("unlock", "-")))
-        extra = " · 오류 설명이 탐정 말투로 바뀜" if o["id"] == "detective" else ""
-        w(f"| {cell(o['name'])} | {how}{extra} |")
+        extra = " · 입으면 오류 설명이 탐정 말투로 바뀜" if o.get("voice") == "detective" else ""
+        w(f"| {cell(o['name'])} | {how}{extra} | {cell(o.get('desc', ''))} |")
     w("")
 
     # ---- 리아 교수

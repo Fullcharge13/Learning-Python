@@ -263,12 +263,12 @@ test("M7_again: 끊긴 뒤 다시 7일 (best ≥ 7) → 보상 없음", () => {
   assert.equal(r.save.bytes, 0);
 });
 
-test("M30: 30일 → astronaut 의상, 중복 없음", () => {
+test("M30: 30일 → graduate(졸업 가운) 의상, 중복 없음", () => {
   const r = earnXp(at(29, 29), 20, "2026-10-29");
   assert.equal(r.milestone, 30);
-  assert.deepEqual(r.save.outfits, ["basic", "astronaut"]);
-  const r2 = applyMilestones(at(29, 29, { outfits: ["basic", "astronaut"] }), { ...r.save });
-  assert.deepEqual(r2.save.outfits, ["basic", "astronaut"]);
+  assert.deepEqual(r.save.outfits, ["basic", "graduate"]);
+  const r2 = applyMilestones(at(29, 29, { outfits: ["basic", "graduate"] }), { ...r.save });
+  assert.deepEqual(r2.save.outfits, ["basic", "graduate"]);
 });
 
 test("M100: 100일 → streak100 배지, 중복 없음", () => {

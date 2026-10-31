@@ -23,7 +23,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PAPER = "#FBF6EA"   # style.css --paper
 TEAL = "#1F9E93"    # style.css --teal
 TEAL_SOFT = "#DDF1EC"
-HEAD_VIEWBOX = "30 4 140 140"  # riaSVG 좌표(200×260)에서 머리·올림머리·어깨 윗부분
+HEAD_VIEWBOX = "25 6 150 150"  # riaSVG 좌표(200×260)에서 머리·올림머리·어깨 윗부분
 
 NODE_SCRIPT = """
 const m = await import(process.argv[1]);

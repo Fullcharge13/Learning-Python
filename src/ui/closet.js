@@ -1,4 +1,4 @@
-// 의상실: 9벌 미리보기, 바이트로 사기, 입기, 기록 보호권
+// 의상실: 10벌 미리보기, 바이트로 사기, 입기, 기록 보호권
 import { OUTFITS } from "../../data/outfits.js";
 import { buy } from "../shop.js";
 import { buyFreeze, FREEZE_PRICE, FREEZE_MAX } from "../rules.js";
@@ -30,7 +30,8 @@ export function render(root, ctx, params = {}) {
           <div class="ria-wrap big">${riaSVG({ outfit: o.id, face: wearing ? "smile" : "sparkle", size: 170 })}</div>
           <div class="stage-info">
             <h2>${esc(o.name)}</h2>
-            ${o.id === "detective" ? `<p class="muted">입으면 오류 설명이 탐정 말투로 바뀌어요</p>` : ""}
+            ${o.desc ? `<p class="muted outfit-desc">「${esc(o.desc)}」</p>` : ""}
+            ${o.voice === "detective" ? `<p class="muted">입으면 오류 설명이 탐정 말투로 바뀌어요</p>` : ""}
             ${line ? `<p class="bubble">${esc(line)}</p>` : ""}
             ${action}
           </div>

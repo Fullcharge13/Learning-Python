@@ -113,14 +113,14 @@ test("placeholders: {streak}·{xp} 채움", () => {
 });
 
 test("outfit_short: 모든 의상에 short 이름이 있음 (C16)", () => {
-  assert.equal(OUTFITS.length, 9);
+  assert.equal(OUTFITS.length, 10);
   for (const o of OUTFITS) {
     assert.equal(typeof o.short, "string", o.id);
     assert.ok(o.short.length > 0 && o.short.length <= 8, `${o.id}: ${o.short}`);
   }
 });
 
-test("placeholders_outfit: 실제 의상 short 이름 9개 × {outfit} 줄 전부", () => {
+test("placeholders_outfit: 실제 의상 short 이름 10개 × {outfit} 줄 전부", () => {
   const s = "outfit_bought";
   const idx = LINES[s].map((l, i) => (l.text.includes("{outfit}") ? i : -1)).filter((i) => i >= 0);
   assert.ok(idx.length >= 1);

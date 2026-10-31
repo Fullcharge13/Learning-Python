@@ -44,11 +44,11 @@
 | C32 | 실기기(아이폰, 2026-10-30): 실행·키보드 정상. 홈 화면 앱을 인터넷 없이 처음 열면 흰 화면 → 온라인에서 한 번 연 뒤에는 비행기 모드에서도 열리고 Python 실행·기록 유지 확인. 원인: 홈 화면 앱이 처음 열릴 때까지 오프라인 저장본이 없음(코드 버그 아님) | 사용자 승인(「진행」): 홈 화면 추가 안내에 「인터넷 될 때 한 번 열기」 추가, 설정에 「오프라인 준비 완료」 표시, 확인 목록·LOG 기록 |
 | C8 | 데이터 파일 형식 | 모두 ES 모듈 `export const 이름 = [...]`. `tests/content.py`는 `node`로 import해 JSON으로 꺼냄 |
 
-## 공통 Save 모양 (saveVer 1)
+## 공통 Save 모양 (saveVer 2 — v0.6, 아래 「v0.6」 참고)
 
 ```js
 {
-  saveVer: 1,
+  saveVer: 2,
   current_chapter: 1, current_lesson: "1-1",
   completed_lessons: [],            // ["1-1", ...]
   submission_logs: [],              // 최근 50개 { lesson, item, pass, at }
@@ -62,13 +62,14 @@
   quests: { date: null, ids: [], progress: {}, done: [], chest: false },
   badges: [], outfits: ["basic"], outfit: "basic",
   stats: { lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0 },
-  settings: { sound: true, dailyGoal: 20, name: "" }
+  settings: { sound: true, dailyGoal: 20, name: "" },
+  pending_refund: 0                 // v0.6: 1→2 옮기기에서 돌려준 바이트, 홈에서 한 번 알리고 0 (C42)
 }
 ```
 
 ## 공통 이름
 
-- 의상 id: `basic`, `lab`, `detective`, `chef`, `painter`, `gardener`, `rain`, `camping`, `astronaut`
+- 의상 id (v0.6~): `basic`, `casual`, `whitecoat`, `hoodie`, `gym`, `chef`, `explorer`, `uniform`, `wizard`, `graduate` (v0.5까지: `lab`, `detective`, `chef`, `painter`, `gardener`, `rain`, `camping`, `astronaut` — saveVer 2가 옮김)
 - 표정 id: `smile`, `joy`, `sparkle`, `think`, `surprise`, `worry`, `cheer`, `wink`
 - 대사 상황 id: `greet`, `correct`, `combo`, `wrong`, `running`, `error`, `hint`, `lesson_done`, `streak_up`, `streak_broken`, `outfit_bought`, `welcome_back`
 - 퀘스트 id: `q_lessons2`, `q_xp20`, `q_hintfree`, `q_fixerr`, `q_review3`, `q_perfect`
@@ -134,3 +135,7 @@
 - **C39** 과정 완주: 다음 장 예정이 없고 마지막 레슨을 처음 끝낸 순간 완료 화면 제목 「과정 완주!」와 `course_done` 대사. 홈 길 끝 문구도 「과정을 모두 끝냈어요!」(완주 전에는 「17장이 마지막 장이에요」).
 - **C40** sqlite3는 Pyodide 314.0.7 기본 파일(`pyodide.asm.wasm`, `python_stdlib.zip`)에 들어 있어 따로 받지 않는다(계획서의 loadPackage는 불필요). 버전을 올릴 때 `test_sqlite3_in_precached_core`가 지킨다.
 - **C41** 16-2·16-3은 시작 코드가 `books.csv`(11장에서 배운 파일)에서 책을 읽어 오고, 파일이 다른 숨은 시험을 하나 더 둔다(SELECT 1 꼼수 차단). 16-4·16-5는 변수 이름 require를 뺐다(입력 시험만으로 충분).
+
+## v0.6
+
+- **C42** (사용자 결정, 2026-10-31) ① 오류 설명 탐정 말투는 **탐험가(`explorer`)** 의상을 입으면 켜진다. 의상 표에 `voice: "detective"` 칸을 두고 `grade.explain`·의상실·README가 이 칸을 본다(옛 id `detective`는 기본 말투). `data/errors.js`의 탐정 문장은 그대로. ② saveVer 1→2 옮기기에서 바이트를 돌려준 경우, 그 금액을 `pending_refund`에 남기고 업데이트 뒤 첫 홈 인사 자리에 리아가 한 번 알린다: 「없어진 옷 값 {n}바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!」. 보여 주는 순간 0으로 저장해 다시 나오지 않음, 0바이트면 안내 없음, 그날 인사(오랜만·기록 끊김)보다 먼저. 시험: `tests/unit/save.test.js`(C42 4개), `grade.test.js` explain_detective, `tests/flow.py` `test_refund_notice_once`.

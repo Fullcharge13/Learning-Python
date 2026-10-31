@@ -1,5 +1,6 @@
 // 채점 핵심 (설계서 4-3, 4-5). 실행은 runner.py(작업 5에서 Pyodide 작업자)가 하고,
 // 이 파일은 실행 결과를 비교하고 오류를 설명할 뿐이다.
+import { OUTFITS } from "../data/outfits.js";
 import { ERRORS, ERROR_ALIASES } from "../data/errors.js";
 import { chartMismatch } from "./chart.js";
 
@@ -66,6 +67,8 @@ export function explain(error, outfit, opts = {}) {
   const key = has(type) ? type
     : (Object.prototype.hasOwnProperty.call(ERROR_ALIASES, type) ? ERROR_ALIASES[type] : "_default");
   const entry = ERRORS[key];
-  const body = outfit === "detective" && entry.detective ? entry.detective : entry.body;
+  const o = typeof outfit === "string" ? OUTFITS.find((x) => x.id === outfit) : null;
+  const voice = o && o.voice;   // 탐험가 → "detective" (판정 C42)
+  const body = voice && typeof entry[voice] === "string" ? entry[voice] : entry.body;
   return { title: fill(entry.title, line, type, seconds), body: fill(body, line, type, seconds), line };
 }

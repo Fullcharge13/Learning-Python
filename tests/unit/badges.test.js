@@ -90,8 +90,8 @@ test("stat thresholds: fixed 5, hintfree 10, perfect 10, review_items 30", () =>
 });
 
 test("collector: 3 outfits besides basic (ruling)", () => {
-  assert.deepEqual(checkBadges(mkSave({ outfits: ["basic", "lab", "chef"] }), { hour: 12 }), []);
-  assert.deepEqual(checkBadges(mkSave({ outfits: ["basic", "lab", "chef", "rain"] }), { hour: 12 }), ["collector"]);
+  assert.deepEqual(checkBadges(mkSave({ outfits: ["basic", "casual", "chef"] }), { hour: 12 }), []);
+  assert.deepEqual(checkBadges(mkSave({ outfits: ["basic", "casual", "chef", "uniform"] }), { hour: 12 }), ["collector"]);
 });
 
 test("does not mutate save", () => {

@@ -1,5 +1,5 @@
 // 리아와 파이썬! — 앱 입구. 상태는 app = { save, screen, modal } 하나, 화면 전환은 show() 하나.
-import { loadEx, store, migrate } from "./save.js";
+import { loadEx, store, migrate, takeRefundNotice, refundNoticeText } from "./save.js";
 import { rollDay } from "./rules.js";
 import { ensureQuests } from "./quests.js";
 import { say as pickLine } from "./say.js";
@@ -22,7 +22,7 @@ import * as badges from "./ui/badges.js";
 import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 
-export const VERSION = "v0.5";
+export const VERSION = "v0.6";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -224,6 +224,13 @@ const ctx = {
   onPy(f) { app.pyListeners.add(f); return () => app.pyListeners.delete(f); },
   dayStart,
   takeGreeting() { const g = app.greetOverride; app.greetOverride = null; return g; },
+  // 의상 교체로 돌려준 바이트 안내(판정 C42): 처음 한 번만. 깃발을 내린 저장을 바로 남긴다
+  takeNotice() {
+    const r = takeRefundNotice(app.save);
+    if (!r.bytes) return null;
+    commit(r.save);
+    return { text: refundNoticeText(r.bytes), face: "wink", situation: "refund" };
+  },
   migrate,
 };
 

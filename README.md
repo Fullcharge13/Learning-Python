@@ -1,9 +1,15 @@
 <!-- 이 파일은 tools/readme_gen.py가 data/ 표에서 자동으로 만든다. 손으로 고치지 말 것. -->
 # 리아와 파이썬! v0.6.1
 
-리아 교수와 하루 5~10분, 아이폰 브라우저에서 Python 기초(출력·변수·조건문)를 터치 문제와 직접 코드 작성으로 익히는 듀오링고식 학습 웹앱이에요.
+리아 교수와 하루 5~10분, 휴대폰 브라우저에서 Python을 첫 코드부터 데이터 시각화까지 터치 문제와 직접 코드 작성으로 익히는 듀오링고식 학습 웹앱이에요. 설치할 것 없이 브라우저 안에서 코드가 실행되고 바로 채점돼요.
 
-<p align="center"><img src="docs/img/ria-hero.png" alt="기본 의상을 입고 미소 짓는 리아 교수" width="280"></p>
+**▶ [앱 바로 열기](https://fullcharge13.github.io/Learning-Python/)** — 아이폰은 사파리로 연 뒤 공유 → 「홈 화면에 추가」하면 앱처럼 쓰고 오프라인에서도 돼요.
+
+> 이 저장소는 앱의 **소스 코드**예요. 공부는 위 링크의 앱에서 하고, 아래 「실행 방법」은 앱을 고치거나 다시 만들 때 써요.
+
+<p align="center"><img src="docs/img/screen-home.png" alt="홈 화면: 리아 교수, 오늘의 퀘스트, 학습 길" width="220"> <img src="docs/img/screen-write.png" alt="직접 작성 문제: 과제, 기대 출력, 코드 입력창과 실행·제출 버튼" width="220"> <img src="docs/img/screen-done.png" alt="레슨 완료 화면: 얻은 XP·바이트와 리아 교수" width="220"></p>
+
+**배우는 것** — 1장 첫 코드 · 2장 변수와 표현식 · 3장 조건문 · 4장 함수 · 5장 반복문 · 6장 문자열 다루기 · 7장 리스트 · 8장 딕셔너리 · 9장 튜플과 집합 · 10장 예외 처리 · 11장 파일 · 12장 정규표현식 · 13장 네트워크 기초 · 14장 웹 API와 JSON · 15장 객체지향 · 16장 데이터베이스와 SQL · 17장 데이터 시각화
 
 - 판: **v0.6.1** (게임 안 버전 표시, `LOG.md`의 판 번호와 같음)
 - 내용: 17장 · 레슨 85개 · 문제 634개 · 일일 퀘스트 6종 · 배지 13개 · 리아 교수 의상 10벌 · 표정 8가지
@@ -20,6 +26,7 @@
 | 배포 파일 만들기 | `python3 build.py` | `dist/`에 `index.html`(앱과 레슨 목록) + `lessons/`(장마다 문제 파일) + `manifest.webmanifest` + `sw.js` + 아이콘. **`lessons/` 폴더까지 함께** 이 폴더를 그대로 웹에 올리면 돼요 (Pyodide 제외 700KB 이하) |
 | README 다시 만들기 | `python3 tools/readme_gen.py` | 데이터 표를 바꾼 뒤 실행. `--check`는 어긋남만 검사 |
 | 리아 그림 시트 다시 뽑기 | `python3 tools/ria_sheet.py` | `docs/img/ria-sheet.png`, `ria-hero.png` |
+| README 첫머리 화면 캡처 바꾸기 | `python3 tests/flow.py` 뒤 `python3 tools/readme_shots.py` | `docs/img/screen-home.png`, `screen-write.png`, `screen-done.png` |
 
 **시험 (확인 도구)**
 

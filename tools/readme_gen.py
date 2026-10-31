@@ -93,10 +93,21 @@ def build(d):
     w("<!-- 이 파일은 tools/readme_gen.py가 data/ 표에서 자동으로 만든다. 손으로 고치지 말 것. -->")
     w(f"# 리아와 파이썬! {version}")
     w("")
-    w("리아 교수와 하루 5~10분, 아이폰 브라우저에서 Python 기초(출력·변수·조건문)를 "
-      "터치 문제와 직접 코드 작성으로 익히는 듀오링고식 학습 웹앱이에요.")
+    first, last = d["chapters"][0]["chapter"], d["chapters"][-1]["chapter"]
+    w(f"리아 교수와 하루 5~10분, 휴대폰 브라우저에서 Python을 {first['title']}부터 {last['title']}까지 "
+      "터치 문제와 직접 코드 작성으로 익히는 듀오링고식 학습 웹앱이에요. "
+      "설치할 것 없이 브라우저 안에서 코드가 실행되고 바로 채점돼요.")
     w("")
-    w('<p align="center"><img src="docs/img/ria-hero.png" alt="기본 의상을 입고 미소 짓는 리아 교수" width="280"></p>')
+    w(f"**▶ [앱 바로 열기]({APP_URL})** — 아이폰은 사파리로 연 뒤 공유 → 「홈 화면에 추가」하면 앱처럼 쓰고 오프라인에서도 돼요.")
+    w("")
+    w("> 이 저장소는 앱의 **소스 코드**예요. 공부는 위 링크의 앱에서 하고, 아래 「실행 방법」은 앱을 고치거나 다시 만들 때 써요.")
+    w("")
+    w('<p align="center">'
+      '<img src="docs/img/screen-home.png" alt="홈 화면: 리아 교수, 오늘의 퀘스트, 학습 길" width="220"> '
+      '<img src="docs/img/screen-write.png" alt="직접 작성 문제: 과제, 기대 출력, 코드 입력창과 실행·제출 버튼" width="220"> '
+      '<img src="docs/img/screen-done.png" alt="레슨 완료 화면: 얻은 XP·바이트와 리아 교수" width="220"></p>')
+    w("")
+    w("**배우는 것** — " + " · ".join(f"{c['chapter']['id']}장 {c['chapter']['title']}" for c in d["chapters"]))
     w("")
     w(f"- 판: **{version}** (게임 안 버전 표시, `LOG.md`의 판 번호와 같음)")
     w(f"- 내용: {len(d['chapters'])}장 · 레슨 {n_lessons}개 · 문제 {n_items}개 · 일일 퀘스트 {n_quests}종 · "
@@ -118,6 +129,7 @@ def build(d):
       f"이 폴더를 그대로 웹에 올리면 돼요 (Pyodide 제외 {max_kb}KB 이하) |")
     w("| README 다시 만들기 | `python3 tools/readme_gen.py` | 데이터 표를 바꾼 뒤 실행. `--check`는 어긋남만 검사 |")
     w("| 리아 그림 시트 다시 뽑기 | `python3 tools/ria_sheet.py` | `docs/img/ria-sheet.png`, `ria-hero.png` |")
+    w("| README 첫머리 화면 캡처 바꾸기 | `python3 tests/flow.py` 뒤 `python3 tools/readme_shots.py` | `docs/img/screen-home.png`, `screen-write.png`, `screen-done.png` |")
     w("")
     w("**시험 (확인 도구)**")
     w("")
@@ -277,6 +289,9 @@ def build(d):
     w("")
     return "\n".join(L), {"lessons": n_lessons, "badges": n_badges, "outfits": n_outfits,
                           "quests": n_quests, "items": n_items, "version": version}
+
+
+APP_URL = "https://fullcharge13.github.io/Learning-Python/"  # gh-pages 배포 주소
 
 
 def main():

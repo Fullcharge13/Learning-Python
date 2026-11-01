@@ -10,12 +10,12 @@
 // - 게임 저장본 이름에 판 번호와 내용 지문이 들어 있어, 새 판을 올리면 활성화 때 옛 저장본을 지운다.
 //   Pyodide 저장본은 Pyodide 버전으로만 이름이 바뀐다(판을 올려도 10MB를 다시 받지 않게).
 
-const VERSION = "v0.7.1";
-const GAME_CACHE = "ria-game-v0.7.1-065a4d77f8";
+const VERSION = "v0.7.2";
+const GAME_CACHE = "ria-game-v0.7.2-1e767377dd";
 const PY_CACHE = "ria-pyodide-314.0.7";
 const PYODIDE_PREFIX = new URL("https://cdn.jsdelivr.net/npm/pyodide@314.0.7/", self.location.href).href;
 const GAME_FILES = ["./", "index.html", "manifest.webmanifest", "licenses.txt", "icons/apple-touch-icon.png", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
-const CHAPTER_FILES = ["lessons/ch1-64c87a22.json", "lessons/ch2-40ff160e.json", "lessons/ch3-82ffab3f.json", "lessons/ch4-3eaa30b1.json", "lessons/ch5-d0fefd40.json", "lessons/ch6-b48cb252.json", "lessons/ch7-c1d8e921.json", "lessons/ch8-d5b64adf.json", "lessons/ch9-89ed61fb.json", "lessons/ch10-ba15556a.json", "lessons/ch11-b3074b4c.json", "lessons/ch12-526a2218.json", "lessons/ch13-ad936be5.json", "lessons/ch14-4ae616a7.json", "lessons/ch15-e5394585.json", "lessons/ch16-f8cdac70.json", "lessons/ch17-664329fe.json"];
+const CHAPTER_FILES = ["lessons/ch1-8155cb34.json", "lessons/ch2-f8ab9b5a.json", "lessons/ch3-12fcfbbf.json", "lessons/ch4-e6dc1406.json", "lessons/ch5-b1fc4e4a.json", "lessons/ch6-801c2da4.json", "lessons/ch7-c1d8e921.json", "lessons/ch8-d5b64adf.json", "lessons/ch9-89ed61fb.json", "lessons/ch10-ba15556a.json", "lessons/ch11-b3074b4c.json", "lessons/ch12-526a2218.json", "lessons/ch13-ad936be5.json", "lessons/ch14-4ae616a7.json", "lessons/ch15-e5394585.json", "lessons/ch16-f8cdac70.json", "lessons/ch17-664329fe.json"];
 const CHAPTER_RE = /\/lessons\/ch[1-9]\d*-[0-9a-f]{8}\.json$/;
 const NETWORK_TIMEOUT_MS = 4000; // 게임 파일: 이보다 느리면 저장본을 먼저 보여 줌
 // 처음 설치 때 미리 받아 두는 Pyodide 핵심 파일(실패해도 설치는 계속, 쓸 때 다시 받음)

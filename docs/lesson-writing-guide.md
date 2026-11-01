@@ -53,7 +53,7 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 
 ## 3-0. 본 과정 1~6장에서 쓸 수 있는 문법 (누적, v0.7.1)
 
-점검기 `CHAPTER_RULES`가 정한다. 뒤 장은 앞 장 것을 모두 쓸 수 있다. 서식 지정자(`f"{x:.2f}"`)·여러 줄 문자열·기본값 매개변수·재귀·`for…else`·`match`·`divmod` 풀기는 **본 과정에서는 언제나 오류**(심화 전용, 3-3절).
+점검기 `CHAPTER_RULES`가 정한다. 뒤 장은 앞 장 것을 모두 쓸 수 있다. 서식 지정자(`f"{x:.2f}"`)·여러 줄 문자열·기본값 매개변수·재귀·`for…else`·`match`·`divmod` 풀기, 리스트 컴프리헨션·lambda·맨 `raise`·`csv.writer`·이름 붙인 묶음 `(?P<…>)`·묶음 참조 `\1`·`\g<…>`(v0.8)는 **본 과정에서는 언제나 오류**(심화 전용, 3-3절).
 
 | 장 | 새로 쓸 수 있는 것 |
 |---|---|
@@ -70,7 +70,7 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 - write의 시험마다 `files`를 따로 둘 수 있다(`{ stdin, expect, public, files }`, 없으면 문제의 `files`). 시험별 `files`가 있으면 input이 없어도 시험 2~4개 — 파일 내용을 바꾼 숨은 시험으로 하드코딩을 막는다.
 - **server** (13장~): `{"https://ria.example/menu": {"status": 200, "body": "…", "type": "text/html"}}` 주소 → 응답. status는 100~599 정수, body는 문자열, type은 선택. 실행 동안 `urllib.request.urlopen`이 이 표로 답한다. 표에 없는 주소는 `URLError`, status 400 이상은 `HTTPError`. 실제 인터넷은 쓰지 않는다.
 - **주소 규칙**: 연습 서버 주소는 언제나 `https://ria.example/…`(실존 사이트 주소 금지). 경로는 짧게(`/menu`, `/bus?stop=101`).
-- **import**: 장마다 정해진 모듈만(누적). 11장 `csv` · 12장 `re` · 13장 `urllib.request`·`urllib.parse`·`urllib.error` · 14장 `json`. 그 밖의 모듈(`os`, `sys`, `requests` …)은 오류. 모듈에서 쓸 수 있는 이름과 `open()`의 모드(`"r"`·`"w"`·`"a"`만, `encoding=`·`newline=` 허용)는 `tests/content.py`의 `MODULE_MEMBERS`·`CALL_KWARGS`가 정한다.
+- **import**: 장마다 정해진 모듈만(누적). 11장 `csv` · 12장 `re` · 13장 `urllib.request`·`urllib.parse`·`urllib.error` · 14장 `json`. 그 밖의 모듈(`os`, `sys`, `requests` …)은 오류. 본 과정 11장의 `csv`는 `reader`만(`csv.writer`는 11장 심화 전용, v0.8). 모듈에서 쓸 수 있는 이름과 `open()`의 모드(`"r"`·`"w"`·`"a"`만, `encoding=`·`newline=` 허용)는 `tests/content.py`의 `MODULE_MEMBERS`·`CALL_KWARGS`가 정한다.
 - **38칸**: `urllib.request.urlopen("https://ria.example/x")`는 한 줄에 안 들어간다. `from urllib.request import urlopen`과 `url = "…"` 변수로 나눈다.
 - **JSON 출력(14장)**: 딕셔너리를 통째로 `print`하거나 `json.dumps`를 그냥 출력하지 말고 **특정 값을 꺼내 출력**한다. 꼭 dumps 결과를 보여야 하면 `sort_keys=True`, `indent=2`, `ensure_ascii=False`를 명시해 키 순서·공백이 하나로 정해지게 하고, 과제 문장에도 그 인자를 적는다.
 - **정규표현식(12장)**: 패턴 글자를 채점하지 말고 **출력**을 채점한다. 맞는 패턴이 여러 개(`\d+`·`[0-9]+`)일 수 있으므로 시험 데이터는 어느 맞는 패턴에도 같은 출력이 나오게 고르고, blank 오답 칩은 실제로 다른 출력이나 오류를 내야 한다. 패턴은 `r"…"`로 쓴다.
@@ -113,8 +113,22 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
   | 4장 | 기본값 매개변수(DefaultArg, 숫자·문자열·True/False/None 상수만), 재귀(Recursion) | 내 함수에 이름 붙여 넘기기 `f(b=1)` |
   | 5장 | `for … else`·`while … else`(LoopElse) | 중첩 반복, `break`·`continue`, `print(…, end=" ")` |
   | 6장 | 새 문법 없음 | `center`·`ljust`·`rjust`·`zfill`·`count`·`title`·`capitalize`·`startswith`·`endswith`·`"-".join("abc")`, 채우기 서식 `f"{s:*^9}"`(1장 심화) |
+  | 7장 (v0.8) | 리스트 컴프리헨션 `[n * 2 for n in a if n > 2]`(ListComp): **for 하나, if 0~1개**(조건 여럿은 `and`), 컴프리헨션 안에 컴프리헨션 금지. 2차원은 `[[0] * 3 for r in range(2)]`처럼 | 리스트 안 리스트 `a[1][0]`(7-1), `for i in range(len(a))`(7-2), for + if + append(7-3) |
+  | 8장 | 새 문법 없음 | `d.get(k, 0) + 1`(8-4), `d[k] = []`·`d[k].append(x)`(8-2), `for k, v in d.items()` |
+  | 9장 | `lambda`(Lambda): **함수에 넘기는 자리에서만** `sorted(ps, key=lambda p: p[1])`·`a.sort(key=lambda s: len(s))`. `f = lambda …`·`return lambda …` 금지(이름에 담을 함수는 `def`) | `sorted(…, key=함수 이름)`·`reverse=True`(9-3), `^`·`<=`·`discard`(본 과정 문법이지만 9-A2가 가르침), `add`·`in`(9-4) |
+  | 10장 | 맨 `raise`(Reraise): **except 안에서만** 잡은 오류를 다시 던짐. `raise … from …`은 어디서나 금지 | `raise ValueError(f"…")`, `except … as e`, `try/except/else/finally`(10-3·10-4), `while True` 안 try(10-2) |
+  | 11장 | `csv.writer(f)`(CsvWriter) → `writerow([…])`·`writerows([[…]])`, 쓸 때도 `newline=""` | `csv.reader`, `open(name)` 변수 이름으로 열기(11-3), `"w"`·`"a"` |
+  | 12장 | 이름 붙인 묶음 `(?P<h>\d+)`·`m.group("h")`·`m.groupdict()`(RegexNamedGroup), 묶음 참조 `\1`·`\g<h>`·`(?P=h)`(RegexBackref) | `( )`·`group(1)`(12-3), `findall` + `( )` → 튜플(12-3), `re.sub`(12-4) |
 
-  1~6장 심화에서도 lambda·컴프리헨션은 금지(7·9장 심화에서 연다).
+  사전·집합 컴프리헨션(`{k: v for …}`·`{x for …}`)과 제너레이터 식(`sum(x for …)`)은 심화에서도 늘 금지(가르치지 않음). 12장 심화 문법은 **re를 들여온 코드의 모든 글자 상수**를 보므로 패턴을 변수에 담아도 잡힌다. 메서드(`writerow`·`discard`)는 점검기가 막지 못하니 본 과정 레슨에 쓰지 않는다.
+- **심화 채점 조건(require, v0.8)**: `ListComp`·`Lambda`는 ast 마디 이름 그대로 쓴다. 12장 이름 붙인 묶음은 `NamedGroup`(글자 상수 안에 `(?P<`가 있음) — `group(1)`로 풀어도 같은 출력이 나오므로 A1 write에는 꼭 넣는다. 10장 맨 `raise`는 `Reraise`(except 블록 안에 `raise` 한 단어가 있음) — `raise ValueError(e)`·`raise e`로 새로 던져도 같은 출력이 나오므로 10-A2 write에 넣고 과제 문장에 「raise 한 단어로 다시 던지고」라고 쓴다.
+- **「안다고 가정하지 않음」(7~12장 심화, 디딤돌 조사 4절)**: 학습자는 1~6장 심화를 건너뛰었을 수 있다. 서식 지정자 `:>5`·`:.1f`(→ `round`·`zfill`·`center`), `"""…"""`, `divmod`, **`a if c else b`**, `match`, 기본값 매개변수·재귀, `for…else`, **`join`·`ljust`·`rjust`·`title`**은 **그 심화 레슨이 직접 가르치지 않으면 쓰지 않는다**(점검기는 허용하지만 본 과정에서 안 가르침). `+=` 대신 `total = total + x`(`+=`는 어디서도 안 가르침 — 13장 이후 코드에 있음, v0.8 범위 밖으로 따로 기록).
+  - **7장**: `enumerate`·`zip`·`list(range(…))` 없음(점검기 오류). A1은 7-3의 긴 모양 바로 옆에 한 줄 모양을 둔다. 2차원은 7-1 맛보기 `a[1][0]`에서 잇는다.
+  - **8장**: `sorted(d.items(), key=…)`는 9장이라 쓰지 않음(출력은 넣은 순서). `max(d, key=…)` 대신 반복 + `if`. 컴프리헨션(7-A1)도 가정 안 함.
+  - **9장**: lambda는 9-3의 `def get_count(pair): return pair[1]`을 한 줄로 바꾸며 시작. `max`/`min`의 `key=`·`.sort(key=)`는 쓰면 카드로 보여 준다. 집합은 `add`·`in`까지만 가정.
+  - **10장**: `isdigit()`·**`except (A, B):`** 가정 안 함(쓰려면 그 카드에서 가르침). 맨 `raise`·겹친 try·try 안 `return`과 `finally`의 순서는 A2가 정확히 설명.
+  - **11장**: 가상 파일 최대 5개. `FileNotFoundError`를 try로 잡는 것은 처음이라 쓰면 카드로. `",".join`·`readlines` 없음. 빈 줄 건너뛰기는 A3 카드에서.
+  - **12장**: 바꿀 글에도 `r"…"`. `\s`·`\b`·`^`·`$`·`[^…]`·`re.split`·`re.compile`은 본 과정에 없음 → 쓰면 카드로. 다른 바른 패턴(`[0-9]+`)도 같은 출력이 나오게 시험을 고른다.
 - **직접 작성 시간**: 심화 정답은 시험마다 **1초 안에** 끝나야 하고, 재귀는 **100단계 안에서** 끝나야 한다(휴대폰 3초 제한·스택 여유, 점검기가 잰다). 재귀 예시는 `fact(5)`, 자릿수 합처럼 작은 수로.
 - **말투**: 리아가 첫 카드에서 「한 걸음 더」 가 보는 선택 레슨이라고 알린다(예: 「여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요.」). 본 과정 내용을 다시 설명하지 않고 바로 새 것으로 간다. 나머지 글자 수·문제 규칙·하드코딩 막기는 본 과정과 같다.
 

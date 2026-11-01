@@ -181,6 +181,29 @@ def test_require_selfcall_formatspec_triplestr_in_pyodide():
     r = _run(plain, "", ["SelfCall", "FormatSpec", "TripleStr"])
     assert r["missing"] == ["SelfCall", "FormatSpec", "TripleStr"], r
 
+
+def test_require_namedgroup_listcomp_lambda_in_pyodide():
+    # v0.8(12장·7장·9장 심화): 이름 붙인 묶음 (?P<…>)과 컴프리헨션·lambda를 Pyodide에서도 가려낸다
+    code = ('import re\nm = re.search(r"(?P<h>\\d+)시", "9시")\nps = sorted([3, 1], key=lambda x: -x)\n'
+            'print(m.group("h"), [p * 2 for p in ps])\n')
+    r = _run(code, "", ["NamedGroup", "ListComp", "Lambda"])
+    assert r["stdout"] == "9 [6, 2]\n" and r["missing"] == [], r
+    plain = 'import re\n# (?P<h>…)\nprint(re.search(r"(\\d+)시", "9시").group(1))\n'
+    r = _run(plain, "", ["NamedGroup", "ListComp", "Lambda"])
+    assert r["stdout"] == "9\n" and r["missing"] == ["NamedGroup", "ListComp", "Lambda"], r
+
+
+def test_require_reraise_in_pyodide():
+    # v0.8(10장 심화): except 안의 맨 raise만 Reraise로 본다(새 오류를 던지는 raise ValueError(e)는 아님)
+    code = ('try:\n    try:\n        int("a")\n    except ValueError:\n        print("안")\n        raise\n'
+            'except ValueError:\n    print("밖")\n')
+    r = _run(code, "", ["Reraise"])
+    assert r["stdout"] == "안\n밖\n" and r["missing"] == [], r
+    plain = code.replace("        raise\n", "        raise ValueError(\"x\")\n")
+    r = _run(plain, "", ["Reraise"])
+    assert r["stdout"] == "안\n밖\n" and r["missing"] == ["Reraise"], r
+
+
 def test_error_line():
     r = _run("x = 1\nprint(y)")
     assert r["error"]["type"] == "NameError", r
@@ -478,6 +501,7 @@ def test_idle_worker_error_event():
 
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,
          test_require_comment_elif_else_in_pyodide, test_require_selfcall_formatspec_triplestr_in_pyodide,
+         test_require_namedgroup_listcomp_lambda_in_pyodide, test_require_reraise_in_pyodide,
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
          test_practice_server_in_pyodide, test_chart_in_pyodide, test_sqlite3_in_pyodide, test_queue, test_timeout_then_ok,
          test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,

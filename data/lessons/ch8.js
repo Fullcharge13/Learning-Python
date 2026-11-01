@@ -99,7 +99,9 @@ export const LESSONS = [
       "d[키] = 값: 없으면 추가, 있으면 교체",
       "키는 겹치지 않음, 같은 키는 하나뿐",
       "키 in d 는 키만 확인, 빈 통은 {}",
+      "값이 리스트면 d[k].append(값)",
     ],
+    updated: "v0.8",
     cards: [
       {
         say: "d[키] = 값 이라고 쓰면 키가 없을 땐 새로 추가하고, 이미 있으면 값을 바꿔요. 키는 하나뿐이라 같은 키로 또 넣으면 앞의 값이 사라져요.",
@@ -110,6 +112,11 @@ export const LESSONS = [
         say: "키 in 딕셔너리 는 그 키가 있는지 True나 False로 알려 줘요. 값이 아니라 키만 봐요. 빈 딕셔너리는 {} 로 만들어요. not in은 없는지 물어요.",
         code: "stock = {}\nstock[\"사과\"] = 3\nprint(\"사과\" in stock)\nprint(3 in stock)",
         out: "True\nFalse",
+      },
+      {
+        say: "값이 리스트인 딕셔너리도 있어요. 처음 보는 키면 먼저 빈 리스트를 만들어 두고, 그다음 scores[키].append(값)으로 쌓아요.",
+        code: "scores = {}\nif \"민지\" not in scores:\n    scores[\"민지\"] = []\nscores[\"민지\"].append(90)\nprint(scores)",
+        out: "{'민지': [90]}",
       },
     ],
     items: [
@@ -159,6 +166,14 @@ export const LESSONS = [
         options: ["{'사과': 2}", "{'사과': 1}", "{'사과': 1, '사과': 2}"],
         answer: 0,
         explain: "키는 하나뿐이라서 같은 키에 다시 넣으면 값이 교체돼요. 마지막에 넣은 2만 남아요.",
+      },
+      {
+        type: "choice", concept: "dictmod",
+        q: "화면에 무엇이 출력될까요?",
+        code: "d = {}\nfor n in [\"민지\", \"준\", \"민지\"]:\n    if n not in d:\n        d[n] = []\n    d[n].append(1)\nprint(d)",
+        options: ["{'민지': [1, 1], '준': [1]}", "{'민지': [1], '준': [1]}", "{'민지': 2, '준': 1}"],
+        answer: 0,
+        explain: "민지는 두 번 나와서 빈 리스트는 처음에만 만들고 1이 두 번 쌓여요. 준은 한 번이라 [1]이에요.",
       },
       {
         type: "write", concept: "dictmod",
@@ -463,6 +478,405 @@ export const LESSONS = [
         options: ["처음 보는 단어에서 KeyError를 피하려고", "단어를 알파벳순으로 정렬하려고", "이미 있는 단어를 지우려고"],
         answer: 0,
         explain: "처음 보는 키는 아직 없어서 [ ]로 읽으면 KeyError예요. get의 기본값 0이 그 틈을 메워 줘요.",
+      },
+    ],
+  },
+];
+
+// ---------------------------------------------------------------------------
+// 8장 심화 (v0.8). 안 가르친 것: 정렬(sorted)·max(key=)·컴프리헨션·join·서식 지정자·+=·조건 표현식.
+// 출력 순서는 딕셔너리에 넣은 순서(처음 나온 순서)로 정해진다.
+export const ADVANCED = [
+  {
+    id: "8-A1", chapter: 8, isAdvanced: true, title: "기준별로 묶어 세기",
+    goal: "단어의 특징으로 묶어 세고 합칠 수 있다",
+    summary: [
+      "키를 w 대신 w[0], len(w)로 바꾸면 기준이 바뀜",
+      "if로 이름표를 붙여 그 이름표를 키로 씀",
+      "1 대신 값을 더하면 개수가 아닌 합계",
+    ],
+    cards: [
+      {
+        say: "여기는 「한 걸음 더」 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. 8-4에서는 단어 그대로 셌죠? 키를 w[0](첫 글자)로 바꾸면 첫 글자별로 세어져요.",
+        code: `words = "사과 바나나 배 바다".split()
+counts = {}
+for w in words:
+    k = w[0]
+    counts[k] = counts.get(k, 0) + 1
+print(counts)`,
+        out: "{'사': 1, '바': 2, '배': 1}",
+      },
+      {
+        say: "1 대신 값을 더하면 합계가 돼요. 기준은 if로 정해도 돼요. 5000원 이상이면 「비쌈」, 아니면 「보통」이라는 이름표를 키로 써서 금액을 합쳐요.",
+        code: `sums = {}
+for p in [4000, 9000, 5000]:
+    if p >= 5000:
+        k = "비쌈"
+    else:
+        k = "보통"
+    sums[k] = sums.get(k, 0) + p
+print(sums)`,
+        out: "{'보통': 4000, '비쌈': 14000}",
+      },
+    ],
+    items: [
+      {
+        type: "choice", concept: "groupcount",
+        q: "화면에 무엇이 출력될까요?",
+        code: `words = "사과 바나나 배 바다".split()
+counts = {}
+for w in words:
+    k = w[0]
+    counts[k] = counts.get(k, 0) + 1
+print(counts)`,
+        options: ["{'사': 1, '바': 2, '배': 1}", "{'사과': 1, '바나나': 1, '배': 1, '바다': 1}", "{'사': 1, '바': 1, '배': 1}"],
+        answer: 0,
+        explain: "키가 첫 글자라서 바나나와 바다가 같은 「바」 칸에 쌓여 2가 돼요. 키는 처음 나온 순서로 들어가요.",
+      },
+      {
+        type: "choice", concept: "groupcount",
+        q: "화면에 무엇이 출력될까요?",
+        code: `words = "차 커피 빵 우유 라떼".split()
+counts = {}
+for w in words:
+    n = len(w)
+    counts[n] = counts.get(n, 0) + 1
+print(counts)`,
+        options: ["{1: 2, 2: 3}", "{2: 3, 1: 2}", "{1: 1, 2: 1}"],
+        answer: 0,
+        explain: "글자 수가 키예요. 1글자는 차·빵 둘, 2글자는 커피·우유·라떼 셋이에요. 키가 숫자여도 처음 나온 순서(1 먼저)로 찍혀요.",
+      },
+      {
+        type: "blank", concept: "groupcount",
+        q: "첫 글자별로 세어지게 빈칸을 채워 보세요.",
+        code: `counts = {}
+for w in "배 바다 바나나".split():
+    k = ___
+    counts[k] = counts.get(k, 0) + 1
+print(counts)`,
+        chips: ["w[0]", "w", "w[1]"],
+        answer: 0,
+        explain: "w[0]은 첫 글자예요. w를 그대로 쓰면 단어마다 따로 세고, w[1]은 「배」처럼 한 글자 단어에서 IndexError예요.",
+      },
+      {
+        type: "order", concept: "groupcount",
+        q: "{2: 3}이 찍히게 줄을 놓아 보세요.",
+        lines: [
+          "counts = {}",
+          "for w in \"수박 참외 딸기\".split():",
+          "    n = len(w)",
+          "    counts[n] = counts.get(n, 0) + 1",
+          "print(counts)",
+        ],
+        expect: "{2: 3}",
+        explain: "통을 먼저 만들고, 반복 안에서 글자 수를 구해 세고, 반복이 끝난 뒤 찍어요. n을 구하기 전에 쓰면 NameError예요.",
+      },
+      {
+        type: "choice", concept: "groupcount",
+        q: "화면에 무엇이 출력될까요?",
+        code: `sums = {}
+for p in [2000, 6000, 7000]:
+    if p >= 5000:
+        k = "비쌈"
+    else:
+        k = "보통"
+    sums[k] = sums.get(k, 0) + p
+print(sums)`,
+        options: ["{'보통': 2000, '비쌈': 13000}", "{'보통': 1, '비쌈': 2}", "{'보통': 2000, '비쌈': 6000}"],
+        answer: 0,
+        explain: "2000은 보통에, 6000과 7000은 비쌈에 합쳐져요. 6000 + 7000 = 13000이에요. 더하는 값이 1이면 개수가 돼요.",
+      },
+      {
+        type: "write", concept: "groupcount",
+        task: "단어들을 공백으로 나눠 input()으로 받아(괄호는 비워 두세요) 글자 수(len)별로 get으로 세어요. counts에 모은 뒤 처음 나온 순서로 「n글자 k개」를 한 줄씩 출력해요. 예: 차 빵 커피 → 「1글자 2개」 「2글자 1개」",
+        starter: "words = input().split()\ncounts = {}\n",
+        tests: [
+          { stdin: "사과 바나나 배 귤 포도", expect: "2글자 2개\n3글자 1개\n1글자 2개", public: true },
+          { stdin: "배", expect: "1글자 1개", public: false },
+          { stdin: "커피 차 커피 라떼", expect: "2글자 3개\n1글자 1개", public: false },
+          { stdin: "수박 참외 수박", expect: "2글자 3개", public: false },
+        ],
+        require: ["For", "Dict", "Method:get", "Call:len", "Name:counts"],
+        hints: [
+          "단어가 아니라 글자 수가 같은 것끼리 센 뒤, 처음 나온 글자 수부터 한 줄씩 찍어요. 차 빵 커피에서 1글자가 왜 2개일까요?",
+          "8-4의 세기 패턴에서 키만 바꿔요. 단어 w 대신 len(w)를 키로 쓰면 글자 수별로 세어져요.",
+          "첫 반복에서 글자 수를 구해 get으로 세고, 반복이 끝난 뒤 키와 값을 함께 도는 두 번째 for로 f-문자열을 찍어요.",
+          "for w in words:\n    n = len(___)\n    counts[n] = counts.get(___, 0) + 1\nfor n, k in counts.items():\n    print(f\"{n}글자 {k}개\")",
+        ],
+        solution: `words = input().split()
+counts = {}
+for w in words:
+    n = len(w)
+    counts[n] = counts.get(n, 0) + 1
+for n, k in counts.items():
+    print(f"{n}글자 {k}개")`,
+        explain: "세기 패턴에서 키만 len(w)로 바꿨을 뿐인데 기준이 달라졌어요. 단어가 하나뿐인 경우도, 글자 수가 한 가지뿐인 경우도 맞아요.",
+      },
+      {
+        type: "check", concept: "groupcount",
+        q: "sums.get(k, 0) + p 처럼 1 대신 p를 더하면 무엇이 쌓일까요?",
+        options: ["기준별 금액의 합계", "기준별 개수", "기준별 최댓값"],
+        answer: 0,
+        explain: "더하는 값이 1이면 몇 번 나왔는지(개수), 값 p면 p를 모두 합친 합계가 돼요. 뼈대는 똑같고 더하는 값만 달라요.",
+      },
+    ],
+  },
+  {
+    id: "8-A2", chapter: 8, isAdvanced: true, title: "딕셔너리 안 리스트",
+    goal: "기준별로 값을 리스트에 모아 꺼낼 수 있다",
+    summary: [
+      "처음 보는 키는 d[k] = [] 로 빈 리스트를 먼저 둠",
+      "d[k].append(값)으로 기준별로 쌓음",
+      "꺼낸 리스트에 [0], len, sum을 바로 씀",
+    ],
+    cards: [
+      {
+        say: "「한 걸음 더」예요. 8-2에서 값이 리스트인 딕셔너리를 맛봤죠? 숫자를 세는 대신 단어를 그대로 쌓으면 첫 글자별 묶음이 돼요. 키가 처음일 때만 빈 리스트를 만들어요.",
+        code: `words = "사과 바나나 배 바다".split()
+groups = {}
+for w in words:
+    k = w[0]
+    if k not in groups:
+        groups[k] = []
+    groups[k].append(w)
+print(groups)`,
+        out: "{'사': ['사과'], '바': ['바나나', '바다'], '배': ['배']}",
+      },
+      {
+        say: "꺼낸 값이 리스트라서 바로 번호를 붙이거나 len, sum을 쓸 수 있어요. scores[이름][1]은 그 이름의 두 번째 점수예요.",
+        code: `d = {"민지": [90, 80], "준": [70]}
+print(d["민지"][1])
+d["준"].append(100)
+print(d["준"], len(d["준"]))
+for k, v in d.items():
+    print(k, sum(v))`,
+        out: "80\n[70, 100] 2\n민지 170\n준 170",
+      },
+    ],
+    items: [
+      {
+        type: "choice", concept: "dictlist",
+        q: "화면에 무엇이 출력될까요?",
+        code: `d = {"민지": [90, 80], "준": [70]}
+print(d["민지"][1])`,
+        options: ["80", "90", "[90, 80]"],
+        answer: 0,
+        explain: "d[\"민지\"]가 [90, 80] 리스트이고, 거기에 [1]을 붙이면 두 번째인 80이에요. 번호는 0부터 세요.",
+      },
+      {
+        type: "choice", concept: "dictlist",
+        q: "화면에 무엇이 출력될까요?",
+        code: `scores = {"준": [70]}
+scores["준"].append(100)
+print(scores["준"])`,
+        options: ["[70, 100]", "[100]", "{'준': [70, 100]}"],
+        answer: 0,
+        explain: "scores[\"준\"]이 리스트라서 append로 뒤에 100이 붙어요. 찍은 것은 딕셔너리가 아니라 그 리스트 하나예요.",
+      },
+      {
+        type: "blank", concept: "dictlist",
+        q: "가가 두 번 쌓이게 빈칸을 채워 보세요.",
+        code: `d = {}
+for w in "가 나 가".split():
+    if w not in d:
+        d[w] = ___
+    d[w].append(1)
+print(d)`,
+        chips: ["[]", "0", "{}"],
+        answer: 0,
+        explain: "append를 쓰려면 값이 리스트여야 해요. 0이나 {}에는 append가 없어서 AttributeError가 나요.",
+      },
+      {
+        type: "order", concept: "dictlist",
+        q: "1이 찍히게 줄을 놓아 보세요.",
+        lines: [
+          "scores = {}",
+          "scores[\"민지\"] = []",
+          "scores[\"민지\"].append(95)",
+          "print(len(scores[\"민지\"]))",
+        ],
+        expect: "1",
+        explain: "빈 딕셔너리, 빈 리스트 만들기, 점수 쌓기, 개수 세기 순서예요. 리스트를 만들기 전에 append하면 KeyError예요.",
+      },
+      {
+        type: "choice", concept: "dictlist",
+        q: "화면에 무엇이 출력될까요?",
+        code: `scores = {"민지": [90, 80]}
+print(sum(scores["민지"]))`,
+        options: ["170", "90", "[90, 80]"],
+        answer: 0,
+        explain: "scores[\"민지\"]를 꺼내면 리스트라서 sum으로 합할 수 있어요. 90 + 80 = 170이에요.",
+      },
+      {
+        type: "write", concept: "dictlist",
+        task: "첫 줄에 이름들, 둘째 줄에 점수들(같은 순서)을 input()으로 받아(괄호는 비워 두세요) groups에 이름별 점수 리스트로 append해요. 점수는 int()로 바꿔요. 처음 나온 순서로 「이름 [점수들]」을 출력해요. 예: 「민지 준 민지」 「90 70 80」 → 「민지 [90, 80]」 「준 [70]」",
+        starter: "names = input().split()\nscores = input().split()\ngroups = {}\n",
+        tests: [
+          { stdin: "민지 준 민지\n90 70 80", expect: "민지 [90, 80]\n준 [70]", public: true },
+          { stdin: "준\n100", expect: "준 [100]", public: false },
+          { stdin: "가 나 가 가\n1 2 3 4", expect: "가 [1, 3, 4]\n나 [2]", public: false },
+          { stdin: "나 가\n5 6", expect: "나 [5]\n가 [6]", public: false },
+        ],
+        require: ["For", "Dict", "Method:append", "Call:int", "Name:groups"],
+        hints: [
+          "이름이 같은 점수끼리 한 리스트에 모아요. 민지가 두 번 나오면 민지 리스트에는 점수가 몇 개 들어갈까요?",
+          "이름과 점수는 같은 번호끼리 짝이에요(7-2의 range(len(a))). 키가 처음이면 빈 리스트를 먼저 만들고 append해요.",
+          "번호 i로 돌며 names[i]를 키로 쓰고 int(scores[i])를 append해요. 반복이 끝난 뒤 키와 값을 함께 돌며 찍어요.",
+          "for i in range(len(names)):\n    n = names[i]\n    if n ___ groups:\n        groups[n] = []\n    groups[n].append(int(scores[___]))\nfor k, v in groups.items():\n    print(k, v)",
+        ],
+        solution: `names = input().split()
+scores = input().split()
+groups = {}
+for i in range(len(names)):
+    n = names[i]
+    if n not in groups:
+        groups[n] = []
+    groups[n].append(int(scores[i]))
+for k, v in groups.items():
+    print(k, v)`,
+        explain: "처음 보는 이름에만 빈 리스트를 만들고 점수를 쌓은 흐름이 깔끔해요. 사람이 한 명뿐이거나 이름 순서가 뒤섞여도 맞아요.",
+      },
+      {
+        type: "check", concept: "dictlist",
+        q: "d[k].append(x) 전에 처음 보는 키라면 d[k] = [] 를 먼저 하는 이유는?",
+        options: ["없는 키를 d[k]로 읽으면 KeyError라서", "리스트를 정렬해 두려고", "이미 있는 값을 지우려고"],
+        answer: 0,
+        explain: "d[k].append(x)는 먼저 d[k]를 읽는데, 없는 키면 KeyError예요. 빈 리스트를 넣어 두면 그 읽기가 성공해요.",
+      },
+    ],
+  },
+  {
+    id: "8-A3", chapter: 8, isAdvanced: true, title: "성적표 요약",
+    goal: "이름별 점수로 평균과 1등을 구할 수 있다",
+    summary: [
+      "평균은 round(sum(v) / len(v), 1)",
+      "가장 높은 값은 > 로 비교해 갈아 끼움",
+      "묶어 담기, 세기, 비교를 한 프로그램에 모음",
+    ],
+    cards: [
+      {
+        say: "「한 걸음 더」 마지막 시간이에요. 이름별 점수 리스트에서 평균을 구해 볼게요. 합을 개수로 나누고 round로 소수 첫째 자리까지만 남겨요.",
+        code: `data = {"민지": [90, 75], "준": [88]}
+for k, v in data.items():
+    avg = round(sum(v) / len(v), 1)
+    print(k, avg)`,
+        out: "민지 82.5\n준 88.0",
+      },
+      {
+        say: "1등은 반복 안에서 if로 찾아요. 지금까지의 최고 평균보다 크면 갈아 끼워요. > 라서 같을 땐 먼저 나온 사람이 남아요.",
+        code: `data = {"민지": [90, 75], "준": [88]}
+best_name = ""
+best_avg = -1
+for k, v in data.items():
+    avg = round(sum(v) / len(v), 1)
+    if avg > best_avg:
+        best_avg = avg
+        best_name = k
+print("1등", best_name)`,
+        out: "1등 준",
+      },
+    ],
+    items: [
+      {
+        type: "choice", concept: "dictlist",
+        q: "화면에 무엇이 출력될까요?",
+        code: `v = [70, 85]
+print(round(sum(v) / len(v), 1))`,
+        options: ["77.5", "155", "78"],
+        answer: 0,
+        explain: "합 155를 개수 2로 나누면 77.5예요. round(…, 1)은 소수 첫째 자리까지 남기는데 이미 한 자리라 그대로예요.",
+      },
+      {
+        type: "choice", concept: "groupcount",
+        q: "화면에 무엇이 출력될까요?",
+        code: `counts = {}
+for s in [55, 70, 90, 40]:
+    if s >= 60:
+        k = "합격"
+    else:
+        k = "불합격"
+    counts[k] = counts.get(k, 0) + 1
+print(counts)`,
+        options: ["{'불합격': 2, '합격': 2}", "{'합격': 2, '불합격': 2}", "{'합격': 3, '불합격': 1}"],
+        answer: 0,
+        explain: "첫 점수 55가 불합격이라 불합격 키가 먼저 들어가요. 70과 90은 합격, 40은 불합격이라 둘씩이에요.",
+      },
+      {
+        type: "blank", concept: "dictlist",
+        q: "가장 높은 평균 88.0이 찍히게 빈칸을 채워 보세요.",
+        code: `best = -1
+for a in [82.5, 88.0, 79.0]:
+    if a ___ best:
+        best = a
+print(best)`,
+        chips: [">", "<", "=="],
+        answer: 0,
+        explain: "지금까지의 최고보다 클 때만 갈아 끼워요. <나 ==를 쓰면 한 번도 갈아 끼우지 못해 -1이 그대로 찍혀요. 0점도 이기도록 -1에서 시작해요.",
+      },
+      {
+        type: "order", concept: "dictlist",
+        q: "80.0이 찍히게 줄을 놓아 보세요.",
+        lines: ["v = [90, 80, 70]", "avg = sum(v) / len(v)", "print(round(avg, 1))"],
+        expect: "80.0",
+        explain: "점수 리스트를 만들고, 평균을 구하고, 반올림해 찍어요. 평균을 구하기 전에 쓰면 NameError예요.",
+      },
+      {
+        type: "choice", concept: "dictlist",
+        q: "화면에 무엇이 출력될까요?",
+        code: `avgs = {"가": 70.0, "나": 70.0}
+best = ""
+top = -1
+for k, a in avgs.items():
+    if a > top:
+        top = a
+        best = k
+print(best)`,
+        options: ["가", "나", "가 나"],
+        answer: 0,
+        explain: "가가 먼저 70.0으로 최고가 되고, 나는 같을 뿐 더 크지 않아서 갈아 끼우지 못해요. 같으면 먼저 나온 사람이 남아요.",
+      },
+      {
+        type: "write", concept: "dictlist",
+        task: "첫 줄 이름들, 둘째 줄 점수들(같은 순서)을 input()으로 받아(괄호는 비워 두세요) groups에 이름별로 append하세요. 처음 나온 순서로 「이름 평균」(sum·len·round, 소수 첫째 자리), 끝에 if로 「1등 이름」. 같으면 먼저 나온 사람. 예: 민지 준 민지 / 90 70 80 → 민지 85.0, 준 70.0, 1등 민지",
+        starter: "names = input().split()\nscores = input().split()\ngroups = {}\n",
+        tests: [
+          { stdin: "민지 준 민지\n90 70 80", expect: "민지 85.0\n준 70.0\n1등 민지", public: true },
+          { stdin: "준\n0", expect: "준 0.0\n1등 준", public: false },
+          { stdin: "가 나\n70 70", expect: "가 70.0\n나 70.0\n1등 가", public: false },
+          { stdin: "하나 둘 하나 하나\n90 50 75 82", expect: "하나 82.3\n둘 50.0\n1등 하나", public: false },
+        ],
+        require: ["For", "Dict", "If", "Method:append", "Call:round", "Call:sum", "Call:len", "Name:groups"],
+        hints: [
+          "이름별로 점수를 모아 평균을 낸 뒤, 평균이 가장 높은 사람을 마지막에 찍어요. 예시에서 민지의 평균은 왜 85.0일까요?",
+          "A2의 묶어 담기로 groups를 만들고, 반복 안에서 평균을 구해 찍으면서 지금까지의 최고와 비교해요.",
+          "최고 평균은 -1에서, 최고 이름은 빈 문자열에서 시작해요. 평균이 최고보다 크면 둘을 갈아 끼워요. 같을 땐 그대로 둬요.",
+          "(묶어 담기 뒤)\nbest_name = \"\"\nbest_avg = -1\nfor k, v in groups.items():\n    avg = round(sum(v) / len(v), 1)\n    print(k, avg)\n    if avg ___ best_avg:\n        best_avg = avg\n        best_name = ___\nprint(\"1등\", best_name)",
+        ],
+        solution: `names = input().split()
+scores = input().split()
+groups = {}
+for i in range(len(names)):
+    n = names[i]
+    if n not in groups:
+        groups[n] = []
+    groups[n].append(int(scores[i]))
+best_name = ""
+best_avg = -1
+for k, v in groups.items():
+    avg = round(sum(v) / len(v), 1)
+    print(k, avg)
+    if avg > best_avg:
+        best_avg = avg
+        best_name = k
+print("1등", best_name)`,
+        explain: "묶어 담기, 평균, 최고 찾기를 한 흐름으로 이었어요. 점수가 0점이어도 동점이어도 소수가 길게 나와도 모두 맞아요.",
+      },
+      {
+        type: "check", concept: "dictlist",
+        q: "최고 평균을 찾는 if에서 >= 대신 > 를 쓰면 동점일 때 누가 남을까요?",
+        options: ["먼저 나온 사람", "나중에 나온 사람", "둘 다"],
+        answer: 0,
+        explain: ">는 진짜 더 클 때만 갈아 끼워요. 동점이면 갈아 끼우지 않아서 먼저 나온 사람이 그대로 남아요.",
       },
     ],
   },

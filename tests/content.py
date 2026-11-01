@@ -220,8 +220,18 @@ INPUT_FROM_CHAPTER = 2  # input()은 2장부터
 #   DefaultArg   def f(x, end="!"): 기본값(숫자·문자열·True/False/None 상수만)
 #   Recursion    함수가 자기 자신을 부름
 #   LoopElse     for…else / while…else
+#   Reraise      except 안의 맨 raise(다시 던지기, v0.8). raise ValueError(…)는 본 과정 10장. raise … from …은 늘 금지
+#   CsvWriter    csv.writer(+ writerow·writerows, v0.8). 본 과정 11장은 csv.reader만(check_imports가 알림)
+#   RegexNamedGroup  re를 들여온 코드에서 글자 상수 안의 (?P<…>, m.group("이름")(글자 인자), .groupdict() (v0.8)
+#   RegexBackref     re를 들여온 코드에서 글자 상수 안의 \1~\9·\g<…>·(?P=…) — 바꿀 글·패턴 어디든 (v0.8)
+#                    패턴을 변수에 담아 넘겨도 잡도록 re.* 인자만이 아니라 그 코드의 모든 글자 상수를 본다
 # Match는 ast 마디. 쓸 수 있는 패턴: 글자·숫자·None/True/False 값, | 여러 값, _ 나머지(check_match).
-ADVANCED_ONLY = {"FormatSpec", "TripleQuote", "DivmodUnpack", "DefaultArg", "Recursion", "LoopElse", "Match"}
+# ListComp·Lambda도 ast 마디(v0.8): 본 과정에서는 어느 장에서도 금지라 「심화 전용」 안내가 나가게 여기 넣는다.
+#   ListComp  for 하나, if는 0~1개, 컴프리헨션 안에 컴프리헨션 없음(2차원은 [[0] * 3 for r in range(2)]).
+#             DictComp·SetComp·GeneratorExp(sum(x for …))는 가르치지 않아 심화에서도 늘 금지
+#   Lambda    함수에 넘기는 자리(sorted(…, key=lambda p: p[1]))에서만. 이름에 담기(f = lambda …)·return 금지
+ADVANCED_ONLY = {"FormatSpec", "TripleQuote", "DivmodUnpack", "DefaultArg", "Recursion", "LoopElse", "Match",
+                 "ListComp", "Lambda", "Reraise", "CsvWriter", "RegexNamedGroup", "RegexBackref"}
 ADVANCED_EXTRA = {
     # 1장 심화: 자릿수·정렬(f"{3.14159:.2f}", f"{'커피':>6}") — 변수는 아직이라 상수만. 여러 줄 문자열
     #           (f-문자열 자체는 v0.7.1부터 본 과정 1장에서 허용)
@@ -237,8 +247,22 @@ ADVANCED_EXTRA = {
     # 6장 심화: 새 문법 없음. center·ljust·rjust·zfill·count·title 등 메서드는 본 과정 6장부터(Attribute),
     #           채우기·정렬 서식(f"{s:*^9}")은 1장 심화의 FormatSpec으로 이미 열림
     6: {},
-    # 7장 이후(v0.8~): 컴프리헨션(7), lambda(9), 특수 메서드(15) 등을 여기에 더한다
+    # 7장 심화(v0.8): 리스트 컴프리헨션 [식 for x in a if 조건] (모양 제한은 ADVANCED_ONLY 주석)
+    7: {"allow": {"ListComp"}},
+    # 8장 심화: 새 문법 없음(묶음 세기·딕셔너리 안 리스트는 본 과정 8장 문법으로 씀)
+    8: {},
+    # 9장 심화: lambda(넘기는 자리에서만). 집합 ^·<=·discard는 본 과정 9장 문법(BinOp·Compare·메서드)
+    9: {"allow": {"Lambda"}},
+    # 10장 심화: 맨 raise로 다시 던지기(except 안). raise ValueError(f"…")는 본 과정 10장
+    10: {"allow": {"Reraise"}},
+    # 11장 심화: csv.writer(f) → writerow·writerows. 여러 파일 합치기는 본 과정 11장 문법
+    11: {"allow": {"CsvWriter"}},
+    # 12장 심화: 이름 붙인 묶음 (?P<이름>…)·m.group("이름")·groupdict(), 묶음 참조 \1·\g<이름>
+    12: {"allow": {"RegexNamedGroup", "RegexBackref"}},
+    # 13장 이후: 특수 메서드(15) 등을 여기에 더한다
 }
+# 모듈 이름 중 심화에서만 여는 것: "모듈.이름" → 가짜 문법 이름(ADVANCED_ONLY)
+ADVANCED_MEMBERS = {"csv.writer": "CsvWriter"}
 ADV_RUN_SECONDS = 1.0       # 심화 직접 작성: 정답이 시험마다 이 시간 안에 끝나야 함(앱 제한 3초의 여유)
 ADV_RECURSION_DEPTH = 100   # 심화 재귀 정답이 쓸 수 있는 깊이(Pyodide 스택 여유)
 
@@ -588,8 +612,12 @@ def check_code_shape(rep, where, code, chapter):
                        if isinstance(n, ast.For) and isinstance(n.target, ast.Tuple)}
     from_names = {}
     if "Import" not in forbid:
-        from_names = check_imports(rep, where, tree, chapter)
+        adv_members = []
+        from_names = check_imports(rep, where, tree, chapter, adv_members)
         calls = calls | set(from_names)
+        for kind, line in adv_members:
+            if kind in forbid:
+                forbidden(kind, line)
     for node in ast.walk(tree):
         kind = type(node).__name__
         if kind == "Tuple" and (id(node) in for_targets or id(node) in divmod_targets):
@@ -626,7 +654,29 @@ def _const_default(node):
 def advanced_features(tree, code):
     """심화 가짜 문법 찾기 → [(이름, 줄, 문제)]. 문제가 None이면 그 문법을 쓴 것, 아니면 허용돼도 틀린 쓰임."""
     found = []
+    comps = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+    lambda_args = {id(a) for n in ast.walk(tree) if isinstance(n, ast.Call)
+                   for a in list(n.args) + [k.value for k in n.keywords] if isinstance(a, ast.Lambda)}
+    in_except = {id(r) for h in ast.walk(tree) if isinstance(h, ast.ExceptHandler)
+                 for b in h.body for r in ast.walk(b) if isinstance(r, ast.Raise)}
     for node in ast.walk(tree):
+        if isinstance(node, ast.ListComp):
+            if len(node.generators) > 1:
+                found.append(("ListComp", node.lineno, "for는 하나만 씀(반복 안의 반복은 for 문 두 개로)"))
+            if any(len(g.ifs) > 1 for g in node.generators):
+                found.append(("ListComp", node.lineno, "if는 하나만 씀(조건 여러 개는 and로 묶음)"))
+            if any(isinstance(c, comps) for c in ast.walk(node) if c is not node):
+                found.append(("ListComp", node.lineno, "컴프리헨션 안에 컴프리헨션을 넣지 않음(바깥은 for 문으로)"))
+        if isinstance(node, ast.Lambda) and id(node) not in lambda_args:
+            found.append(("Lambda", node.lineno,
+                          "lambda는 함수에 넘기는 자리(key=lambda p: p[1])에서만 — 이름에 담을 함수는 def로"))
+        if isinstance(node, ast.Raise):
+            if node.exc is None:
+                found.append(("Reraise", node.lineno, None))
+                if id(node) not in in_except:
+                    found.append(("Reraise", node.lineno, "맨 raise는 except 안에서만(잡은 오류를 다시 던짐)"))
+            if node.cause is not None:
+                found.append(("Raise", node.lineno, "raise … from … 은 쓰지 않음"))
         if isinstance(node, ast.FormattedValue) and node.format_spec is not None:
             found.append(("FormatSpec", node.lineno, None))
             if any(isinstance(n, ast.FormattedValue) for n in ast.walk(node.format_spec)):
@@ -651,6 +701,35 @@ def advanced_features(tree, code):
                 found.append(("TripleQuote", tok.start[0], None))
     except (tokenize.TokenError, SyntaxError, IndentationError):
         pass
+    found.extend(regex_features(tree))
+    return found
+
+
+REGEX_NAMED = "(?P<"
+REGEX_BACKREF = re.compile(r"\\[1-9]|\\g<|\(\?P=")
+
+
+def regex_features(tree):
+    """re를 들여온 코드에서 12장 심화 정규식 문법 찾기 → [(이름, 줄, None)].
+    글자 상수 안의 (?P<…> → RegexNamedGroup, \\1~\\9·\\g<…>·(?P=…) → RegexBackref,
+    .group("이름")(글자 인자)·.groupdict() → RegexNamedGroup."""
+    uses_re = any((isinstance(n, ast.Import) and any(a.name == "re" for a in n.names))
+                  or (isinstance(n, ast.ImportFrom) and n.module == "re" and not n.level)
+                  for n in ast.walk(tree))
+    if not uses_re:
+        return []
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if REGEX_NAMED in node.value:
+                found.append(("RegexNamedGroup", node.lineno, None))
+            if REGEX_BACKREF.search(node.value):
+                found.append(("RegexBackref", node.lineno, None))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr == "groupdict" or (
+                    node.func.attr == "group"
+                    and any(isinstance(a, ast.Constant) and isinstance(a.value, str) for a in node.args)):
+                found.append(("RegexNamedGroup", node.lineno, None))
     return found
 
 
@@ -715,9 +794,14 @@ def _dotted(node):
     return parts[::-1]
 
 
-def check_imports(rep, where, tree, chapter):
+def check_imports(rep, where, tree, chapter, adv_members=None):
     """11장부터: import는 그 장까지 배운 모듈만, 모듈에서는 MODULE_MEMBERS에 있는 이름만.
-    open()의 모드, CALL_KWARGS의 키워드도 여기서 본다. from … import로 들여온 {이름: "모듈.이름"}을 돌려준다."""
+    open()의 모드, CALL_KWARGS의 키워드도 여기서 본다. from … import로 들여온 {이름: "모듈.이름"}을 돌려준다.
+    adv_members(목록)를 주면 ADVANCED_MEMBERS에 있는 이름을 쓴 곳을 (가짜 문법 이름, 줄)로 담는다."""
+    def note(qname, line):
+        if adv_members is not None and qname in ADVANCED_MEMBERS:
+            adv_members.append((ADVANCED_MEMBERS[qname], line))
+
     modules = MODULES_BY_CHAPTER.get(chapter, set())
     allowed = ", ".join(sorted(modules)) or "없음"
 
@@ -748,6 +832,7 @@ def check_imports(rep, where, tree, chapter):
                             % (mod, a.name, chapter, node.lineno, ", ".join(sorted(MODULE_MEMBERS.get(mod, ())))))
                 else:
                     from_names[a.asname or a.name] = mod + "." + a.name
+                    note(mod + "." + a.name, node.lineno)
 
     inner = {id(n.value) for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
     qual = {}   # id(속성 마디) → "모듈.이름"
@@ -767,6 +852,7 @@ def check_imports(rep, where, tree, chapter):
                     % (mod, parts[cut], chapter, node.lineno, ", ".join(sorted(MODULE_MEMBERS[mod]))))
         elif cut < len(parts):
             qual[id(node)] = mod + "." + parts[cut]
+            note(mod + "." + parts[cut], node.lineno)
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -982,12 +1068,14 @@ def uses_input(code):
 REQUIRE_PREFIXES = ("Call", "Name", "Method")
 # 판정 C44: ast 마디 이름이 아니지만 runner가 알아보는 조건(주석·elif·else)
 # 판정 C45: 심화용 재귀 호출·f-문자열 서식·세 따옴표 문자열
-REQUIRE_EXTRA = ("Comment", "Elif", "Else", "SelfCall", "FormatSpec", "TripleStr")
+# v0.8: 12장 심화 이름 붙인 묶음(글자 상수 안에 (?P<가 있음)
+# v0.8: 10장 심화 다시 던지기(except 안의 맨 raise)
+REQUIRE_EXTRA = ("Comment", "Elif", "Else", "SelfCall", "FormatSpec", "TripleStr", "NamedGroup", "Reraise")
 
 
 def check_require(rep, where, req):
     """require 항목: ast 마디 이름(예: "If", "Mult"), "Call:<이름>"·"Name:<이름>"·"Method:<이름>",
-    또는 REQUIRE_EXTRA("Comment"·"Elif"·"Else"·"SelfCall"·"FormatSpec"·"TripleStr")."""
+    또는 REQUIRE_EXTRA("Comment"·"Elif"·"Else"·"SelfCall"·"FormatSpec"·"TripleStr"·"NamedGroup"·"Reraise")."""
     for name in req:
         if isinstance(name, str) and ":" in name:
             kind, _, ident = name.partition(":")

@@ -464,10 +464,7 @@ except FileNotFoundError:
 with open("book.csv") as f:
     for row in csv.reader(f):
         print(row[0])
-with open("out.csv", "w", newline="") as f:
-    w = csv.writer(f)
-    w.writerow(["a", 1])
-print(text, first, rest, count)"""
+print(text, first, rest, count)"""   # csv.writer는 v0.8부터 11장 심화 전용(아래 v0.8 시험)
 
 
 def test_ch11_allowed():
@@ -1192,7 +1189,7 @@ def test_concepts_v07_advanced():
     for cid in ("fmtspec", "multiline", "floaterr", "divmod", "condsimple", "match", "defaultarg",
                 "recursion", "nestedloop", "loopelse", "strfmt", "strmore"):
         assert cid in adv, cid
-    assert all(1 <= ch <= 6 for ch in adv.values())
+    assert all(1 <= ch <= 12 for ch in adv.values())   # v0.8: 7~12장 심화 개념
     ids = [c["id"] for c in cs]
     assert len(ids) == len(set(ids))
 
@@ -1354,6 +1351,206 @@ def test_c49_summary_four_lines_only_when_updated():
     assert _summary_errors(["가", "나", "다"], "v0.7.1") == []
     assert _summary_errors(["가", "나", "다", "라", "마"], "v0.7.1") != []
     assert _summary_errors(["가", "나"], "v0.7.1") != []
+
+
+# ── v0.8 7~12장 심화(디딤돌 조사 3절): 심화 전용 문법과 본 과정 새는 곳 막기 ─────────────
+def adv_rule_errors(code, chapter):
+    return [e for e in adv_errors(code, chapter) if "넓음" not in e]
+
+
+V08_ADV_ONLY = {"ListComp", "Lambda", "Reraise", "CsvWriter", "RegexNamedGroup", "RegexBackref"}
+
+
+def test_v08_tables():
+    assert V08_ADV_ONLY <= content.ADVANCED_ONLY
+    opened = {7: {"ListComp"}, 9: {"Lambda"}, 10: {"Reraise"}, 11: {"CsvWriter"},
+              12: {"RegexNamedGroup", "RegexBackref"}}
+    for ch in range(1, 18):
+        for at, names in opened.items():
+            if ch >= at:
+                assert not (names & content.ADV_FORBID_BY_CHAPTER[ch]), (ch, names)
+            else:
+                assert names <= content.ADV_FORBID_BY_CHAPTER[ch], (ch, names)
+        # 사전·집합 컴프리헨션과 제너레이터 식은 어디서도 가르치지 않음
+        assert {"DictComp", "SetComp", "GeneratorExp"} <= content.ADV_FORBID_BY_CHAPTER[ch], ch
+        assert V08_ADV_ONLY <= content.MAIN_FORBID_BY_CHAPTER[ch], ch
+
+
+# 7장 심화: 리스트 컴프리헨션(for 하나, if는 0~1개, 컴프리헨션 안에 컴프리헨션 없음)
+LC7 = "nums = [3, 8, 1]\nbig = [n * 2 for n in nums if n > 2]\nprint(big)"
+
+
+def test_v08_listcomp_ok_in_adv7_and_later():
+    assert adv_errors(LC7, 7) == []
+    assert adv_errors(LC7, 12) == []
+    assert adv_errors('t = "1 2 3"\nprint([int(x) for x in t.split()])', 7) == []
+    assert adv_errors("grid = [[0] * 3 for r in range(2)]\nprint(grid[1][2])", 7) == []
+
+
+def test_v08_listcomp_forbidden_in_main_and_adv6():
+    for ch in (7, 17):
+        e = shape_errors(LC7, ch)
+        assert has(e, "ListComp") and has(e, "심화"), (ch, e)
+    assert has(adv_errors(LC7, 6), "ListComp")
+
+
+def test_v08_listcomp_shape_limits():
+    assert has(adv_errors("print([a * b for a in range(2) for b in range(3)])", 7), "for는 하나")
+    assert has(adv_errors("print([n for n in range(9) if n > 1 if n < 5])", 7), "if는 하나")
+    assert has(adv_errors("print([[c for c in range(2)] for r in range(2)])", 9), "컴프리헨션 안")
+    assert adv_rule_errors("print([n for n in range(9) if n > 1 and n < 5])", 7) == []
+
+
+def test_v08_other_comprehensions_forbidden_everywhere():
+    for code, kind in (("print({n: 1 for n in range(3)})", "DictComp"),
+                       ("print({n for n in range(3)})", "SetComp"),
+                       ("print(sum(n for n in range(3)))", "GeneratorExp")):
+        for ch in (7, 12, 17):
+            assert has(adv_errors(code, ch), kind), (code, ch)
+
+
+# 9장 심화: lambda는 함수에 넘기는 자리(key=lambda …)에서만
+LAMBDA9 = ('ps = [("민지", 90), ("리아", 80)]\n'
+           'ps = sorted(ps, key=lambda p: p[1])\n'
+           'print(ps[0][0])')
+
+
+def test_v08_lambda_ok_in_adv9_and_later():
+    assert adv_errors(LAMBDA9, 9) == []
+    assert adv_errors(LAMBDA9, 12) == []
+    assert adv_errors('w = ["bb", "a"]\nw.sort(key=lambda s: len(s))\nprint(w)', 9) == []
+
+
+def test_v08_lambda_forbidden_in_main_and_adv8():
+    for ch in (9, 15):
+        e = shape_errors(LAMBDA9, ch)
+        assert has(e, "Lambda") and has(e, "심화"), (ch, e)
+    assert has(adv_errors(LAMBDA9, 8), "Lambda")
+
+
+def test_v08_lambda_only_as_argument():
+    assert has(adv_errors("double = lambda x: x * 2\nprint(double(3))", 9), "넘기는 자리")
+    assert has(adv_errors("def k():\n    return lambda x: x\nprint(k()(1))", 9), "넘기는 자리")
+    assert has(adv_errors("print((lambda x: x)(1))", 12), "넘기는 자리")
+
+
+# 10장 심화: 맨 raise(except 안에서 다시 던지기). raise ValueError(…)는 본 과정 10장 그대로
+RERAISE10 = """def to_int(s):
+    try:
+        return int(s)
+    except ValueError:
+        print("숫자 아님:", s)
+        raise
+
+try:
+    to_int("a")
+except ValueError:
+    print("다시 잡음")"""
+
+
+def test_v08_reraise_ok_in_adv10_and_later():
+    assert adv_errors(RERAISE10, 10) == []
+    assert adv_errors(RERAISE10, 12) == []
+
+
+def test_v08_reraise_forbidden_in_main_and_adv9():
+    for ch in (10, 17):
+        e = shape_errors(RERAISE10, ch)
+        assert has(e, "Reraise") and has(e, "심화"), (ch, e)
+    assert has(adv_errors(RERAISE10, 9), "Reraise")
+    assert shape_errors(CH10_OK, 10) == []      # raise ValueError("…")는 본 과정 그대로
+
+
+def test_v08_raise_limits():
+    assert has(adv_errors("raise", 10), "except 안")
+    code = 'try:\n    int("a")\nexcept ValueError as e:\n    raise TypeError("숫자") from e'
+    assert has(adv_errors(code, 10), "from")
+    assert has(shape_errors(code, 10), "from")
+
+
+# 11장 심화: csv.writer(+ writerow·writerows). 본 과정 11장은 csv.reader만
+CSVW11 = ('import csv\n'
+          'with open("o", "w", newline="") as f:\n'
+          '    w = csv.writer(f)\n'
+          '    w.writerow(["리아", 90])\n'
+          '    w.writerows([["민지", 80]])')
+
+
+def test_v08_csv_writer_ok_in_adv11_and_later():
+    assert adv_errors(CSVW11, 11) == []
+    assert adv_errors(CSVW11, 12) == []
+    assert adv_errors('from csv import writer\nwith open("o.csv", "w") as f:\n    writer(f).writerow([1])', 11) == []
+
+
+def test_v08_csv_writer_forbidden_in_main_and_adv10():
+    for ch in (11, 14):
+        e = shape_errors(CSVW11, ch)
+        assert has(e, "CsvWriter") and has(e, "심화"), (ch, e)
+    assert has(shape_errors("from csv import writer\nprint(writer)", 11), "CsvWriter")
+    assert has(adv_errors(CSVW11, 10), "Import")
+    assert rule_errors('import csv\nwith open("b.csv") as f:\n    print(list(csv.reader(f)))', 11) == []
+
+
+# 12장 심화: 이름 붙인 묶음 (?P<…>)·m.group("이름")·groupdict(), 묶음 참조 \1·\g<…>
+NG12 = ('import re\n'
+        'm = re.search(r"(?P<h>\\d+)시", "9시")\n'
+        'if m:\n'
+        '    print(m.group("h"), m.groupdict())')
+BR12 = ('import re\n'
+        's = "2026-11"\n'
+        'print(re.sub(r"(\\d+)-(\\d+)", r"\\2/\\1", s))\n'
+        'print(re.sub(r"(?P<y>\\d+)", r"\\g<y>년", s))')
+
+
+def test_v08_regex_named_ok_in_adv12():
+    assert adv_errors(NG12, 12) == []
+    assert adv_rule_errors(BR12, 12) == []
+    assert adv_rule_errors(BR12, 17) == []
+
+
+def test_v08_regex_named_forbidden_in_main_and_adv11():
+    for ch in (12, 17):
+        e = shape_errors(NG12, ch)
+        assert has(e, "RegexNamedGroup") and has(e, "심화"), (ch, e)
+        assert has(shape_errors(BR12, ch), "RegexBackref"), ch
+    assert has(adv_errors(NG12, 11), "re")
+
+
+def test_v08_regex_named_each_form_in_main12():
+    head = 'import re\nm = re.search(r"(\\d+)", "12")\n'
+    assert has(shape_errors(head + 'print(m.group("n"))', 12), "RegexNamedGroup")
+    assert has(shape_errors(head + "print(m.groupdict())", 12), "RegexNamedGroup")
+    # 패턴을 변수에 담아 넘겨도 잡는다
+    assert has(shape_errors('import re\np = r"(?P<y>\\d{4})"\nprint(re.search(p, "2026"))', 12),
+               "RegexNamedGroup")
+    assert has(shape_errors('import re\nprint(re.sub(r"(\\w)", r"\\g<1>!", "ab"))', 12), "RegexBackref")
+    assert has(shape_errors('import re\nprint(re.search(r"(\\w)\\1", "aab"))', 12), "RegexBackref")
+    assert has(shape_errors('import re\nprint(re.search(r"(?P<a>\\w)(?P=a)", "aa"))', 12), "RegexBackref")
+    # 본 과정 12장 그대로: 번호 묶음 group(1), 보통 바꾸기
+    assert rule_errors(CH12_OK, 12) == []
+
+
+def test_v08_require_namedgroup_ok():
+    assert require_errors(["NamedGroup", "Method:group"]) == []
+    assert has(require_errors(["Namedgroup"]), "ast 마디 이름이 아님")
+
+
+def test_v08_require_reraise_ok():
+    assert require_errors(["Reraise", "Try"]) == []
+
+
+def test_concepts_v08_advanced():
+    path = content.CONCEPTS_FILE
+    cs = content.load_modules([path])[path]["CONCEPTS"]
+    adv = {c["id"]: c["chapter"] for c in cs if c.get("advanced") is True}
+    want = {7: ("listcomp", "list2d"), 8: ("groupcount", "dictlist"), 9: ("lambda", "setops"),
+            10: ("raisemsg", "reraise"), 11: ("filesmerge", "csvwrite"), 12: ("namedgroup", "backref")}
+    for ch, ids in want.items():
+        for cid in ids:
+            assert adv.get(cid) == ch, (cid, adv.get(cid))
+    ids = [c["id"] for c in cs]
+    assert len(ids) == len(set(ids))
+
 
 if __name__ == "__main__":
     tests =[(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]

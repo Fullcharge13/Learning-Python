@@ -77,3 +77,19 @@ test("missingMessage: SelfCall·FormatSpec·TripleStr (판정 C45)", () => {
   assert.equal(requireKo("FormatSpec"), "f-문자열 서식");
   assert.equal(requireKo("TripleStr"), "세 따옴표 문자열");
 });
+
+test("missingMessage: NamedGroup·ListComp·Lambda (v0.8 7~12장 심화)", () => {
+  assert.equal(missingMessage(["NamedGroup"]), "정답은 나왔지만 이번 문제는 패턴에 (?P<이름>…)으로 묶음에 이름을 붙여서 풀어야 해요.");
+  assert.equal(missingMessage(["ListComp"]), "정답은 나왔지만 이번 문제는 리스트 컴프리헨션을 써서 풀어야 해요.");
+  assert.equal(missingMessage(["Lambda"]), "정답은 나왔지만 이번 문제는 lambda를 써서 풀어야 해요.");
+  assert.equal(missingMessage(["If", "NamedGroup"]),
+    "정답은 나왔지만 이번 문제는 if 문을 써서, 패턴에 (?P<이름>…)으로 묶음에 이름을 붙여서 풀어야 해요.");
+  assert.equal(requireKo("NamedGroup"), "이름 붙인 묶음");
+});
+
+test("missingMessage: Reraise (v0.8 10장 심화)", () => {
+  assert.equal(missingMessage(["Reraise"]), "정답은 나왔지만 이번 문제는 except에서 받은 오류를 raise 한 단어로 다시 던져서 풀어야 해요.");
+  assert.equal(missingMessage(["Call:print", "Reraise"]),
+    "정답은 나왔지만 이번 문제는 print()를 써서, except에서 받은 오류를 raise 한 단어로 다시 던져서 풀어야 해요.");
+  assert.equal(requireKo("Reraise"), "다시 던지기 raise");
+});

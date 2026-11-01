@@ -109,4 +109,22 @@ export const CONCEPTS = [
   // 6장 심화
   { id: "strfmt", name: "서식 고급(채우기·정렬)", chapter: 6, advanced: true },
   { id: "strmore", name: "문자열 메서드 묶음", chapter: 6, advanced: true },
+  // 7장 심화(v0.8)
+  { id: "listcomp", name: "리스트 한 줄로 만들기", chapter: 7, advanced: true },
+  { id: "list2d", name: "2차원 리스트", chapter: 7, advanced: true },
+  // 8장 심화
+  { id: "groupcount", name: "기준별로 묶어 세기", chapter: 8, advanced: true },
+  { id: "dictlist", name: "딕셔너리 안 리스트", chapter: 8, advanced: true },
+  // 9장 심화
+  { id: "lambda", name: "lambda로 정렬 기준", chapter: 9, advanced: true },
+  { id: "setops", name: "집합 연산 응용", chapter: 9, advanced: true },
+  // 10장 심화
+  { id: "raisemsg", name: "내 오류 만들기", chapter: 10, advanced: true },
+  { id: "reraise", name: "오류 다시 던지기·finally", chapter: 10, advanced: true },
+  // 11장 심화
+  { id: "filesmerge", name: "여러 파일 합치기", chapter: 11, advanced: true },
+  { id: "csvwrite", name: "CSV 쓰기", chapter: 11, advanced: true },
+  // 12장 심화
+  { id: "namedgroup", name: "이름 붙인 묶음", chapter: 12, advanced: true },
+  { id: "backref", name: "묶음 참조로 바꾸기", chapter: 12, advanced: true },
 ];

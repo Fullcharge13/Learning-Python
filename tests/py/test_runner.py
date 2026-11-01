@@ -585,3 +585,36 @@ def test_require_triplestr():
 def test_require_c45_mixed_order():
     r = run("print(1)", [], ["TripleStr", "If", "SelfCall", "FormatSpec"])
     assert r["missing"] == ["TripleStr", "If", "SelfCall", "FormatSpec"]
+
+
+# ── v0.8: NamedGroup (12장 심화 이름 붙인 묶음) ──────────────────────────
+def test_require_namedgroup():
+    for code in ('import re\nm = re.search(r"(?P<h>\\d+)시", "9시")\nprint(m.group("h"))',
+                 'import re\np = "(?P<y>[0-9]+)"\nprint(re.search(p, "2026").group(1))'):
+        assert run(code, [], ["NamedGroup"])["missing"] == [], code
+    for code in ('import re\nm = re.search(r"(\\d+)시", "9시")\nprint(m.group(1))',
+                 'import re\n# (?P<h>…) 대신 번호로\nprint(re.findall(r"\\d+", "9시"))',
+                 'print("(?P")'):
+        assert run(code, [], ["NamedGroup"])["missing"] == ["NamedGroup"], code
+
+
+# ── v0.8: Reraise (10장 심화 다시 던지기) ───────────────────────────────
+def test_require_reraise():
+    ok = ('try:\n    try:\n        int("a")\n    except ValueError:\n        print("안")\n        raise\n'
+          'except ValueError as e:\n    print("밖", e)')
+    nested_if = ('def f(x):\n    try:\n        return int(x)\n    except ValueError:\n        if x == "":\n'
+                 '            raise\n        return 0\n\nprint(f("a"))')
+    for code in (ok, nested_if):
+        assert run(code, [], ["Reraise"])["missing"] == [], code
+    new_exc = ('try:\n    try:\n        int("a")\n    except ValueError as e:\n        raise ValueError(e)\n'
+               'except ValueError as e:\n    print("밖", e)')
+    outside = 'def f():\n    raise\n\nprint(1)'
+    finally_raise = 'try:\n    print(1)\nfinally:\n    pass\n# raise'
+    for code in (new_exc, outside, finally_raise, 'print("raise")'):
+        assert run(code, [], ["Reraise"])["missing"] == ["Reraise"], code
+
+
+def test_require_listcomp_lambda_are_plain_nodes():
+    code = 'ps = [("a", 2), ("b", 1)]\nps = sorted(ps, key=lambda p: p[1])\nprint([p[0] for p in ps])'
+    assert run(code, [], ["ListComp", "Lambda"])["missing"] == []
+    assert run("print(1)", [], ["ListComp", "Lambda", "NamedGroup", "Reraise"])["missing"] == ["ListComp", "Lambda", "NamedGroup", "Reraise"]

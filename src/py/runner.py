@@ -31,7 +31,7 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
 run(code, stdin, require, files=None, server=None) -> {
     "stdout": str, "stderr": str,
     "error": None | {"type": str, "line": int | None, "msg": str},
-    "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr)
+    "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr, NamedGroup·Reraise)
     "charts": [{"kind": "bar" | "line", "labels": [str], "values": [int | float],
                 "title"?: str, "xlabel"?: str, "ylabel"?: str}, ...],
 }
@@ -248,6 +248,10 @@ def _missing(tree, require, code=""):
     #   "FormatSpec"  — f-문자열 {…} 안에 :서식이 있음({x:>8}, {n:,}, {v:.2f}).
     #                   {x!r}만 있거나 {x:}처럼 비었거나 format()·.format()은 아님
     #   "TripleStr"   — 세 따옴표 문자열 리터럴(""" 또는 ''', f-문자열 포함, 주석 안은 아님)
+    # v0.8(12장 심화):
+    #   "NamedGroup"  — 글자 상수 안에 (?P< 가 있음(이름 붙인 묶음, 패턴을 변수에 담아도 됨, 주석 안은 아님)
+    # v0.8(10장 심화):
+    #   "Reraise"     — except 블록 안의 맨 raise(받은 오류를 그대로 다시 던짐). raise ValueError(e)·except 밖의 raise는 아님
     lines = code.splitlines()
     found = set()
     for node in ast.walk(tree):
@@ -266,6 +270,11 @@ def _missing(tree, require, code=""):
                 found.add("Else")
         elif isinstance(node, getattr(ast, "TryStar", ())) and node.orelse:
             found.add("Else")
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and "(?P<" in node.value:
+            found.add("NamedGroup")
+        if isinstance(node, ast.ExceptHandler) and any(
+                isinstance(r, ast.Raise) and r.exc is None for st in node.body for r in ast.walk(st)):
+            found.add("Reraise")
         if isinstance(node, ast.FormattedValue) and node.format_spec is not None:
             spec = node.format_spec
             if not (isinstance(spec, ast.JoinedStr) and not spec.values):

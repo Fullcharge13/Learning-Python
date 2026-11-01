@@ -298,7 +298,7 @@ export const LESSONS = [
     ],
   },
   {
-    id: "3-4", chapter: 3, title: "and·or로 조건 묶기",
+    id: "3-4", chapter: 3, title: "and·or로 조건 묶기", updated: "v0.7.1",
     goal: "and·or·not으로 여러 조건을 묶을 수 있다",
     summary: [
       "and: 둘 다 참일 때만 참",
@@ -315,6 +315,11 @@ export const LESSONS = [
         say: "not은 참과 거짓을 뒤집어요. 범위는 13 <= age < 19 처럼 한 번에 쓸 수 있어요. 수학 시간에 보던 모양 그대로라 반갑죠? 13 이상이면서 19 미만이라는 뜻이에요.",
         code: 'age = 15\nif 13 <= age < 19:\n    print("청소년")\nprint(not age > 20)',
         out: "청소년\nTrue",
+      },
+      {
+        say: "조건도 계산이라 결과가 True나 False 값이에요. 변수에 담아 두면 if 옆에 이름만 써도 돼요. 긴 조건에 이름표를 붙이는 셈이죠.",
+        code: "kor = 70\nmath = 55\nok = kor >= 60 and math >= 60\nprint(ok)\nif ok:\n    print(\"합격\")\nelse:\n    print(\"재시험\")",
+        out: "False\n재시험",
       },
     ],
     items: [
@@ -365,6 +370,14 @@ export const LESSONS = [
         lines: ["temp = 33", "if temp > 30 or temp < 0:", '    print("외출 주의")'],
         expect: "외출 주의",
         explain: "33도는 30도보다 높아서 or의 앞 조건이 참이에요. 둘 중 하나만 참이어도 실행돼요.",
+      },
+      {
+        type: "blank", concept: "logic",
+        q: "점수 둘 중 하나라도 60 이상이면 「통과」가 나오게 빈칸을 채워 보세요.",
+        code: "a = 80\nb = 50\nok = a >= 60 or b >= 60\nif ___:\n    print(\"통과\")\nelse:\n    print(\"탈락\")",
+        chips: ["ok", "not ok", "ok()"],
+        answer: 0,
+        explain: "ok에 이미 True가 담겨 있어서 이름만 써도 조건이 돼요. not ok는 뒤집혀 탈락이 되고, ok()는 값을 함수처럼 불러서 TypeError예요.",
       },
       {
         type: "write", concept: "logic",
@@ -526,7 +539,7 @@ export const ADVANCED = [
     ],
     cards: [
       {
-        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. if 안에 if를 겹치면 길어져요. 두 조건이 모두 필요하면 and로 묶어 한 줄로 줄일 수 있어요.",
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 3-4에서 본 and 기억하죠? if 안에 if를 겹치면 길어지니, and로 묶어 한 줄로 줄여 봐요.",
         code: 'age = 15\nif age >= 13:\n    if age < 19:\n        print("청소년")\n\nif age >= 13 and age < 19:\n    print("청소년")',
         out: "청소년\n청소년",
       },

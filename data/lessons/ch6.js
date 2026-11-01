@@ -182,7 +182,7 @@ export const LESSONS = [
     ],
   },
   {
-    id: "6-3", chapter: 6, title: "문자열 메서드",
+    id: "6-3", chapter: 6, title: "문자열 메서드", updated: "v0.7.1",
     goal: "메서드로 문자열을 다듬을 수 있다",
     summary: [
       "변수.메서드()꼴로 문자열에 일을 시킴",
@@ -199,6 +199,11 @@ export const LESSONS = [
         say: "중요! 메서드는 원본을 고치지 않고 새 문자열을 돌려줘요. 바뀐 값은 변수에 다시 담아요. replace(옛것, 새것)는 바꿔치기, menu[0].upper()처럼 글자 하나에도 붙여요.",
         code: 'menu = "ice latte"\nmenu.upper()\nprint(menu)\nmenu = menu.replace("ice", "hot")\nprint(menu)\nprint(menu[0].upper())',
         out: "ice latte\nhot latte\nH",
+      },
+      {
+        say: "zfill(3)은 앞을 0으로 채워 3칸을 만들어요. center(6, \"*\")는 6칸 가운데에 놓고 빈 곳을 *로 채워요. 번호표나 제목 줄 모양을 맞출 때 좋아요.",
+        code: "no = \"7\"\nprint(no.zfill(3))\nprint(\"42\".zfill(5))\nprint(\"hi\".center(6, \"*\"))",
+        out: "007\n00042\n**hi**",
       },
     ],
     items: [
@@ -248,6 +253,14 @@ export const LESSONS = [
         options: ["2", "6", "4"],
         answer: 0,
         explain: "strip()으로 공백 네 칸을 지운 hi는 두 글자예요. 안쪽 메서드가 먼저 실행돼서 len은 2를 세요.",
+      },
+      {
+        type: "blank", concept: "strmethod",
+        q: "「**hi**」가 나오게 빈칸을 채워 보세요.",
+        code: "print(\"hi\".___(6, \"*\"))",
+        chips: ["center", "zfill", "strip"],
+        answer: 0,
+        explain: "center(6, \"*\")는 여섯 칸 가운데에 hi를 놓고 양쪽을 *로 채워요. zfill과 strip은 값을 두 개 받지 않아 단서(TypeError)가 나요.",
       },
       {
         type: "write", concept: "strmethod",
@@ -476,7 +489,7 @@ export const ADVANCED = [
     ],
     cards: [
       {
-        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. 서식 칸에 채울 글자와 방향, 폭을 쓰면 줄이 맞아요. <는 왼쪽, >는 오른쪽, ^는 가운데예요.",
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. 서식 칸에 채울 글자와 방향, 폭을 쓰면 줄이 맞아요. <는 왼쪽, >는 오른쪽, ^는 가운데예요. 6-3의 zfill·center와 이어져요.",
         code: 'name = "tea"\nprint(f"[{name:*<7}]")\nprint(f"[{name:*>7}]")\nprint(f"[{name:*^7}]")',
         out: "[tea****]\n[****tea]\n[**tea**]",
       },

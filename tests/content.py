@@ -12,9 +12,10 @@
 
 레슨 파일 형식 (data/lessons/chN.js)
     export const CHAPTER = { id: N, title: "…" };
-    export const LESSONS = [ { id: "N-1", chapter: N, title, goal, summary: [3줄], isExam?,
+    export const LESSONS = [ { id: "N-1", chapter: N, title, goal, summary: [3줄], isExam?, updated?("v0.7.1"),
                                cards: [{ say, code, out }], items: [...] }, ... ];
     items = 터치 문제(choice/blank/order) 4~6개(장 평가는 4~8개) → write 1개 → check 1개, 이 순서.
+    cards는 1~2장. 보강 레슨(updated 있음, 판정 C48)은 카드 1~3장·터치 문제 4~7개(평가는 그대로 4~8개).
     export const ADVANCED = [ { id: "N-A1", chapter: N, isAdvanced: true, … }, N-A2, N-A3 ];  (선택, v0.7)
     심화 레슨은 본 과정 레슨과 모양이 같고(isExam 없음) 규칙은 N장 + ADVANCED_EXTRA[1..N](심화끼리 누적).
 아래 ITEM_KEYS가 문제 형태별로 허용하는 칸이다(오타를 잡으려고 모르는 칸은 오류).
@@ -60,7 +61,9 @@ EXPLAIN_MAX = 160     # 해설
 TASK_MAX = 200        # 직접 작성 과제 설명
 HINT_MAX = 120
 
-LESSON_KEYS = {"id", "chapter", "title", "goal", "summary", "isExam", "isAdvanced", "cards", "items"}
+LESSON_KEYS = {"id", "chapter", "title", "goal", "summary", "isExam", "isAdvanced", "cards", "items", "updated"}
+# v0.7.1: 보강한 레슨에 updated: "v0.7.1"(판 이름). 이미 끝낸 학습자의 학습 길에 「새 내용」 점이 뜬다
+UPDATED_RE = re.compile(r"v\d+\.\d+(\.\d+)?")
 CARD_KEYS = {"say", "code", "out"}
 ENV_KEYS = {"files", "server"}   # v0.4 가상 파일·연습 서버
 CARD_OPT = {"stdin", "chart", "show_only"} | ENV_KEYS
@@ -111,26 +114,31 @@ TOUCH = {"choice", "blank", "order"}
 # FORBID_ALL: 장 표에 없는 장의 기본값(가장 엄격). 반복문·함수 정의·import·목록/사전·예외 처리 등.
 # "ForNonRange"는 ast 마디가 아닌 가짜 이름: range(…)가 아닌 것(문자열, split() 결과)을 for로 도는 것.
 # "ForTupleTarget"도 가짜 이름: for의 대상 자리에서만 튜플로 풀기(for k, v in d.items():). 튜플 일반은 9장.
+# "PrintEnd"도 가짜 이름: print(…, end="…"). 5장부터(v0.7.1). print의 다른 이름 붙은 인자(sep 등)는 언제나 금지.
 FORBID_ALL = {
     "For", "While", "FunctionDef", "AsyncFunctionDef", "Lambda", "ClassDef", "Import", "ImportFrom",
     "List", "Dict", "Set", "Tuple", "ListComp", "DictComp", "SetComp", "GeneratorExp",
     "Try", "With", "Return", "Yield", "Global", "Nonlocal", "Delete", "Assert", "Raise", "Match",
-    "ForNonRange", "Slice", "ForTupleTarget",
+    "ForNonRange", "Slice", "ForTupleTarget", "PrintEnd",
 }
 # 장마다 새로 허용하는 것만 적는다. 뒤 장은 앞 장이 허용한 것을 모두 허용한다(누적).
 #   allow: 금지에서 빼는 문법, calls: 새로 부를 수 있는 내장 함수, names: None이면 이름 제한 해제
 CHAPTER_RULES = {
-    # 1장: 변수·조건·비교 없음. 이름은 print 하나만, f-문자열·메서드·인덱싱 없음.
+    # 1장: 변수·조건·비교 없음. 이름은 print 하나만, 메서드·인덱싱 없음.
+    #      f-문자열은 1장부터(v0.7.1, 1-2 보강): f"{3 * 4}개"처럼 {} 안에 값·계산만. 서식 지정자(:.2f)는 심화 전용
     1: {"forbid": FORBID_ALL | {"Assign", "AugAssign", "AnnAssign", "NamedExpr", "If", "IfExp", "Compare",
-                                "BoolOp", "JoinedStr", "Attribute", "Subscript"},
+                                "BoolOp", "Attribute", "Subscript"},
         "names": {"print"}, "calls": {"print"}},
     # 2장: 변수·표현식·입력. (v0.2: Attribute·Subscript는 6장으로 옮김 — 인덱스·메서드는 6장에서 처음 배움)
-    2: {"allow": {"Assign", "AugAssign", "AnnAssign", "NamedExpr", "Compare", "BoolOp", "JoinedStr"},
+    #      round(x)·round(x, n)은 2장부터(2-2 보강)
+    2: {"allow": {"Assign", "AugAssign", "AnnAssign", "NamedExpr", "Compare", "BoolOp"},
         "names": None, "calls": {"input", "int", "float", "str", "bool", "type", "round"}},
     3: {"allow": {"If", "IfExp"}, "calls": {"len", "abs", "max", "min"}},
+    # 4장: 내 함수 정의·부르기. 부를 때 이름 붙여 넘기기 f(won=5000)도 됨(4-3). 기본값 매개변수는 심화 전용
     4: {"allow": {"FunctionDef", "Return"}, "calls": {"len", "max", "min", "abs", "round"}},
-    5: {"allow": {"For", "While"}, "calls": {"range"}},          # for는 range(…)만 돈다
-    # 6장: 인덱스·슬라이싱·문자열 메서드(s.upper() 등), 문자열·split() 결과를 for로 돌기
+    # 5장: for는 range(…)만 돈다. 반복 안의 반복, print(…, end=" ")(5-2 보강)
+    5: {"allow": {"For", "While", "PrintEnd"}, "calls": {"range"}},
+    # 6장: 인덱스·슬라이싱·문자열 메서드(s.upper(), zfill·center·ljust·rjust 등), 문자열·split() 결과를 for로 돌기
     6: {"allow": {"Attribute", "Subscript", "Slice", "ForNonRange"}, "calls": {"len"}},
     # 7장: 리스트 리터럴, 메서드(append·remove·pop·sort·index·insert — 메서드는 6장부터 Attribute로 허용),
     #      cart[0] = … 로 바꾸기(Subscript는 6장부터). 컴프리헨션은 계속 금지.
@@ -216,7 +224,8 @@ INPUT_FROM_CHAPTER = 2  # input()은 2장부터
 ADVANCED_ONLY = {"FormatSpec", "TripleQuote", "DivmodUnpack", "DefaultArg", "Recursion", "LoopElse", "Match"}
 ADVANCED_EXTRA = {
     # 1장 심화: 자릿수·정렬(f"{3.14159:.2f}", f"{'커피':>6}") — 변수는 아직이라 상수만. 여러 줄 문자열
-    1: {"allow": {"JoinedStr", "FormatSpec", "TripleQuote"}},
+    #           (f-문자열 자체는 v0.7.1부터 본 과정 1장에서 허용)
+    1: {"allow": {"FormatSpec", "TripleQuote"}},
     # 2장 심화: round(2장부터 있음)로 실수 오차 다루기, divmod와 그 결과 풀기
     2: {"allow": {"DivmodUnpack"}, "calls": {"divmod"}},
     # 3장 심화: match(값 패턴만). 조건 묶기(and·or, 3 < x < 7, … if … else …)는 본 과정 3장부터 허용됨
@@ -596,6 +605,14 @@ def check_code_shape(rep, where, code, chapter):
             rep.err(where, "%s에서 쓸 수 없는 이름 %r(변수는 2장부터)" % (where_ch, node.id))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id not in calls:
             rep.err(where, "%s에서 아직 배우지 않은 함수 %s()" % (where_ch, node.func.id))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "print":
+            for kw in node.keywords:
+                if kw.arg == "end":
+                    if "PrintEnd" in forbid:
+                        forbidden("PrintEnd", node.lineno)
+                else:
+                    rep.err(where, "print에는 end= 말고 이름 붙은 인자(%s)를 쓰지 않음(%s줄)"
+                            % ("**" if kw.arg is None else kw.arg + "=", node.lineno))
 
 
 def _const_default(node):
@@ -1155,6 +1172,10 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
             rep.err("isAdvanced", "본 과정 레슨(LESSONS)에는 isAdvanced를 두지 않음 — 심화는 ADVANCED 목록에")
         if bool(lesson.get("isExam")) != exam or ("isExam" in lesson and not isinstance(lesson["isExam"], bool)):
             rep.err("isExam", "장의 마지막 레슨(%d-%d)만 true" % (chapter, LESSONS_PER_CHAPTER))
+    if "updated" in lesson:
+        u = lesson["updated"]
+        if not isinstance(u, str) or not UPDATED_RE.fullmatch(u):
+            rep.err("updated", "%r — \"v0.7.1\"처럼 보강한 판 이름 글자여야 함" % (u,))
     check_text(rep, "title", lesson.get("title"), TITLE_MAX)
     check_text(rep, "goal", lesson.get("goal"), GOAL_MAX)
     summ = lesson.get("summary")
@@ -1164,9 +1185,12 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
         for i, s in enumerate(summ):
             check_text(rep, "summary[%d]" % i, s, SUMMARY_MAX, need_hangul=False)
 
+    # 판정 C48(v0.7.1): 보강한 레슨(updated 있음)은 기존 카드·문제를 지우지 않고 더하므로 한 칸씩 더 둔다
+    boosted = "updated" in lesson
+    card_hi = 3 if boosted else 2
     cards = lesson.get("cards")
-    if not isinstance(cards, list) or not (1 <= len(cards) <= 2):
-        rep.err("cards", "개념 카드는 1~2장")
+    if not isinstance(cards, list) or not (1 <= len(cards) <= card_hi):
+        rep.err("cards", "개념 카드는 1~%d장%s" % (card_hi, "(보강 레슨)" if boosted else ""))
         cards = cards if isinstance(cards, list) else []
     for i, c in enumerate(cards):
         w = "cards[%d]" % i
@@ -1195,7 +1219,7 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
         rep.err("items", "목록이 아님")
         return
     kinds = [i.get("type") if isinstance(i, dict) else None for i in items]  # 객체가 아닌 문제는 None
-    touch_hi = 8 if exam else 6
+    touch_hi = 8 if exam else (7 if boosted else 6)
     n_touch = len(items) - 2
     if (kinds.count("write") != 1 or kinds.count("check") != 1 or kinds[-2:] != ["write", "check"]
             or any(k not in TOUCH for k in kinds[:-2])):

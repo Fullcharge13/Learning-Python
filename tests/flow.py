@@ -996,6 +996,106 @@ def test_advanced_branch():
         assert not a.errors, a.errors
 
 
+# ---------------------------------------------------------------- 「새 내용」 점 (v0.7.1 작업 1)
+
+_upd_env = {}
+
+
+def upd_url():
+    """1-2에 updated: "v0.7.1"을 단 빌드를 따로 띄운다(실제 보강 내용이 없어도 점·기록을 시험)."""
+    if _upd_env:
+        return _upd_env["url"]
+    env()
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fixtures.advanced_dir import make
+    lessons = make(os.path.join(ROOT, "data", "lessons"), os.path.join(OUT, "lessons-upd"), chapters=(),
+                   updated={"1-2": "v0.7.1"})
+    dist = os.path.join(OUT, "dist-upd")
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "build.py"), "--dev-pyodide", "--out", dist, "--lessons-dir", lessons],
+                       cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, "build.py (updated fixture) failed:\n" + r.stdout + r.stderr
+    httpd = _Server(("127.0.0.1", 0), functools.partial(_Handler, directory=dist))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    atexit.register(httpd.shutdown)
+    _upd_env["url"] = "http://127.0.0.1:%d/" % httpd.server_address[1]
+    return _upd_env["url"]
+
+
+def _dots(a):
+    return a.js("() => [...document.querySelectorAll('.screen.home .new-dot')].map((d) => d.dataset.for)")
+
+
+def test_new_content_dot():
+    url = upd_url()
+    done = ["1-1", "1-2"]
+    seed = {"saveVer": 2, "xp": 40, "bytes": 30, "completed_lessons": done, "current_lesson": "1-3", "current_chapter": 1,
+            "grading_results": {k: {"perfect": True, "attempts": 1} for k in done}}
+    with App("iPhone 17", save=seed, url=url) as a:
+        a.start()
+        assert _dots(a) == ["1-2"], _dots(a)
+        dot = a.page.query_selector('.new-dot[data-for="1-2"]')
+        assert dot.get_attribute("aria-label") == "새 내용 있음" and dot.get_attribute("role") == "img"
+        assert "새 내용 있음" in a.page.get_attribute('.node[data-lesson="1-2"]', "aria-label")
+        assert "새 내용" not in (a.page.get_attribute('.node[data-lesson="1-1"]', "aria-label") or "")
+        a.js("() => document.querySelector('.node[data-lesson=\"1-2\"]').scrollIntoView({ block: 'center' })")
+        a.page.wait_for_timeout(200)
+        # 점이 노드 누르기를 가리지 않음: 노드 가운데·점 자리를 누르면 노드가 받는다, 노드 크기 그대로
+        box = a.page.query_selector('.node[data-lesson="1-2"]').bounding_box()
+        assert round(box["width"]) == 68 and round(box["height"]) == 68, box
+        hit = a.js("([x, y]) => document.elementFromPoint(x, y)?.closest('.node')?.dataset.lesson || null",
+                   [box["x"] + box["width"] / 2, box["y"] + box["height"] / 2])
+        assert hit == "1-2", hit
+        db = dot.bounding_box()
+        under = a.js("([x, y]) => document.elementFromPoint(x, y)?.closest('.new-dot') ? 'dot' : 'other'",
+                     [db["x"] + db["width"] / 2, db["y"] + db["height"] / 2])
+        assert under == "other", "dot must not take taps (pointer-events: none)"
+        a.shot("v071-new-dot-home.png")
+        m = measure(a, "home-new-dot")
+        assert not m["problems"] and not m["small"], m
+        # 설정 학습 내용: 1장을 펼치면 1-2 줄에 점
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        a.page.click('.ch-row[aria-controls="ch-1"]')
+        a.page.wait_for_selector("#ch-1:not([hidden])")
+        rows = a.page.eval_on_selector_all("#ch-1 .ls", "es => es.map(e => !!e.querySelector('.new-dot'))")
+        assert rows[:3] == [False, True, False], rows
+        a.js("() => document.querySelector('#ch-1 .new-dot').scrollIntoView({ block: 'center' })")
+        a.page.wait_for_timeout(150)
+        a.shot("v071-new-dot-settings.png")
+        m = measure(a, "settings-new-dot")
+        assert not m["problems"] and not m["small"], m
+        # 다시 하기 → 끝까지 → 점 사라짐, 완료 화면은 평소 다시 하기와 같음
+        a.page.click('[data-go="home"]')
+        a.page.wait_for_selector(".screen.home")
+        a.page.click('[data-lesson="1-2"]')
+        a.page.wait_for_selector(".modal .btn.primary")
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".screen.lesson")
+        a.play("1-2")
+        r = a.result()
+        s = a.save()
+        assert r["xp"] == 10 and r["lessonBytes"] == 0 and not r["firstTime"], r
+        assert s["seen_updates"] == {"1-2": "v0.7.1"}, s.get("seen_updates")
+        assert s["completed_lessons"] == done and s["saveVer"] == 2, s
+        text = a.page.inner_text(".screen.done")
+        assert "다시 하기라서" in text and "새 내용" not in text, text
+        a.dismiss()
+        a.page.click("#home")
+        a.page.wait_for_selector(".screen.home")
+        a.dismiss()
+        assert _dots(a) == [], _dots(a)
+        assert "새 내용" not in a.page.get_attribute('.node[data-lesson="1-2"]', "aria-label")
+        a.js("() => document.querySelector('.node[data-lesson=\"1-2\"]').scrollIntoView({ block: 'center' })")
+        a.page.wait_for_timeout(200)
+        a.shot("v071-new-dot-after-replay.png")
+        # 새로 불러도 그대로(저장됨)
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.start()
+        assert _dots(a) == [], _dots(a)
+        assert not a.errors, a.errors
+
+
 def main():
     only = sys.argv[1:]
     tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f) and (not only or n in only)]

@@ -101,7 +101,7 @@ export const LESSONS = [
     ],
   },
   {
-    id: "2-2", chapter: 2, title: "값의 종류, 자료형",
+    id: "2-2", chapter: 2, title: "값의 종류, 자료형", updated: "v0.7.1",
     goal: "int·float·str을 구별하고 type()으로 확인할 수 있다",
     summary: [
       "정수는 int, 소수는 float, 문자열은 str",
@@ -118,6 +118,11 @@ export const LESSONS = [
         say: "/ 로 나누면 7 / 2 는 3.5, 나누어떨어지는 8 / 2 도 4.0이에요. / 의 결과는 언제나 float거든요. 정수가 필요하면 1장의 // 를 쓰면 돼요.",
         code: "print(7 / 2)\nprint(8 / 2)\nprint(type(8 / 2))",
         out: "3.5\n4.0\n<class 'float'>",
+      },
+      {
+        say: "10 / 3 처럼 소수가 길게 늘어질 때가 있어요. round(값)은 가장 가까운 정수로, round(값, 2)는 소수 둘째 자리까지 다듬어 줘요.",
+        code: "print(10 / 3)\nprint(round(10 / 3))\nprint(round(10 / 3, 2))",
+        out: "3.3333333333333335\n3\n3.33",
       },
     ],
     items: [
@@ -166,6 +171,14 @@ export const LESSONS = [
         lines: ["print(type(5))", "print(type(5 / 1))", 'print(type("5"))'],
         expect: "<class 'int'>\n<class 'float'>\n<class 'str'>",
         explain: "5는 int, 5 / 1 은 / 로 나눴으니 float, \"5\"는 따옴표가 있어 str이에요. 같은 5라도 쓰는 법에 따라 종류가 달라요.",
+      },
+      {
+        type: "choice", concept: "expr",
+        q: "화면에 무엇이 출력될까요?",
+        code: "print(round(2 / 3, 2))",
+        options: ["0.67", "0.66", "0.6666666666666666"],
+        answer: 0,
+        explain: "2 / 3 은 0.666…으로 길어요. round(값, 2)는 소수 둘째 자리까지 남기는데, 셋째 자리가 6이라 올려서 0.67이에요.",
       },
       {
         type: "write", concept: "type",
@@ -528,7 +541,7 @@ export const ADVANCED = [
     ],
     cards: [
       {
-        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. 0.1 + 0.2 는 0.3일 것 같죠? 컴퓨터는 소수를 2진법으로 저장해서 0.1을 정확히 못 담고 아주 가까운 값을 담아요. 버그가 아니라 원래 그래요.",
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 2-2에서 본 round, 기억하죠? 0.1 + 0.2 는 0.3일 것 같지만 컴퓨터는 0.1을 정확히 못 담고 아주 가까운 값을 담아요. 버그가 아니에요.",
         code: "print(0.1 + 0.2)\nprint(0.7 + 0.1)",
         out: "0.30000000000000004\n0.7999999999999999",
       },

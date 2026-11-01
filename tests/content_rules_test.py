@@ -46,12 +46,14 @@ OLD_CALLS = {
 # v0.2의 의도된 변경(감독 판정): 인덱스·슬라이싱·메서드는 6장에서 처음 배우므로
 # 2~3장에서도 Attribute·Subscript를 금지한다. 그 밖의 1~3장 표는 v0.1과 똑같다.
 V02_MOVED_TO_CH6 = {"Attribute", "Subscript"}
+# v0.7.1의 의도된 변경(기초 보강 설계 2절): f-문자열은 1장(1-2)부터 본 과정에서 허용
+V071_ALLOWED_IN_CH1 = {"JoinedStr"}
 
 
 def test_ch1_3_tables_unchanged():
     for ch in (1, 2, 3):
         real = {k for k in content.FORBID_BY_CHAPTER[ch] if k in OLD_FORBID_ALL or k in OLD_FORBID[1]}
-        assert real == OLD_FORBID[ch] | V02_MOVED_TO_CH6, ch
+        assert real == (OLD_FORBID[ch] | V02_MOVED_TO_CH6) - V071_ALLOWED_IN_CH1, ch
         assert content.NAMES_BY_CHAPTER[ch] == OLD_NAMES[ch], ch
         assert content.CALLS_BY_CHAPTER[ch] == OLD_CALLS[ch], ch
 
@@ -904,8 +906,9 @@ def test_adv1_allowed():
     assert adv_errors(CH1A_OK, 1) == []
 
 
-def test_adv1_fstring_forbidden_in_main_1_and_spec_in_main_2():
-    assert has(shape_errors('print(f"{3.14159:.2f}")', 1), "JoinedStr")
+def test_adv1_spec_forbidden_in_main_1_and_main_2():
+    e1 = shape_errors('print(f"{3.14159:.2f}")', 1)
+    assert has(e1, "FormatSpec") and not has(e1, "JoinedStr")
     e = shape_errors('x = 3.14159\nprint(f"{x:.2f}")', 2)
     assert has(e, "FormatSpec") and has(e, "심화")
     assert has(shape_errors('w = 7\nprint(f"{w:>8}")', 17), "FormatSpec")
@@ -1219,14 +1222,121 @@ def test_adv_main_reads_advanced_from_chapter_file():
             code_ok = content.main(["--advanced", "1"])
         assert code_ok == 0, out.getvalue()[-800:]
         assert "1-A3" in out.getvalue() and "심화: 레슨 3개" in out.getvalue()
-        # 같은 코드를 1장 본 과정에 두면 오류(JoinedStr·FormatSpec)
-        assert has(shape_errors(code, 1), "JoinedStr") and has(shape_errors(code, 1), "FormatSpec")
+        # 같은 코드를 1장 본 과정에 두면 오류(FormatSpec — f-문자열 자체는 v0.7.1부터 1장 본 과정에서 허용)
+        assert has(shape_errors(code, 1), "FormatSpec")
     finally:
         content.LESSON_DIR = old
 
 
+# ── v0.7.1 기초 보강(설계 2절): 심화의 디딤돌을 본 과정 그 장부터 허용 ─────────────
+def test_v071_fstring_plain_ok_in_ch1_main():
+    assert shape_errors('print(f"{3 * 4}개")', 1) == []
+    assert shape_errors('print(f"합계 {1000 + 500}원")', 1) == []
+
+
+def test_v071_fstring_spec_still_advanced_only_in_main():
+    for code in ('print(f"{3.14159:.2f}")', 'print(f"{4500:,}")', "print(f\"{'커피':>6}\")"):
+        e = shape_errors(code, 1)
+        assert has(e, "FormatSpec") and has(e, "심화"), (code, e)
+    assert has(shape_errors('x = 5\nprint(f"{x:>3}")', 6), "FormatSpec")
+
+
+def test_v071_fstring_ch1_still_no_variables():
+    assert has(shape_errors('x = 3\nprint(f"{x}")', 1), "Assign")
+
+
+def test_v071_round_gated_at_ch2():
+    assert has(shape_errors("print(round(3.14159, 2))", 1), "round()")
+    assert shape_errors("x = 0.1 + 0.2\nprint(x, round(x, 1))\nprint(round(2.5))", 2) == []
+
+
+def test_v071_keyword_args_to_own_function_ch4():
+    code = "def price(won, n):\n    return won * n\n\nprint(price(won=5000, n=2))\nprint(price(3000, n=1))"
+    assert shape_errors(code, 4) == []
+
+
+def test_v071_default_params_still_advanced_only():
+    e = shape_errors('def price(won, n=1):\n    return won * n\nprint(price(5000))', 4)
+    assert has(e, "DefaultArg") and has(e, "심화")
+
+
+def test_v071_print_end_gated_at_ch5():
+    for ch in (1, 2, 3, 4):
+        e = shape_errors('print("가", end=" ")\nprint("나")', ch)
+        assert has(e, "PrintEnd"), (ch, e)
+    assert shape_errors('for i in range(3):\n    print(i, end=" ")\nprint()', 5) == []
+    assert shape_errors('for r in range(2):\n    for c in range(3):\n        print("*", end="")\n    print()', 5) == []
+    assert shape_errors('print("가", end="")', 12) == []
+
+
+def test_v071_print_other_keywords_rejected():
+    e = shape_errors('print("a", "b", sep="-")', 5)
+    assert has(e, "sep"), e
+    assert has(shape_errors('print("a", flush=True)', 12), "flush")
+
+
+def test_v071_print_end_ok_in_advanced_from_ch5_only():
+    assert adv_errors('for i in range(3):\n    print(i, end=" ")\nelse:\n    print()', 5) == []
+    assert has(adv_errors('print("가", end="")', 4), "PrintEnd")
+
+
+def test_v071_shape_methods_gated_at_ch6():
+    code = 's = "7"\nprint(s.zfill(3))\nprint("리아".center(8, "*"))\nprint("a".ljust(3), "b".rjust(3))'
+    assert has(shape_errors(code, 5), "Attribute")
+    assert shape_errors(code, 6) == []
+    assert shape_errors('print("12".zfill(5))', 6) == []
+
+
+# ── v0.7.1 레슨 칸 updated(「새 내용」 점): "v0.7.1"처럼 판 이름 글자 ───────────
+def _updated_errors(value, adv=False):
+    lesson = _lesson("1-A2" if adv else "1-2", 1, 'print("a")', "a", "print", [], adv=adv)
+    lesson["updated"] = value
+    rep = Lesson("1-2")
+    content.check_lesson(rep, lesson, content.AdvancedChapter(1) if adv else 1, 2, _concepts())
+    return [e for e in rep.errors if "updated" in e]
+
+
+def test_v071_lesson_updated_ok():
+    assert _updated_errors("v0.7.1") == []
+    assert _updated_errors("v0.8") == []
+    assert _updated_errors("v0.7.1", adv=True) == []
+
+
+def test_v071_lesson_updated_bad():
+    for bad in ("0.7.1", "v0.7.1 ", 71, True, "", None, "v0.7.1a"):
+        assert _updated_errors(bad) != [], bad
+
+# ── v0.7.1 판정 C48: 보강 레슨(updated 있음)은 카드 1~3장·터치 문제 ≤7개 ──────
+def _size_errors(n_cards, n_touch, updated=None, lid="1-2", pos=2):
+    lesson = _lesson(lid, 1, 'print("a")', "a", "print", [], adv=False)
+    lesson["cards"] = [dict(lesson["cards"][0]) for _ in range(n_cards)]
+    lesson["items"] = [dict(lesson["items"][0]) for _ in range(n_touch)] + lesson["items"][-2:]
+    if updated is not None:
+        lesson["updated"] = updated
+    rep = Lesson(lid)
+    content.check_lesson(rep, lesson, 1, pos, _concepts())
+    return [e for e in rep.errors if "cards" in e or "터치 문제는" in e]
+
+
+def test_c48_updated_lesson_allows_3_cards_7_touch():
+    assert _size_errors(3, 7, "v0.7.1") == []
+    assert _size_errors(2, 6, "v0.7.1") == []
+
+
+def test_c48_plain_lesson_keeps_2_cards_6_touch():
+    assert _size_errors(2, 6) == []
+    assert has(_size_errors(3, 5), "cards")
+    assert has(_size_errors(2, 7), "터치 문제는 4~6")
+
+
+def test_c48_updated_lesson_upper_limits():
+    assert has(_size_errors(4, 5, "v0.7.1"), "cards")
+    assert has(_size_errors(2, 8, "v0.7.1"), "터치 문제는 4~7")
+    assert has(_size_errors(0, 5, "v0.7.1"), "cards")
+
+
 if __name__ == "__main__":
-    tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
+    tests =[(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     bad = 0
     for name, fn in tests:
         try:

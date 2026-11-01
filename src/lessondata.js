@@ -5,7 +5,10 @@
 // - 장 파일(lessons/chN-<지문8자>.json): 장 하나의 { CHAPTER, LESSONS, ADVANCED? } 전체. 레슨을 열 때 getChapter(n)으로 받는다.
 // - 배포판: build.py가 window.RIA_LESSON_INDEX와 window.RIA_CHAPTER_FILES를 index.html에 넣는다 → 네트워크(서비스 작업자 저장본)로.
 // - 개발판(tools/dev.py): 두 값이 없다 → app.js가 data/lessons/chN.js를 import해 modules로 넘긴다(네트워크 없음).
+// - 보강한 레슨(v0.7.1)은 stub에 updated("v0.7.1")를 옮긴다 → 학습 길 「새 내용」 점(newcontent.js).
 // 이 파일은 데이터 파일을 import하지 않는다(build.py도 레슨 목록·파일 이름을 이 함수로 만든다).
+
+import { lessonUpdated } from "./newcontent.js";
 
 export const CHAPTER_FILE_RE = /^lessons\/ch([1-9]\d*)-([0-9a-f]{8})\.json$/;
 
@@ -32,15 +35,22 @@ function conceptsOf(l) {
 
 /** 레슨 하나의 목록 칸(문제·카드 없음) */
 export function lessonStub(l, chapterId) {
-  return {
+  return withUpdated({
     id: l.id, chapter: l.chapter ?? chapterId, title: l.title, goal: l.goal || "",
     summary: Array.isArray(l.summary) ? l.summary.slice() : [], isExam: !!l.isExam, concepts: conceptsOf(l),
-  };
+  }, l);
+}
+
+/** 보강 판 이름(updated)이 맞는 형식이면 stub에 옮긴다 */
+function withUpdated(stub, l) {
+  const u = lessonUpdated(l);
+  if (u) stub.updated = u;
+  return stub;
 }
 
 /** 심화 레슨 하나의 목록 칸(v0.7): id·장·제목·목표·개념·isAdvanced */
 export function advancedStub(l, chapterId) {
-  return { id: l.id, chapter: l.chapter ?? chapterId, title: l.title, goal: l.goal || "", concepts: conceptsOf(l), isAdvanced: true };
+  return withUpdated({ id: l.id, chapter: l.chapter ?? chapterId, title: l.title, goal: l.goal || "", concepts: conceptsOf(l), isAdvanced: true }, l);
 }
 
 /** 장 모듈들({CHAPTER, LESSONS, ADVANCED?}) → 레슨 목록 [{ id, title, lessons: [stub], advanced?: [stub] }] (장 번호 순) */

@@ -28,6 +28,7 @@ const LEDGER_SHAPE = {
   stats: { lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0 },
   settings: { sound: true, dailyGoal: 20, name: "" },
   pending_refund: 0,
+  seen_updates: {}, // v0.7.1: 「새 내용」 점 — 다시 본 판 { 레슨 id: "v0.7.1" } (saveVer 그대로)
 };
 
 test("constants", () => {

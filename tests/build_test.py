@@ -580,6 +580,27 @@ def test_split_advanced():
     assert "심화 시험 작성 1-A1" not in html and "심화 시험 카드 1-A2" not in html, "advanced lesson text leaked into index.html"
 
 
+UPD_SNAP = os.path.join(OUT, "lessons-upd")
+UPD_OUT = os.path.join(OUT, "dist-upd")
+
+
+def test_split_updated():
+    """v0.7.1: 레슨의 updated("v0.7.1")는 목록 stub에도 옮겨진다(「새 내용」 점). 없는 레슨 stub에는 칸이 없다"""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fixtures.advanced_dir import make
+    make(_snapshot(), UPD_SNAP, chapters=(), updated={"1-2": "v0.7.1", "1-A1": "v0.7.1"})
+    _build("--out", UPD_OUT, "--lessons-dir", UPD_SNAP)
+    html = _read(os.path.join(UPD_OUT, "index.html"))
+    idx = {c["id"]: c for c in _lesson_index(html)}
+    by = {l["id"]: l for l in idx[1]["lessons"] + idx[1].get("advanced", [])}
+    assert by["1-2"].get("updated") == "v0.7.1", by["1-2"]
+    assert by["1-A1"].get("updated") == "v0.7.1", by["1-A1"]
+    assert "updated" not in by["1-1"] and "updated" not in by["1-3"], (by["1-1"], by["1-3"])  # 보강 대상 아님
+    table = _chapter_table(html)
+    got = json.loads(_read(os.path.join(UPD_OUT, table[1])))
+    assert [l.get("updated") for l in got["LESSONS"]][:3] == [None, "v0.7.1", None]
+
+
 def test_split_advanced_bad_id():
     """ADVANCED 레슨 id가 N-Ak 꼴이 아니거나 isAdvanced가 없으면 빌드가 멈춘다"""
     bad = os.path.join(OUT, "lessons-adv-bad")

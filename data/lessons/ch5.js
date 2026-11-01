@@ -105,7 +105,7 @@ export const LESSONS = [
     ],
   },
   {
-    id: "5-2", chapter: 5, title: "for와 range",
+    id: "5-2", chapter: 5, title: "for와 range", updated: "v0.7.1",
     goal: "정해진 횟수만큼 for와 range로 반복할 수 있다",
     summary: [
       "for i in range(n): n번 반복, i는 0부터",
@@ -122,6 +122,11 @@ export const LESSONS = [
         say: "range(시작, 끝)은 시작부터 끝 바로 앞까지예요. 끝값은 포함되지 않아요. 1부터 3까지는 range(1, 4)예요. 들여쓴 줄만 반복되고, 들여쓰지 않은 줄은 한 번만 실행돼요.",
         code: 'for i in range(1, 4):\n    print(i)\nprint("끝")',
         out: "1\n2\n3\n끝",
+      },
+      {
+        say: "print(i, end=\" \")는 줄을 바꾸는 대신 빈칸을 붙여 한 줄에 이어 찍어요. end=\"\"면 아무것도 안 붙여요. 이어 찍은 뒤 빈 print()를 부르면 줄이 바뀌어요.",
+        code: "for i in range(1, 4):\n    print(i, end=\" \")\nprint(\"끝\")\nfor i in range(3):\n    print(\"*\", end=\"\")\nprint()\nprint(\"다음 줄\")",
+        out: "1 2 3 끝\n***\n다음 줄",
       },
     ],
     items: [
@@ -165,6 +170,22 @@ export const LESSONS = [
         explain: "for 줄 다음에 들여쓴 반복 몸통이 오고, 들여쓰지 않은 마지막 줄은 반복 뒤에 한 번 실행돼요.",
       },
       {
+        type: "choice", concept: "for",
+        q: "화면에 무엇이 출력될까요?",
+        code: "for i in range(3):\n    print(i, end=\" \")\nprint(\"끝\")",
+        options: ["0 1 2 끝", "0\n1\n2\n끝", "0 1 2\n끝"],
+        answer: 0,
+        explain: "end=\" \"는 줄 대신 빈칸 하나를 붙여서 0 1 2 뒤에 바로 「끝」이 이어져요. 줄을 바꾸려면 print()를 따로 불러야 해요.",
+      },
+      {
+        type: "blank", concept: "for",
+        q: "별 세 개 다음 줄에 「끝」이 나오게 빈칸을 채워 보세요.",
+        code: "for i in range(3):\n    print(\"*\", end=\"\")\n___\nprint(\"끝\")",
+        chips: ["print()", "print", "end"],
+        answer: 0,
+        explain: "빈 print()는 아무것도 안 찍고 줄만 바꿔요. 괄호 없는 print는 부르지 않은 것이라 「***끝」이 붙어 나오고, end만 쓰면 NameError예요.",
+      },
+      {
         type: "write", concept: "for",
         task: "구구단 한 단을 출력해요. 단을 input()으로 받아 int()로 바꿔 주세요(괄호는 비워 두세요). for와 range로 1부터 9까지 곱셈 줄을 출력해요. 예: 3을 입력하면 첫 줄 「3 x 1 = 3」, 끝 줄 「3 x 9 = 27」",
         starter: "dan = int(input())\n",
@@ -194,7 +215,7 @@ export const LESSONS = [
     ],
   },
   {
-    id: "5-3", chapter: 5, title: "합계 모으기",
+    id: "5-3", chapter: 5, title: "합계 모으기", updated: "v0.7.1",
     goal: "반복하며 합계와 개수를 모을 수 있다",
     summary: [
       "반복 전에 total = 0 으로 준비",
@@ -211,6 +232,11 @@ export const LESSONS = [
         say: "print를 반복 안에 두면 쌓여 가는 과정이 한 줄씩 보여요. 반복 밖에 두면 최종 결과만 한 번 나와요. 들여쓰기 한 칸 차이로 출력 횟수가 달라져요.",
         code: "total = 0\nfor i in range(1, 4):\n    total = total + i\n    print(total)",
         out: "1\n3\n6",
+      },
+      {
+        say: "반복 안에 반복도 넣을 수 있어요. 바깥이 한 바퀴 돌 때마다 안쪽이 처음부터 끝까지 돌아요. 안쪽이 end=\"\"로 한 줄을 채우고, print()로 줄을 바꿔요.",
+        code: "for r in range(2):\n    for c in range(3):\n        print(\"*\", end=\"\")\n    print()",
+        out: "***\n***",
       },
     ],
     items: [
@@ -260,6 +286,14 @@ export const LESSONS = [
         lines: ["total = 0", "for i in range(1, 4):", "    total = total + i", "print(total)"],
         expect: "6",
         explain: "total을 먼저 0으로 만들고, 반복 안에서 더하고, 반복이 끝난 뒤 찍어요. 준비가 늦으면 NameError예요.",
+      },
+      {
+        type: "choice", concept: "for",
+        q: "화면에 무엇이 출력될까요?",
+        code: "for r in range(3):\n    for c in range(2):\n        print(\"#\", end=\"\")\n    print()",
+        options: ["##\n##\n##", "###\n###", "######"],
+        answer: 0,
+        explain: "바깥이 3바퀴 돌고, 매 바퀴 안쪽이 #을 2개 이어 찍은 뒤 print()가 줄을 바꿔요. 2개씩 세 줄이에요.",
       },
       {
         type: "write", concept: "accum",
@@ -510,7 +544,7 @@ export const ADVANCED = [
     ],
     cards: [
       {
-        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. 반복 안에 반복을 또 넣을 수 있어요. 바깥이 한 바퀴 돌 때마다 안쪽은 처음부터 끝까지 다 돌아요.",
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. 5-3에서 맛본 반복 안의 반복과 5-2의 이어 찍기(end=\"\")를 더 깊이 써 봐요. 바깥이 한 바퀴 돌 때마다 안쪽은 끝까지 다 돌아요.",
         code: "for a in range(1, 3):\n    for b in range(1, 3):\n        print(a, b)",
         out: "1 1\n1 2\n2 1\n2 2",
       },

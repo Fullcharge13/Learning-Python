@@ -5,6 +5,7 @@ import { tick, ensureQuests } from "./quests.js";
 import { checkBadges } from "./badges.js";
 import { localDate } from "./today.js";
 import { isAdvancedLesson } from "./advanced.js";
+import { markSeen } from "./newcontent.js";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
 
@@ -82,6 +83,8 @@ export function finishLesson(save, info, now = new Date()) {
       ...s.grading_results,
       [lesson.id]: { perfect: !!prev.perfect || perfect, attempts: num(prev.attempts) + 1 },
     };
+    // 「새 내용」 점(v0.7.1): 끝까지 본 레슨의 보강 판을 기록(처음·다시 하기·이어 하기 모두)
+    s = markSeen(s, lesson);
     if (info.nextLessonId) s.current_lesson = info.nextLessonId;
     if (info.nextChapter) s.current_chapter = info.nextChapter;
   }

@@ -5,6 +5,11 @@ import { riaSVG } from "../ria.js";
 import { esc, icon, bar, riaSays, dialog, toast } from "./dom.js";
 import { tabBar, bindTabs, statusBar } from "./nav.js";
 import { pathEndText } from "../curriculum.js";
+import { hasNewContent } from "../newcontent.js";
+
+// 「새 내용」 점(v0.7.1): 노드 옆 작은 꼬리표. 누르기는 노드가 받는다(pointer-events: none, 노드 크기 그대로)
+const NEW_LABEL = "새 내용 있음";
+const newDot = (id, cls = "") => `<span class="new-dot${cls}" role="img" aria-label="${NEW_LABEL}" data-for="${esc(id)}">새 내용</span>`;
 
 const ROW = 112;          // 레슨 한 칸 높이
 const W = 320;            // 길 폭
@@ -44,8 +49,10 @@ function advBranch(ctx, chapter, ex, ey) {
     const k = String(l.id).split("-A")[1] || String(i + 1);
     const x = cx - span / 2 + i * STAR_GAP;
     const stateKo = { locked: "잠김, 장 평가를 통과하면 열려요", open: "열림", done: "완료", perfect: "실수 없이 완료" }[st];
+    const fresh = hasNewContent(l, ctx.save);
     return `<button class="star-node ${st}" style="left:${x - STAR / 2}px;top:${sy - STAR / 2}px" data-lesson="${esc(l.id)}"
-      aria-label="${esc(`심화 ${l.id} ${l.title}, ${stateKo}`)}">${starGlyph(k, st)}</button>`;
+      aria-label="${esc(`심화 ${l.id} ${l.title}, ${stateKo}${fresh ? `, ${NEW_LABEL}` : ""}`)}">${starGlyph(k, st)}</button>${fresh
+      ? `<span class="new-dot-at" style="left:${x + STAR / 2 - 14}px;top:${sy - STAR / 2 - 10}px">${newDot(l.id, " star")}</span>` : ""}`;
   }).join("");
   const cap = `<span class="adv-cap${opened ? " open" : ""}" style="top:${sy + STAR / 2 + 6}px">심화 ${doneN}/${adv.length}${opened ? "" : " · 장 평가 뒤 열림"}</span>`;
   return { links, nodes: stars + cap };
@@ -113,8 +120,10 @@ function pathSection(ctx, chapter, startIndex, currentId) {
     const glyph = st === "locked" ? icon("lock") : st === "perfect" ? icon("star", "fill") : st === "done" ? icon("check") : `<b>${esc(l.id)}</b>`;
     const stateKo = { locked: "잠김", open: cur ? "지금 할 레슨" : "열림", done: "완료", perfect: "실수 없이 완료" }[st];
     const side = p.x > W / 2 ? "left" : "right";
+    const fresh = hasNewContent(l, ctx.save);
     return `<div class="node-wrap" style="left:${p.x - NODE / 2}px;top:${p.y - NODE / 2}px">
-      <button class="node ${st}${cur ? " current" : ""}" data-lesson="${esc(l.id)}" aria-label="${esc(`${l.id} ${l.title}, ${stateKo}`)}">${glyph}</button>
+      <button class="node ${st}${cur ? " current" : ""}" data-lesson="${esc(l.id)}" aria-label="${esc(`${l.id} ${l.title}, ${stateKo}${fresh ? `, ${NEW_LABEL}` : ""}`)}">${glyph}</button>
+      ${fresh ? newDot(l.id) : ""}
       <span class="node-label">${l.isExam && !/평가/.test(l.title) ? '<em>장 평가</em>' : ""}${esc(l.title)}</span>
       ${cur ? `<span class="node-ria ${side}" aria-hidden="true">${riaSVG({ outfit: ctx.save.outfit, face: "cheer", size: 58 })}</span>` : ""}
     </div>`;

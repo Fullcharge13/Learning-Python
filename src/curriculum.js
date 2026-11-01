@@ -1,6 +1,7 @@
 // 학습 내용 요약 (판정 C33). 순수 함수. 불러온 장 파일에서 계산하므로 ch4.js를 넣어도 화면 코드는 그대로다.
 // 심화 레슨(v0.7)은 장의 `advanced` 칸에 따로 있어 본 과정 개수·지금 레슨·완주(C39)에 들어가지 않는다.
 import { advancedOpen, isAdvancedId } from "./advanced.js";
+import { hasNewContent } from "./newcontent.js";
 
 // 다음 판에 열릴 장 제목. UPCOMING[i]는 (i + 4)장. 이미 불러온 장 번호는 자동으로 숨긴다.
 export const UPCOMING = ["함수", "반복문", "문자열 다루기", "리스트", "딕셔너리", "튜플과 집합", "예외 처리", "파일",
@@ -14,11 +15,13 @@ export function upcomingChapters(chapters) {
 }
 
 /**
- * @param {{ chapters: {id,title,lessons}[], completed: string[], currentId: string|null }} o
+ * @param {{ chapters: {id,title,lessons}[], completed: string[], currentId: string|null, seenUpdates?: object }} o
+ * 레슨마다 isNew: 「새 내용」 점(v0.7.1, newcontent.js)
  * 레슨 상태: done(완료) · current(지금) · open(열렸지만 지금이 아님) · locked(잠김). 앞 레슨을 끝내야 열림.
  */
-export function curriculum({ chapters, completed, currentId }) {
+export function curriculum({ chapters, completed, currentId, seenUpdates = {} }) {
   const doneSet = new Set(completed || []);
+  const seenSave = { completed_lessons: completed || [], seen_updates: seenUpdates };
   const all = (chapters || []).flatMap((c) => c.lessons);
   const statusOf = (l, i) => {
     if (doneSet.has(l.id)) return "done";
@@ -28,11 +31,12 @@ export function curriculum({ chapters, completed, currentId }) {
   };
   let idx = 0;
   const out = (chapters || []).map((c) => {
-    const lessons = c.lessons.map((l) => ({ id: l.id, title: l.title, goal: l.goal || "", isExam: !!l.isExam, status: statusOf(l, idx++) }));
+    const lessons = c.lessons.map((l) => ({ id: l.id, title: l.title, goal: l.goal || "", isExam: !!l.isExam, status: statusOf(l, idx++), isNew: hasNewContent(l, seenSave) }));
     // 심화: 완료 · 열림(장 평가를 끝냄) · 잠김. 「지금」은 없음(선택 레슨)
     const open = advancedOpen(c, completed);
     const advanced = (c.advanced || []).map((l) => ({
       id: l.id, title: l.title, goal: l.goal || "", status: doneSet.has(l.id) ? "done" : open ? "open" : "locked",
+      isNew: hasNewContent(l, seenSave),
     }));
     return {
       id: c.id, title: c.title,

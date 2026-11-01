@@ -21,7 +21,9 @@ const ST = {
 
 /** 학습 내용 카드 (C33): 요약 한 줄, 장마다 펼치기, 다음 업데이트 예정 */
 function courseCard(ctx) {
-  const c = curriculum({ chapters: ctx.chapters, completed: ctx.save.completed_lessons, currentId: ctx.currentLessonId() });
+  const c = curriculum({ chapters: ctx.chapters, completed: ctx.save.completed_lessons, currentId: ctx.currentLessonId(),
+    seenUpdates: ctx.save.seen_updates });
+  const dot = (l) => (l.isNew ? '<span class="new-dot inline" role="img" aria-label="새 내용 있음">새 내용</span>' : "");
   const first = c.upcoming.slice(0, 3);
   const rest = c.upcoming.slice(3);
   const upName = (u) => `${u.no}장 ${u.title}`;
@@ -41,11 +43,11 @@ function courseCard(ctx) {
       </button>
       <ol class="ch-lessons" id="ch-${ch.id}" hidden>${ch.lessons.map((l) => `<li class="ls ${l.status}">
         <span class="ls-st">${icon(ST[l.status][0])}<span>${ST[l.status][1]}</span></span>
-        <span class="ls-main"><b>${esc(l.id)} ${esc(l.title)}</b><small>${esc(l.goal)}</small></span>
+        <span class="ls-main"><b>${esc(l.id)} ${esc(l.title)}${dot(l)}</b><small>${esc(l.goal)}</small></span>
       </li>`).join("")}
       ${ch.advTotal ? `<li class="ch-adv-head">${icon("star")}심화 <small>장 평가를 통과하면 열려요 · 선택</small></li>${ch.advanced.map((l) => `<li class="ls adv ${l.status}">
         <span class="ls-st">${icon(ST[l.status][0])}<span>${ST[l.status][1]}</span></span>
-        <span class="ls-main"><b>${esc(l.id)} ${esc(l.title)}</b><small>${esc(l.goal)}</small></span>
+        <span class="ls-main"><b>${esc(l.id)} ${esc(l.title)}${dot(l)}</b><small>${esc(l.goal)}</small></span>
       </li>`).join("")}` : ""}</ol>
     </li>`).join("")}</ul>
     ${win.hidden.length ? `<button class="btn ghost small wide" id="ch-more" aria-expanded="false" aria-controls="course-chapters" data-n="${win.hidden.length}">다른 장 ${win.hidden.length}개 더 보기</button>` : ""}

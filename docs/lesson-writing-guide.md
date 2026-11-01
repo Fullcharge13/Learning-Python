@@ -11,9 +11,9 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 ```
 레슨 하나:
 ```js
-{ id: "N-k", chapter: N, title, goal, summary: ["…","…","…"], isExam?: true,
-  cards: [ { say, code, out, stdin? } ],          // 1~2장
-  items: [ 터치 문제 4~6개(평가 4~8개) → write 1개 → check 1개 ] }
+{ id: "N-k", chapter: N, title, goal, summary: ["…","…","…"], isExam?: true, updated?: "v0.7.1",
+  cards: [ { say, code, out, stdin? } ],          // 1~2장 (보강 레슨 1~3장)
+  items: [ 터치 문제 4~6개(평가 4~8개, 보강 레슨 4~7개) → write 1개 → check 1개 ] }
 ```
 | type | 필수 칸 | 선택 칸 |
 |---|---|---|
@@ -23,6 +23,8 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 | write | concept, task, starter, tests, require, hints(4), solution, explain | files, server |
 
 카드도 `files`·`server`를 둘 수 있다. `files`·`server`는 3-1절.
+
+- **`updated`(v0.7.1~)**: 이미 나간 레슨에 카드·문제를 보강했으면 `updated: "v0.7.1"`처럼 **그 판 이름 글자**(`v숫자.숫자` 또는 `v숫자.숫자.숫자`)를 적는다. 그 레슨을 이미 끝낸 학습자의 학습 길 노드에 「새 내용」 점이 뜨고, 다시 하기로 끝까지 마치면 사라진다. 다음 판에 또 보강하면 값을 새 판으로 바꾼다(점이 다시 뜬다). 새로 만드는 레슨에는 두지 않는다. 보강은 **더하기**다: 기존 카드·문제는 그대로 두고 새 카드 1장 + 문제 1~2개를 더한다. 그래서 `updated`가 있는 레슨은 카드 1~3장·터치 문제 4~7개까지 된다(판정 C48, 평가 레슨은 그대로 4~8개).
 
 모르는 칸 이름은 오류다(오타 방지). `concept`는 `data/concepts.js`에 있는 id이고, 그 개념의 장이 레슨의 장보다 뒤면 안 된다.
 
@@ -48,6 +50,19 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
   - 과제 문장에 **예시 입출력**을 한 줄 넣는다(「3을 입력하면 「…」」).
   - 과제 문장에 없는 조건을 `require`로 요구하지 않는다(예: and를 요구하면 문장에 「and로 묶어」라고 쓴다).
   - **힌트 4단계**: ① 문제 다시 읽기 → ② 배운 개념 떠올리기 → ③ 방향(답 코드를 쓰지 않음) → ④ 뼈대 코드(`___` 포함).
+
+## 3-0. 본 과정 1~6장에서 쓸 수 있는 문법 (누적, v0.7.1)
+
+점검기 `CHAPTER_RULES`가 정한다. 뒤 장은 앞 장 것을 모두 쓸 수 있다. 서식 지정자(`f"{x:.2f}"`)·여러 줄 문자열·기본값 매개변수·재귀·`for…else`·`match`·`divmod` 풀기는 **본 과정에서는 언제나 오류**(심화 전용, 3-3절).
+
+| 장 | 새로 쓸 수 있는 것 |
+|---|---|
+| 1장 | `print`만(변수·조건 없음). **f-문자열 `f"{3 * 4}개"`**(v0.7.1, `{}` 안에 값·계산만, 서식 지정자 없음) |
+| 2장 | 변수·`+=`·비교·`and`/`or`, `input`·`int`·`float`·`str`·`bool`·`type`, **`round(x)`·`round(x, n)`** |
+| 3장 | `if`/`elif`/`else`, `a if c else b`, `len`·`abs`·`max`·`min`. 조건을 변수에 담기(`ok = a >= 60 and b >= 60`) |
+| 4장 | `def`·`return`, **내 함수에 이름 붙여 넘기기 `price(won=5000)`**, 함수 안에서 다른 함수 부르기 |
+| 5장 | `for … in range(…)`·`while`·`break`·`continue`, 반복 안의 반복, **`print(…, end=" ")`**(v0.7.1부터 5장 전에는 오류). `print`의 다른 이름 붙은 인자(`sep=` 등)는 쓰지 않는다 |
+| 6장 | 인덱스·슬라이싱, 문자열 메서드(`upper`·`strip`·`split`… **`zfill`·`center`·`ljust`·`rjust`**), 문자열·`split()` 결과를 `for`로 돌기 |
 
 ## 3-1. 파일·연습 서버·import (11~14장)
 
@@ -92,8 +107,8 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 
   | 심화 | 새로 여는 것(점검기 이름) | 이미 본 과정에서 되는 것 |
   |---|---|---|
-  | 1장 | f-string과 서식 지정자 `f"{3.14159:.2f}"`·`f"{'커피':>6}"`·`f"{4500:,}"`(FormatSpec, 지정자 안 `{…}` 금지), 여러 줄 문자열 `"""…"""`(TripleQuote). 변수는 아직 없으니 값을 직접 넣는다 | — |
-  | 2장 | `divmod(a, b)`, 그 결과 풀기 `h, m = divmod(t, 60)`만(튜플 일반은 9장) | `round(x, 2)`, `//`·`%` |
+  | 1장 | f-string 서식 지정자 `f"{3.14159:.2f}"`·`f"{'커피':>6}"`·`f"{4500:,}"`(FormatSpec, 지정자 안 `{…}` 금지), 여러 줄 문자열 `"""…"""`(TripleQuote). 변수는 아직 없으니 값을 직접 넣는다 | f-문자열 `f"{3 * 4}개"`(v0.7.1, 1-2) |
+  | 2장 | `divmod(a, b)`, 그 결과 풀기 `h, m = divmod(t, 60)`만(튜플 일반은 9장) | `round(x, 2)`(2-2), `//`·`%` |
   | 3장 | `match`/`case`: 글자·숫자·`None`/`True`/`False` 값, `"a" \| "b"`, `case _:`. 이름 잡기(`case x:`)·`case … if …`·목록/사전/클래스 패턴은 금지 | `and`·`or`·`not`, `3 < x < 7`, `a if c else b` |
   | 4장 | 기본값 매개변수(DefaultArg, 숫자·문자열·True/False/None 상수만), 재귀(Recursion) | 내 함수에 이름 붙여 넘기기 `f(b=1)` |
   | 5장 | `for … else`·`while … else`(LoopElse) | 중첩 반복, `break`·`continue`, `print(…, end=" ")` |

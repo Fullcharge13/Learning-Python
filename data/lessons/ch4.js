@@ -195,7 +195,7 @@ export const LESSONS = [
     ],
   },
   {
-    id: "4-3", chapter: 4, title: "매개변수",
+    id: "4-3", chapter: 4, title: "매개변수", updated: "v0.7.1",
     goal: "값을 받아서 쓰는 함수를 만들 수 있다",
     summary: [
       "매개변수: 함수가 받는 이름표",
@@ -212,6 +212,11 @@ export const LESSONS = [
         say: "이름표가 둘이면 인자도 두 개, 순서대로 짝지어져요. 그리고 매개변수는 함수 안에서만 보여요. 밖에서 쓰려 하면 NameError라는 단서가 나와요.",
         code: 'def left(money, spent):\n    print(money - spent)\n\nleft(10000, 3500)',
         out: "6500",
+      },
+      {
+        say: "부를 때 spent=3500처럼 매개변수 이름을 붙여 건넬 수도 있어요. 이름으로 짝지어지니 순서를 바꿔도 결과가 같아요.",
+        code: "def left(money, spent):\n    print(money - spent)\n\nleft(10000, 3500)\nleft(spent=3500, money=10000)",
+        out: "6500\n6500",
       },
     ],
     items: [
@@ -256,6 +261,22 @@ export const LESSONS = [
         explain: "y는 함수 안에서 만든 이름표라서 함수가 끝나면 사라져요. 밖에서 부르면 NameError라는 단서가 나와요.",
       },
       {
+        type: "choice", concept: "param",
+        q: "화면에 무엇이 출력될까요?",
+        code: "def left(money, spent):\n    print(money - spent)\n\nleft(spent=1000, money=5000)",
+        options: ["4000", "-4000", "오류(단서)가 난다"],
+        answer: 0,
+        explain: "이름을 붙여 부르면 순서와 상관없이 money는 5000, spent는 1000으로 짝지어져요. 5000 - 1000은 4000이에요.",
+      },
+      {
+        type: "blank", concept: "param",
+        q: "「민지 라떼」가 나오게 빈칸을 채워 보세요.",
+        code: "def order(name, food):\n    print(name, food)\n\norder(food=\"라떼\", ___=\"민지\")",
+        chips: ["name", "food", "민지"],
+        answer: 0,
+        explain: "이름을 붙인 값은 같은 이름의 매개변수로 가요. food는 이미 건넸으니 남은 name이 맞아요. 없는 이름이나 같은 이름을 두 번 쓰면 단서가 나요.",
+      },
+      {
         type: "write", concept: "param",
         task: "price_with_tax(price) 함수를 만들어요. 가격에 세금 10%를 더해 round()로 정수로 만든 값을 출력해요. 가격을 p에 input()으로 받아 int()로 바꾸고(괄호는 비워 두세요) 함수를 불러요. 매개변수 이름은 price예요. 예: 1000을 입력하면 「1100」",
         starter: "# 여기에 함수를 만들어요\np = int(input())\n",
@@ -289,7 +310,7 @@ export const LESSONS = [
     ],
   },
   {
-    id: "4-4", chapter: 4, title: "결과 돌려주기",
+    id: "4-4", chapter: 4, title: "결과 돌려주기", updated: "v0.7.1",
     goal: "결과를 돌려주는 함수를 만들 수 있다",
     summary: [
       "return: 함수가 결과를 돌려줌",
@@ -306,6 +327,11 @@ export const LESSONS = [
         say: "print만 하고 return이 없는 함수의 반환값은 None, 「없음」이에요. 화면엔 글자가 찍혔어도 담긴 값은 없는 거죠.",
         code: 'def show(n):\n    print(n * 2)\n\nx = show(5)\nprint(x)',
         out: "10\nNone",
+      },
+      {
+        say: "함수 안에서 내가 만든 다른 함수를 불러도 돼요. total이 tax를 불러 받은 값을 더해 다시 돌려줘요. 값이 tax에서 total로, 다시 밖으로 올라와요.",
+        code: "def tax(p):\n    return p // 10\n\ndef total(p):\n    return p + tax(p)\n\nprint(total(5000))",
+        out: "5500",
       },
     ],
     items: [
@@ -359,6 +385,14 @@ export const LESSONS = [
         ],
         expect: "7",
         explain: "먼저 def로 만들고 몸통에서 return으로 합을 돌려줘요. 마지막 줄에서 그 반환값을 print로 보여 줘요.",
+      },
+      {
+        type: "choice", concept: "return",
+        q: "화면에 무엇이 출력될까요?",
+        code: "def tax(p):\n    return p // 10\n\ndef total(p):\n    return p + tax(p)\n\nprint(total(2000))",
+        options: ["2200", "200", "2000"],
+        answer: 0,
+        explain: "total(2000) 안에서 tax(2000)을 불러 200을 돌려받아요. 2000 + 200이 다시 total의 반환값 2200이 돼요.",
       },
       {
         type: "write", concept: "return",
@@ -503,7 +537,7 @@ export const ADVANCED = [
     ],
     cards: [
       {
-        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. 매개변수에 =로 기본값을 적어 두면, 인자를 안 건넬 때 그 값이 쓰여요.",
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. 매개변수에 =로 기본값을 적어 두면, 인자를 안 건넬 때 그 값이 쓰여요. 4-3의 이름 붙여 부르기도 나와요.",
         code: 'def order(drink, size="톨"):\n    print(drink, size)\n\norder("라떼")\norder("라떼", "그란데")',
         out: "라떼 톨\n라떼 그란데",
       },
@@ -597,7 +631,7 @@ export const ADVANCED = [
     ],
     cards: [
       {
-        say: "여기는 한 걸음 더 가 보는 곳이에요. 줄에서 내가 몇 번째인지 앞사람에게 묻고, 그 사람은 또 앞사람에게 묻는 일처럼 함수가 자기를 다시 부르는 걸 재귀라고 해요.",
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 줄에서 내가 몇 번째인지 앞사람에게 묻고, 그 사람은 또 앞사람에게 묻는 일처럼 함수가 자기를 다시 부르는 걸 재귀라고 해요. 4-4에선 다른 함수를 불렀죠, 이번엔 자기 자신이에요.",
         code: 'def count_down(n):\n    if n == 0:\n        print("발사!")\n    else:\n        print(n)\n        count_down(n - 1)\n\ncount_down(3)',
         out: "3\n2\n1\n발사!",
       },

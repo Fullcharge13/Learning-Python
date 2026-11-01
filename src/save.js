@@ -1,6 +1,7 @@
 // 저장: localStorage 한 칸에 JSON 하나. 옛 저장은 migrate로 새 형식에 맞춘다.
 // saveVer 2 (v0.6): 의상 10벌로 교체 — 옛 의상 id를 새 id로 옮기고, 없어진 의상은 바이트로 돌려준다.
 import { OUTFITS, OUTFIT_RENAME_V2, OUTFIT_REFUND_V2 } from "../data/outfits.js";
+import { cleanSeenUpdates } from "./newcontent.js";
 
 export const SAVE_KEY = "ria-python.save";
 export const SAVE_VER = 2;
@@ -26,6 +27,7 @@ export function newSave() {
     stats: { lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0 },
     settings: { sound: true, dailyGoal: 20, name: "" },
     pending_refund: 0, // saveVer 1→2에서 돌려준 바이트. 홈에서 한 번 알리고 0으로 (판정 C42)
+    seen_updates: {},  // v0.7.1 「새 내용」 점: { 레슨 id: 끝까지 다시 본 판 "v0.7.1" }. saveVer 그대로, 없으면 {}
   };
 }
 
@@ -90,6 +92,7 @@ function clampRanges(s) {
     if (typeof v === "number" && Number.isFinite(v) && v >= 0) wc[k] = v;
   }
   s.weak_concepts = wc;
+  s.seen_updates = cleanSeenUpdates(s.seen_updates);
   return s;
 }
 

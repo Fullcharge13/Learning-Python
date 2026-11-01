@@ -64,6 +64,7 @@
   stats: { lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0 },
   settings: { sound: true, dailyGoal: 20, name: "" },
   pending_refund: 0                 // v0.6: 1→2 옮기기에서 돌려준 바이트, 홈에서 한 번 알리고 0 (C42)
+  seen_updates: {}                  // v0.7.1: 「새 내용」 점 — { 레슨 id: 끝까지 다시 본 판 "v0.7.1" }. saveVer 그대로, 레슨을 끝낼 때 기록(복습 제외)
 }
 ```
 
@@ -147,3 +148,4 @@
 - **C45** 채점 조건 `SelfCall`(함수 본문 안에서 같은 이름을 직접 부름, 서로 부르기·밖에서 부르기는 아님), `FormatSpec`(f-문자열 칸에 비지 않은 서식), `TripleStr`(tokenize로 `"""`·`'''` 문자열). 과제 문장에 그 문법이 있을 때만 건다. 4-A2·4-A3 SelfCall, 5-A2 Else, 1-A1·1-A2·1-A3·6-A1·6-A3 FormatSpec, 1-A2·1-A3 TripleStr.
 - **C46** 심화 레슨은 선택: 지금 레슨·본 과정 진도·과정 완주(C39) 판정에서 뺀다. `courseJustFinished`는 심화 레슨에서 늘 거짓. `advancedAll` 배지는 그때 레슨 목록에 있는 심화 전부(v0.7 = 18개), 한 번 받으면 유지.
 - **C47** 빌드는 심화 레슨에 `isAdvanced`가 없으면 채워 넣고, `true`가 아닌 값이면 멈춘다(작성 중 장 파일이 빌드를 깨지 않게).
+- **C48** 기초 보강(v0.7.1): 보강 레슨(`updated` 칸)만 카드 1~3장·터치 문제 4~7개 허용(나머지 레슨은 1~2장·4~6개 그대로). 보강은 「더하기」만 하고 기존 카드·문제는 바꾸지 않는다. 「새 내용」 점은 끝낸 레슨 + `updated` + `seen_updates[id] !== updated`일 때, 기록은 레슨을 끝낼 때(복습 제외). f-문자열은 본 과정 1장부터(서식 지정자는 심화 전용), `print(end=)`는 5장부터.

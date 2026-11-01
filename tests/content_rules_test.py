@@ -48,12 +48,14 @@ OLD_CALLS = {
 V02_MOVED_TO_CH6 = {"Attribute", "Subscript"}
 # v0.7.1의 의도된 변경(기초 보강 설계 2절): f-문자열은 1장(1-2)부터 본 과정에서 허용
 V071_ALLOWED_IN_CH1 = {"JoinedStr"}
+# v0.9의 의도된 변경(13~17장 디딤돌 조사 3-1절): +=·-=(AugAssign)는 5-1 보강과 함께 5장부터
+V09_MOVED_TO_CH5 = {"AugAssign"}
 
 
 def test_ch1_3_tables_unchanged():
     for ch in (1, 2, 3):
         real = {k for k in content.FORBID_BY_CHAPTER[ch] if k in OLD_FORBID_ALL or k in OLD_FORBID[1]}
-        assert real == (OLD_FORBID[ch] | V02_MOVED_TO_CH6) - V071_ALLOWED_IN_CH1, ch
+        assert real == (OLD_FORBID[ch] | V02_MOVED_TO_CH6 | V09_MOVED_TO_CH5) - V071_ALLOWED_IN_CH1, ch
         assert content.NAMES_BY_CHAPTER[ch] == OLD_NAMES[ch], ch
         assert content.CALLS_BY_CHAPTER[ch] == OLD_CALLS[ch], ch
 
@@ -651,9 +653,6 @@ CH15_OK = """class Pet:
         self.name = name
         self.hunger = 0
 
-    def __str__(self):
-        return "펫 " + self.name
-
     def eat(self, n):
         self.hunger -= n
         return self.hunger
@@ -1189,7 +1188,7 @@ def test_concepts_v07_advanced():
     for cid in ("fmtspec", "multiline", "floaterr", "divmod", "condsimple", "match", "defaultarg",
                 "recursion", "nestedloop", "loopelse", "strfmt", "strmore"):
         assert cid in adv, cid
-    assert all(1 <= ch <= 12 for ch in adv.values())   # v0.8: 7~12장 심화 개념
+    assert all(1 <= ch <= 17 for ch in adv.values())   # v0.8: 7~12장, v0.9: 13~17장 심화 개념
     ids = [c["id"] for c in cs]
     assert len(ids) == len(set(ids))
 
@@ -1545,6 +1544,145 @@ def test_concepts_v08_advanced():
     adv = {c["id"]: c["chapter"] for c in cs if c.get("advanced") is True}
     want = {7: ("listcomp", "list2d"), 8: ("groupcount", "dictlist"), 9: ("lambda", "setops"),
             10: ("raisemsg", "reraise"), 11: ("filesmerge", "csvwrite"), 12: ("namedgroup", "backref")}
+    for ch, ids in want.items():
+        for cid in ids:
+            assert adv.get(cid) == ch, (cid, adv.get(cid))
+    ids = [c["id"] for c in cs]
+    assert len(ids) == len(set(ids))
+
+
+# ── v0.9 13~17장 심화(디딤돌 조사 3절) ─────────────────────────────────────
+AUG = "n = 3\nn += 2\nn -= 1\nprint(n)"
+
+
+def test_v09_augassign_from_ch5():
+    for ch in (2, 3, 4):
+        e = shape_errors(AUG, ch)
+        assert has(e, "AugAssign"), (ch, e)
+        assert has(adv_errors(AUG, ch), "AugAssign"), ch
+    for ch in (5, 10, 17):
+        assert shape_errors(AUG, ch) == [], ch
+        assert adv_errors(AUG, ch) == [], ch
+    assert "AugAssign" in content.FORBID_BY_CHAPTER[4]
+    assert "AugAssign" not in content.FORBID_BY_CHAPTER[5]
+
+
+DUNDER15 = """class Book:
+    def __init__(self, t):
+        self.t = t
+
+    def __str__(self):
+        return "책 " + self.t
+
+    def __eq__(self, other):
+        return self.t == other.t
+
+
+a = Book("별")
+print(a, a == Book("별"))"""
+
+
+def test_v09_dunders_advanced_only():
+    assert adv_errors(DUNDER15, 15) == []
+    assert adv_errors(DUNDER15, 17) == []
+    for ch in (15, 17):
+        e = shape_errors(DUNDER15, ch)
+        assert has(e, "DunderStr") and has(e, "DunderEq") and has(e, "심화"), (ch, e)
+    only_str = "class A:\n    def __str__(self):\n        return 'a'\n\nprint(A())"
+    assert has(shape_errors(only_str, 15), "DunderStr")
+    # 점 뒤에 써도 같다
+    assert has(shape_errors("class A:\n    pass\n\nprint(A().__str__())", 15), "DunderStr")
+    assert adv_errors("class A:\n    pass\n\nprint(A().__str__())", 15) == []
+    # 다른 특수 메서드는 심화에서도 금지
+    for name in ("__repr__", "__lt__", "__hash__", "__len__"):
+        code = "class A:\n    def %s(self, *o):\n        return 1" % name
+        assert has(adv_errors(code, 15), name), name
+        assert has(shape_errors(code, 15), name), name
+    assert has(adv_errors("class A:\n    pass\n\nprint(A().__dict__)", 15), "__dict__")
+    # __init__은 그대로 본 과정
+    assert shape_errors("class A:\n    def __init__(self):\n        self.x = 1\n\nprint(A().x)", 15) == []
+
+
+def test_v09_class_attribute_is_main_grammar():
+    code = ("class Book:\n    count = 0\n\n    def __init__(self, t):\n        self.t = t\n"
+            "        Book.count = Book.count + 1\n\n\nBook(\"a\")\nBook(\"b\")\nprint(Book.count)")
+    assert shape_errors(code, 15) == []
+    assert adv_errors(code, 15) == []
+
+
+JSONF14 = ('import json\n'
+           'd = {"a": 1}\n'
+           'with open("d.json", "w") as f:\n'
+           '    json.dump(d, f, indent=2)\n'
+           'with open("d.json") as f:\n'
+           '    print(json.load(f)["a"])')
+
+
+def test_v09_json_file_adv14():
+    assert adv_errors(JSONF14, 14) == []
+    assert adv_errors(JSONF14, 17) == []
+    assert adv_errors('from json import dump, load\nwith open("x", "w") as f:\n    dump([1], f)', 14) == []
+    for ch in (14, 16):
+        e = shape_errors(JSONF14, ch)
+        assert has(e, "JsonFile") and has(e, "심화"), (ch, e)
+    assert has(adv_errors(JSONF14, 13), "json")
+    bad = 'import json\nwith open("x", "w") as f:\n    json.dump([1], f, default=str)'
+    assert has(adv_errors(bad, 14), "default")
+    assert has(adv_errors('import json\nwith open("x") as f:\n    json.load(f, parse_int=str)', 14), "parse_int")
+    # dumps·loads는 본 과정 그대로
+    assert rule_errors('import json\nprint(json.loads(json.dumps([1])))', 14) == []
+
+
+LEGEND17 = ('import chart\n'
+            'days = ["월", "화"]\n'
+            'chart.line(days, [1, 2])\n'
+            'chart.line(days, [3, 1])\n'
+            'chart.legend(["철수", "영희"])\n'
+            'chart.show()')
+
+
+def test_v09_chart_legend_adv17():
+    assert adv_errors(LEGEND17, 17) == []
+    e = shape_errors(LEGEND17, 17)
+    assert has(e, "ChartMulti") and has(e, "심화"), e
+    assert has(adv_errors(LEGEND17, 16), "chart")
+    assert has(adv_errors('import chart\nchart.legend(names=["a"])', 17), "names")
+
+
+def test_v09_tables():
+    new = {14: {"JsonFile"}, 15: {"DunderStr", "DunderEq"}, 17: {"ChartMulti"}}
+    for names in new.values():
+        assert names <= content.ADVANCED_ONLY
+    for ch in range(1, 18):
+        for at, names in new.items():
+            if ch >= at:
+                assert not (names & content.ADV_FORBID_BY_CHAPTER[ch]), (ch, names)
+            else:
+                assert names <= content.ADV_FORBID_BY_CHAPTER[ch], (ch, names)
+            assert names <= content.MAIN_FORBID_BY_CHAPTER[ch], (ch, names)
+    for ch in (13, 16):
+        assert content.ADVANCED_EXTRA[ch] == {}, ch
+    assert content.ADVANCED_MEMBERS["json.dump"] == "JsonFile"
+    assert content.ADVANCED_MEMBERS["json.load"] == "JsonFile"
+    assert content.ADVANCED_MEMBERS["chart.legend"] == "ChartMulti"
+
+
+def test_v09_require_def_sql_ok():
+    assert require_errors(["Def:__str__", "Def:__eq__", "Def:add", "SQL:JOIN", "SQL:HAVING", "If"]) == []
+
+
+def test_v09_require_def_sql_bad_format():
+    for bad in ("Def:", "Def:1x", "Def:class", "Def:a b", "SQL:", "SQL:join", "SQL:GROUP BY", "SQL:JOIN1",
+                "Sql:JOIN", "def:add"):
+        assert has(require_errors([bad]), "형식이 틀림"), bad
+
+
+def test_concepts_v09_advanced():
+    path = content.CONCEPTS_FILE
+    cs = content.load_modules([path])[path]["CONCEPTS"]
+    adv = {c["id"]: c["chapter"] for c in cs if c.get("advanced") is True}
+    want = {13: ("queryparam", "statuscode", "pagecrawl"), 14: ("apipaging", "jsonsave"),
+            15: ("dunder", "classattr"), 16: ("sqljoin", "sqlhaving"), 17: ("multichart", "filterchart")}
     for ch, ids in want.items():
         for cid in ids:
             assert adv.get(cid) == ch, (cid, adv.get(cid))

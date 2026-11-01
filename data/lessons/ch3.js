@@ -808,3 +808,47 @@ export const ADVANCED = [
     ],
   },
 ];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+export const TEMPLATES = [
+  {
+    id: "3-T1", concept: "compare", type: "blank",
+    q: "뽑은 번호가 당첨 번호와 같을 때 「당첨!」이 나오게 빈칸을 채워 보세요.",
+    code: 'lucky = {A}\npick = {A}\nif pick ___ lucky:\n    print("당첨!")\nelse:\n    print("꽝")',
+    chips: ["==", "=", "!="], answer: 0,
+    vars: { A: { min: 11, max: 99 } },
+    explain: "같은지 물을 때는 등호 두 개 == 예요. = 는 값을 넣는 대입이라 if 조건에 쓰면 SyntaxError가 나요. != 는 다르다라서 꽝이 나와요.",
+  },
+  {
+    id: "3-T2", concept: "if", type: "choice",
+    q: "기준 온도가 정확히 같을 때, 화면에 무엇이 출력될까요?",
+    code: 'temp = {T}\nlimit = {T}\nmsg = "보통"\nif temp >= limit:\n    msg = "더움"\nprint(msg)',
+    wrong: ['temp = {T}\nlimit = {T}\nmsg = "보통"\nif temp > limit:\n    msg = "더움"\nprint(msg)', 'temp = {T}\nlimit = {T}\nmsg = "보통"\nif temp >= limit:\nmsg = "더움"\nprint(msg)'],
+    vars: { T: { min: 24, max: 35 } },
+    explain: "{T} >= {T} 는 참이에요(이상은 같은 값도 포함). > 는 같은 값을 포함하지 않아요. 또 if 아래 줄을 들여쓰지 않으면 IndentationError예요.",
+  },
+  {
+    id: "3-T3", concept: "else", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: 'age = {A}\nif age >= {L}:\n    print("입장 가능")\nelse:\n    print("입장 불가")',
+    wrong: ['age = {A}\nif age < {L}:\n    print("입장 가능")\nelse:\n    print("입장 불가")', 'age = "{A}"\nif age >= {L}:\n    print("입장 가능")\nelse:\n    print("입장 불가")'],
+    vars: { A: { min: 10, max: 30 }, L: [14, 16, 18, 20] },
+    explain: "나이와 기준 나이를 비교해요. 참이면 if 아래, 거짓이면 else 아래가 실행돼요. 따옴표로 감싼 숫자는 글자라서 숫자와 크기를 비교하면 TypeError예요.",
+  },
+  {
+    id: "3-T4", concept: "elif", type: "blank",
+    q: "먼 거리면 「먼 거리」만, 아니면 아래 조건을 보도록 빈칸을 채워 보세요.",
+    code: 'km = {K}\nif km >= 10:\n    print("먼 거리")\n___ km >= 5:\n    print("중간 거리")\nelse:\n    print("가까운 거리")',
+    chips: ["elif", "if", "else"], answer: 0,
+    vars: { K: { min: 10, max: 20 } },
+    explain: "elif는 앞 조건이 거짓일 때만 검사해요. 그냥 if를 쓰면 새 조건문이라 중간 거리까지 함께 나오고, else 뒤에는 조건을 쓸 수 없어 SyntaxError예요.",
+  },
+  {
+    id: "3-T5", concept: "logic", type: "choice",
+    q: "놀이기구 탑승 조건이에요. 화면에 무엇이 출력될까요?",
+    code: 'age = {A}\nheight = {H}\nif age >= 8 and height >= {M}:\n    print("탑승 가능")\nelse:\n    print("탑승 불가")',
+    wrong: ['age = {A}\nheight = {H}\nif age >= 8 and height >= {M}:\n    print("탑승 불가")\nelse:\n    print("탑승 가능")','age = {A}\nheight = "{H}"\nif age >= 8 and height >= {M}:\n    print("탑승 가능")\nelse:\n    print("탑승 불가")'],
+    vars: { A: { min: 5, max: 14 }, H: { min: 95, max: 140 }, M: [110, 120, 130] },
+    explain: "and는 나이와 키 조건이 모두 참이어야 탑승 가능이에요. 하나라도 거짓이면 탑승 불가예요. 키를 따옴표로 감싸면 글자라서 숫자와 비교할 때 TypeError예요.",
+  },
+];

@@ -10,10 +10,12 @@ export const LESSONS = [
   {
     id: "5-1", chapter: 5, title: "while로 반복하기",
     goal: "조건이 참인 동안 같은 코드를 되풀이할 수 있다",
+    updated: "v0.9",
     summary: [
       "while 조건: 참인 동안 들여쓴 줄 반복",
       "반복 안에서 조건의 값이 바뀌어야 끝남",
       "안 바뀌면 무한 반복, 3초 뒤 시간 초과",
+      "n += 1은 n = n + 1의 줄임",
     ],
     cards: [
       {
@@ -25,6 +27,11 @@ export const LESSONS = [
         say: "끝나지 않는 반복이 무한 반복이에요. 이 앱은 3초가 지나면 「시간 초과」 단서로 멈추고, 계속 찍어 대면 더 일찍 「출력이 너무 많아요」로 멈춰요.",
         code: 'i = 1\nwhile i <= 3:\n    print("안녕")\n    i = i + 1',
         out: "안녕\n안녕\n안녕",
+      },
+      {
+        say: "n = n - 1은 n -= 1로, n = n + 1은 n += 1로 줄여 쓸 수 있어요. 뜻은 같아요. 합계를 모을 때 편하고, 문자열도 s += \"!\"처럼 뒤에 이어 붙여요.",
+        code: 'total = 0\nn = 3\nwhile n > 0:\n    total += n\n    n -= 1\nprint(total)',
+        out: "6",
       },
     ],
     items: [
@@ -70,6 +77,22 @@ export const LESSONS = [
         lines: ["n = 3", "while n > 0:", "    print(n)", "    n = n - 1"],
         expect: "3\n2\n1",
         explain: "값을 먼저 만들고, while로 조건을 묻고, 들여쓴 안쪽에서 찍은 뒤 n을 줄여요. 줄이는 줄이 없으면 무한 반복이에요.",
+      },
+      {
+        type: "blank", concept: "while",
+        q: "6이 찍히게 빈칸을 채워 보세요.",
+        code: "total = 0\nn = 3\nwhile n > 0:\n    total ___ n\n    n -= 1\nprint(total)",
+        chips: ["+=", "=+", "=="],
+        answer: 0,
+        explain: "total += n 은 total = total + n 과 같아서 3, 2, 1이 쌓여 6이에요. =+ 는 「+n을 넣기」라 덧셈이 아니고, == 는 비교만 해서 total이 0이에요.",
+      },
+      {
+        type: "choice", concept: "while",
+        q: "화면에 무엇이 출력될까요?",
+        code: "n = 10\nn -= 3\nn -= 3\nprint(n)",
+        options: ["4", "7", "10"],
+        answer: 0,
+        explain: "n -= 3 은 n = n - 3 이에요. 10에서 3을 두 번 빼서 4가 돼요.",
       },
       {
         type: "write", concept: "while",
@@ -811,5 +834,49 @@ export const ADVANCED = [
         explain: "한 줄을 다 채운 직후에 줄을 바꿔야 해요. 안쪽 몸통에 두면 칸마다 줄이 바뀌고, 바깥 반복 뒤에 두면 줄이 한 번만 바뀌어요.",
       },
     ],
+  },
+];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+export const TEMPLATES = [
+  {
+    id: "5-T1", concept: "range", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: "total = 0\nfor i in range(1, {N}):\n    total = total + i\nprint(total)",
+    wrong: ["total = 0\nfor i in range(1, {N} + 1):\n    total = total + i\nprint(total)", "total = 0\nfor i in range(1, {N} - 1):\n    total = total + i\nprint(total)"],
+    vars: { N: { min: 4, max: 9 } },
+    explain: "range(1, {N}): 1부터 {N} 바로 앞까지예요. 끝 값은 들어가지 않아요. 그래서 합은 {OUT}.",
+  },
+  {
+    id: "5-T2", concept: "for", type: "blank",
+    q: "별(*)이 정확히 {N}개 찍히도록 range 안의 빈칸을 채워 보세요.",
+    code: 'stars = ""\nfor i in range(___):\n    stars = stars + "*"\nprint(stars)',
+    chips: ["{N}", "{N} + 1", "{N} - 1"], answer: 0,
+    vars: { N: { min: 4, max: 9 } },
+    explain: "range({N}): 0부터 {N} 바로 앞까지, 모두 {N}번 돌아요. + 1을 붙이면 한 번 더, - 1을 붙이면 한 번 덜 돌아요.",
+  },
+  {
+    id: "5-T3", concept: "while", type: "choice",
+    q: "저금액이 목표 {G}원 이상이 되려면 며칠 걸릴까요? 무엇이 출력될까요?",
+    code: "coin = {C}\ndays = 0\nwhile coin < {G}:\n    coin = coin * 2\n    days = days + 1\nprint(days)",
+    wrong: ["coin = {C}\ndays = 0\nwhile coin > {G}:\n    coin = coin * 2\n    days = days + 1\nprint(days)", "coin = {C}\ndays = 1\nwhile coin < {G}:\n    coin = coin * 2\n    days = days + 1\nprint(days)", "coin = {C}\ndays = 0\nwhile coin < {G}:\n    coin = coin * 2\ndays = days + 1\nprint(days)"],
+    vars: { C: { min: 1, max: 5 }, G: { min: 40, max: 100 } },
+    explain: "coin이 {G}원 미만인 동안 coin을 2배로 만들기를 되풀이해요. 센 횟수는 {OUT}. days 줄이 while 밖에 있으면 한 번만 세요.",
+  },
+  {
+    id: "5-T4", concept: "accum", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: "total = 0\nfor i in range(1, {N} + 1):\n    total = total + i * {P}\nprint(total)",
+    wrong: ["total = 0\nfor i in range(1, {N} + 1):\n    total = 0\n    total = total + i * {P}\nprint(total)", "total = 0\nfor i in range(1, {N}):\n    total = total + i * {P}\nprint(total)"],
+    vars: { N: { min: 4, max: 9 }, P: { min: 2, max: 9 } },
+    explain: "total에 i * {P} 값을 계속 더해 모아요. 반복 안에서 total을 0으로 되돌리면 마지막 값만 남고, range 끝 값에 + 1이 없으면 마지막 i가 빠져요.",
+  },
+  {
+    id: "5-T5", concept: "break", type: "choice",
+    q: "처음 찾은 배수에서 멈추는 코드예요. 화면에 무엇이 출력될까요?",
+    code: "found = 0\nfor n in range(1, 30):\n    if n % {K} == 0 and n > {S}:\n        found = n\n        break\nprint(found)",
+    wrong: ["found = 0\nfor n in range(1, 30):\n    if n % {K} == 0 and n > {S}:\n        found = n\nprint(found)", "found = 0\nfor n in range(1, 30):\n    if n % {K} == 0 and n > {S}:\n        break\n        found = n\nprint(found)"],
+    vars: { K: { min: 3, max: 5 }, S: { min: 5, max: 12 } },
+    explain: "n % {K} == 0 이고 n > {S} 인 첫 수에서 break로 반복이 끝나요. break가 없으면 끝까지 돌아 마지막 배수가 남고, break를 먼저 쓰면 found가 0 그대로예요.",
   },
 ];

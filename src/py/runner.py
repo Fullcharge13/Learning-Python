@@ -24,16 +24,21 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
   status 400 이상은 HTTPError. 끝나면 진짜 urlopen으로 되돌린다. server가 None이면 손대지 않는다.
 
 차트(v0.5 E3): 실행마다 새 `chart` 모듈을 sys.modules에 넣는다(끝나면 지워져 실행 사이에 상태가 없다).
-  matplotlib.pyplot과 거의 같은 이름(line만 pyplot에서는 plot): bar(이름들, 값들), line(이름들, 값들), title(글), xlabel(글), ylabel(글), show().
+  matplotlib.pyplot과 거의 같은 이름(line만 pyplot에서는 plot): bar(이름들, 값들), line(이름들, 값들), title(글), xlabel(글), ylabel(글), legend(선 이름들), show().
   show()가 그림 하나를 결과의 charts에 넣고 그림을 비운다. show() 없이 끝나면 그리지 않는다. 한 실행에 CHART_MAX개까지.
-  인자는 차례로만 받는다(color= 같은 이름 붙은 인자는 한국어 TypeError). 그림 하나에 막대 또는 꺾은선 하나만. 이름은 글자로 바꿔 담고, 값은 JSON에 넣을 수 있는 수(int·float, bool·nan·inf 아님).
+  인자는 차례로만 받는다(color= 같은 이름 붙은 인자는 한국어 TypeError). 이름은 글자로 바꿔 담고, 값은 JSON에 넣을 수 있는 수(int·float, bool·nan·inf 아님).
+  그림 하나에 막대는 하나만. 꺾은선은 같은 이름들(가로축)로 CHART_LINES_MAX개까지 겹칠 수 있다(v0.9, 17장 심화).
+  막대와 꺾은선은 섞지 않는다. legend(이름들)는 선 이름표 — 부르는 차례는 line 앞뒤 상관없고, show() 때 개수가 선 수와 같아야 한다.
+  그림 모양: 꺾은선 하나이고 legend가 없으면 예전 그대로 {kind, labels, values, …}.
+             꺾은선이 둘 이상이거나 legend가 있으면 values 대신 series: [{"name"?: 글, "values": [수]}, …].
 
 run(code, stdin, require, files=None, server=None) -> {
     "stdout": str, "stderr": str,
     "error": None | {"type": str, "line": int | None, "msg": str},
-    "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr, NamedGroup·Reraise)
+    "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:/Def:/SQL:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr, NamedGroup·Reraise)
     "charts": [{"kind": "bar" | "line", "labels": [str], "values": [int | float],
-                "title"?: str, "xlabel"?: str, "ylabel"?: str}, ...],
+                "title"?: str, "xlabel"?: str, "ylabel"?: str}
+               | {"kind": "line", "labels": [str], "series": [{"name"?: str, "values": [...]}, ...], ...}, ...],
 }
 stdin은 "12\n30" 같은 문자열(레슨 데이터 형식) 또는 문자열 목록.
 
@@ -252,7 +257,13 @@ def _missing(tree, require, code=""):
     #   "NamedGroup"  — 글자 상수 안에 (?P< 가 있음(이름 붙인 묶음, 패턴을 변수에 담아도 됨, 주석 안은 아님)
     # v0.8(10장 심화):
     #   "Reraise"     — except 블록 안의 맨 raise(받은 오류를 그대로 다시 던짐). raise ValueError(e)·except 밖의 raise는 아님
+    # v0.9(13~17장 심화):
+    #   "Def:__str__" — 그 이름의 def가 어딘가에 있음(클래스 안 메서드도). 부르기만 하거나 lambda에 이름 붙인 것은 아님
+    #   "SQL:JOIN"    — 글자 상수(이어 붙인 글자, f-문자열의 글자 부분 포함) 안에 그 낱말이 있음.
+    #                   대소문자 무시, 앞뒤가 영문자·숫자·_가 아니어야 함(JOINED·re_join은 아님). 주석·변수 이름은 아님
     lines = code.splitlines()
+    sql_words = [name[4:] for name in require if name.startswith("SQL:") and name[4:]]
+    texts = []
     found = set()
     for node in ast.walk(tree):
         found.add(type(node).__name__)
@@ -270,8 +281,13 @@ def _missing(tree, require, code=""):
                 found.add("Else")
         elif isinstance(node, getattr(ast, "TryStar", ())) and node.orelse:
             found.add("Else")
-        if isinstance(node, ast.Constant) and isinstance(node.value, str) and "(?P<" in node.value:
-            found.add("NamedGroup")
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if "(?P<" in node.value:
+                found.add("NamedGroup")
+            if sql_words:
+                texts.append(node.value)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            found.add("Def:" + node.name)
         if isinstance(node, ast.ExceptHandler) and any(
                 isinstance(r, ast.Raise) and r.exc is None for st in node.body for r in ast.walk(st)):
             found.add("Reraise")
@@ -285,6 +301,12 @@ def _missing(tree, require, code=""):
         found.add("SelfCall")
     if "TripleStr" in require and _has_triple_str(code):
         found.add("TripleStr")
+    if sql_words:
+        import re
+        for w in sql_words:
+            pat = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(w) + r"(?![A-Za-z0-9_])", re.IGNORECASE)
+            if any(pat.search(t) for t in texts):
+                found.add("SQL:" + w)
     return [name for name in require if name not in found]
 
 
@@ -353,6 +375,7 @@ def _make_urlopen(server):
 CHART_MAX = 3          # 한 실행에 그릴 수 있는 그림 수
 CHART_POINTS_MAX = 24  # 그림 하나의 막대·점 수(휴대폰 폭에서 읽을 수 있는 만큼)
 CHART_TEXT_MAX = 40    # 제목·축 이름·항목 이름 글자 수
+CHART_LINES_MAX = 3    # 그림 하나에 겹칠 수 있는 꺾은선 수(v0.9, 17장 심화)
 _float = float
 _int = int
 _bool = bool
@@ -361,6 +384,7 @@ _tuple = tuple
 _ValueError = ValueError
 _TypeError = TypeError
 _type = type
+_enumerate = enumerate
 _INT_SAFE = 2 ** 53
 
 
@@ -369,7 +393,9 @@ def _make_chart(charts):
     import types
 
     mod = types.ModuleType("chart")
-    mod.__doc__ = "리아와 파이썬! 차트: bar, line, title, xlabel, ylabel, show (matplotlib.pyplot과 거의 같은 이름, line은 pyplot의 plot)"
+    mod.__doc__ = ("리아와 파이썬! 차트: bar, line, title, xlabel, ylabel, legend, show "
+                   "(matplotlib.pyplot과 거의 같은 이름, line은 pyplot의 plot)")
+    # kind, labels, lines(꺾은선마다 값 목록 / 막대는 하나), legend, title, xlabel, ylabel
     fig = {}
 
     def _text(v, what):
@@ -405,8 +431,12 @@ def _make_chart(charts):
         return args
 
     def _plot(kind, labels, values):
-        if fig.get("kind"):
-            raise _ValueError("그림 하나에는 그래프 하나만 그려요. 먼저 chart.show()를 불러요")
+        if fig.get("kind") == "bar" and kind == "bar":
+            raise _ValueError("그림 하나에는 막대 그래프 하나만 그려요. 먼저 chart.show()를 불러요")
+        if fig.get("kind") and fig["kind"] != kind:
+            raise _ValueError("막대와 꺾은선은 한 그림에 섞지 않아요. 먼저 chart.show()를 불러요")
+        if fig.get("kind") == "line" and _len(fig["lines"]) >= CHART_LINES_MAX:
+            raise _ValueError("꺾은선은 한 그림에 %d개까지 겹칠 수 있어요" % CHART_LINES_MAX)
         labels = _seq(labels, "이름들")
         values = _seq(values, "값들")
         if _len(labels) != _len(values):
@@ -415,8 +445,15 @@ def _make_chart(charts):
             raise _ValueError("그릴 값이 하나도 없어요")
         if _len(labels) > CHART_POINTS_MAX:
             raise _ValueError("그래프 하나에 값은 %d개까지 그릴 수 있어요" % CHART_POINTS_MAX)
-        fig["labels"] = [_text(x, "이름") for x in labels]
-        fig["values"] = [_num(x) for x in values]
+        labels = [_text(x, "이름") for x in labels]
+        values = [_num(x) for x in values]
+        if fig.get("kind"):
+            if labels != fig["labels"]:
+                raise _ValueError("선마다 이름(가로축)이 같아야 해요")
+            fig["lines"].append(values)
+            return
+        fig["labels"] = labels
+        fig["lines"] = [values]
         fig["kind"] = kind
 
     def bar(*args, **kw):
@@ -425,7 +462,7 @@ def _make_chart(charts):
         _plot("bar", labels, values)
 
     def line(*args, **kw):
-        """꺾은선 그래프: chart.line(["월", "화"], [12, 15])"""
+        """꺾은선 그래프: chart.line(["월", "화"], [12, 15]). 같은 이름들로 다시 부르면 선을 겹친다(3개까지)"""
         labels, values = _args("line", args, kw, 2, 'chart.line(이름들, 값들)')
         _plot("line", labels, values)
 
@@ -444,21 +481,43 @@ def _make_chart(charts):
         text, = _args("ylabel", args, kw, 1, 'chart.ylabel("세로축 이름")')
         fig["ylabel"] = _text(text, "세로축 이름")
 
+    def legend(*args, **kw):
+        """선 이름표: chart.legend(["철수", "영희"]) — 선을 그린 차례대로"""
+        names, = _args("legend", args, kw, 1, 'chart.legend(["선 이름", "선 이름"])')
+        names = _seq(names, "선 이름들")
+        if not names:
+            raise _ValueError("선 이름이 하나도 없어요")
+        if _len(names) > CHART_LINES_MAX:
+            raise _ValueError("선 이름은 %d개까지 줄 수 있어요(꺾은선이 %d개까지라서)"
+                              % (CHART_LINES_MAX, CHART_LINES_MAX))
+        fig["legend"] = [_text(x, "선 이름") for x in names]
+
     def show(*args, **kw):
         """지금까지 그린 그림을 화면에 보여 주고 새 그림을 시작한다"""
         _args("show", args, kw, 0, "chart.show()")
         if not fig.get("kind"):
             raise _ValueError("그릴 그래프가 없어요. chart.bar()나 chart.line()을 먼저 불러요")
+        names = fig.get("legend")
+        if names is not None and fig["kind"] != "line":
+            raise _ValueError("chart.legend()는 꺾은선 그래프에만 써요")
+        if names is not None and _len(names) != _len(fig["lines"]):
+            raise _ValueError("선 이름(legend)의 개수가 선 개수와 달라요(선 %d개, 이름 %d개)"
+                              % (_len(fig["lines"]), _len(names)))
         if _len(charts) >= CHART_MAX:
             raise _ValueError("그림은 한 번 실행에 %d개까지 보여 줄 수 있어요" % CHART_MAX)
-        c = {"kind": fig["kind"], "labels": fig["labels"], "values": fig["values"]}
+        c = {"kind": fig["kind"], "labels": fig["labels"]}
+        if _len(fig["lines"]) == 1 and names is None:
+            c["values"] = fig["lines"][0]   # 예전 모양 그대로(v0.5 레슨·시험)
+        else:
+            c["series"] = [({"name": names[i], "values": v} if names is not None else {"values": v})
+                           for i, v in _enumerate(fig["lines"])]
         for k in ("title", "xlabel", "ylabel"):
             if k in fig:
                 c[k] = fig[k]
         charts.append(c)
         fig.clear()
 
-    for f in (bar, line, title, xlabel, ylabel, show):
+    for f in (bar, line, title, xlabel, ylabel, legend, show):
         f.__module__ = "chart"
         setattr(mod, f.__name__, f)
     return mod

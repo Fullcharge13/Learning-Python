@@ -2,11 +2,15 @@
 // 순수 함수만 둔다(Node 단위 시험). tests/content.py의 chart_mismatch()가 같은 비교 규칙을 따른다.
 //
 // 그림 하나 = { kind: "bar" | "line", labels: [글자], values: [수], title?, xlabel?, ylabel? }
+//         또는 (v0.9, 17장 심화) { kind: "line", labels, series: [{ name?, values }] (1~3개), title?, … }
+//         — 꺾은선이 둘 이상이거나 legend를 부르면 runner가 values 대신 series를 준다.
 // 채점: 기대(레슨 데이터의 chart)에 적힌 칸만 비교한다. 값은 수로(3 == 3.0, 아주 작은 소수 오차는 같음),
 //       이름은 글자로(2024 == "2024"), 제목·축 이름은 앞뒤 빈칸을 빼고 비교한다.
 //       chart가 객체면 그림이 정확히 1개, 목록이면 같은 수·같은 차례여야 한다.
+//       선(series): 선 수·차례·값, 기대에 name이 적혀 있으면 이름도. 선 하나끼리는 예전 말(「그래프 값이 달라요」).
 
 export const CHART_MAX = 3;
+export const LINES_MAX = 3;
 const KINDS = { bar: "막대 그래프", line: "꺾은선 그래프" };
 const TEXT_KEYS = [["title", "그래프 제목이 달라요"], ["xlabel", "가로축 이름이 달라요"], ["ylabel", "세로축 이름이 달라요"]];
 
@@ -19,14 +23,31 @@ export function sameNumber(a, b) {
   return Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 }
 
+const finiteList = (v, n) => Array.isArray(v) && v.length === n && v.every((x) => typeof x === "number" && Number.isFinite(x));
+
+/** 그림의 선 목록: series가 있으면 그것, 아니면 values 하나짜리 */
+function linesOf(c) {
+  if (Array.isArray(c.series)) return c.series;
+  return [{ values: Array.isArray(c.values) ? c.values : [] }];
+}
+
 /** 작업자에서 온 charts를 믿지 않고 모양을 다듬는다(모르는 종류·깨진 그림은 버림, 최대 3개) */
 export function cleanCharts(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
   for (const c of list) {
-    if (!c || typeof c !== "object" || !KINDS[c.kind] || !Array.isArray(c.labels) || !Array.isArray(c.values)) continue;
-    if (!c.labels.length || c.labels.length !== c.values.length || !c.values.every((v) => typeof v === "number" && Number.isFinite(v))) continue;
-    const g = { kind: c.kind, labels: c.labels.map(String), values: c.values.slice() };
+    if (!c || typeof c !== "object" || !KINDS[c.kind] || !Array.isArray(c.labels) || !c.labels.length) continue;
+    const n = c.labels.length;
+    let g;
+    if (c.series != null) {
+      if (c.values != null || c.kind !== "line" || !Array.isArray(c.series) || !c.series.length || c.series.length > LINES_MAX) continue;
+      if (!c.series.every((s) => s && typeof s === "object" && finiteList(s.values, n))) continue;
+      g = { kind: c.kind, labels: c.labels.map(String),
+        series: c.series.map((s) => (s.name != null ? { name: String(s.name), values: s.values.slice() } : { values: s.values.slice() })) };
+    } else {
+      if (!finiteList(c.values, n)) continue;
+      g = { kind: c.kind, labels: c.labels.map(String), values: c.values.slice() };
+    }
     for (const [k] of TEXT_KEYS) if (c[k] != null) g[k] = String(c[k]);
     out.push(g);
     if (out.length >= CHART_MAX) break;
@@ -40,9 +61,20 @@ function oneMismatch(exp, got) {
     const a = exp.labels.map(String), b = (got.labels || []).map(String);
     if (a.length !== b.length || a.some((x, i) => x !== b[i])) return "그래프 이름(가로축 항목)이 달라요";
   }
-  if (exp.values != null) {
-    const b = got.values || [];
-    if (exp.values.length !== b.length || exp.values.some((x, i) => !sameNumber(x, b[i]))) return "그래프 값이 달라요";
+  if (exp.values != null || exp.series != null) {
+    const es = linesOf(exp), gs = linesOf(got);
+    const sameVals = (a, b) => a.length === b.length && a.every((x, i) => sameNumber(x, b[i]));
+    if (es.length === 1 && gs.length === 1) {
+      if (es[0].name != null && String(es[0].name).trim() !== String(gs[0].name ?? "").trim()) return "선 이름이 달라요";
+      if (!sameVals(es[0].values || [], gs[0].values || [])) return "그래프 값이 달라요";
+    } else if (es.length !== gs.length) {
+      return `선 개수가 달라요(기대 ${es.length}개, 내 코드 ${gs.length}개)`;
+    } else {
+      for (let i = 0; i < es.length; i++) {
+        if (es[i].name != null && String(es[i].name).trim() !== String(gs[i].name ?? "").trim()) return `${i + 1}번째 선 이름이 달라요`;
+        if (!sameVals(es[i].values || [], gs[i].values || [])) return `${i + 1}번째 선 값이 달라요`;
+      }
+    }
   }
   for (const [k, msg] of TEXT_KEYS) {
     if (exp[k] != null && String(exp[k]).trim() !== String(got[k] ?? "").trim()) return msg;
@@ -69,12 +101,18 @@ export function fmtNum(v) {
   return String(parseFloat(Number(v).toPrecision(6)));
 }
 
-/** 읽기 프로그램·글로 보는 설명: 「막대 그래프 「제목」(가로축 x, 세로축 y): 사과 3, 배 5」 */
+const lineName = (s, i) => (s.name != null ? String(s.name) : `선 ${i + 1}`);
+
+/** 읽기 프로그램·글로 보는 설명: 「막대 그래프 「제목」(가로축 x, 세로축 y): 사과 3, 배 5」
+ *  여러 선: 「꺾은선 그래프: 월, 화 / 철수: 3, 5 / 영희: 1, 2」 */
 export function chartText(c) {
   let s = KINDS[c.kind] || "그래프";
   if (c.title) s += ` 「${c.title}」`;
   const ax = [c.xlabel ? `가로축 ${c.xlabel}` : "", c.ylabel ? `세로축 ${c.ylabel}` : ""].filter(Boolean);
   if (ax.length) s += `(${ax.join(", ")})`;
+  if (Array.isArray(c.series)) {
+    return s + ": " + [c.labels.join(", "), ...c.series.map((ln, i) => `${lineName(ln, i)}: ${ln.values.map(fmtNum).join(", ")}`)].join(" / ");
+  }
   return s + ": " + c.labels.map((l, i) => `${l} ${fmtNum(c.values[i])}`).join(", ");
 }
 
@@ -106,11 +144,23 @@ function niceStep(span) {
 const W = 340, H = 220;
 const r1 = (v) => Math.round(v * 10) / 10;
 
+// 선마다 색(style.css .c-line-1~3)과 함께 점선 모양·점 모양도 달리해 색만으로 구분하지 않는다(색맹 배려)
+const DASH = ["", "7 4", "2 4"];
+
+function marker(k, x, y) {
+  const cls = `c-dot c-dot-${k + 1}`;
+  if (k === 1) return `<rect class="${cls}" x="${r1(x - 3.2)}" y="${r1(y - 3.2)}" width="6.4" height="6.4"/>`;
+  if (k === 2) return `<path class="${cls}" d="M${r1(x)} ${r1(y - 4.2)}L${r1(x + 4)} ${r1(y + 3)}L${r1(x - 4)} ${r1(y + 3)}Z"/>`;
+  return `<circle class="${cls}" cx="${x}" cy="${y}" r="3.5"/>`;
+}
+
 /** 그림 하나를 SVG 글자로. 색은 style.css의 .chart 규칙(--teal 등)을 따른다 */
 export function chartSVG(c) {
   const n = c.labels.length;
-  const vals = c.values;
-  let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  const multi = Array.isArray(c.series);
+  const lines = linesOf(c);
+  const all = lines.flatMap((s) => s.values);
+  let lo = Math.min(0, ...all), hi = Math.max(0, ...all);
   if (hi === lo) hi = lo + 1;
   const step = niceStep(hi - lo);
   lo = Math.floor(lo / step + 1e-9) * step;
@@ -120,7 +170,8 @@ export function chartSVG(c) {
   const tickW = Math.max(...ticks.map((t) => textW(fmtNum(t), 11)));
   const padL = 8 + tickW + 6 + (c.ylabel ? 18 : 0);
   const padR = 10;
-  const padT = (c.title ? 30 : 10) + 14; // 값 글자 자리
+  const legY = (c.title ? 30 : 10) + 8;   // 이름표 줄(여러 선일 때만)
+  const padT = (c.title ? 30 : 10) + (multi ? 22 : 0) + 14; // 값 글자 자리
   const padB = 22 + (c.xlabel ? 20 : 0);
   const pw = W - padL - padR, ph = H - padT - padB;
   const y = (v) => r1(padT + ph - ((v - lo) / (hi - lo)) * ph);
@@ -128,6 +179,16 @@ export function chartSVG(c) {
   const cx = (i) => r1(padL + band * (i + 0.5));
   const parts = [];
   if (c.title) parts.push(`<text class="c-title" x="${W / 2}" y="20" text-anchor="middle">${esc(fit(c.title, W - 20, 14))}</text>`);
+  if (multi) {
+    const cell = (W - 20) / lines.length;
+    lines.forEach((s, k) => {
+      const x0 = 10 + cell * k + 4;
+      const dash = DASH[k] ? ` stroke-dasharray="${DASH[k]}"` : "";
+      parts.push(`<line class="c-legline c-line-${k + 1}" x1="${r1(x0)}" x2="${r1(x0 + 22)}" y1="${legY}" y2="${legY}"${dash}/>`);
+      parts.push(marker(k, r1(x0 + 11), legY));
+      parts.push(`<text class="c-leg" x="${r1(x0 + 28)}" y="${legY + 4}">${esc(fit(lineName(s, k), cell - 36, 11))}</text>`);
+    });
+  }
   for (const t of ticks) {
     parts.push(`<line class="c-grid${t === 0 ? " c-zero" : ""}" x1="${r1(padL)}" x2="${W - padR}" y1="${y(t)}" y2="${y(t)}"/>`);
     parts.push(`<text class="c-yt" x="${r1(padL - 6)}" y="${y(t) + 4}" text-anchor="end">${esc(fmtNum(t))}</text>`);
@@ -141,22 +202,33 @@ export function chartSVG(c) {
     if (i % every) return;
     parts.push(`<text class="c-xl" x="${cx(i)}" y="${r1(padT + ph + 16)}" text-anchor="middle">${esc(fit(l, room, 11))}</text>`);
   });
-  const showVals = n <= 12;
-  const valText = (i, yy) => showVals
-    ? `<text class="c-val" x="${cx(i)}" y="${r1(yy)}" text-anchor="middle">${esc(fit(fmtNum(vals[i]), band + 8, 10))}</text>` : "";
+  const showVals = n <= 12 && lines.length === 1;   // 선이 여럿이면 값 글자가 겹쳐서 뺀다(글 설명에 있음)
+  const valText = (v, i, yy) => showVals
+    ? `<text class="c-val" x="${cx(i)}" y="${r1(yy)}" text-anchor="middle">${esc(fit(fmtNum(v), band + 8, 10))}</text>` : "";
   if (c.kind === "bar") {
+    const vals = lines[0].values;
     const bw = Math.max(2, Math.min(band * 0.62, 44));
     vals.forEach((v, i) => {
       const top = Math.min(y(v), y(0)), h = Math.max(1, Math.abs(y(v) - y(0)));
       parts.push(`<rect class="c-bar" x="${r1(cx(i) - bw / 2)}" y="${r1(top)}" width="${r1(bw)}" height="${r1(h)}" rx="2"/>`);
-      parts.push(valText(i, v >= 0 ? top - 4 : top + h + 11));
+      parts.push(valText(v, i, v >= 0 ? top - 4 : top + h + 11));
     });
-  } else {
+  } else if (!multi) {
+    const vals = lines[0].values;
     parts.push(`<polyline class="c-line" points="${vals.map((v, i) => `${cx(i)},${y(v)}`).join(" ")}"/>`);
     vals.forEach((v, i) => {
       parts.push(`<circle class="c-dot" cx="${cx(i)}" cy="${y(v)}" r="3.5"/>`);
-      parts.push(valText(i, y(v) - 8));
+      parts.push(valText(v, i, y(v) - 8));
     });
+  } else {
+    lines.forEach((s, k) => {
+      const dash = DASH[k] ? ` stroke-dasharray="${DASH[k]}"` : "";
+      parts.push(`<polyline class="c-line c-line-${k + 1}"${dash} points="${s.values.map((v, i) => `${cx(i)},${y(v)}`).join(" ")}"/>`);
+    });
+    lines.forEach((s, k) => s.values.forEach((v, i) => {
+      parts.push(marker(k, cx(i), y(v)));
+      parts.push(valText(v, i, y(v) - 8));
+    }));
   }
   return `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">${parts.join("")}</svg>`;
 }

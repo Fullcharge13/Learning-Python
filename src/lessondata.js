@@ -2,7 +2,8 @@
 //
 // - 레슨 목록(index): 장 번호·제목, 레슨 id·title·goal·summary·isExam, 레슨이 쓰는 개념 id. 학습 길·설정·진도·배지는 이것만 쓴다.
 //   심화 레슨(v0.7)은 장의 `advanced` 칸에 따로(id·title·goal·concepts·isAdvanced). ADVANCED가 없는 장은 이 칸이 없다.
-// - 장 파일(lessons/chN-<지문8자>.json): 장 하나의 { CHAPTER, LESSONS, ADVANCED? } 전체. 레슨을 열 때 getChapter(n)으로 받는다.
+// - 매일 도전 틀(v0.9): 장 파일의 TEMPLATES. 목록에는 장의 `templates` 칸에 id·개념만(없는 장은 칸 없음).
+// - 장 파일(lessons/chN-<지문8자>.json): 장 하나의 { CHAPTER, LESSONS, ADVANCED?, TEMPLATES? } 전체. 레슨을 열 때 getChapter(n)으로 받는다.
 // - 배포판: build.py가 window.RIA_LESSON_INDEX와 window.RIA_CHAPTER_FILES를 index.html에 넣는다 → 네트워크(서비스 작업자 저장본)로.
 // - 개발판(tools/dev.py): 두 값이 없다 → app.js가 data/lessons/chN.js를 import해 modules로 넘긴다(네트워크 없음).
 // - 보강한 레슨(v0.7.1)은 stub에 updated("v0.7.1")를 옮긴다 → 학습 길 「새 내용」 점(newcontent.js).
@@ -22,7 +23,8 @@ export function chapterFileName(n, hash8) {
 function chapterOfModule(m) {
   if (!m || !Array.isArray(m.LESSONS)) return null;
   const ch = m.CHAPTER || { id: m.LESSONS[0] && m.LESSONS[0].chapter, title: "" };
-  return { id: ch.id, title: ch.title || "", lessons: m.LESSONS, advanced: Array.isArray(m.ADVANCED) ? m.ADVANCED : [] };
+  return { id: ch.id, title: ch.title || "", lessons: m.LESSONS, advanced: Array.isArray(m.ADVANCED) ? m.ADVANCED : [],
+    templates: Array.isArray(m.TEMPLATES) ? m.TEMPLATES : [] };
 }
 
 function conceptsOf(l) {
@@ -61,6 +63,8 @@ export function buildLessonIndex(modules) {
     if (!ch) continue;
     const c = { id: ch.id, title: ch.title, lessons: ch.lessons.map((l) => lessonStub(l, ch.id)) };
     if (ch.advanced.length) c.advanced = ch.advanced.map((l) => advancedStub(l, ch.id));
+    // 매일 도전 틀(v0.9): 목록에는 id·개념만(문제 고르기용). 틀 내용은 장 파일에
+    if (ch.templates.length) c.templates = ch.templates.map((t) => ({ id: t.id, concept: t.concept }));
     out.push(c);
   }
   return out.sort((a, b) => a.id - b.id);
@@ -121,7 +125,7 @@ export function createLessonData({ index, files, modules, base, fetch: fetchImpl
   if (!split) {
     for (const m of modules || []) {
       const ch = chapterOfModule(m);
-      if (ch) done.set(ch.id, { CHAPTER: { id: ch.id, title: ch.title }, LESSONS: ch.lessons, ADVANCED: ch.advanced });
+      if (ch) done.set(ch.id, { CHAPTER: { id: ch.id, title: ch.title }, LESSONS: ch.lessons, ADVANCED: ch.advanced, TEMPLATES: ch.templates });
     }
   }
   const lessons = idx.flatMap((c) => c.lessons);            // 본 과정만
@@ -150,7 +154,7 @@ export function createLessonData({ index, files, modules, base, fetch: fetchImpl
     }
     const ch = chapterOfModule(data);
     if (!ch || ch.id !== n) throw new ChapterLoadError(n, `chapter ${n}: file holds chapter ${ch && ch.id}`);
-    return { CHAPTER: { id: ch.id, title: ch.title }, LESSONS: ch.lessons, ADVANCED: ch.advanced };
+    return { CHAPTER: { id: ch.id, title: ch.title }, LESSONS: ch.lessons, ADVANCED: ch.advanced, TEMPLATES: ch.templates };
   }
 
   /** 장 n의 { CHAPTER, LESSONS }. 실패는 기억하지 않아 다음 부름에서 다시 받는다 */

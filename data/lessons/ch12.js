@@ -765,3 +765,111 @@ export const ADVANCED = [
     ],
   },
 ];
+
+export const TEMPLATES = [
+  {
+    id: "12-T1", concept: "re", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: J(
+      "import re",
+      "t = \"{WORD} {N}번\"",
+      "m = re.search(r\"\\d+\", t)",
+      "print(m.group())",
+    ),
+    wrong: [
+      J(
+        "import re",
+        "t = \"{WORD} {N}번\"",
+        "m = re.search(r\"\\d\", t)",
+        "print(m.group())",
+      ),
+      J(
+        "import re",
+        "t = \"{WORD} {N}번\"",
+        "m = re.search(r\"\\w+\", t)",
+        "print(m.group())",
+      ),
+    ],
+    vars: { WORD: ["사과", "버스", "택배", "주문"], N: { min: 10, max: 99 } },
+    explain: "\\d+는 숫자가 이어진 덩어리 전체를 잡아요. \\d는 숫자 한 개, \\w+는 글자부터 잡아서 숫자 앞 낱말이 나와요.",
+  },
+  {
+    id: "12-T2", concept: "refindall", type: "blank",
+    q: "글에서 숫자 덩어리를 모두 찾아 리스트로 만들도록 패턴을 골라 보세요.",
+    code: J(
+      "import re",
+      "t = \"{A}개 {B}개 {C}개\"",
+      "print(re.findall(___, t))",
+    ),
+    chips: ["r\"\\d+\"", "r\"\\d\"", "r\"\\w\""], answer: 0,
+    vars: { A: { min: 10, max: 99 }, B: { min: 10, max: 99 }, C: { min: 10, max: 99 } },
+    explain: "\\d+는 숫자 덩어리째 잡아요. \\d는 숫자를 한 글자씩 잘라 내고, \\w는 \"개\"까지 잡아요.",
+  },
+  {
+    id: "12-T3", concept: "regroup", type: "choice",
+    q: "메일 주소에서 @ 뒤 낱말만 꺼내요. 화면에 무엇이 출력될까요?",
+    code: J(
+      "import re",
+      "t = \"{ID}@{HOST}.com\"",
+      "m = re.search(r\"(\\w+)@(\\w+)\", t)",
+      "print(m.group(2))",
+    ),
+    wrong: [
+      J(
+        "import re",
+        "t = \"{ID}@{HOST}.com\"",
+        "m = re.search(r\"(\\w+)@(\\w+)\", t)",
+        "print(m.group(1))",
+      ),
+      J(
+        "import re",
+        "t = \"{ID}@{HOST}.com\"",
+        "m = re.search(r\"(\\w+)@(\\w+)\", t)",
+        "print(m.group())",
+      ),
+      J(
+        "import re",
+        "t = \"{ID}@{HOST}.com\"",
+        "m = re.search(r\"(\\w+)@(\\w+)\", t)",
+        "print(m.group(3))",
+      ),
+    ],
+    vars: { ID: ["ria", "mina", "joon", "sora"], HOST: ["cafe", "mail", "shop", "bus"] },
+    explain: "group(1)은 첫 ( )인 아이디, group(2)는 둘째 ( )인 {HOST}예요. group()은 전체이고, 없는 3번 묶음은 오류예요.",
+  },
+  {
+    id: "12-T4", concept: "resub", type: "blank",
+    q: "번호의 숫자 덩어리를 *로 가리도록 패턴을 골라 보세요. 출력은 「{OUT}」.",
+    code: J(
+      "import re",
+      "t = \"번호 {A}-{B}\"",
+      "print(re.sub(___, \"*\", t))",
+    ),
+    chips: ["r\"\\d+\"", "r\"\\d\"", "r\"\\d+-\""], answer: 0,
+    vars: { A: { min: 100, max: 999 }, B: { min: 1000, max: 9999 } },
+    explain: "\\d+는 숫자 덩어리마다 * 하나로 바꿔요. \\d는 숫자 한 글자마다 *가 되고, 끝의 -까지 넣으면 -가 사라져요.",
+  },
+  {
+    id: "12-T5", concept: "refindall", type: "choice",
+    q: "시간에서 시(時) 앞 숫자만 모으려 해요. 화면에 무엇이 출력될까요?",
+    code: J(
+      "import re",
+      "t = \"{H}시 {M}분\"",
+      "print(re.findall(r\"(\\d+)시\", t))",
+    ),
+    wrong: [
+      J(
+        "import re",
+        "t = \"{H}시 {M}분\"",
+        "print(re.findall(r\"\\d+시\", t))",
+      ),
+      J(
+        "import re",
+        "t = \"{H}시 {M}분\"",
+        "print(re.findall(r\"\\d+\", t))",
+      ),
+    ],
+    vars: { H: { min: 1, max: 9 }, M: { min: 10, max: 59 } },
+    explain: "findall에 ( )가 있으면 묶음 안 글자만 리스트에 담아요. ( )가 없으면 \"시\"까지 함께 나와요.",
+  },
+];

@@ -8,6 +8,7 @@
 ```js
 export const CHAPTER = { id: N, title: "장 제목" };
 export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
+export const TEMPLATES = [ /* 매일 도전 틀 N-T1 …, 7절 (v0.9) */ ];
 ```
 레슨 하나:
 ```js
@@ -53,15 +54,15 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 
 ## 3-0. 본 과정 1~6장에서 쓸 수 있는 문법 (누적, v0.7.1)
 
-점검기 `CHAPTER_RULES`가 정한다. 뒤 장은 앞 장 것을 모두 쓸 수 있다. 서식 지정자(`f"{x:.2f}"`)·여러 줄 문자열·기본값 매개변수·재귀·`for…else`·`match`·`divmod` 풀기, 리스트 컴프리헨션·lambda·맨 `raise`·`csv.writer`·이름 붙인 묶음 `(?P<…>)`·묶음 참조 `\1`·`\g<…>`(v0.8)는 **본 과정에서는 언제나 오류**(심화 전용, 3-3절).
+점검기 `CHAPTER_RULES`가 정한다. 뒤 장은 앞 장 것을 모두 쓸 수 있다. 서식 지정자(`f"{x:.2f}"`)·여러 줄 문자열·기본값 매개변수·재귀·`for…else`·`match`·`divmod` 풀기, 리스트 컴프리헨션·lambda·맨 `raise`·`csv.writer`·이름 붙인 묶음 `(?P<…>)`·묶음 참조 `\1`·`\g<…>`(v0.8), `json.dump`·`json.load`·`__str__`·`__eq__`·`chart.legend`·한 그림에 꺾은선 여럿(v0.9)은 **본 과정에서는 언제나 오류**(심화 전용, 3-3절).
 
 | 장 | 새로 쓸 수 있는 것 |
 |---|---|
 | 1장 | `print`만(변수·조건 없음). **f-문자열 `f"{3 * 4}개"`**(v0.7.1, `{}` 안에 값·계산만, 서식 지정자 없음) |
-| 2장 | 변수·`+=`·비교·`and`/`or`, `input`·`int`·`float`·`str`·`bool`·`type`, **`round(x)`·`round(x, n)`** |
+| 2장 | 변수·비교·`and`/`or`, `input`·`int`·`float`·`str`·`bool`·`type`, **`round(x)`·`round(x, n)`** |
 | 3장 | `if`/`elif`/`else`, `a if c else b`, `len`·`abs`·`max`·`min`. 조건을 변수에 담기(`ok = a >= 60 and b >= 60`) |
 | 4장 | `def`·`return`, **내 함수에 이름 붙여 넘기기 `price(won=5000)`**, 함수 안에서 다른 함수 부르기 |
-| 5장 | `for … in range(…)`·`while`·`break`·`continue`, 반복 안의 반복, **`print(…, end=" ")`**(v0.7.1부터 5장 전에는 오류). `print`의 다른 이름 붙은 인자(`sep=` 등)는 쓰지 않는다 |
+| 5장 | `for … in range(…)`·`while`·`break`·`continue`, 반복 안의 반복, **`print(…, end=" ")`**(v0.7.1부터 5장 전에는 오류), **`n += 1`·`n -= 1`**(v0.9, 5-1 보강에서 배움 — 2~4장에서는 오류, `n = n + 1`로). `print`의 다른 이름 붙은 인자(`sep=` 등)는 쓰지 않는다 |
 | 6장 | 인덱스·슬라이싱, 문자열 메서드(`upper`·`strip`·`split`… **`zfill`·`center`·`ljust`·`rjust`**), 문자열·`split()` 결과를 `for`로 돌기 |
 
 ## 3-1. 파일·연습 서버·import (11~14장)
@@ -77,14 +78,20 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 
 ## 3-2. 객체지향·SQL·차트 (15~17장)
 
-- **import(누적)**: 15장 새 모듈 없음 · 16장 `sqlite3`(이름은 `connect`만) · 17장 `chart`(앱이 주는 모듈, `bar`·`line`·`title`·`xlabel`·`ylabel`·`show`만, 이름 붙은 인자 없음).
-- **15장 class**: `class Dog(Pet):`처럼 **이 코드에서 만든 클래스 하나만** 물려받는다(`object`·`Exception`·여러 클래스·`metaclass=` 금지). 데코레이터(`@…`) 금지. 특수 메서드는 `__init__`·`__str__`만(다른 `__이름__`은 정의도, `obj.__dict__`처럼 점 뒤에 쓰는 것도 금지). `super().__init__(…)`, `isinstance(x, Pet)`, 클래스 변수(`kind = "동물"`)는 된다. 컴프리헨션·lambda는 여전히 금지.
+- **import(누적)**: 15장 새 모듈 없음 · 16장 `sqlite3`(이름은 `connect`만) · 17장 `chart`(앱이 주는 모듈, `bar`·`line`·`title`·`xlabel`·`ylabel`·`show`만, 이름 붙은 인자 없음. `legend`는 17장 심화 전용).
+- **15장 class**: `class Dog(Pet):`처럼 **이 코드에서 만든 클래스 하나만** 물려받는다(`object`·`Exception`·여러 클래스·`metaclass=` 금지). 데코레이터(`@…`) 금지. 특수 메서드는 본 과정에서 `__init__`만(v0.9: `__str__`·`__eq__`는 15장 심화 전용 — 본 과정에 쓰면 「심화 전용」 오류. 다른 `__이름__`은 심화에서도 정의·`obj.__dict__`처럼 점 뒤에 쓰기 모두 금지). `super().__init__(…)`, `isinstance(x, Pet)`, 클래스 변수(`kind = "동물"`)는 된다. 컴프리헨션·lambda는 여전히 금지.
 - **self 빠뜨림 설명**: `def bark():`로 쓰고 `d.bark()`를 부르면 `TypeError: Dog.bark() takes 0 positional arguments but 1 was given`이 난다. 해설은 쉬운 말로: 「`d.bark()`라고 부르면 Python이 `d`를 첫 번째 값으로 몰래 넘겨요. 받을 자리(`self`)가 없어서 『0개 받는데 1개가 왔다』는 단서가 나와요. 메서드의 첫 매개변수는 언제나 `self`예요.」 이런 틀린 예는 점검기가 막지 않으므로 choice 문제의 code로 쓸 수 있다(정답 보기에 「오류」).
 - **클래스와 객체 혼동**: `Dog`(설계도)와 `d = Dog("초코")`(만든 물건)를 말로 구분한다. 「클래스 = 붕어빵 틀, 객체 = 붕어빵」처럼 한 번 비유하고 용어를 바꾸지 않는다.
 - **16장 sqlite3**: 언제나 `sqlite3.connect(":memory:")` — 인자는 이 글자 하나만(변수·파일 이름·이름 붙은 인자는 점검기 오류). 실행마다 새 빈 DB이므로 코드 안에서 `CREATE TABLE` → `INSERT` → `SELECT` 순서로 다 한다. 연결·커서에는 `cursor`·`execute`·`executemany`·`fetchall`·`fetchone`·`commit`·`close`만 쓴다(`executescript` 등 금지). SQL 글 자체는 점검기가 보지 않으니 직접 실행해 확인한다.
 - **ORDER BY**: 여러 줄이 나오는 `SELECT`의 출력을 채점하거나 보기로 비교하면 **반드시 `ORDER BY`**를 붙인다(없으면 순서가 우연에 기댐). `GROUP BY` 집계도 `ORDER BY`를 함께 쓴다.
 - **`?` 자리 표시**: 값은 SQL 글에 f-문자열·`+`로 끼워 넣지 않고 `cur.execute("… WHERE y > ?", (2020,))`처럼 `?`와 튜플로 넘긴다(값 하나도 `(값,)` 쉼표). 16-4에서 「글을 이어 붙이면 위험해요(SQL 주입)」를 한 줄로 말한다.
-- **17장 차트**: `chart.bar(이름들, 값들)`/`chart.line(…)` → `chart.title`·`xlabel`·`ylabel` → `chart.show()`. `show()`가 없으면 그림이 없다. 한 그림에 막대·꺾은선 하나만, 한 실행에 그림 3개까지. 이름과 값의 개수가 다르면 `ValueError`.
+- **17장 차트**: `chart.bar(이름들, 값들)`/`chart.line(…)` → `chart.title`·`xlabel`·`ylabel` → `chart.show()`. `show()`가 없으면 그림이 없다. **본 과정은 한 그림에 막대·꺾은선 하나만**(꺾은선을 `show` 없이 두 번 부르면 실행은 되지만 점검기가 「본 과정 레슨에서는 한 그림에 꺾은선 하나만」 오류), 한 실행에 그림 3개까지, 한 그림 점 24개까지. 이름과 값의 개수가 다르면 `ValueError`.
+- **여러 선(17장 심화, v0.9)**: 같은 이름들로 `chart.line`을 **최대 3번** 부르고 `chart.legend(["철수", "영희"])`(선 그린 차례대로, line 앞뒤 어디서 불러도 됨) → `show()` 한 번. 이름들(가로축)이 첫 선과 다르면 `ValueError("선마다 이름(가로축)이 같아야 해요")`, 4번째 선·막대 두 번·막대와 꺾은선 섞기·legend 개수가 선 수와 다름·막대에 legend는 모두 한국어 `ValueError`. 그림 모양은 선이 둘 이상이거나 legend가 있으면 `values` 대신 `series`:
+  ```js
+  chart: { kind: "line", labels: ["월", "화", "수"], title: "공부 시간",
+           series: [{ name: "철수", values: [3, 5, 4] }, { name: "영희", values: [1, 2, 6] }] }
+  ```
+  채점은 선 수·차례·값, `name`을 적으면 이름까지(안 적으면 이름은 보지 않음). 화면은 선마다 색 + 점선 모양 + 점 모양(원·네모·세모)이 다르고 제목 아래 이름표 한 줄, 값 글자는 생략(글 설명에 모두 있음). legend가 없으면 이름표는 「선 1·선 2」. matplotlib 대응은 `plt.plot` 두 번 + `plt.legend(["…", "…"])`(show_only 카드).
 - **차트 채점(`chart` 칸)**: write의 시험과 터치 문제에 선택 칸 `chart: {"kind": "bar"|"line", "labels": [...], "values": [...], "title"?, "xlabel"?, "ylabel"?}`을 둔다. 적힌 칸만 비교하고, 값은 숫자로 비교한다(`3`과 `3.0`은 같음). 출력(`expect`)과 차트를 둘 다 맞혀야 통과한다. 하드코딩을 막으려면 `require`에 `Method:bar`처럼 쓰고, 값은 리스트·딕셔너리에서 계산해 넣게 한다.
 - **matplotlib 비교 카드(17-5, 판정 C38)**: 카드에 `show_only: true`를 두면 코드를 **실행하지 않고 보여 주기만** 한다(화면에 「실제 컴퓨터용 코드(여기서는 실행 안 함)」 표시, 출력 칸 없음). 그래서 주석이 아닌 진짜 코드로 쓴다. 점검기는 너비(38칸)만 보고, `out`은 없거나 `""`, stdin·files·server·chart는 같이 쓸 수 없다. 카드에만 쓸 수 있다. 예:
   ```python
@@ -119,15 +126,27 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
   | 10장 | 맨 `raise`(Reraise): **except 안에서만** 잡은 오류를 다시 던짐. `raise … from …`은 어디서나 금지 | `raise ValueError(f"…")`, `except … as e`, `try/except/else/finally`(10-3·10-4), `while True` 안 try(10-2) |
   | 11장 | `csv.writer(f)`(CsvWriter) → `writerow([…])`·`writerows([[…]])`, 쓸 때도 `newline=""` | `csv.reader`, `open(name)` 변수 이름으로 열기(11-3), `"w"`·`"a"` |
   | 12장 | 이름 붙인 묶음 `(?P<h>\d+)`·`m.group("h")`·`m.groupdict()`(RegexNamedGroup), 묶음 참조 `\1`·`\g<h>`·`(?P=h)`(RegexBackref) | `( )`·`group(1)`(12-3), `findall` + `( )` → 튜플(12-3), `re.sub`(12-4) |
+  | 13장 (v0.9) | 새 문법 없음 | 쿼리 붙이기 `base + "?page=" + str(n)`, `parse_qs`(13-1), `e.code`·`r.status`(13-2), `while True` 안 try·`break`, `urlencode`(점검기는 허용, 가르침은 14-4) |
+  | 14장 | `json.dump(d, f)`·`json.load(f)`(JsonFile, `dump`는 `ensure_ascii`·`indent`·`sort_keys`만, `load`는 이름 붙은 인자 없음) | `json.dumps`·`loads`, `f.write(json.dumps(…))`·`json.loads(f.read())` |
+  | 15장 | `__str__`·`__eq__`(DunderStr·DunderEq) — 정의와 점 뒤 쓰기. `__repr__`·`__lt__`·`__hash__` 등은 계속 금지 | 클래스 속성 `Book.count = Book.count + 1`, `self.items = []`, 객체 리스트 for(15-2·15-3 보강) |
+  | 16장 | 새 문법 없음(SQL 글은 점검기가 안 봄) | `JOIN … ON`·`GROUP BY … HAVING`은 SQL 글이라 그대로 씀, `executescript`는 계속 금지 |
+  | 17장 | `chart.legend([...])`(ChartMulti) + 한 그림에 꺾은선 최대 3개(3-2절) | `chart.line`·`title`·`xlabel`·`ylabel`·`show`, 한 그림 점 24개·한 실행 그림 3개 |
 
   사전·집합 컴프리헨션(`{k: v for …}`·`{x for …}`)과 제너레이터 식(`sum(x for …)`)은 심화에서도 늘 금지(가르치지 않음). 12장 심화 문법은 **re를 들여온 코드의 모든 글자 상수**를 보므로 패턴을 변수에 담아도 잡힌다. 메서드(`writerow`·`discard`)는 점검기가 막지 못하니 본 과정 레슨에 쓰지 않는다.
+- **심화 채점 조건(require, v0.9)**: `Def:__str__`·`Def:__eq__`(그 이름의 def가 있음) — `__str__`은 `print`가 몰래 불러 `Method:`로 셀 수 없고 `print(b.title)`로 풀어도 같은 출력이 나오므로 15-A1 write에 꼭 넣는다. `SQL:JOIN`·`SQL:HAVING`(코드의 글자 상수 안에 그 낱말, 대소문자 무시·낱말 단위, 주석은 아님. require에는 대문자로 적음) — 두 번 SELECT해 파이썬에서 합쳐도 같은 출력이 나오므로 16-A1·A2 write에 넣는다. 화면 말: 「…__str__ 메서드를 만들어서 풀어야 해요」, 「…SQL에 JOIN을 써서 풀어야 해요」. `json.dump`는 `Method:dump`, 여러 선은 시험의 `chart` 칸(series 2개)으로 충분.
 - **심화 채점 조건(require, v0.8)**: `ListComp`·`Lambda`는 ast 마디 이름 그대로 쓴다. 12장 이름 붙인 묶음은 `NamedGroup`(글자 상수 안에 `(?P<`가 있음) — `group(1)`로 풀어도 같은 출력이 나오므로 A1 write에는 꼭 넣는다. 10장 맨 `raise`는 `Reraise`(except 블록 안에 `raise` 한 단어가 있음) — `raise ValueError(e)`·`raise e`로 새로 던져도 같은 출력이 나오므로 10-A2 write에 넣고 과제 문장에 「raise 한 단어로 다시 던지고」라고 쓴다.
-- **「안다고 가정하지 않음」(7~12장 심화, 디딤돌 조사 4절)**: 학습자는 1~6장 심화를 건너뛰었을 수 있다. 서식 지정자 `:>5`·`:.1f`(→ `round`·`zfill`·`center`), `"""…"""`, `divmod`, **`a if c else b`**, `match`, 기본값 매개변수·재귀, `for…else`, **`join`·`ljust`·`rjust`·`title`**은 **그 심화 레슨이 직접 가르치지 않으면 쓰지 않는다**(점검기는 허용하지만 본 과정에서 안 가르침). `+=` 대신 `total = total + x`(`+=`는 어디서도 안 가르침 — 13장 이후 코드에 있음, v0.8 범위 밖으로 따로 기록).
+- **「안다고 가정하지 않음」(7~12장 심화, 디딤돌 조사 4절)**: 학습자는 1~6장 심화를 건너뛰었을 수 있다. 서식 지정자 `:>5`·`:.1f`(→ `round`·`zfill`·`center`), `"""…"""`, `divmod`, **`a if c else b`**, `match`, 기본값 매개변수·재귀, `for…else`, **`join`·`ljust`·`rjust`·`title`**은 **그 심화 레슨이 직접 가르치지 않으면 쓰지 않는다**(점검기는 허용하지만 본 과정에서 안 가르침). `+=`·`-=`는 **5-1 보강(v0.9)에서 배움** — 5장부터 써도 된다(2~4장은 점검기 오류, `total = total + x`로).
   - **7장**: `enumerate`·`zip`·`list(range(…))` 없음(점검기 오류). A1은 7-3의 긴 모양 바로 옆에 한 줄 모양을 둔다. 2차원은 7-1 맛보기 `a[1][0]`에서 잇는다.
   - **8장**: `sorted(d.items(), key=…)`는 9장이라 쓰지 않음(출력은 넣은 순서). `max(d, key=…)` 대신 반복 + `if`. 컴프리헨션(7-A1)도 가정 안 함.
   - **9장**: lambda는 9-3의 `def get_count(pair): return pair[1]`을 한 줄로 바꾸며 시작. `max`/`min`의 `key=`·`.sort(key=)`는 쓰면 카드로 보여 준다. 집합은 `add`·`in`까지만 가정.
   - **10장**: `isdigit()`·**`except (A, B):`** 가정 안 함(쓰려면 그 카드에서 가르침). 맨 `raise`·겹친 try·try 안 `return`과 `finally`의 순서는 A2가 정확히 설명.
   - **11장**: 가상 파일 최대 5개. `FileNotFoundError`를 try로 잡는 것은 처음이라 쓰면 카드로. `",".join`·`readlines` 없음. 빈 줄 건너뛰기는 A3 카드에서.
+  - **13~17장(v0.9)**: 1~12장 심화를 건너뛴 학습자 기준 — 서식 지정자·`"""`·컴프리헨션·lambda(→ `def` 함수 이름)·`join`·`extend`·`isinstance`·`is None`(→ `if 값:`)은 쓰지 않는다.
+    - **13장 연습 서버**: 주소 글자가 **정확히 같을 때만** 답한다(쿼리 순서까지). 상태가 없어 같은 주소는 늘 같은 답(「503이면 다시 시도」는 성공하지 않음 → 다른 주소로). 한 문제 서버 표 **최대 8개**, 시험마다 따로 둘 수 없으니 숨은 시험은 stdin으로 다른 주소·값을 고르게. 쿼리 값은 영문·숫자만. A3은 `?page=` 늘리기 + 404에서 멈추기(3~4쪽).
+    - **14장**: 멈출 때를 데이터(`"next": null`·`"pages"`)로 안다. 파일은 실행이 끝나면 사라지니 같은 실행에서 쓰고 읽는다. JSON을 보여 줄 때는 `sort_keys=True`·`indent=2`·`ensure_ascii=False`를 모두 적는다. 평균은 `round(…, 1)`.
+    - **15장**: `print(객체)`의 기본 출력 `<__main__.Book object at 0x…>`는 **주소가 실행마다 달라** 카드 `out`·보기·기대 출력에 쓰지 않는다(말로만). `print([b1, b2])`도 `__repr__`이라 주소가 나옴 → for로 하나씩. `__eq__`를 정의한 객체는 집합·딕셔너리 열쇠로 쓰지 않는다. `__eq__` 안에 `isinstance` 없이 같은 클래스끼리만 비교.
+    - **16장**: 여러 줄 결과는 `ORDER BY` 필수(JOIN·GROUP BY 포함, 같은 값이면 둘째 기준까지). INNER JOIN만. `AVG`는 파이썬 `round`. `AS`·`ROUND()`·하위 질의는 쓰지 않거나 카드로. 표 내용은 시험마다 다른 CSV(`files`) + `require`의 `SQL:JOIN`/`SQL:HAVING`.
+    - **17장**: 한 그림 점 **24개까지**(`CHART_POINTS_MAX`), 한 실행 그림 **3개까지**, 선 **3개까지**. 한 달 31일은 그대로 못 그리니 주별(`(day - 1) // 7`)·종류별로 묶는다. 앞 몇 개는 7-4 보강의 리스트 슬라이싱 `a[:3]`.
   - **12장**: 바꿀 글에도 `r"…"`. `\s`·`\b`·`^`·`$`·`[^…]`·`re.split`·`re.compile`은 본 과정에 없음 → 쓰면 카드로. 다른 바른 패턴(`[0-9]+`)도 같은 출력이 나오게 시험을 고른다.
 - **직접 작성 시간**: 심화 정답은 시험마다 **1초 안에** 끝나야 하고, 재귀는 **100단계 안에서** 끝나야 한다(휴대폰 3초 제한·스택 여유, 점검기가 잰다). 재귀 예시는 `fact(5)`, 자릿수 합처럼 작은 수로.
 - **말투**: 리아가 첫 카드에서 「한 걸음 더」 가 보는 선택 레슨이라고 알린다(예: 「여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요.」). 본 과정 내용을 다시 설명하지 않고 바로 새 것으로 간다. 나머지 글자 수·문제 규칙·하드코딩 막기는 본 과정과 같다.
@@ -159,3 +178,52 @@ export const LESSONS = [ /* N-1 … N-5, N-5는 isExam: true */ ];
 2. `python3 tests/content.py`를 실행해 그 장의 오류가 0이 될 때까지 고친다.
 3. 다음 레슨으로 간다.
 4. 다 쓰면 하드코딩 확인 결과와 함께 보고한다.
+
+## 7. 매일 도전 틀 `TEMPLATES` (v0.9, 판정 C54)
+
+「오늘의 도전」의 터치 문제 2개는 장 파일의 **틀**에 값을 바꿔 끼워 매일 새로 만든다(직접 작성 1개는 끝낸 레슨의 write 문제를 그대로 씀, C53 — 틀로 만들지 않는다). 틀을 쓰는 일꾼은 이 절과 3-0절(장별 문법)만 보면 된다. 엔진: `src/template.js`, 점검: `python3 tests/content.py`(틀이 있으면 늘 검사, `--templates N`이면 1~N장에 장마다 4개 이상 필요).
+
+```js
+export const TEMPLATES = [
+  { id: "1-T1", concept: "arith", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: "print({A} + {B} * {C})",
+    wrong: ["print(({A} + {B}) * {C})", "print({A} + {B} + {C})"],   // 오답 「코드」 2~3개
+    vars: { A: { min: 2, max: 9 }, B: { min: 3, max: 9 }, C: { min: 2, max: 5 } },
+    explain: "곱셈이 먼저예요. {B} * {C} 먼저, 그다음 {A} 더하기 → {OUT}" },
+  { id: "1-T2", concept: "arith", type: "blank",
+    q: "{FOOD} {N}개를 {K}명이 똑같이 나누고 남는 개수가 나오게 빈칸을 채워 보세요.",
+    code: "print({N} ___ {K})", chips: ["%", "//", "/"], answer: 0,
+    vars: { FOOD: ["사탕", "귤", "쿠키"], N: { min: 13, max: 29 }, K: { min: 3, max: 6 } },
+    explain: "남는 개수는 나머지 % 로 구해요." },
+];
+```
+
+| 칸 | 뜻 |
+|---|---|
+| `id` | `N-T1`, `N-T2` … (장 번호 + T + 번호). 한 번 정하면 바꾸지 않는다(학습자 저장에 남음) |
+| `concept` | 본 과정 개념 id(그 장까지). 심화 개념은 안 됨. 복습 가중에 쓰임 |
+| `type` | `choice` 또는 `blank` (order·write 틀은 없음) |
+| `q` · `explain` | 문제 80자 · 해설 160자(값을 끼운 뒤 길이). `{OUT}`(정답 출력) 쓸 수 있음 |
+| `code` | 보여 줄 코드. choice는 정답 코드, blank는 `___` 정확히 하나 |
+| `wrong` (choice) | 오답 코드 2~3개. **보기는 코드들을 실제로 돌린 출력**(오류면 「오류가 나요」). 정답 보기는 언제나 `code`의 출력 |
+| `chips` · `answer` (blank) | 칩 3~4개와 정답 칩 번호. 오답 칩을 넣은 코드는 오류이거나 정답과 다른 출력이어야 함 |
+| `vars` | `{ 이름: [값, …] }`(2~40개, 글자 또는 정수) 또는 `{ 이름: { min, max } }`(정수, min < max). 1~6개 |
+| `stdin` (선택) | `input()` 입력. `"{A}\n{B}"`처럼 자리 표시 가능(2장부터) |
+
+**자리 표시 규칙**
+- `{대문자}`만 바뀐다(`{A}`, `{NAME}`, `{N_2}`). 코드의 변수는 소문자로 쓰므로 헷갈리지 않는다. f-문자열의 `{x}`·`{3 * 2}`는 그대로 둔다.
+- f-문자열 안에서 값을 계산하려면 바깥 중괄호를 그대로 쓴다: `f"{FRUIT} {{N} * {P}}원"` → `f"사과 {3 * 1200}원"`.
+- 글자 값은 코드에 따옴표와 함께 넣는다: `name = "{NAME}"`. 값 자체에는 따옴표·역슬래시·중괄호·줄바꿈을 넣지 않는다.
+- `OUT`은 예약 이름(값 이름으로 못 씀). `q`·`explain`에서만.
+- 선언한 값은 어딘가에 꼭 쓴다(안 쓰면 오류). 문제 문장에만 쓰는 값(예: `FOOD`)도 된다.
+- **숫자 뒤 조사 금지**: `{N}을`/`{N}를`은 숫자 읽기에 따라 틀린다. `{N}개를`, `{N}명이`처럼 단위를 붙이거나 조사 없는 문장으로 쓴다.
+
+**점검기가 보는 것** (씨앗 0~99 각각, 앱도 이 100가지만 냄)
+1. 값을 끼운 코드를 실제로 돌린다(한 번에 1초 안). 정답 코드가 오류면 틀 오류.
+2. choice 보기는 한 줄 출력, 비어 있지 않음, 30칸(한글 2칸) 이하, 서로 모두 다름. blank는 정답 칩만 그 출력.
+3. 보기가 우연히 겹치면(예: `15 % 4`와 `15 // 4`가 둘 다 3) 같은 씨앗의 다음 「시도」로 값을 다시 뽑는다. 5번 안에 안 겹치는 값이 나와야 한다(늘 겹치면 오류). 다시 만든 수는 점검 결과 줄에 나온다 — 많으면 값 범위를 고친다.
+4. 코드 한 줄 38칸, 그 **장의 본 과정 문법**(3-0절 표). 서식 지정자·컴프리헨션 같은 심화 문법은 쓰지 않는다.
+5. 값을 끼운 `q`·`explain`의 길이와 한국어.
+
+**잘 만든 틀**: 오답 코드는 그 개념에서 실제로 하는 실수(괄호 없이 계산 순서, f 빠뜨림, 글자와 숫자 혼동, 변수 이름에 따옴표). 값 범위는 오답이 정답과 거의 겹치지 않게(예: `A + B * C`와 `A + B + C`는 B·C가 2이면 같아지므로 B를 3부터).

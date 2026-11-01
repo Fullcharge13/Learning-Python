@@ -5,6 +5,8 @@
       python3 tests/content.py --full N 정확히 1~N장(N×5개 레슨)이 있어야 통과
                                         (N을 빼면 있는 장 파일 수. 장 파일은 늘 1장부터 이어져야 함)
       python3 tests/content.py --advanced N  1~N장 파일에 심화 레슨(ADVANCED)이 모두 있어야 통과
+      python3 tests/content.py --templates N 1~N장 파일에 매일 도전 틀(TEMPLATES)이 4개 이상 있어야 통과
+                                        (틀은 플래그 없이도 있는 것은 모두 검사: 씨앗 0~99를 실제로 돌려 봄)
 
 데이터는 node로 ES 모듈을 import해 JSON으로 꺼낸다(실행 기록 C8).
 코드는 src/py/runner.py의 run()으로 CPython에서 실제로 돌린다(앱의 Pyodide 작업자와 같은 파일).
@@ -88,6 +90,8 @@ CHART_DOC = """
 chart:  {"kind": "bar", "labels": ["사과", "배"], "values": [3, 5], "title"?: "…", "xlabel"?: "…", "ylabel"?: "…"}
         또는 그런 그림 1~3개의 목록(그림 수·차례까지 비교). kind는 "bar"·"line", labels는 글자·숫자 1~24개,
         values는 같은 수의 숫자(true/false 아님). 제목·축 이름은 40자 이하 글자.
+        여러 선(v0.9, 17장 심화만): values 대신 "series": [{"name"?: "철수", "values": [...]}, …] 1~3개, kind "line".
+                    runner는 꺾은선이 둘 이상이거나 legend를 부르면 이 모양을 준다. 본 과정 레슨에서 나오면 오류.
         write 시험: 정답 코드의 chart.show() 그림과 비교(적힌 칸만, 값은 수로 3 == 3.0, 이름은 글자로).
                     출력과 그림을 둘 다 맞혀야 통과. 정답이 그림을 그리면 chart를 꼭 적는다.
         카드·터치 문제: 실행하지 않고 이 그림을 화면에 보여 준다. 점검기는 코드를 돌린 그림과 같은지 본다.
@@ -98,6 +102,8 @@ show_only: true (카드만) — 코드를 보여 주기만 하고 돌리지 않�
 """
 CHART_KEYS = {"kind", "labels", "values"}
 CHART_OPT = {"title", "xlabel", "ylabel"}
+CHART_LINES_MAX = 3   # v0.9: 17장 심화 한 그림의 꺾은선 수(runner CHART_LINES_MAX)
+SERIES_KEYS, SERIES_OPT = {"values"}, {"name"}
 CHART_KINDS = {"bar": "막대 그래프", "line": "꺾은선 그래프"}
 CHART_MAX = 3
 CHART_POINTS_MAX = 24
@@ -130,14 +136,14 @@ CHAPTER_RULES = {
                                 "BoolOp", "Attribute", "Subscript"},
         "names": {"print"}, "calls": {"print"}},
     # 2장: 변수·표현식·입력. (v0.2: Attribute·Subscript는 6장으로 옮김 — 인덱스·메서드는 6장에서 처음 배움)
-    #      round(x)·round(x, n)은 2장부터(2-2 보강)
-    2: {"allow": {"Assign", "AugAssign", "AnnAssign", "NamedExpr", "Compare", "BoolOp"},
+    #      round(x)·round(x, n)은 2장부터(2-2 보강). +=·-=(AugAssign)는 v0.9부터 5장(5-1 보강)
+    2: {"allow": {"Assign", "AnnAssign", "NamedExpr", "Compare", "BoolOp"},
         "names": None, "calls": {"input", "int", "float", "str", "bool", "type", "round"}},
     3: {"allow": {"If", "IfExp"}, "calls": {"len", "abs", "max", "min"}},
     # 4장: 내 함수 정의·부르기. 부를 때 이름 붙여 넘기기 f(won=5000)도 됨(4-3). 기본값 매개변수는 심화 전용
     4: {"allow": {"FunctionDef", "Return"}, "calls": {"len", "max", "min", "abs", "round"}},
-    # 5장: for는 range(…)만 돈다. 반복 안의 반복, print(…, end=" ")(5-2 보강)
-    5: {"allow": {"For", "While", "PrintEnd"}, "calls": {"range"}},
+    # 5장: for는 range(…)만 돈다. 반복 안의 반복, print(…, end=" ")(5-2 보강), n += 1·n -= 1(v0.9, 5-1 보강)
+    5: {"allow": {"For", "While", "PrintEnd", "AugAssign"}, "calls": {"range"}},
     # 6장: 인덱스·슬라이싱·문자열 메서드(s.upper(), zfill·center·ljust·rjust 등), 문자열·split() 결과를 for로 돌기
     6: {"allow": {"Attribute", "Subscript", "Slice", "ForNonRange"}, "calls": {"len"}},
     # 7장: 리스트 리터럴, 메서드(append·remove·pop·sort·index·insert — 메서드는 6장부터 Attribute로 허용),
@@ -157,7 +163,7 @@ CHAPTER_RULES = {
     13: {"modules": {"urllib.request", "urllib.parse", "urllib.error"}},  # 연습 서버(E2)
     14: {"modules": {"json"}},
     # 15장: class(사용자 클래스 하나만 물려받기, metaclass·데코레이터 없음), 메서드와 self,
-    #       특수 메서드는 __init__·__str__만(check_classes), super().__init__(…), isinstance(…).
+    #       특수 메서드는 __init__만(check_classes, v0.9: __str__·__eq__는 15장 심화), super().__init__(…), isinstance(…).
     15: {"allow": {"ClassDef"}, "calls": {"isinstance", "super"}},
     # 16장: sqlite3.connect(":memory:")만(check_sqlite). SQL 글 자체는 검사하지 않음.
     16: {"modules": {"sqlite3"}},
@@ -171,9 +177,9 @@ MODULE_MEMBERS = {
     "urllib.request": {"urlopen", "Request"},
     "urllib.parse": {"urlencode", "quote", "unquote", "urlparse", "parse_qs"},
     "urllib.error": {"HTTPError", "URLError"},
-    "json": {"loads", "dumps"},
+    "json": {"loads", "dumps", "dump", "load"},   # dump·load(파일)는 14장 심화 전용(ADVANCED_MEMBERS)
     "sqlite3": {"connect"},
-    "chart": {"bar", "line", "title", "xlabel", "ylabel", "show"},
+    "chart": {"bar", "line", "title", "xlabel", "ylabel", "show", "legend"},   # legend는 17장 심화 전용
 }
 OPEN_MODES = ("r", "w", "a")
 # 이름 붙은 인자(키워드)를 제한하는 함수: 함수 → 쓸 수 있는 키워드
@@ -181,11 +187,15 @@ CALL_KWARGS = {
     "open": {"mode", "encoding", "newline"},
     "json.dumps": {"ensure_ascii", "indent", "sort_keys"},
     "json.loads": set(),
+    "json.dump": {"ensure_ascii", "indent", "sort_keys"},
+    "json.load": set(),
     "sqlite3.connect": set(),
-    **{"chart." + n: set() for n in ("bar", "line", "title", "xlabel", "ylabel", "show")},
+    **{"chart." + n: set() for n in ("bar", "line", "title", "xlabel", "ylabel", "show", "legend")},
 }
-# 15장: 클래스 안에 정의할 수 있는 특수 메서드, 점 뒤에 쓸 수 있는 __이름__
-CLASS_DUNDERS = {"__init__", "__str__"}
+# 15장: 클래스 안에 정의할 수 있는 특수 메서드, 점 뒤에 쓸 수 있는 __이름__ (본 과정)
+CLASS_DUNDERS = {"__init__"}
+# 15장 심화(v0.9)가 더 여는 특수 메서드 → 가짜 문법 이름(ADVANCED_ONLY). 그 밖의 __이름__은 심화에서도 금지
+ADVANCED_DUNDERS = {"__str__": "DunderStr", "__eq__": "DunderEq"}
 # 16장: sqlite3.connect(…) 결과(연결)와 그 cursor()/execute(…) 결과(커서)에 쓸 수 있는 메서드
 DB_METHODS = {"execute", "executemany", "fetchall", "fetchone", "commit", "close", "cursor"}
 DB_MEMORY = ":memory:"
@@ -230,8 +240,12 @@ INPUT_FROM_CHAPTER = 2  # input()은 2장부터
 #   ListComp  for 하나, if는 0~1개, 컴프리헨션 안에 컴프리헨션 없음(2차원은 [[0] * 3 for r in range(2)]).
 #             DictComp·SetComp·GeneratorExp(sum(x for …))는 가르치지 않아 심화에서도 늘 금지
 #   Lambda    함수에 넘기는 자리(sorted(…, key=lambda p: p[1]))에서만. 이름에 담기(f = lambda …)·return 금지
+#   JsonFile     json.dump(d, f)·json.load(f) 파일로 쓰고 읽기(v0.9). 본 과정 14장은 dumps·loads만
+#   DunderStr·DunderEq  클래스 안 __str__·__eq__ 정의 또는 점 뒤 쓰기(v0.9, check_classes). 본 과정 15장은 __init__만
+#   ChartMulti   chart.legend(…)(v0.9). 한 그림에 선 여럿은 실행 결과(series)로 잡는다(check_main_charts)
 ADVANCED_ONLY = {"FormatSpec", "TripleQuote", "DivmodUnpack", "DefaultArg", "Recursion", "LoopElse", "Match",
-                 "ListComp", "Lambda", "Reraise", "CsvWriter", "RegexNamedGroup", "RegexBackref"}
+                 "ListComp", "Lambda", "Reraise", "CsvWriter", "RegexNamedGroup", "RegexBackref",
+                 "JsonFile", "DunderStr", "DunderEq", "ChartMulti"}
 ADVANCED_EXTRA = {
     # 1장 심화: 자릿수·정렬(f"{3.14159:.2f}", f"{'커피':>6}") — 변수는 아직이라 상수만. 여러 줄 문자열
     #           (f-문자열 자체는 v0.7.1부터 본 과정 1장에서 허용)
@@ -259,10 +273,21 @@ ADVANCED_EXTRA = {
     11: {"allow": {"CsvWriter"}},
     # 12장 심화: 이름 붙인 묶음 (?P<이름>…)·m.group("이름")·groupdict(), 묶음 참조 \1·\g<이름>
     12: {"allow": {"RegexNamedGroup", "RegexBackref"}},
-    # 13장 이후: 특수 메서드(15) 등을 여기에 더한다
+    # 13장 심화(v0.9): 새 문법 없음(쿼리 붙이기·상태 코드·쪽 번호 반복은 본 과정 13장 문법).
+    #           urlencode·quote는 MODULE_MEMBERS로 본 과정 13장부터 이미 허용
+    13: {},
+    # 14장 심화: json.dump(d, f)·json.load(f) — 파일로 쓰고 읽기(csv.writer와 같은 선례)
+    14: {"allow": {"JsonFile"}},
+    # 15장 심화: __str__·__eq__. 클래스 속성(Book.count = Book.count + 1)은 본 과정 15장 문법
+    15: {"allow": {"DunderStr", "DunderEq"}},
+    # 16장 심화: 새 문법 없음(JOIN·HAVING은 SQL 글이라 점검기가 보지 않음 — require SQL:JOIN으로 채점)
+    16: {},
+    # 17장 심화: 한 그림에 꺾은선 여럿(최대 3개) + chart.legend([...])
+    17: {"allow": {"ChartMulti"}},
 }
 # 모듈 이름 중 심화에서만 여는 것: "모듈.이름" → 가짜 문법 이름(ADVANCED_ONLY)
-ADVANCED_MEMBERS = {"csv.writer": "CsvWriter"}
+ADVANCED_MEMBERS = {"csv.writer": "CsvWriter", "json.dump": "JsonFile", "json.load": "JsonFile",
+                    "chart.legend": "ChartMulti"}
 ADV_RUN_SECONDS = 1.0       # 심화 직접 작성: 정답이 시험마다 이 시간 안에 끝나야 함(앱 제한 3초의 여유)
 ADV_RECURSION_DEPTH = 100   # 심화 재귀 정답이 쓸 수 있는 깊이(Pyodide 스택 여유)
 
@@ -335,6 +360,13 @@ def same_number(a, b):
     return abs(a - b) <= 1e-9 * max(1, abs(a), abs(b))
 
 
+def _lines_of(c):
+    """src/chart.js linesOf: series가 있으면 그것, 아니면 values 하나짜리 선 목록"""
+    if isinstance(c.get("series"), list):
+        return [x if isinstance(x, dict) else {} for x in c["series"]]
+    return [{"values": c.get("values") if isinstance(c.get("values"), list) else []}]
+
+
 def _chart_one(exp, got):
     if exp.get("kind") is not None and exp.get("kind") != got.get("kind"):
         return "그래프 종류가 달라요(기대: %s)" % CHART_KINDS.get(exp["kind"], exp["kind"])
@@ -342,10 +374,29 @@ def _chart_one(exp, got):
         a, b = [str(x) for x in exp["labels"]], [str(x) for x in got.get("labels") or []]
         if a != b:
             return "그래프 이름(가로축 항목)이 달라요"
-    if exp.get("values") is not None:
-        b = got.get("values") or []
-        if len(exp["values"]) != len(b) or not all(same_number(x, y) for x, y in zip(exp["values"], b)):
-            return "그래프 값이 달라요"
+    if exp.get("values") is not None or exp.get("series") is not None:
+        es, gs = _lines_of(exp), _lines_of(got)
+
+        def same_vals(a, b):
+            return len(a) == len(b) and all(same_number(x, y) for x, y in zip(a, b))
+
+        def name_differs(e, g):
+            return e.get("name") is not None and str(e["name"]).strip() != str(
+                g.get("name") if g.get("name") is not None else "").strip()
+
+        if len(es) == 1 and len(gs) == 1:
+            if name_differs(es[0], gs[0]):
+                return "선 이름이 달라요"
+            if not same_vals(es[0].get("values") or [], gs[0].get("values") or []):
+                return "그래프 값이 달라요"
+        elif len(es) != len(gs):
+            return "선 개수가 달라요(기대 %d개, 내 코드 %d개)" % (len(es), len(gs))
+        else:
+            for i, (e, g) in enumerate(zip(es, gs)):
+                if name_differs(e, g):
+                    return "%d번째 선 이름이 달라요" % (i + 1)
+                if not same_vals(e.get("values") or [], g.get("values") or []):
+                    return "%d번째 선 값이 달라요" % (i + 1)
     for k, msg in (("title", "그래프 제목이 달라요"), ("xlabel", "가로축 이름이 달라요"), ("ylabel", "세로축 이름이 달라요")):
         if exp.get(k) is not None and str(exp[k]).strip() != str(got.get(k) if got.get(k) is not None else "").strip():
             return msg
@@ -377,20 +428,52 @@ def chart_of(rep, where, obj):
         rep.err(where, "chart는 그림 객체 하나 또는 1~%d개 목록" % CHART_MAX)
         return None
     ok = True
+    multi_keys = CHART_KEYS - {"values"} | {"series"}
     for f in figs:
-        if not isinstance(f, dict) or not (CHART_KEYS <= set(f) <= CHART_KEYS | CHART_OPT):
-            rep.err(where, "chart 칸은 kind, labels, values (+ 선택 title, xlabel, ylabel)")
+        if not isinstance(f, dict) or not (CHART_KEYS <= set(f) <= CHART_KEYS | CHART_OPT
+                                           or multi_keys <= set(f) <= multi_keys | CHART_OPT):
+            rep.err(where, "chart 칸은 kind, labels, values (또는 여러 선이면 values 대신 series)"
+                           " + 선택 title, xlabel, ylabel")
             ok = False
             continue
         if f["kind"] not in CHART_KINDS:
             rep.err(where, "chart.kind는 \"bar\" 또는 \"line\"")
             ok = False
-        labels, values = f["labels"], f["values"]
-        if (not isinstance(labels, list) or not isinstance(values, list) or not (1 <= len(labels) <= CHART_POINTS_MAX)
-                or len(labels) != len(values)):
-            rep.err(where, "chart.labels와 chart.values는 같은 길이의 목록(1~%d개)" % CHART_POINTS_MAX)
+        labels = f["labels"]
+        if not isinstance(labels, list) or not (1 <= len(labels) <= CHART_POINTS_MAX):
+            rep.err(where, "chart.labels는 목록(1~%d개)" % CHART_POINTS_MAX)
             ok = False
             continue
+        if "series" in f:
+            series = f["series"]
+            if f["kind"] != "line":
+                rep.err(where, "chart.series(여러 선)는 kind \"line\"에만")
+                ok = False
+            if not isinstance(series, list) or not (1 <= len(series) <= CHART_LINES_MAX):
+                rep.err(where, "chart.series는 선 1~%d개 목록 [{name?, values}, …]" % CHART_LINES_MAX)
+                ok = False
+                continue
+            values = []
+            for line in series:
+                if not isinstance(line, dict) or not (SERIES_KEYS <= set(line) <= SERIES_KEYS | SERIES_OPT):
+                    rep.err(where, "chart.series의 선 하나는 {values, name?}")
+                    ok = False
+                    continue
+                if "name" in line and (not isinstance(line["name"], str) or not line["name"].strip()
+                                       or len(line["name"]) > CHART_TEXT_MAX):
+                    rep.err(where, "chart.series의 name은 비어 있지 않은 글자(%d자 이하)" % CHART_TEXT_MAX)
+                    ok = False
+                if not isinstance(line["values"], list) or len(line["values"]) != len(labels):
+                    rep.err(where, "chart.series의 values는 labels와 같은 길이의 목록")
+                    ok = False
+                    continue
+                values = values + line["values"]
+        else:
+            values = f["values"]
+            if not isinstance(values, list) or len(labels) != len(values):
+                rep.err(where, "chart.labels와 chart.values는 같은 길이의 목록(1~%d개)" % CHART_POINTS_MAX)
+                ok = False
+                continue
         if not all((isinstance(x, str) or _is_num(x)) and len(str(x)) <= CHART_TEXT_MAX for x in labels):
             rep.err(where, "chart.labels는 글자나 숫자(%d자 이하)" % CHART_TEXT_MAX)
             ok = False
@@ -518,6 +601,15 @@ def same_outcome(a, b):
     return (not ca and not cb) or (bool(ca) and chart_mismatch(ca, cb) is None)
 
 
+def check_main_charts(rep, where, chapter, result):
+    """v0.9: 본 과정 레슨은 한 그림에 선 하나만(여러 선·legend는 17장 심화). line을 두 번 부르는 것은
+    정적으로 다 못 잡으므로 실행 결과의 그림(series)으로 본다."""
+    if isinstance(chapter, AdvancedChapter):
+        return
+    if any(isinstance(c, dict) and "series" in c for c in result.get("charts") or []):
+        rep.err(where, "본 과정 레슨에서는 한 그림에 꺾은선 하나만 그림 — 여러 선·legend는 17장 심화 전용")
+
+
 def check_run_chart(rep, where, expected, result):
     """카드·터치 문제의 chart(화면에 보여 줄 그림)가 코드를 돌린 그림과 같은지"""
     if expected is None or result["error"]:
@@ -577,12 +669,13 @@ def check_code_shape(rep, where, code, chapter):
     names = NAMES_BY_CHAPTER.get(chapter)
     where_ch = "%d장 심화" % chapter if adv else "%d장" % chapter
 
-    def forbidden(kind, line):
+    def forbidden(kind, line, what=None):
+        label = "%s(%s)" % (kind, what) if what else kind
         if kind in ADVANCED_ONLY and not adv:
             rep.err(where, "%s 은 심화 레슨에서만 쓰는 문법 — %d장 본 과정 레슨에서는 쓰지 않음(%s줄)"
-                    % (kind, chapter, line))
+                    % (label, chapter, line))
         else:
-            rep.err(where, "%s에서 아직 배우지 않은 문법 %s (%s줄)" % (where_ch, kind, line))
+            rep.err(where, "%s에서 아직 배우지 않은 문법 %s (%s줄)" % (where_ch, label, line))
 
     for kind, line, problem in advanced_features(tree, code):
         if problem:
@@ -604,7 +697,9 @@ def check_code_shape(rep, where, code, chapter):
         calls = calls | {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
     if "ClassDef" not in forbid:     # 직접 만든 클래스로 객체 만들기(15장부터)
         calls = calls | {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
-        check_classes(rep, where, tree, chapter)
+        for kind, line, what in check_classes(rep, where, tree, chapter):
+            if kind in forbid:
+                forbidden(kind, line, what)
     # for 대상 자리의 튜플(for k, v in …:) — ForTupleTarget이 허용된 장에서는 Tuple 금지에서 뺀다
     for_targets = set()
     if "ForTupleTarget" not in forbid:
@@ -615,9 +710,9 @@ def check_code_shape(rep, where, code, chapter):
         adv_members = []
         from_names = check_imports(rep, where, tree, chapter, adv_members)
         calls = calls | set(from_names)
-        for kind, line in adv_members:
+        for kind, line, what in adv_members:
             if kind in forbid:
-                forbidden(kind, line)
+                forbidden(kind, line, what)
     for node in ast.walk(tree):
         kind = type(node).__name__
         if kind == "Tuple" and (id(node) in for_targets or id(node) in divmod_targets):
@@ -758,8 +853,12 @@ def check_match(rep, where, tree):
 
 def check_classes(rep, where, tree, chapter):
     """15장부터: 물려받기는 같은 코드에서 만든 클래스 하나만, metaclass·데코레이터 없음,
-    특수 메서드(__이름__)는 CLASS_DUNDERS만 정의하고 점 뒤에도 그것만 쓴다."""
+    특수 메서드(__이름__)는 CLASS_DUNDERS만 정의하고 점 뒤에도 그것만 쓴다.
+    ADVANCED_DUNDERS(__str__·__eq__, 15장 심화)는 여기서 오류로 적지 않고 [(가짜 문법 이름, 줄, 이름)]로 돌려준다
+    (부르는 쪽이 금지 표로 「심화 전용」/「아직 배우지 않은」을 고름)."""
     own = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+    allowed = CLASS_DUNDERS | set(ADVANCED_DUNDERS)
+    adv_found = []
     for node in ast.walk(tree):
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.decorator_list:
             rep.err(where, "%d장에서는 데코레이터(@…)를 쓰지 않음(%s줄)" % (chapter, node.decorator_list[0].lineno))
@@ -774,12 +873,18 @@ def check_classes(rep, where, tree, chapter):
                 rep.err(where, "class %s: %s= 은 쓰지 않음(%s줄)" % (node.name, k.arg or "**", node.lineno))
             for f in node.body:
                 if (isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)) and f.name.startswith("__")
-                        and f.name.endswith("__") and f.name not in CLASS_DUNDERS):
-                    rep.err(where, "특수 메서드 %s 은 %d장에서 쓰지 않음 — 쓸 수 있는 것: %s(%s줄)"
-                            % (f.name, chapter, ", ".join(sorted(CLASS_DUNDERS)), f.lineno))
-        if (isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__")
-                and node.attr not in CLASS_DUNDERS):
-            rep.err(where, ".%s 은 %d장에서 쓰지 않음(%s줄)" % (node.attr, chapter, node.lineno))
+                        and f.name.endswith("__")):
+                    if f.name in ADVANCED_DUNDERS:
+                        adv_found.append((ADVANCED_DUNDERS[f.name], f.lineno, f.name))
+                    elif f.name not in allowed:
+                        rep.err(where, "특수 메서드 %s 은 %d장에서 쓰지 않음 — 쓸 수 있는 것: %s(%s줄)"
+                                % (f.name, chapter, ", ".join(sorted(allowed)), f.lineno))
+        if isinstance(node, ast.Attribute) and node.attr.startswith("__") and node.attr.endswith("__"):
+            if node.attr in ADVANCED_DUNDERS:
+                adv_found.append((ADVANCED_DUNDERS[node.attr], node.lineno, "." + node.attr))
+            elif node.attr not in allowed:
+                rep.err(where, ".%s 은 %d장에서 쓰지 않음(%s줄)" % (node.attr, chapter, node.lineno))
+    return adv_found
 
 
 def _dotted(node):
@@ -797,10 +902,10 @@ def _dotted(node):
 def check_imports(rep, where, tree, chapter, adv_members=None):
     """11장부터: import는 그 장까지 배운 모듈만, 모듈에서는 MODULE_MEMBERS에 있는 이름만.
     open()의 모드, CALL_KWARGS의 키워드도 여기서 본다. from … import로 들여온 {이름: "모듈.이름"}을 돌려준다.
-    adv_members(목록)를 주면 ADVANCED_MEMBERS에 있는 이름을 쓴 곳을 (가짜 문법 이름, 줄)로 담는다."""
+    adv_members(목록)를 주면 ADVANCED_MEMBERS에 있는 이름을 쓴 곳을 (가짜 문법 이름, 줄, "모듈.이름")으로 담는다."""
     def note(qname, line):
         if adv_members is not None and qname in ADVANCED_MEMBERS:
-            adv_members.append((ADVANCED_MEMBERS[qname], line))
+            adv_members.append((ADVANCED_MEMBERS[qname], line, qname))
 
     modules = MODULES_BY_CHAPTER.get(chapter, set())
     allowed = ", ".join(sorted(modules)) or "없음"
@@ -951,6 +1056,7 @@ def check_choice(rep, where, item, chapter):
         return
     check_code_shape(rep, where + ".code", code, chapter)
     r = safe_run(rep, where, code, stdin, **env)
+    check_main_charts(rep, where, chapter, r)
     check_run_chart(rep, where, chart_of(rep, where, item), r)
     if not ok:
         return
@@ -1012,6 +1118,7 @@ def check_blank(rep, where, item, chapter):
     if good["error"]:
         rep.err(where, "정답 칩을 넣은 코드가 오류: %s %s" % (good["error"]["type"], good["error"]["msg"]))
         return
+    check_main_charts(rep, where, chapter, good)
     check_run_chart(rep, where, chart_of(rep, where, item), good)
     for i, c in enumerate(chips):
         if i == item["answer"]:
@@ -1041,6 +1148,7 @@ def check_order(rep, where, item, chapter):
         return
     chart = chart_of(rep, where, item)
     r = safe_run(rep, where, code, stdin, **env)
+    check_main_charts(rep, where, chapter, r)
     why = judge(r, item["expect"], chart)
     if why:
         rep.err(where, "정답 순서 실행 결과가 expect와 다름 — " + why)
@@ -1071,16 +1179,25 @@ REQUIRE_PREFIXES = ("Call", "Name", "Method")
 # v0.8: 12장 심화 이름 붙인 묶음(글자 상수 안에 (?P<가 있음)
 # v0.8: 10장 심화 다시 던지기(except 안의 맨 raise)
 REQUIRE_EXTRA = ("Comment", "Elif", "Else", "SelfCall", "FormatSpec", "TripleStr", "NamedGroup", "Reraise")
+# v0.9(13~17장 심화): "Def:__str__" = 그 이름의 함수·메서드를 정의함(print가 몰래 부르는 __str__은 Method:로 못 셈),
+#                    "SQL:JOIN" = 코드의 글자 상수 안에 그 SQL 낱말(대문자로 적음, 채점은 대소문자 무시·낱말 단위)
+REQUIRE_DEF_SQL = ("Def", "SQL")
+SQL_WORD_RE = re.compile(r"[A-Z]+")
 
 
 def check_require(rep, where, req):
-    """require 항목: ast 마디 이름(예: "If", "Mult"), "Call:<이름>"·"Name:<이름>"·"Method:<이름>",
+    """require 항목: ast 마디 이름(예: "If", "Mult"), "Call:<이름>"·"Name:<이름>"·"Method:<이름>"·"Def:<이름>"·"SQL:<낱말>",
     또는 REQUIRE_EXTRA("Comment"·"Elif"·"Else"·"SelfCall"·"FormatSpec"·"TripleStr"·"NamedGroup"·"Reraise")."""
     for name in req:
         if isinstance(name, str) and ":" in name:
             kind, _, ident = name.partition(":")
-            if kind not in REQUIRE_PREFIXES or not ident.isidentifier() or keyword.iskeyword(ident):
-                rep.err(where, "require %r 형식이 틀림(Call:이름, Name:이름, Method:이름 중 하나, 이름은 Python 식별자)" % (name,))
+            if kind == "SQL":
+                if not SQL_WORD_RE.fullmatch(ident):
+                    rep.err(where, "require %r 형식이 틀림(SQL:JOIN처럼 대문자 영어 낱말 하나)" % (name,))
+            elif ((kind not in REQUIRE_PREFIXES and kind not in REQUIRE_DEF_SQL)
+                  or not ident.isidentifier() or keyword.iskeyword(ident)):
+                rep.err(where, "require %r 형식이 틀림(Call:이름, Name:이름, Method:이름, Def:이름 중 하나, "
+                               "이름은 Python 식별자 — 또는 SQL:낱말)" % (name,))
             continue
         if name in REQUIRE_EXTRA:
             continue
@@ -1159,6 +1276,7 @@ def check_write(rep, where, item, chapter):
             r = adv_run(rep, tw, sol, t["stdin"], req, tenv)
         else:
             r = safe_run(rep, tw, sol, t["stdin"], req, **tenv)
+        check_main_charts(rep, tw, chapter, r)
         why = judge(r, t["expect"], charts[i])
         if why:
             rep.err(tw, "solution이 통과하지 못함 — " + why)
@@ -1295,6 +1413,7 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
             continue
         check_code_shape(rep, w + ".code", c["code"], chapter)
         r = safe_run(rep, w, c["code"], stdin_of(rep, w, c), **env_of(rep, w, c))
+        check_main_charts(rep, w, chapter, r)
         why = judge(r, c["out"])
         if why:
             rep.err(w, "코드 실행 결과가 out과 다름 — " + why)
@@ -1386,9 +1505,289 @@ def check_exam_coverage(rep, lessons):
         rep.err("items", "장 평가에 빠진 개념: " + ", ".join(map(str, lack)))
 
 
+# ── 매일 도전 틀 TEMPLATES (v0.9 작업 2, 판정 C54) ─────────────────────────
+# 형식은 docs/lesson-writing-guide.md 7절과 src/template.js. 이 묶음은 다른 검사와 따로 둔다(심화 규칙과 섞지 않음).
+# 값 바꿔 끼우기는 앱과 똑같이 src/template.js의 instantiate를 node로 불러 만든다(씨앗 0~99 × 시도 0~4).
+# 그 코드를 CPython runner로 돌리고 judge_instance(= template.js judgeInstance와 같은 규칙)로 판정한다.
+TEMPLATE_SEEDS = 100
+TEMPLATE_ATTEMPTS = 5
+TEMPLATE_RUN_SECONDS = 1.0     # 틀 코드 한 번 실행이 이 시간 안에 끝나야 함(앱이 하루 문제를 만들 때 기다리는 시간)
+TEMPLATE_MIN = 4               # --templates N: 1~N장마다 틀 이 개수 이상
+OPTION_COLS = 30               # 보기 한 줄 폭(src/template.js OPTION_COLS)
+TEMPLATE_KEYS = {
+    "choice": ({"id", "concept", "type", "q", "code", "vars", "wrong", "explain"}, {"stdin"}),
+    "blank": ({"id", "concept", "type", "q", "code", "vars", "chips", "answer", "explain"}, {"stdin"}),
+}
+TPL_VAR = re.compile(r"\{([A-Z][A-Z0-9_]*)\}")
+TPL_VAR_KEY = re.compile(r"[A-Z][A-Z0-9_]*")
+TPL_OUT = "OUT"
+TPL_VALUE_BAD = re.compile(r'["\'\\\n{}]')
+
+
+def instantiate_templates(templates):
+    """{틀 id: [씨앗][시도] → 바꿔 끼운 한 벌}. src/template.js instantiate를 그대로 쓴다."""
+    lib = "file://" + os.path.join(ROOT, "src", "template.js")
+    script = (
+        "const [libUrl, seeds, attempts] = process.argv.slice(1);"
+        "const lib = await import(libUrl);"
+        "const fs = await import('node:fs');"
+        "const tpls = JSON.parse(fs.readFileSync(0, 'utf8')); const out = {};"
+        "for (const t of tpls) { out[t.id] = []; for (let s = 0; s < +seeds; s++) { const row = [];"
+        "  for (let a = 0; a < +attempts; a++) row.push(lib.instantiate(t, s, a)); out[t.id].push(row); } }"
+        "process.stdout.write(JSON.stringify(out));"
+    )
+    r = subprocess.run(["node", "--input-type=module", "-e", script, lib, str(TEMPLATE_SEEDS), str(TEMPLATE_ATTEMPTS)],
+                       input=json.dumps(templates), capture_output=True, text=True, cwd=ROOT)
+    if r.returncode != 0:
+        raise RuntimeError(r.stderr.strip() or "node 실행 실패")
+    return json.loads(r.stdout)
+
+
+def template_run_list(inst):
+    """src/template.js runList와 같음"""
+    if inst["type"] == "blank":
+        return [inst["code"].replace("___", c) for c in inst["chips"]]
+    return [inst["code"]] + list(inst["wrong"])
+
+
+def judge_instance(inst, results):
+    """src/template.js judgeInstance와 같은 규칙. 문제가 되면 None, 아니면 이유(dup·answer-error·empty·multiline·wide)."""
+    def text(r):
+        return None if r["error"] else normalize(r["stdout"])
+    ai = inst["answer"] if inst["type"] == "blank" else 0
+    ans = text(results[ai])
+    if ans is None:
+        return "answer-error"
+    if not ans:
+        return "empty"
+    if inst["type"] == "blank":
+        if "{OUT}" in (inst.get("q") or "") + (inst.get("explain") or "") and "\n" in ans:
+            return "multiline"
+        if any(i != ai and text(r) == ans for i, r in enumerate(results)):
+            return "dup"
+        return None
+    opts = ["오류가 나요" if text(r) is None else text(r) for r in results]
+    if any("\n" in o for o in opts):
+        return "multiline"
+    if any(not o.strip() for o in opts):
+        return "empty"
+    if any(width(o) > OPTION_COLS for o in opts):
+        return "wide"
+    if len(set(opts)) != len(opts):
+        return "dup"
+    return None
+
+
+def _template_values_ok(rep, where, key, v):
+    if isinstance(v, list):
+        if not (2 <= len(v) <= 40):
+            rep.err(where, "vars.%s 목록은 값 2~40개" % key)
+            return False
+        for x in v:
+            if isinstance(x, bool) or not isinstance(x, (str, int)) or (isinstance(x, str) and (not x.strip() or TPL_VALUE_BAD.search(x))):
+                rep.err(where, "vars.%s 의 값 %r — 글자(따옴표·역슬래시·중괄호·줄바꿈 없음) 또는 정수만" % (key, x))
+                return False
+        if len(set(map(str, v))) != len(v):
+            rep.err(where, "vars.%s 목록에 같은 값이 두 번 있음" % key)
+            return False
+        return True
+    if isinstance(v, dict) and set(v) == {"min", "max"}:
+        lo, hi = v["min"], v["max"]
+        if (not isinstance(lo, int) or not isinstance(hi, int) or isinstance(lo, bool) or isinstance(hi, bool)
+                or not (lo < hi) or abs(lo) > 10 ** 6 or abs(hi) > 10 ** 6):
+            rep.err(where, "vars.%s 는 {min, max} 정수이고 min < max (절댓값 100만 이하)" % key)
+            return False
+        return True
+    rep.err(where, "vars.%s 는 값 목록 [..] 또는 {min, max}" % key)
+    return False
+
+
+def _template_schema(rep, t, chapter, concepts):
+    """틀 하나의 모양. 실행해 볼 만하면 True."""
+    kind = t.get("type")
+    if kind not in TEMPLATE_KEYS:
+        rep.err("type", "틀의 type은 choice 또는 blank (지금 %r)" % (kind,))
+        return False
+    need, opt = TEMPLATE_KEYS[kind]
+    missing, extra = need - set(t), set(t) - need - opt
+    if missing:
+        rep.err("", "빠진 칸: " + ", ".join(sorted(missing)))
+    if extra:
+        rep.err("", "모르는 칸: " + ", ".join(sorted(extra)))
+    if missing:
+        return False
+    ok = not extra
+    if not re.fullmatch(r"%d-T[1-9]\d*" % chapter, str(t.get("id"))):
+        rep.err("id", "틀 id %r 는 %d-T1, %d-T2 … 모양" % (t.get("id"), chapter, chapter))
+        ok = False
+    c = t.get("concept")
+    if not isinstance(c, str) or c not in concepts:
+        rep.err("concept", "개념 %r 이 concepts.js에 없음" % (c,))
+        ok = False
+    elif isinstance(concepts[c], AdvancedChapter):
+        rep.err("concept", "심화 개념 %s 은 틀에 쓰지 않음(틀은 본 과정 수준)" % c)
+        ok = False
+    elif concepts[c] > chapter:
+        rep.err("concept", "개념 %s 은 %d장 개념이라 %d장 틀에서 쓸 수 없음" % (c, concepts[c], chapter))
+        ok = False
+    for k in ("q", "code", "explain") + (("stdin",) if "stdin" in t else ()):
+        if not isinstance(t.get(k), str) or (k != "stdin" and not t[k].strip()):
+            rep.err(k, "%s 는 비어 있지 않은 글자" % k)
+            ok = False
+    if not ok:
+        return False
+    vars_ = t.get("vars")
+    if not isinstance(vars_, dict) or not (1 <= len(vars_) <= 6):
+        rep.err("vars", "vars는 {이름: 값들} 1~6개")
+        return False
+    for key, v in vars_.items():
+        if not TPL_VAR_KEY.fullmatch(key):
+            rep.err("vars", "값 이름 %r 은 대문자로(예: N, NAME) — 코드의 소문자 변수와 헷갈리지 않게" % key)
+            ok = False
+        elif key == TPL_OUT:
+            rep.err("vars", "OUT은 정답 출력 자리라 값 이름으로 못 씀")
+            ok = False
+        elif not _template_values_ok(rep, "vars", key, v):
+            ok = False
+    if kind == "choice":
+        w = t.get("wrong")
+        if not isinstance(w, list) or not (2 <= len(w) <= 3) or not all(isinstance(x, str) and x.strip() for x in w):
+            rep.err("wrong", "wrong은 오답 코드 2~3개(글자)")
+            return False
+        if "___" in t["code"]:
+            rep.err("code", "choice 틀 code에는 ___ 를 쓰지 않음")
+            ok = False
+    else:
+        if t["code"].count("___") != 1:
+            rep.err("code", "blank 틀 code에 빈칸 ___ 이 정확히 하나여야 함")
+            ok = False
+        if not check_index(rep, "chips", t, "chips", 3, 4):
+            return False
+        if any("___" in x for x in t["chips"]):
+            rep.err("chips", "칩에 ___ 가 들어 있음")
+            ok = False
+    # 자리 표시: code 쪽은 vars만, q·explain은 vars + OUT. 어디에도 안 쓰는 값은 오류(바꿔 끼워도 문제가 그대로)
+    code_side = [t["code"], t.get("stdin", "")] + list(t.get("wrong") or []) + list(t.get("chips") or [])
+    names = set(vars_)
+    for where, texts, allowed in (("code", code_side, names), ("q", [t["q"]], names | {TPL_OUT}),
+                                  ("explain", [t["explain"]], names | {TPL_OUT})):
+        for x in texts:
+            for m in TPL_VAR.findall(x):
+                if m not in allowed:
+                    rep.err(where, "모르는 자리 표시 {%s}%s" % (m, " — {OUT}은 q·explain에서만" if m == TPL_OUT else ""))
+                    ok = False
+    used = set(TPL_VAR.findall("\n".join(code_side + [t["q"], t["explain"]])))
+    for key in sorted(names - used):
+        rep.err("vars", "쓰지 않는 값 %s (어디에도 {%s} 가 없음)" % (key, key))
+        ok = False
+    return ok
+
+
+def _check_one_template(rep, t, insts, chapter, stats):
+    msgs = set()
+
+    def once(where, msg):
+        if (where, msg) not in msgs:
+            msgs.add((where, msg))
+            rep.err(where, msg)
+
+    for seed, row in enumerate(insts):
+        made = False
+        for attempt, inst in enumerate(row):
+            results = []
+            for code in template_run_list(inst):
+                t0 = time.time()
+                r = safe_run(rep, "씨앗 %d" % seed, code, inst["stdin"])
+                took = time.time() - t0
+                results.append(r)
+                if took > TEMPLATE_RUN_SECONDS:
+                    rep.err("씨앗 %d" % seed, "실행이 %g초를 넘음(%.2f초) — 틀 코드는 짧게" % (TEMPLATE_RUN_SECONDS, took))
+                    return
+            why = judge_instance(inst, results)
+            if why == "dup":
+                continue
+            if why:
+                e = results[inst["answer"] if inst["type"] == "blank" else 0]["error"]
+                detail = {
+                    "answer-error": "정답 코드가 오류 %s: %s" % ((e or {}).get("type"), (e or {}).get("msg")),
+                    "empty": "정답 코드의 출력이 비어 있음",
+                    "multiline": "출력이 여러 줄 — 보기와 {OUT}은 한 줄 출력만",
+                    "wide": "보기가 화면보다 넓음(%d칸 넘음)" % OPTION_COLS,
+                }[why]
+                rep.err("씨앗 %d" % seed, "%s — 코드: %s" % (detail, inst["code"].replace("\n", " ⏎ ")))
+                return
+            made = True
+            stats["retried"] += 1 if attempt else 0
+            for where, val, lim in (("q", inst["q"], Q_MAX), ("explain", inst["explain"], EXPLAIN_MAX)):
+                filled = val.replace("{OUT}", normalize(results[inst["answer"] if inst["type"] == "blank" else 0]["stdout"]))
+                sub = Lesson("")
+                check_text(sub, where, filled, lim, one_line=(where == "q"))
+                for e in sub.errors:
+                    once("", e)
+            for code in template_run_list(inst):
+                sub = Lesson("")
+                check_code_shape(sub, "code", code, chapter)
+                for e in sub.errors:
+                    once("", e)
+            break
+        if not made:
+            rep.err("씨앗 %d" % seed, "%d번 안에 겹치지 않는 보기를 못 만듦 — 오답 코드·칩이 정답과 자주 같은 출력" % TEMPLATE_ATTEMPTS)
+            return
+        stats["instances"] += 1
+
+
+def check_templates(templates, chapter, concepts):
+    """장 하나의 TEMPLATES 검사. 돌려줌 (오류 목록, {"instances": 문제가 된 씨앗 수, "retried": 다시 만든 수, "count": 틀 수})"""
+    errors, stats = [], {"instances": 0, "retried": 0, "count": 0}
+    if not isinstance(templates, list):
+        return ["TEMPLATES는 목록 [...]"], stats
+    seen, good, reps = set(), [], []
+    for i, t in enumerate(templates):
+        label = t.get("id") if isinstance(t, dict) and isinstance(t.get("id"), str) else "#%d" % (i + 1)
+        rep = Lesson(label)
+        reps.append(rep)
+        if not isinstance(t, dict):
+            rep.err("", "틀이 객체가 아님")
+            continue
+        if label in seen:
+            rep.err("id", "틀 id 중복")
+            continue
+        seen.add(label)
+        if _template_schema(rep, t, chapter, concepts):
+            good.append((rep, t))
+    stats["count"] = len(templates)
+    if good:
+        insts = instantiate_templates([t for _, t in good])
+        for rep, t in good:
+            _check_one_template(rep, t, insts[t["id"]], chapter, stats)
+    for rep in reps:
+        errors += ["틀 %s: %s" % (rep.label, e) for e in rep.errors]
+    return errors, stats
+
+
+def template_count_errors(counts, upto):
+    """--templates N: 1~N장마다 틀이 TEMPLATE_MIN개 이상. counts = {장: 틀 수}"""
+    if not upto:
+        return []
+    return ["--templates %d: %d장 틀이 %d개(%d개 이상 필요)" % (upto, c, counts.get(c, 0), TEMPLATE_MIN)
+            for c in range(1, upto + 1) if counts.get(c, 0) < TEMPLATE_MIN]
+
+
+def parse_templates(argv):
+    """--templates N: 1~N장에 틀이 TEMPLATE_MIN개 이상 있어야 함. 없으면 None."""
+    if "--templates" not in argv:
+        return None
+    i = argv.index("--templates")
+    if i + 1 < len(argv) and argv[i + 1].isdigit() and int(argv[i + 1]) >= 1:
+        return int(argv[i + 1])
+    return None
+
+
 def main(argv):
     full = parse_full(argv)  # None | 0(있는 장 수) | N
     adv_upto = parse_advanced(argv)  # None | N(1~N장에 심화가 있어야 함)
+    tpl_upto = parse_templates(argv)  # None | N(1~N장에 매일 도전 틀이 4개 이상)
+    tpl_counts, tpl_total = {}, 0
     failed = 0
     adv_total, found_adv = 0, []
 
@@ -1497,6 +1896,19 @@ def main(argv):
                     print("       - " + e)
                 failed += len(rep.errors)
 
+        if "TEMPLATES" in mod:   # 매일 도전 틀(v0.9). 없는 장은 건너뜀(--templates N이면 오류)
+            terr, tstats = check_templates(mod["TEMPLATES"], chapter, concepts)
+            tpl_counts[chapter] = tstats["count"]
+            tpl_total += tstats["count"]
+            print("  ── 매일 도전 틀 %d개: 씨앗 %d개 문제 만듦(다시 만든 것 %d) %s"
+                  % (tstats["count"], tstats["instances"], tstats["retried"], "✓ 통과" if not terr else "✗ 오류 %d" % len(terr)))
+            for e in terr:
+                print("       - " + e)
+            failed += len(terr)
+
+    for e in template_count_errors(tpl_counts, tpl_upto):
+        print("\n✗ " + e)
+        failed += 1
     for e in advanced_file_errors(found_adv, adv_upto):
         print("\n✗ " + e)
         failed += 1
@@ -1508,6 +1920,8 @@ def main(argv):
     note = " (아직 없음: %s)" % ", ".join("ch%d.js" % c for c in absent) if absent else ""
     if found_adv or adv_upto:
         print("\n심화: 레슨 %d개 (%s)" % (adv_total, ", ".join("%d장" % c for c in found_adv) or "없음"))
+    if tpl_counts or tpl_upto:
+        print("매일 도전 틀: %d개 (%s)" % (tpl_total, ", ".join("%d장 %d" % kv for kv in sorted(tpl_counts.items())) or "없음"))
     print("\n합계: 레슨 %d/%d%s, 오류 %d" % (total, planned * LESSONS_PER_CHAPTER, note, failed))
     return 1 if failed else 0
 

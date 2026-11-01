@@ -29,6 +29,7 @@ const LEDGER_SHAPE = {
   settings: { sound: true, dailyGoal: 20, name: "" },
   pending_refund: 0,
   seen_updates: {}, // v0.7.1: 「새 내용」 점 — 다시 본 판 { 레슨 id: "v0.7.1" } (saveVer 그대로)
+  daily: { date: null, picks: [], done: [], streak: 0, best: 0, last_done_date: null }, // v0.9 매일 도전(saveVer 그대로)
 };
 
 test("constants", () => {
@@ -431,4 +432,26 @@ test("C42 refund notice: 이상한 값은 0으로", () => {
 
 test("C42 refund notice text", () => {
   assert.equal(refundNoticeText(780), "없어진 옷 값 780바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!");
+});
+
+// v0.9 매일 도전: daily 칸은 saveVer 2 그대로, 없거나 깨지면 기본값(옮기기)
+test("migrate v0.9: daily가 없는 옛 저장은 기본 daily를 받음", () => {
+  const old = JSON.parse(JSON.stringify(LEDGER_SHAPE));
+  delete old.daily;
+  const s = migrate(old);
+  assert.equal(s.saveVer, 2);
+  assert.deepEqual(s.daily, LEDGER_SHAPE.daily);
+});
+
+test("migrate v0.9: 깨진 daily 값은 고침, 맞는 값은 그대로", () => {
+  const bad = migrate({ ...LEDGER_SHAPE, daily: { date: 3, picks: "x", done: [9, 1, 1], streak: "7", best: -2, last_done_date: "2026-02-30" } });
+  assert.deepEqual(bad.daily, { date: null, picks: [], done: [1], streak: 7, best: 7, last_done_date: null });
+  assert.deepEqual(migrate({ ...LEDGER_SHAPE, daily: [] }).daily, LEDGER_SHAPE.daily);
+  const good = { date: "2026-11-05", picks: [{ kind: "tpl", id: "2-T1", chapter: 2, seed: 99 }, { kind: "tpl", id: "1-T3", chapter: 1, seed: 0 },
+    { kind: "write", lesson: "1-2", chapter: 1 }], done: [0, 2], streak: 6, best: 10, last_done_date: "2026-11-04" };
+  assert.deepEqual(migrate({ ...LEDGER_SHAPE, daily: good }).daily, good);
+  // 저장 → 읽기 왕복
+  const st = fakeStorage();
+  store(st, { ...newSave(), daily: good });
+  assert.deepEqual(load(st).daily, good);
 });

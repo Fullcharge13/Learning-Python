@@ -747,3 +747,47 @@ export const ADVANCED = [
     ],
   },
 ];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+export const TEMPLATES = [
+  {
+    id: "6-T1", concept: "index", type: "choice",
+    q: "뒤에서 센 인덱스예요. 화면에 무엇이 출력될까요?",
+    code: 'word = "{W}"\nprint(word[-{K}])',
+    wrong: ['word = "{W}"\nprint(word[{K}])', 'word = "{W}"\nprint(word[{K} - 1])'],
+    vars: { W: ["purple", "planet", "jungle", "pencil", "bridge", "silver", "market", "orange"], K: [1, 2, 4, 5] },
+    explain: "음수 인덱스는 뒤에서부터 세요. -1이 맨 뒤 글자예요. 양수 인덱스는 앞에서부터 세고 0부터 시작해서 다른 글자가 나와요.",
+  },
+  {
+    id: "6-T2", concept: "slice", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: 'word = "{W}"\nprint(word[{A}:{B}])',
+    wrong: ['word = "{W}"\nprint(word[{A}:{B} + 1])', 'word = "{W}"\nprint(word[{A} - 1:{B}])'],
+    vars: { W: ["purple", "planet", "jungle", "pencil", "bridge", "silver", "market", "orange"], A: { min: 1, max: 2 }, B: { min: 3, max: 5 } },
+    explain: "word[{A}:{B}]는 인덱스 {A}부터 {B} 바로 앞까지예요. 시작은 포함, 끝은 포함하지 않아요. 그래서 {OUT}.",
+  },
+  {
+    id: "6-T3", concept: "strmethod", type: "blank",
+    q: "영어 단어를 모두 대문자로 바꿔 찍도록 빈칸을 채워 보세요.",
+    code: 'name = "{W}"\nprint(name.___())',
+    chips: ["upper", "lower", "strip"], answer: 0,
+    vars: { W: ["coffee", "latte", "mocha", "juice", "bagel", "toast", "cookie"] },
+    explain: "upper()는 대문자로, lower()는 소문자로 바꿔요. 이미 소문자인 글자에 lower()나 strip()을 해도 그대로예요.",
+  },
+  {
+    id: "6-T4", concept: "strmethod", type: "choice",
+    q: "문자열 메서드의 결과를 받지 않았어요. 화면에 무엇이 출력될까요?",
+    code: 's = "  {W}  "\ns.strip()\nprint(len(s))',
+    wrong: ['s = "  {W}  "\ns = s.strip()\nprint(len(s))', 's = "  {W}  "\ns = s.strip()\nprint(s)'],
+    vars: { W: ["coffee", "latte", "sandwich", "juice", "milk", "americano", "tea"] },
+    explain: "strip()은 원래 문자열을 바꾸지 않고 새 문자열을 돌려줘요. 돌려받은 값을 s에 담지 않았으니 s는 그대로, 길이는 {OUT}.",
+  },
+  {
+    id: "6-T5", concept: "strloop", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: 'word = "{W}"\ncount = 0\nfor ch in word:\n    if ch in "aeiou":\n        count = count + 1\nprint(count)',
+    wrong: ['word = "{W}"\ncount = 0\nfor ch in word:\n    if ch == "aeiou":\n        count = count + 1\nprint(count)', 'word = "{W}"\ncount = 0\nfor ch in word:\n    if ch not in "aeiou":\n        count = count + 1\nprint(count)', 'word = "{W}"\ncount = 1\nfor ch in word:\n    if ch in "aeiou":\n        count = count + 1\nprint(count)'],
+    vars: { W: ["computer", "keyboard", "elephant", "printer", "program", "battery", "screen", "mouse", "window", "audio", "education"] },
+    explain: "for로 글자를 하나씩 꺼내 모음이면 count를 올려요. ch == \"aeiou\"는 한 글자가 다섯 글자와 같을 수 없어 늘 거짓이에요.",
+  },
+];

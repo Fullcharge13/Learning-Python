@@ -330,10 +330,12 @@ export const LESSONS = [
   {
     id: "16-3", chapter: 16, title: "정렬과 집계",
     goal: "ORDER BY, COUNT, AVG, GROUP BY를 쓸 수 있다",
+    updated: "v0.9",
     summary: [
       "ORDER BY 열 DESC는 큰 순서",
       "COUNT(*)는 줄 수, AVG는 평균",
       "GROUP BY로 묶고 ORDER BY로 순서",
+      "SUM 합계, MAX·MIN 큰·작은 값",
     ],
     cards: [
       {
@@ -358,6 +360,20 @@ export const LESSONS = [
           "print(cur.fetchone()[0])",
         ),
         out: "과학 1 2019.0\n동화 2 2021.5\n소설 1 2021.0\n4",
+      },
+      {
+        say: "SUM은 합계, MAX는 가장 큰 값, MIN은 가장 작은 값이에요. VALUES (3), (8), (5)처럼 괄호를 쉼표로 이으면 여러 줄을 한 번에 넣어요. 결과가 한 줄이라 fetchone이 편해요.",
+        code: J(
+          ...HEAD,
+          ...Q("make", "CREATE TABLE t (n INTEGER)"),
+          "cur.execute(make)",
+          ...Q("add", "INSERT INTO t ", "VALUES (3), (8), (5)"),
+          "cur.execute(add)",
+          ...Q("sel", "SELECT SUM(n), ", "MAX(n), MIN(n) ", "FROM t"),
+          "cur.execute(sel)",
+          "print(cur.fetchone())",
+        ),
+        out: "(16, 8, 3)",
       },
     ],
     items: [
@@ -426,6 +442,32 @@ export const LESSONS = [
         ],
         expect: "4.0",
         explain: "SELECT로 먼저 물어야 fetchone이 줄을 가져와요. AVG는 정수만 줘도 소수 모양(4.0)으로 돌아와요.",
+      },
+      {
+        type: "choice", concept: "sqlagg",
+        q: "화면에 무엇이 출력될까요?",
+        code: J(
+          ...PRE(B4),
+          ...Q("sel", "SELECT MAX(year) FROM books"),
+          "cur.execute(sel)",
+          "print(cur.fetchone()[0])",
+        ),
+        options: ["2023", "2019", "4"],
+        answer: 0,
+        explain: "MAX는 가장 큰 값이에요. 네 책의 year 중 가장 큰 2023이 나와요. 가장 작은 2019는 MIN, 개수 4는 COUNT예요.",
+      },
+      {
+        type: "choice", concept: "sqlagg",
+        q: "화면에 무엇이 출력될까요?",
+        code: J(
+          ...PRE(B4),
+          ...Q("sel", "SELECT MIN(year) FROM books ", "WHERE genre = '동화'"),
+          "cur.execute(sel)",
+          "print(cur.fetchone()[0])",
+        ),
+        options: ["2020", "2023", "2"],
+        answer: 0,
+        explain: "WHERE로 동화만 남기면 2023과 2020이 있어요. MIN은 작은 쪽인 2020이에요. 2023은 MAX, 2는 COUNT예요.",
       },
       {
         type: "write", concept: "sqlagg",
@@ -762,6 +804,540 @@ export const LESSONS = [
         options: ["값 하나짜리 튜플을 만들려고", "SQL 글을 둘로 나누려고", "member를 지우려고"],
         answer: 0,
         explain: "(member)는 튜플이 아니라 그냥 member예요. 쉼표를 붙여야 값이 하나인 튜플이 되어 ?에 알맞게 들어가요.",
+      },
+    ],
+  },
+];
+
+// 틀 공통 앞부분(38칸 안에 들이려고 줄을 나눔)
+const TPRE = [
+  "import sqlite3",
+  "con = sqlite3.connect(\":memory:\")",
+  "cur = con.cursor()",
+  "mk = \"CREATE TABLE t (n TEXT, p INT)\"",
+  "cur.execute(mk)",
+  "ins = \"INSERT INTO t VALUES (?, ?)\"",
+];
+const ROWS3 = "rows = [(\"빵\", {A}),\n        (\"우유\", {B}),\n        (\"껌\", {C})]";
+const ROWS4 = "rows = [(\"빵\", {A}),\n        (\"우유\", {B}),\n        (\"껌\", {C}),\n        (\"물\", {D})]";
+const T = (rows, ...rest) => J(...TPRE, rows, "cur.executemany(ins, rows)", ...rest);
+
+export const TEMPLATES = [
+  {
+    id: "16-T1", concept: "sqlselect", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: T("rows = [(\"{N1}\", {A}),\n        (\"{N2}\", {B}),\n        (\"껌\", {C})]", "q = \"SELECT n FROM t\"", "q += \" WHERE p > ? ORDER BY p\"", "cur.execute(q, ({LIM},))", "print(cur.fetchall())"),
+    wrong: [
+      T("rows = [(\"{N1}\", {A}),\n        (\"{N2}\", {B}),\n        (\"껌\", {C})]", "q = \"SELECT n FROM t\"", "q += \" WHERE p < ? ORDER BY p\"", "cur.execute(q, ({LIM},))", "print(cur.fetchall())"),
+      T("rows = [(\"{N1}\", {A}),\n        (\"{N2}\", {B}),\n        (\"껌\", {C})]", "q = \"SELECT n FROM t ORDER BY p\"", "cur.execute(q)", "print(cur.fetchall())"),
+    ],
+    vars: { A: [1500, 1800], B: [2500, 2800], C: [500, 700], LIM: [1000, 2000], N1: ["빵", "떡", "밥", "국"], N2: ["우유", "차", "물", "꿀", "죽"] },
+    explain: "WHERE p > ? 는 기준보다 큰 줄만 골라요. ? 자리에는 튜플 ({LIM},)이 들어가요. → {OUT}",
+  },
+  {
+    id: "16-T2", concept: "sqlselect", type: "blank",
+    q: "p(가격)가 높은 것부터 나오도록 빈칸을 채워 보세요.",
+    code: T(ROWS3, "q = \"SELECT n FROM t ORDER BY ___\"", "cur.execute(q)", "print(cur.fetchall())"),
+    chips: ["p DESC", "p", "DESC p"], answer: 0,
+    vars: { A: [1500, 1800], B: [2500, 2800], C: [500, 700] },
+    explain: "ORDER BY 칸 이름 DESC는 큰 값부터 정렬해요. DESC가 없으면 작은 값부터, DESC가 앞에 오면 오류예요.",
+  },
+  {
+    id: "16-T3", concept: "sqlagg", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: T(ROWS3, "cur.execute(\"SELECT SUM(p) FROM t\")", "print(cur.fetchone()[0])"),
+    wrong: [
+      T(ROWS3, "cur.execute(\"SELECT MAX(p) FROM t\")", "print(cur.fetchone()[0])"),
+      T(ROWS3, "cur.execute(\"SELECT COUNT(p) FROM t\")", "print(cur.fetchone()[0])"),
+    ],
+    vars: { A: [1500, 1800, 2200], B: [2500, 2800, 3100], C: [500, 700, 900] },
+    explain: "SUM은 합계, MAX는 가장 큰 값, COUNT는 줄 개수예요. 집계는 한 줄만 나와서 fetchone으로 꺼내요. → {OUT}",
+  },
+  {
+    id: "16-T4", concept: "sqlagg", type: "blank",
+    q: "줄이 모두 몇 개인지 세도록 빈칸을 채워 보세요.",
+    code: T(ROWS4, "cur.execute(\"SELECT ___(*) FROM t\")", "print(cur.fetchone()[0])"),
+    chips: ["COUNT", "SUM", "MAX"], answer: 0,
+    vars: { A: [1500, 1800], B: [2500, 2800], C: [500, 700], D: [900, 1100] },
+    explain: "COUNT(*)는 줄 개수를 세요. SUM(*)과 MAX(*)는 어느 칸인지 몰라서 오류예요.",
+  },
+  {
+    id: "16-T5", concept: "sqlpy", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: J(...TPRE, "cur.execute(ins, (\"{NAME}\", {S}))", "q = \"SELECT p FROM t WHERE n = ?\"", "cur.execute(q, (\"{NAME}\",))", "print(cur.fetchone()[0])"),
+    wrong: [
+      J(...TPRE, "cur.execute(ins, (\"{NAME}\", {S}))", "q = \"SELECT p FROM t WHERE n = ?\"", "cur.execute(q, (\"{NAME}\"))", "print(cur.fetchone()[0])"),
+      J(...TPRE, "cur.execute(ins, (\"{NAME}\", {S}))", "cur.execute(\"SELECT p FROM t\")", "print(cur.fetchall())"),
+    ],
+    vars: { NAME: ["리아", "민수", "지우", "하나"], S: { min: 60, max: 99 } },
+    explain: "? 자리에 값을 넘길 때는 값이 하나여도 (값,)처럼 쉼표가 있어야 튜플이에요. 쉼표가 없으면 오류예요. → {OUT}",
+  },
+];
+
+// ───────── 16장 심화 (16-A1 ~ 16-A3) ─────────
+// SQL 글을 38칸 안에서 알아서 여러 줄로 나눈다 (공백 기준, 한글은 2칸)
+const XW = (t) => [...t].reduce((n, c) => n + (c.charCodeAt(0) > 127 ? 2 : 1), 0);
+const XQ = (name, ...parts) => {
+  const room = 38 - (name.length + 5) - 1;
+  // 절(SELECT·FROM·JOIN·ON·WHERE·GROUP BY·HAVING·ORDER BY) 단위로 자르고, 너무 긴 절만 낱말로 쪼갠다
+  const units = [];
+  parts.join("").split(/(?=\b(?:SELECT|FROM|JOIN|ON|WHERE|GROUP BY|HAVING|ORDER BY)\b)/).forEach((u) => {
+    if (XW(u) <= room) { units.push(u); return; }
+    const glued = u.replace(/(\S+) ([=<>]+) (\S+)/g, "$1\u00a0$2\u00a0$3").replace(/(ORDER|GROUP) BY/g, "$1\u00a0BY");
+    let piece = "";
+    glued.split(/(?<= )/).forEach((w) => {
+      if (piece && XW(piece + w) > room) { units.push(piece); piece = w; } else piece += w;
+    });
+    units.push(piece);
+  });
+  const lines = [];
+  let cur = "";
+  units.map((u) => u.replace(/\u00a0/g, " ")).forEach((u) => {
+    if (cur && XW(cur + u) > room) { lines.push(cur); cur = u; } else cur += u;
+  });
+  lines.push(cur);
+  if (lines.length === 1) return [`${name} = "${lines[0]}"`];
+  return lines.map((p, k) => (k === 0 ? `${name} = ("` : `${" ".repeat(name.length + 4)}"`) + p + (k === lines.length - 1 ? `")` : `"`));
+};
+const XV = (v) => (typeof v === "number" ? String(v) : `"${v}"`);
+const XLIST = (name, rows) => rows.map((r, i) =>
+  (i === 0 ? `${name} = [` : " ".repeat(name.length + 4)) + `(${r.map(XV).join(", ")})` + (i === rows.length - 1 ? "]" : ","));
+// 카드용: 리스트 + CREATE TABLE + INSERT + executemany (열 이름만, 형 없음)
+const XTBL = (name, cols, rows) => [
+  ...XLIST(name, rows),
+  ...XQ("make", `CREATE TABLE ${name} `, `(${cols})`), "cur.execute(make)",
+  ...XQ("ins", `INSERT INTO ${name} `, `VALUES (${cols.split(", ").map(() => "?").join(", ")})`),
+  `cur.executemany(ins, ${name})`,
+];
+// 과제 starter용: csv 파일을 표에 넣기 (열 형을 적어 숫자는 숫자로 저장)
+const XLOAD = (name, cols) => [
+  ...XQ("make", `CREATE TABLE ${name} `, `(${cols})`), "cur.execute(make)",
+  ...XQ("ins", `INSERT INTO ${name} `, `VALUES (${cols.split(", ").map(() => "?").join(", ")})`),
+  `with open("${name}.csv") as f:`, "    data = csv.reader(f)", "    cur.executemany(ins, data)",
+];
+const XHEAD = ["import sqlite3", "import csv", `conn = sqlite3.connect(":memory:")`, "cur = conn.cursor()"];
+const XFETCH = (expr) => ["cur.execute(sel)", "rows = cur.fetchall()", "for r in rows:", `    print(${expr})`];
+
+// 16-A1·A2·카드 공통 데이터
+const XBOOKS = [[1, "달빛 정원"], [2, "별의 지도"], [3, "작은 숲"]];
+const XLOANS = [[1, 1, "하늘"], [2, 3, "하늘"], [3, 1, "바다"], [4, 2, "나무"]];
+const XJOIN = ["FROM loans JOIN books ", "ON loans.book_id = books.id "];
+
+// 16-A1 과제 시험 데이터
+const A1_P = { b: [[1, "달빛 정원"], [2, "별의 지도"], [3, "작은 숲"]], l: [[1, 1, "하늘"], [2, 3, "하늘"], [3, 1, "바다"], [4, 2, "나무"]] };
+const A1_H1 = { b: [[1, "새벽 버스"], [2, "봄비 편지"], [3, "시장 골목"], [4, "하늘 정원"]], l: [[1, 2, "나무"], [2, 2, "구름"], [3, 9, "별"], [4, 1, "나무"], [5, 2, "가람"]] };
+const A1_H2 = { b: [[1, "여름 바다"]], l: [[1, 1, "봄"], [2, 5, "가을"]] };
+const A1F = (d) => ({ "books.csv": CSV(d.b), "loans.csv": CSV(d.l) });
+
+// 16-A2 과제 시험 데이터 (회원, 책, 일수)
+const A2_P = LOANS.map((r) => [r[1], r[0], r[2]]);
+const A2_H = [["구름", "가", 2], ["구름", "나", 4], ["구름", "다", 6], ["가람", "가", 3], ["가람", "나", 1], ["가람", "다", 8],
+  ["나무", "라", 5], ["나무", "마", 5], ["나무", "바", 5], ["나무", "사", 5]];
+
+// 16-A3 과제 시험 데이터
+const A3_P = {
+  m: [[1, "하늘"], [2, "바다"], [3, "나무"], [4, "구름"]],
+  b: [[1, "달빛 정원", "소설"], [2, "별의 지도", "과학"], [3, "작은 숲", "동화"], [4, "구름 빵집", "동화"]],
+  l: [[1, 1, 7], [1, 3, 14], [1, 4, 3], [2, 2, 3], [2, 3, 5], [2, 1, 10], [3, 3, 2]],
+};
+const A3_Q = {
+  m: [[1, "가람"], [2, "구름"]],
+  b: [[1, "마을 지도", "시"], [2, "바람 노래", "역사"]],
+  l: [[1, 1, 4], [1, 2, 7], [2, 1, 5], [2, 2, 6]],
+};
+const A3F = (d) => ({ "members.csv": CSV(d.m), "books.csv": CSV(d.b), "loans.csv": CSV(d.l) });
+// 카드용 작은 데이터
+const XM = [[1, "하늘"], [2, "바다"]];
+const XB3 = [[1, "달빛 정원", "소설"], [2, "작은 숲", "동화"]];
+const XL3 = [[1, 1, 7], [1, 2, 14], [2, 2, 5]];
+const X3 = [...HEAD, ...XTBL("members", "id, name", XM), ...XTBL("books", "id, title, genre", XB3),
+  ...XTBL("loans", "member_id, book_id, days", XL3)];
+
+export const ADVANCED = [
+  {
+    id: "16-A1", chapter: 16, title: "표 두 개 합치기", isAdvanced: true,
+    goal: "JOIN … ON으로 두 표를 번호로 이어 조회할 수 있다",
+    summary: [
+      "JOIN … ON으로 번호가 같은 줄을 이어요",
+      "열은 표.열 모양으로 써요",
+      "짝이 없는 줄은 빠져요",
+    ],
+    cards: [
+      {
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. loans에는 책 번호(book_id)만 있고 제목은 books에 있어요. JOIN … ON으로 번호가 같은 줄끼리 이어요. 열은 loans.member처럼 표.열로 써요.",
+        code: J(
+          ...HEAD,
+          ...XTBL("books", "id, title", XBOOKS),
+          ...XTBL("loans", "id, book_id, member", XLOANS.slice(0, 3)),
+          ...XQ("sel", "SELECT books.title, loans.member ", ...XJOIN, "ORDER BY books.title, ", "loans.member"),
+          ...XFETCH("r[0], r[1]"),
+        ),
+        out: "달빛 정원 바다\n달빛 정원 하늘\n작은 숲 하늘",
+      },
+      {
+        say: "INNER JOIN은 번호 짝이 있는 줄만 남겨요. 짝이 없으면 그 줄은 빠져요. 아래는 loans 4줄 중 책 번호 9의 줄이 짝이 없어 결과에서 빠지는 모습이에요.",
+        code: J(
+          ...HEAD,
+          ...XTBL("books", "id, title", XBOOKS),
+          ...XTBL("loans", "id, book_id, member", [...XLOANS.slice(0, 3), [4, 9, "별"]]),
+          ...XQ("a", "SELECT COUNT(*) FROM loans"),
+          ...XQ("b", "SELECT COUNT(*) ", ...XJOIN),
+          "cur.execute(a)",
+          "print(cur.fetchone()[0])",
+          "cur.execute(b)",
+          "print(cur.fetchone()[0])",
+        ),
+        out: "4\n3",
+      },
+    ],
+    items: [
+      {
+        type: "choice", concept: "sqljoin",
+        q: "화면에 무엇이 출력될까요?",
+        code: J(
+          ...HEAD,
+          ...XTBL("books", "id, title", XBOOKS),
+          ...XTBL("loans", "id, book_id, member", XLOANS),
+          ...XQ("sel", "SELECT books.title ", ...XJOIN, "WHERE loans.member = '바다'"),
+          "cur.execute(sel)",
+          "print(cur.fetchone()[0])",
+        ),
+        options: ["달빛 정원", "별의 지도", "바다"],
+        answer: 0,
+        explain: "바다의 기록은 book_id가 1이에요. ON으로 books의 id 1과 이어져 제목 달빛 정원이 나와요. 바다는 제목이 아니라 회원이에요.",
+      },
+      {
+        type: "choice", concept: "sqljoin",
+        q: "loans와 books를 알맞게 잇는 ON 조건은?",
+        options: ["ON loans.book_id = books.id", "ON loans.member = books.title", "ON loans.id = books.title"],
+        answer: 0,
+        explain: "loans의 책 번호(book_id)와 books의 번호(id)가 같은 줄끼리 이어요. 회원 이름과 제목처럼 뜻이 다른 열은 이을 수 없어요.",
+      },
+      {
+        type: "blank", concept: "sqljoin",
+        q: "loans 4줄이 모두 이어져 4가 찍히게 빈칸을 채워 보세요.",
+        code: J(
+          ...HEAD,
+          ...XTBL("books", "id, title", XBOOKS),
+          ...XTBL("loans", "id, book_id, member", XLOANS),
+          ...XQ("sel", "SELECT COUNT(*) ", "FROM loans JOIN books ", "ON loans.book_id = ___"),
+          "cur.execute(sel)",
+          "print(cur.fetchone()[0])",
+        ),
+        chips: ["books.id", "loans.id", "books.title"],
+        answer: 0,
+        explain: "책 번호 book_id의 짝은 books.id예요. loans.id로 쓰면 books와 잇는 조건이 없어 엉뚱하게 3이 나오고, books.title은 문자열이라 하나도 안 이어져 0이에요.",
+      },
+      {
+        type: "choice", concept: "sqljoin",
+        q: "이 코드를 실행하면 어떻게 될까요?",
+        code: J(
+          ...HEAD,
+          ...XTBL("books", "id, title", XBOOKS),
+          ...XTBL("loans", "id, book_id, member", XLOANS),
+          ...XQ("sel", "SELECT id ", ...XJOIN),
+          "cur.execute(sel)",
+          "print(cur.fetchone()[0])",
+        ),
+        options: ["오류 (어느 표의 id인지 몰라요)", "1", "loans의 id만 나와요"],
+        answer: 0,
+        explain: "두 표에 모두 id 열이 있어서 어느 쪽인지 알 수 없어 단서(OperationalError)가 나요. loans.id처럼 표.열로 써야 해요.",
+      },
+      {
+        type: "choice", concept: "sqljoin",
+        q: "loans에 book_id 9인 줄이 있고 books에 id 9가 없다면?",
+        options: ["그 줄은 JOIN 결과에서 빠져요", "제목이 빈 칸으로 나와요", "오류가 나요"],
+        answer: 0,
+        explain: "INNER JOIN은 짝이 있는 줄만 남겨요. 짝이 없는 줄은 오류 없이 조용히 빠지니, 개수가 줄었는지 살펴보세요.",
+      },
+      {
+        type: "write", concept: "sqljoin",
+        task: "starter가 books.csv(id, title)와 loans.csv(id, book_id, member)를 표에 넣어 둬요. JOIN으로 두 표를 이어 「제목 - 빌린 사람」을 제목 순(같으면 사람 순)으로 출력해요. 첫 줄은 달빛 정원 - 바다",
+        starter: J(...XHEAD, ...XLOAD("books", "id INTEGER, title TEXT"), ...XLOAD("loans", "id INTEGER, book_id INTEGER, member TEXT"), ""),
+        files: A1F(A1_P),
+        tests: [
+          { stdin: "", expect: "달빛 정원 - 바다\n달빛 정원 - 하늘\n별의 지도 - 나무\n작은 숲 - 하늘", public: true },
+          { stdin: "", expect: "봄비 편지 - 가람\n봄비 편지 - 구름\n봄비 편지 - 나무\n새벽 버스 - 나무", public: false, files: A1F(A1_H1) },
+          { stdin: "", expect: "여름 바다 - 봄", public: false, files: A1F(A1_H2) },
+        ],
+        require: ["SQL:JOIN", "Method:execute", "Method:fetchall", "For"],
+        hints: [
+          "제목은 books에, 빌린 사람은 loans에 있어요. 둘을 한 번의 SELECT로 합쳐야 해요.",
+          "방금 배운 JOIN … ON으로 loans.book_id와 books.id를 이어요. 열은 표.열로 써요.",
+          "SELECT books.title, loans.member FROM loans JOIN books ON … 뒤에 ORDER BY를 두 열로 이어요. 출력은 r[0], r[1]이에요.",
+          "sel = (\"SELECT books.title, \"\n       \"loans.member \"\n       \"FROM loans JOIN books \"\n       \"ON ___ ORDER BY ___\")\n(이어서 execute, fetchall, for)",
+        ],
+        solution: J(
+          ...XHEAD, ...XLOAD("books", "id INTEGER, title TEXT"), ...XLOAD("loans", "id INTEGER, book_id INTEGER, member TEXT"),
+          ...XQ("sel", "SELECT books.title, loans.member ", ...XJOIN, "ORDER BY books.title, ", "loans.member"),
+          ...XFETCH(`f"{r[0]} - {r[1]}"`),
+        ),
+        explain: "ON으로 번호가 같은 줄을 이어 제목과 사람을 한 줄에 모았어요. 짝 없는 대출은 빠지고, 같은 제목은 사람 순으로 정렬돼요.",
+      },
+      {
+        type: "check", concept: "sqljoin",
+        q: "loans.member처럼 표.열 모양으로 쓰는 이유는?",
+        options: ["어느 표의 열인지 분명히 하려고", "열을 지우려고", "표를 새로 만들려고"],
+        answer: 0,
+        explain: "JOIN하면 두 표의 열이 한 결과에 모여요. 표.열로 쓰면 이름이 같은 열(id)도 어느 표 것인지 헷갈리지 않아요.",
+      },
+    ],
+  },
+  {
+    id: "16-A2", chapter: 16, title: "GROUP BY와 HAVING", isAdvanced: true,
+    goal: "WHERE는 묶기 전, HAVING은 묶은 뒤에 거른다",
+    summary: [
+      "WHERE는 묶기 전에 줄을 걸러요",
+      "HAVING은 묶은 뒤 묶음을 걸러요",
+      "순서는 WHERE→GROUP BY→HAVING",
+    ],
+    cards: [
+      {
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 16-3에서 COUNT·AVG에 SUM(합계)·MAX·MIN도 배웠죠? 묶은 결과를 거를 때는 HAVING을 써요. 여기서는 대출이 2건 이상인 회원만 남겨요.",
+        code: J(
+          ...LPRE,
+          ...XQ("sel", "SELECT member, COUNT(*), ", "SUM(days) FROM loans ", "GROUP BY member ", "HAVING COUNT(*) >= 2 ", "ORDER BY member"),
+          ...XFETCH("r[0], r[1], r[2]"),
+        ),
+        out: "바다 3 18\n하늘 3 24",
+      },
+      {
+        say: "WHERE는 묶기 전에 줄을 거르고, HAVING은 묶은 뒤에 묶음을 걸러요. 쓰는 순서는 WHERE → GROUP BY → HAVING → ORDER BY예요. 아래는 5일 이상 빌린 기록만 회원별로 세어요.",
+        code: J(
+          ...LPRE,
+          ...XQ("sel", "SELECT member, COUNT(*) ", "FROM loans WHERE days >= 5 ", "GROUP BY member ", "ORDER BY member"),
+          ...XFETCH("r[0], r[1]"),
+        ),
+        out: "바다 2\n하늘 2",
+      },
+    ],
+    items: [
+      {
+        type: "choice", concept: "sqlhaving",
+        q: "화면에 무엇이 출력될까요?",
+        code: J(
+          ...LPRE,
+          ...XQ("sel", "SELECT member FROM loans ", "GROUP BY member ", "HAVING SUM(days) >= 20 ", "ORDER BY member"),
+          "cur.execute(sel)",
+          "print(cur.fetchone()[0])",
+        ),
+        options: ["하늘", "바다", "나무"],
+        answer: 0,
+        explain: "회원별 합계는 하늘 24일, 바다 18일, 나무 1일이에요. HAVING SUM(days) >= 20을 넘는 묶음은 하늘 하나뿐이에요.",
+      },
+      {
+        type: "choice", concept: "sqlhaving",
+        q: "화면에 무엇이 출력될까요?",
+        code: J(
+          ...LPRE,
+          ...XQ("sel", "SELECT member, COUNT(*) ", "FROM loans WHERE days >= 10 ", "GROUP BY member ", "ORDER BY member"),
+          "cur.execute(sel)",
+          "r = cur.fetchone()",
+          "print(r[0], r[1])",
+        ),
+        options: ["바다 1", "바다 3", "나무 1"],
+        answer: 0,
+        explain: "WHERE가 10일 이상 기록(바다 10일, 하늘 14일)만 남긴 뒤 묶어요. 바다는 한 건이 남아 1이고, 나무는 아예 사라져요.",
+      },
+      {
+        type: "blank", concept: "sqlhaving",
+        q: "대출이 3건 이상인 회원만 나오게 빈칸을 채워 보세요.",
+        code: J(
+          ...LPRE,
+          ...Q("sel", "SELECT member FROM loans ", "GROUP BY member ", "___ COUNT(*) >= 3 ", "ORDER BY member"),
+          ...XFETCH("r[0]"),
+        ),
+        chips: ["HAVING", "WHERE", "ORDER BY"],
+        answer: 0,
+        explain: "묶은 뒤의 건수를 거르니 HAVING이에요. WHERE나 ORDER BY를 GROUP BY 뒤에 두면 SQL 문법이 맞지 않아 단서가 나요.",
+      },
+      {
+        type: "choice", concept: "sqlhaving",
+        q: "이 코드를 실행하면 어떻게 될까요?",
+        code: J(
+          ...LPRE,
+          ...XQ("sel", "SELECT member FROM loans ", "WHERE COUNT(*) >= 2 ", "GROUP BY member"),
+          "cur.execute(sel)",
+        ),
+        options: ["오류 (WHERE에는 집계를 못 써요)", "하늘과 바다가 나와요", "아무것도 안 나와요"],
+        answer: 0,
+        explain: "WHERE는 묶기 전에 일하니 아직 건수가 없어요. COUNT 같은 집계로 거르려면 HAVING을 써야 해요.",
+      },
+      {
+        type: "choice", concept: "sqlhaving",
+        q: "화면에 무엇이 출력될까요?",
+        code: J(
+          ...LPRE,
+          ...XQ("sel", "SELECT member, MAX(days) ", "FROM loans GROUP BY member ", "HAVING MAX(days) >= 10 ", "ORDER BY member"),
+          "cur.execute(sel)",
+          "r = cur.fetchone()",
+          "print(r[0], r[1])",
+        ),
+        options: ["바다 10", "하늘 14", "나무 1"],
+        answer: 0,
+        explain: "MAX는 묶음 안의 가장 큰 값이에요. 바다 10일, 하늘 14일이 남고 member 순으로 첫 줄은 바다예요.",
+      },
+      {
+        type: "write", concept: "sqlhaving",
+        task: "starter가 loans.csv(member, book, days)를 표에 넣어 둬요. n=int(input()). WHERE로 3일 이상 기록만 남기고 회원별로 묶어, HAVING으로 n건 이상만 「이름 N건 D일」(건수 많은 순, 같으면 이름 순), 끝에 「N명」을 출력해요. 2 입력 → 첫 줄 바다 3건 18일",
+        starter: J(...XHEAD, ...XLOAD("loans", "member TEXT, book TEXT, days INTEGER"), "n = int(input())", ""),
+        files: { "loans.csv": CSV(A2_P) },
+        tests: [
+          { stdin: "2", expect: "바다 3건 18일\n하늘 3건 24일\n2명", public: true },
+          { stdin: "2", expect: "나무 4건 20일\n가람 2건 11일\n구름 2건 10일\n3명", public: false, files: { "loans.csv": CSV(A2_H) } },
+          { stdin: "3", expect: "나무 4건 20일\n1명", public: false, files: { "loans.csv": CSV(A2_H) } },
+          { stdin: "9", expect: "0명", public: false, files: { "loans.csv": CSV(A2_H) } },
+        ],
+        require: ["SQL:WHERE", "SQL:HAVING", "Method:execute", "Method:fetchall", "For"],
+        hints: [
+          "기록을 먼저 거르고, 묶은 뒤에 다시 거르는 두 단계예요. 마지막에 명수도 세요.",
+          "3일 이상은 묶기 전이라 WHERE, n건 이상은 묶은 뒤라 HAVING이에요. 값 n은 ?로 넘겨요.",
+          "WHERE days >= 3 → GROUP BY member → HAVING COUNT(*) >= ? → ORDER BY COUNT(*) DESC, member 순서로 이어요. 명수는 len(rows)예요.",
+          "sel = (\"SELECT member, COUNT(*), SUM(days) \"\n       \"FROM loans WHERE ___ \"\n       \"GROUP BY member HAVING ___ >= ? \"\n       \"ORDER BY ___ DESC, member\")\ncur.execute(sel, (n,))",
+        ],
+        solution: J(
+          ...XHEAD, ...XLOAD("loans", "member TEXT, book TEXT, days INTEGER"), "n = int(input())",
+          ...XQ("sel", "SELECT member, COUNT(*), ", "SUM(days) FROM loans ", "WHERE days >= 3 ", "GROUP BY member ", "HAVING COUNT(*) >= ? ", "ORDER BY COUNT(*) DESC, ", "member"),
+          "cur.execute(sel, (n,))",
+          "rows = cur.fetchall()",
+          "for r in rows:",
+          `    print(f"{r[0]} {r[1]}건 {r[2]}일")`,
+          `print(f"{len(rows)}명")`,
+        ),
+        explain: "WHERE가 3일 미만 기록을 먼저 빼고, 묶은 뒤 HAVING이 건수를 걸러요. 순서를 바꾸면 결과가 달라지고, 딱 n건인 회원도 포함돼요.",
+      },
+      {
+        type: "check", concept: "sqlhaving",
+        q: "WHERE와 HAVING의 차이로 맞는 것은?",
+        options: ["WHERE는 묶기 전, HAVING은 묶은 뒤에 거른다", "WHERE는 묶은 뒤, HAVING은 묶기 전에 거른다", "둘은 완전히 같다"],
+        answer: 0,
+        explain: "WHERE는 줄 하나하나를 걸러서 묶을 재료를 정하고, HAVING은 묶음이 만들어진 뒤 건수나 합계로 묶음을 걸러요.",
+      },
+    ],
+  },
+  {
+    id: "16-A3", chapter: 16, title: "대출 통계", isAdvanced: true,
+    goal: "표 셋을 JOIN해 회원별·장르별 통계를 낸다",
+    summary: [
+      "JOIN을 이어 써서 표 셋을 합쳐요",
+      "GROUP BY로 묶고 HAVING으로 걸러요",
+      "AVG는 파이썬 round로 다듬어요",
+    ],
+    cards: [
+      {
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 표가 셋이면 JOIN을 이어 써요. loans에서 members와 books로 번호를 따라가면 누가 어떤 책을 빌렸는지 한 줄에 모여요.",
+        code: J(
+          ...X3,
+          ...XQ("sel", "SELECT members.name, books.title ", "FROM loans ", "JOIN members ", "ON loans.member_id = members.id ", "JOIN books ", "ON loans.book_id = books.id ", "ORDER BY members.name, ", "books.title"),
+          ...XFETCH("r[0], r[1]"),
+        ),
+        out: "바다 작은 숲\n하늘 달빛 정원\n하늘 작은 숲",
+      },
+      {
+        say: "합친 뒤에는 GROUP BY와 HAVING이 그대로 돼요. 장르별 대출 평균 일수를 구하되, 2건 이상인 장르만 남겨요. AVG는 소수가 길 수 있어 파이썬 round로 다듬어요.",
+        code: J(
+          ...X3,
+          ...XQ("sel", "SELECT books.genre, AVG(loans.days) ", "FROM loans JOIN books ", "ON loans.book_id = books.id ", "GROUP BY books.genre ", "HAVING COUNT(*) >= 2 ", "ORDER BY books.genre"),
+          ...XFETCH("r[0], round(r[1], 1)"),
+        ),
+        out: "동화 9.5",
+      },
+    ],
+    items: [
+      {
+        type: "choice", concept: "sqljoin",
+        q: "화면에 무엇이 출력될까요?",
+        code: J(
+          ...X3,
+          ...XQ("sel", "SELECT books.title ", "FROM loans ", "JOIN members ", "ON loans.member_id = members.id ", "JOIN books ", "ON loans.book_id = books.id ", "WHERE members.name = '바다'"),
+          "cur.execute(sel)",
+          "print(cur.fetchone()[0])",
+        ),
+        options: ["작은 숲", "달빛 정원", "바다"],
+        answer: 0,
+        explain: "바다(회원 2)의 기록은 책 번호 2뿐이고, 그 책의 제목은 작은 숲이에요. 두 번의 JOIN이 번호를 차례로 따라갔어요.",
+      },
+      {
+        type: "blank", concept: "sqljoin",
+        q: "두 번째 JOIN이 책 표와 이어지도록 빈칸을 채워 보세요.",
+        code: J(
+          ...X3,
+          ...XQ("sel", "SELECT COUNT(*) FROM loans ", "JOIN members ", "ON loans.member_id = members.id ", "JOIN books ", "ON loans.book_id = ___"),
+          "cur.execute(sel)",
+          "print(cur.fetchone()[0])",
+        ),
+        chips: ["books.id", "members.id", "loans.id"],
+        answer: 0,
+        explain: "책 번호 book_id의 짝은 books.id예요. members.id로 이으면 회원 번호와 비교해 엉뚱한 줄이 이어지고, loans.id는 열이 없어 OperationalError 단서가 나요.",
+      },
+      {
+        type: "choice", concept: "sqlhaving",
+        q: "화면에 무엇이 출력될까요?",
+        code: J(
+          ...X3,
+          ...XQ("sel", "SELECT members.name, SUM(loans.days) ", "FROM loans JOIN members ", "ON loans.member_id = members.id ", "GROUP BY members.name ", "HAVING SUM(loans.days) >= 10 ", "ORDER BY members.name"),
+          "cur.execute(sel)",
+          "r = cur.fetchone()",
+          "print(r[0], r[1])",
+        ),
+        options: ["하늘 21", "바다 5", "하늘 2"],
+        answer: 0,
+        explain: "하늘은 7일과 14일을 빌려 합계 21일로 기준 10을 넘어요. 바다는 5일뿐이라 HAVING에서 빠져요.",
+      },
+      {
+        type: "choice", concept: "sqljoin",
+        q: "회원 표에는 있지만 대출 기록이 없는 회원은 회원별 결과에서 어떻게 될까요?",
+        options: ["JOIN 결과에 나타나지 않아요", "건수 0으로 나와요", "오류가 나요"],
+        answer: 0,
+        explain: "INNER JOIN은 짝이 있는 줄만 남겨요. loans에 번호가 없는 회원은 이어질 줄이 없어서 통계에 나타나지 않아요.",
+      },
+      {
+        type: "write", concept: "sqlhaving",
+        task: "starter가 members·books·loans.csv를 표에 넣어 둬요. n=int(input()). JOIN으로 이어 회원별 「이름 N건 D일」(일수 많은 순, 같으면 이름 순), 이어서 N건 이상인 장르만 HAVING으로 「장르 평균 X.X일」(장르 순, round 한 자리). 2 입력 → 첫 줄 하늘 3건 24일",
+        starter: J(
+          ...XHEAD,
+          ...XLOAD("members", "id INTEGER, name TEXT"),
+          ...XLOAD("books", "id INTEGER, title TEXT, genre TEXT"),
+          ...XLOAD("loans", "member_id INTEGER, book_id INTEGER, days INTEGER"),
+          "n = int(input())", "",
+        ),
+        files: A3F(A3_P),
+        tests: [
+          { stdin: "2", expect: "하늘 3건 24일\n바다 3건 18일\n나무 1건 2일\n동화 평균 6.0일\n소설 평균 8.5일", public: true },
+          { stdin: "3", expect: "하늘 3건 24일\n바다 3건 18일\n나무 1건 2일\n동화 평균 6.0일", public: false },
+          { stdin: "2", expect: "가람 2건 11일\n구름 2건 11일\n시 평균 4.5일\n역사 평균 6.5일", public: false, files: A3F(A3_Q) },
+          { stdin: "5", expect: "가람 2건 11일\n구름 2건 11일", public: false, files: A3F(A3_Q) },
+        ],
+        require: ["SQL:JOIN", "SQL:HAVING", "Method:execute", "Method:fetchall", "For"],
+        hints: [
+          "출력은 두 묶음이에요. 회원별 통계 먼저, 장르별 평균은 그다음이에요.",
+          "회원별은 loans와 members, 장르별은 loans와 books를 JOIN해요. 장르는 HAVING으로 거르고 값 n은 ?로 넘겨요.",
+          "회원별은 GROUP BY members.name에 SUM(loans.days) DESC 정렬, 장르별은 GROUP BY books.genre HAVING COUNT(*) >= ?예요.",
+          "sel = (\"SELECT books.genre, AVG(loans.days) \"\n       \"FROM loans JOIN books ON ___ \"\n       \"GROUP BY books.genre \"\n       \"HAVING COUNT(*) >= ? ORDER BY books.genre\")",
+        ],
+        solution: J(
+          ...XHEAD,
+          ...XLOAD("members", "id INTEGER, name TEXT"),
+          ...XLOAD("books", "id INTEGER, title TEXT, genre TEXT"),
+          ...XLOAD("loans", "member_id INTEGER, book_id INTEGER, days INTEGER"),
+          "n = int(input())",
+          ...XQ("sel", "SELECT members.name, COUNT(*), ", "SUM(loans.days) FROM loans ", "JOIN members ", "ON loans.member_id = members.id ", "GROUP BY members.name ", "ORDER BY SUM(loans.days) DESC, ", "members.name"),
+          ...XFETCH(`f"{r[0]} {r[1]}건 {r[2]}일"`),
+          ...XQ("sel", "SELECT books.genre, AVG(loans.days) ", "FROM loans JOIN books ", "ON loans.book_id = books.id ", "GROUP BY books.genre ", "HAVING COUNT(*) >= ? ", "ORDER BY books.genre"),
+          "cur.execute(sel, (n,))",
+          "rows = cur.fetchall()",
+          "for r in rows:",
+          "    avg = round(r[1], 1)",
+          `    print(f"{r[0]} 평균 {avg}일")`,
+        ),
+        explain: "JOIN으로 이름과 장르를 붙이고 GROUP BY로 묶었어요. 회원은 INNER JOIN이라 기록 없는 회원이 빠지고, 장르는 HAVING이 n건 미만을 걸러요.",
+      },
+      {
+        type: "check", concept: "sqlhaving",
+        q: "장르별 건수가 n 이상인 장르만 남기려면?",
+        options: ["GROUP BY 뒤에 HAVING COUNT(*) >= n", "WHERE COUNT(*) >= n", "ORDER BY COUNT(*) >= n"],
+        answer: 0,
+        explain: "건수는 묶은 뒤에야 알 수 있으니 HAVING이에요. WHERE에 COUNT를 쓰면 단서가 나고, ORDER BY는 거르지 않고 줄만 세워요.",
       },
     ],
   },

@@ -761,3 +761,40 @@ export const ADVANCED = [
     ],
   },
 ];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+// {대문자} 자리에 vars 값을 바꿔 끼우고, 보기는 code·wrong을 실행한 출력으로 정한다. {OUT} = 정답 출력.
+export const TEMPLATES = [
+  {
+    id: "1-T1", concept: "arith", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: "print({A} + {B} * {C})",
+    wrong: ["print(({A} + {B}) * {C})", "print({A} + {B} + {C})"],
+    vars: { A: { min: 2, max: 9 }, B: { min: 3, max: 9 }, C: { min: 2, max: 5 } },
+    explain: "곱셈이 덧셈보다 먼저예요. {B} * {C} 먼저, 그다음 {A} 더하기 → {OUT}",
+  },
+  {
+    id: "1-T2", concept: "arith", type: "blank",
+    q: "{FOOD} {N}개를 {K}명이 똑같이 나누고 남는 개수가 나오게 빈칸을 채워 보세요.",
+    code: "print({N} ___ {K})",
+    chips: ["%", "//", "/"], answer: 0,
+    vars: { FOOD: ["사탕", "귤", "쿠키", "만두", "딸기"], N: { min: 13, max: 29 }, K: { min: 3, max: 6 } },
+    explain: "남는 개수는 나머지 % 로 구해요. // 는 한 사람 몫, / 는 소수점까지 나눈 값이에요.",
+  },
+  {
+    id: "1-T3", concept: "string", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: 'print("{WORD}" * {N})',
+    wrong: ['print("{WORD}" + "{N}")', 'print("{WORD}", {N})'],
+    vars: { WORD: ["하", "멍", "냥", "짝", "와", "콩"], N: { min: 2, max: 5 } },
+    explain: "문자열에 숫자를 * 로 곱하면 그 횟수만큼 이어 붙여요. 그래서 화면에는 {OUT}.",
+  },
+  {
+    id: "1-T4", concept: "string", type: "choice",
+    q: "{FRUIT} {N}개 값을 보여 주는 코드예요. 화면에 무엇이 출력될까요?",
+    code: 'print(f"{FRUIT} {{N} * {P}}원")',
+    wrong: ['print("{FRUIT} {{N} * {P}}원")', 'print(f"{FRUIT} {N} * {P}원")'],
+    vars: { FRUIT: ["사과", "배", "귤", "자두", "복숭아"], N: { min: 2, max: 5 }, P: [500, 800, 1200, 1500] },
+    explain: "따옴표 앞에 f가 있으면 { } 안의 식을 계산해 글자 사이에 넣어요. f가 없거나 식이 { } 밖에 있으면 글자 그대로 나와요.",
+  },
+];

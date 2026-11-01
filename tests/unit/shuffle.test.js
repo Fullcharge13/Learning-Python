@@ -93,3 +93,19 @@ test("missingMessage: Reraise (v0.8 10장 심화)", () => {
     "정답은 나왔지만 이번 문제는 print()를 써서, except에서 받은 오류를 raise 한 단어로 다시 던져서 풀어야 해요.");
   assert.equal(requireKo("Reraise"), "다시 던지기 raise");
 });
+
+test("missingMessage: Def:·SQL: (v0.9 13~17장 심화)", () => {
+  assert.equal(missingMessage(["Def:__str__"]), "정답은 나왔지만 이번 문제는 __str__ 메서드를 만들어서 풀어야 해요.");
+  assert.equal(missingMessage(["Def:__eq__"]), "정답은 나왔지만 이번 문제는 __eq__ 메서드를 만들어서 풀어야 해요.");
+  assert.equal(missingMessage(["Def:add"]), "정답은 나왔지만 이번 문제는 add 함수를 만들어서 풀어야 해요.");
+  assert.equal(missingMessage(["SQL:JOIN"]), "정답은 나왔지만 이번 문제는 SQL에 JOIN을 써서 풀어야 해요.");
+  assert.equal(missingMessage(["SQL:HAVING"]), "정답은 나왔지만 이번 문제는 SQL에 HAVING을 써서 풀어야 해요.");
+  assert.equal(missingMessage(["SQL:WHERE"]), "정답은 나왔지만 이번 문제는 SQL에 WHERE를 써서 풀어야 해요.");
+  assert.equal(missingMessage(["SQL:LIMIT"]), "정답은 나왔지만 이번 문제는 SQL에 LIMIT을 써서 풀어야 해요.");
+  assert.equal(missingMessage(["SQL:COUNT"]), "정답은 나왔지만 이번 문제는 SQL에 COUNT를 써서 풀어야 해요.");
+  assert.equal(missingMessage(["If", "SQL:JOIN", "Def:__str__"]),
+    "정답은 나왔지만 이번 문제는 if 문을 써서, SQL에 JOIN을 써서, __str__ 메서드를 만들어서 풀어야 해요.");
+  assert.equal(requireKo("Def:__str__"), "__str__ 메서드");
+  assert.equal(requireKo("Def:add"), "add 함수");
+  assert.equal(requireKo("SQL:JOIN"), "SQL JOIN");
+});

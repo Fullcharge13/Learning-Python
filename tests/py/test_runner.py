@@ -618,3 +618,129 @@ def test_require_listcomp_lambda_are_plain_nodes():
     code = 'ps = [("a", 2), ("b", 1)]\nps = sorted(ps, key=lambda p: p[1])\nprint([p[0] for p in ps])'
     assert run(code, [], ["ListComp", "Lambda"])["missing"] == []
     assert run("print(1)", [], ["ListComp", "Lambda", "NamedGroup", "Reraise"])["missing"] == ["ListComp", "Lambda", "NamedGroup", "Reraise"]
+
+
+# ── v0.9: Def:<이름>·SQL:<낱말> (13~17장 심화 채점 조건) ─────────────────
+BOOK = ('class Book:\n    def __init__(self, t):\n        self.t = t\n\n'
+        '    def __str__(self):\n        return "책 " + self.t\n\nprint(Book("별"))')
+
+
+def test_require_def():
+    assert run(BOOK, [], ["Def:__str__"])["missing"] == []
+    assert run(BOOK, [], ["Def:__eq__", "Def:__init__"])["missing"] == ["Def:__eq__"]
+    # print(b.t)로 풀면 같은 출력이지만 __str__이 없다
+    plain = 'class Book:\n    def __init__(self, t):\n        self.t = t\n\nprint("책 " + Book("별").t)'
+    r = run(plain, [], ["Def:__str__"])
+    assert r["stdout"] == "책 별\n" and r["missing"] == ["Def:__str__"], r
+    # 보통 함수도 됨, 부르기만 하거나 lambda에 이름을 붙인 것은 아님
+    assert run("def add(a, b):\n    return a + b\nprint(add(1, 2))", [], ["Def:add"])["missing"] == []
+    for code in ("add = lambda a, b: a + b\nprint(add(1, 2))", "print(len('add'))", "# def add():"):
+        assert run(code, [], ["Def:add"])["missing"] == ["Def:add"], code
+
+
+SQLJ = ('import sqlite3\ncon = sqlite3.connect(":memory:")\n'
+        'con.execute("CREATE TABLE a (id, n)")\ncon.execute("CREATE TABLE b (id, m)")\n'
+        'q = ("SELECT n, m FROM a "\n     "join b ON a.id = b.id")\nprint(con.execute(q).fetchall())')
+
+
+def test_require_sql():
+    r = run(SQLJ, [], ["SQL:JOIN", "SQL:HAVING"])
+    assert r["error"] is None and r["missing"] == ["SQL:HAVING"], r
+    having = 'q = f"SELECT g, COUNT(*) FROM t GROUP BY g Having COUNT(*) >= {2}"\nprint(1)'
+    assert run(having, [], ["SQL:HAVING", "SQL:GROUP"])["missing"] == []
+    # 주석·이름·낱말 일부는 아님
+    for code in ('# JOIN\nprint(1)', 'JOIN = 1\nprint(JOIN)', 'print("JOINED")', 'print("re_join")',
+                 'print("조인JOIN")'.replace("조인", "x")):
+        assert run(code, [], ["SQL:JOIN"])["missing"] == ["SQL:JOIN"], code
+    for code in ('print("a JOIN b")', 'print("(JOIN)")', 'print("조인 JOIN 조인")', "print('x\\nJOIN\\ny')"):
+        assert run(code, [], ["SQL:JOIN"])["missing"] == [], code
+
+
+def test_require_def_sql_mixed_order():
+    r = run("print(1)", [], ["SQL:JOIN", "If", "Def:f"])
+    assert r["missing"] == ["SQL:JOIN", "If", "Def:f"]
+
+
+# ── v0.9 17장 심화: 한 그림에 꺾은선 여러 개 + legend ────────────────────
+DAYS = "import chart\nd = ['월', '화', '수']\n"
+
+
+def test_chart_two_lines_series():
+    r = run(DAYS + "chart.line(d, [1, 2, 3])\nchart.line(d, [3, 2.5, 1])\nchart.title('공부')\nchart.show()\n", "", [])
+    assert r["error"] is None, r
+    assert r["charts"] == [{"kind": "line", "labels": ["월", "화", "수"], "title": "공부",
+                            "series": [{"values": [1, 2, 3]}, {"values": [3, 2.5, 1]}]}], r
+
+
+def test_chart_three_lines_with_legend_any_order():
+    code = (DAYS + "chart.legend(['리아', '민지', '준'])\nchart.line(d, [1, 2, 3])\nchart.line(d, [3, 2, 1])\n"
+            "chart.line(d, [0, 0, 0])\nchart.ylabel('분')\nchart.show()\nchart.line(d, [5, 5, 5])\nchart.show()\n")
+    r = run(code, "", [])
+    assert r["error"] is None, r
+    assert r["charts"][0] == {"kind": "line", "labels": ["월", "화", "수"], "ylabel": "분",
+                              "series": [{"name": "리아", "values": [1, 2, 3]}, {"name": "민지", "values": [3, 2, 1]},
+                                         {"name": "준", "values": [0, 0, 0]}]}, r
+    # show()가 legend도 비운다 → 다음 그림은 예전 모양 그대로
+    assert r["charts"][1] == {"kind": "line", "labels": ["월", "화", "수"], "values": [5, 5, 5]}, r
+
+
+def test_chart_single_line_with_legend_is_series():
+    r = run(DAYS + "chart.line(d, [1, 2, 3])\nchart.legend(['리아'])\nchart.show()\n", "", [])
+    assert r["charts"] == [{"kind": "line", "labels": ["월", "화", "수"],
+                            "series": [{"name": "리아", "values": [1, 2, 3]}]}], r
+
+
+def test_chart_fourth_line_error():
+    code = DAYS + "for i in range(4):\n    chart.line(d, [i, i, i])\nchart.show()\n"
+    r = run(code, "", [])
+    assert r["error"]["type"] == "ValueError" and r["error"]["line"] == 4, r
+    assert "3개" in r["error"]["msg"], r
+    assert r["charts"] == []
+
+
+def test_chart_lines_need_same_labels():
+    r = run(DAYS + "chart.line(d, [1, 2, 3])\nchart.line(['월', '화', '목'], [1, 2, 3])\n", "", [])
+    assert r["error"]["type"] == "ValueError" and r["error"]["line"] == 4, r
+    assert r["error"]["msg"] == "선마다 이름(가로축)이 같아야 해요", r
+
+
+def test_chart_bar_twice_and_mixing_errors():
+    for code, line in ((DAYS + "chart.bar(d, [1, 2, 3])\nchart.bar(d, [1, 2, 3])\n", 4),
+                       (DAYS + "chart.bar(d, [1, 2, 3])\nchart.line(d, [1, 2, 3])\n", 4),
+                       (DAYS + "chart.line(d, [1, 2, 3])\nchart.bar(d, [1, 2, 3])\n", 4)):
+        r = run(code, "", [])
+        assert r["error"]["type"] == "ValueError" and r["error"]["line"] == line, (code, r)
+        assert any(ch in r["error"]["msg"] for ch in ("그래프", "꺾은선", "막대")), r
+    r = run(DAYS + "chart.bar(d, [1, 2, 3])\nchart.line(d, [1, 2, 3])\n", "", [])
+    assert "섞" in r["error"]["msg"], r
+
+
+def test_chart_legend_errors():
+    cases = (
+        ("chart.line(d, [1, 2, 3])\nchart.line(d, [1, 2, 3])\nchart.legend(['a'])\nchart.show()\n", 6, "개수"),
+        ("chart.line(d, [1, 2, 3])\nchart.legend(['a', 'b'])\nchart.show()\n", 5, "개수"),
+        ("chart.bar(d, [1, 2, 3])\nchart.legend(['a'])\nchart.show()\n", 5, "꺾은선"),
+        ("chart.legend('ab')\n", 3, "리스트"),
+        ("chart.legend(['a'], ['b'])\n", 3, "1개"),
+        ("chart.legend([True])\n", 3, "글자"),
+        ("chart.legend(['a'] * 4)\n", 3, "3개"),
+        ("chart.legend(['a'])\nchart.show()\n", 4, "그릴 그래프가 없어요"),
+    )
+    for body, line, word in cases:
+        r = run(DAYS + body, "", [])
+        assert r["error"] and r["error"]["line"] == line, (body, r)
+        assert word in r["error"]["msg"], (body, r["error"])
+        assert r["charts"] == [], (body, r)
+
+
+def test_chart_legend_keyword_korean_error():
+    r = run(DAYS + "chart.legend(labels=['a'])\n", "", [])
+    assert r["error"]["type"] == "TypeError" and "이름 붙은 인자" in r["error"]["msg"], r
+
+
+def test_chart_series_survives_deleted_builtins():
+    code = (DAYS + "import builtins\ndel builtins.enumerate\ndel builtins.len\n"
+            "chart.line(d, [1, 2, 3])\nchart.line(d, [3, 2, 1])\nchart.legend(['a', 'b'])\nchart.show()\n")
+    r = run(code, "", [])
+    assert r["error"] is None, r
+    assert [s["name"] for s in r["charts"][0]["series"]] == ["a", "b"]

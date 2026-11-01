@@ -147,6 +147,13 @@ button { cursor: pointer; }
 .chart-svg .c-bar { fill: var(--teal); }
 .chart-svg .c-line { fill: none; stroke: var(--teal-ink); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
 .chart-svg .c-dot { fill: var(--card); stroke: var(--teal-ink); stroke-width: 2; }
+/* v0.9 여러 선(17장 심화): 색 + 점선 모양(chart.js DASH) + 점 모양(원·네모·세모)으로 구분 */
+.chart-svg .c-legline { fill: none; stroke-width: 2.5; stroke-linecap: round; }
+.chart-svg .c-leg { font-size: 11px; font-weight: 700; fill: var(--ink); }
+.chart-svg .c-line-1, .chart-svg .c-dot-1 { stroke: var(--teal-ink); }
+.chart-svg .c-line-2, .chart-svg .c-dot-2 { stroke: var(--coral-ink); }
+.chart-svg .c-line-3, .chart-svg .c-dot-3 { stroke: var(--navy); }
+.chart-svg .c-dot-2, .chart-svg .c-dot-3 { stroke-linejoin: round; }
 .chart-desc { margin: 6px 4px 0; font-size: .82rem; line-height: 1.45; color: var(--ink-2); }
 .chart-diff .chart-note:last-child .chart { border-color: var(--coral); background: var(--coral-soft); }
 .example.show-only .ex-label { display: flex; gap: 6px; align-items: center; }
@@ -226,6 +233,29 @@ main { padding: 16px calc(16px + var(--sar)) 0 calc(16px + var(--sal)); }
 .review h2 { margin-bottom: 2px; }
 .review p { margin: 0; font-size: .9rem; color: var(--sun-ink); }
 .review .btn { flex: none; padding: 10px 14px; }
+/* 매일 도전 카드(v0.9) */
+.daily { display: flex; align-items: center; gap: 12px; background: var(--teal-soft); border-color: var(--teal); }
+.daily-text { flex: 1; min-width: 0; }
+.daily h2 { margin: 0 0 4px; font-size: 1.15rem; }
+.daily-streak { display: flex; align-items: center; gap: 4px; margin: 0 0 8px; font-weight: 800; color: var(--coral-ink); font-size: .95rem; }
+.daily-streak .ic { width: 18px; height: 18px; }
+.daily-dots { display: flex; gap: 8px; margin-bottom: 6px; }
+.d-dot { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid var(--teal-ink); background: var(--card); }
+.d-dot.on { background: var(--teal-ink); }
+.daily-note { margin: 0; font-size: .85rem; color: var(--ink-2); }
+.daily .daily-go { flex: none; min-height: 48px; min-width: 96px; padding: 10px 14px; }
+.daily.done { background: var(--card); border-color: var(--line); }
+.daily.done .d-dot { border-color: var(--teal); }
+.daily.done .d-dot.on { background: var(--teal); }
+.daily .btn[disabled] { opacity: 1; color: var(--teal-ink); box-shadow: none; }
+.daily.locked { background: var(--paper-2); border-style: dashed; border-color: var(--line); padding: 12px 16px; }
+.daily.locked h2 { font-size: 1rem; margin: 0; }
+.daily.locked p { margin: 0; font-size: .9rem; color: var(--ink-2); }
+.daily-ic { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; color: var(--ink-2); background: var(--card); flex: none; }
+.daily-done { display: flex; gap: 8px; align-items: center; background: var(--teal-soft); border: 2px solid var(--teal); border-radius: 16px; padding: 12px 14px; font-weight: 800; color: var(--teal-deep); }
+.daily-done .ic { color: var(--coral-ink); }
+.tag.daily { background: var(--teal-soft); color: var(--teal-deep); }
+.lesson-tag.daily { font-family: var(--sans); color: var(--teal-ink); }
 .quest-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
 .quest { display: grid; grid-template-columns: 28px 1fr auto auto; align-items: center; gap: 8px; }
 .q-ic { color: var(--sun-deep); display: grid; }

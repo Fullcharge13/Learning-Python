@@ -204,6 +204,26 @@ def test_require_reraise_in_pyodide():
     assert r["stdout"] == "안\n밖\n" and r["missing"] == ["Reraise"], r
 
 
+def test_require_def_sql_in_pyodide():
+    # v0.9(15·16장 심화): Def:<이름>은 def가 있는지, SQL:<낱말>은 글자 상수 안의 낱말(대소문자 무시)
+    code = ('class B:\n    def __str__(self):\n        return "책"\n\n'
+            'q = ("SELECT * FROM a "\n     "join b ON a.id = b.id")\nprint(B())\n')
+    r = _run(code, "", ["Def:__str__", "SQL:JOIN", "SQL:HAVING", "Def:__eq__"])
+    assert r["stdout"] == "책\n" and r["missing"] == ["SQL:HAVING", "Def:__eq__"], r
+
+
+def test_multiline_chart_in_pyodide():
+    # v0.9(17장 심화): 같은 이름들에 line 여러 번 + legend → series, 선 하나는 예전 모양 그대로
+    r = _run("import chart\nd = ['월', '화']\nchart.line(d, [1, 2])\nchart.line(d, [2, 0.5])\n"
+             "chart.legend(['리아', '민지'])\nchart.show()\nchart.line(d, [3, 3])\nchart.show()\n")
+    assert r["error"] is None, r
+    assert r["charts"] == [{"kind": "line", "labels": ["월", "화"],
+                            "series": [{"name": "리아", "values": [1, 2]}, {"name": "민지", "values": [2, 0.5]}]},
+                           {"kind": "line", "labels": ["월", "화"], "values": [3, 3]}], r
+    r2 = _run("import chart\nd = ['월', '화']\nchart.line(d, [1, 2])\nchart.legend(['a', 'b'])\nchart.show()\n")
+    assert r2["error"]["type"] == "ValueError" and r2["error"]["line"] == 5 and r2["charts"] == [], r2
+
+
 def test_error_line():
     r = _run("x = 1\nprint(y)")
     assert r["error"]["type"] == "NameError", r
@@ -502,6 +522,7 @@ def test_idle_worker_error_event():
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,
          test_require_comment_elif_else_in_pyodide, test_require_selfcall_formatspec_triplestr_in_pyodide,
          test_require_namedgroup_listcomp_lambda_in_pyodide, test_require_reraise_in_pyodide,
+         test_require_def_sql_in_pyodide, test_multiline_chart_in_pyodide,
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
          test_practice_server_in_pyodide, test_chart_in_pyodide, test_sqlite3_in_pyodide, test_queue, test_timeout_then_ok,
          test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,

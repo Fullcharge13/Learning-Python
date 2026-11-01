@@ -103,3 +103,76 @@ test("cleanCharts: 작업자 결과를 믿지 않고 모양을 다듬는다", ()
   assert.deepEqual(cleanCharts([{ ...bar, title: 5 }]), [{ ...bar, title: "5" }]);
   assert.equal(cleanCharts([bar, bar, bar, bar]).length, 3);
 });
+
+// ── v0.9 17장 심화: 한 그림에 꺾은선 여러 개(series) ─────────────────────
+const multi = { kind: "line", labels: ["월", "화", "수"], series: [{ name: "철수", values: [3, 5, 4] }, { name: "영희", values: [1, 2, 6] }] };
+
+test("series 비교: 같으면 통과, 선 수·이름·값이 다르면 쉬운 말", () => {
+  assert.equal(chartMismatch(multi, [structuredClone(multi)]), null);
+  // 기대에 이름이 없으면 이름은 보지 않음
+  const noNames = { kind: "line", labels: multi.labels, series: [{ values: [3, 5, 4] }, { values: [1, 2, 6.0] }] };
+  assert.equal(chartMismatch(noNames, [multi]), null);
+  assert.match(chartMismatch(multi, [{ ...multi, series: multi.series.slice(0, 1) }]), /선 개수가 달라요\(기대 2개, 내 코드 1개\)/);
+  assert.match(chartMismatch(multi, [{ ...multi, series: [multi.series[0], { name: "민지", values: [1, 2, 6] }] }]), /2번째 선 이름이 달라요/);
+  assert.match(chartMismatch(multi, [{ ...multi, series: [multi.series[0], { name: "영희", values: [1, 2, 7] }] }]), /2번째 선 값이 달라요/);
+  // 선 하나(values) 대 여러 선
+  assert.match(chartMismatch(multi, [{ kind: "line", labels: multi.labels, values: [3, 5, 4] }]), /선 개수가 달라요\(기대 2개, 내 코드 1개\)/);
+  assert.match(chartMismatch({ kind: "line", labels: multi.labels, values: [3, 5, 4] }, [multi]), /선 개수가 달라요\(기대 1개, 내 코드 2개\)/);
+  // 선 하나끼리는 예전 말 그대로
+  assert.match(chartMismatch({ kind: "line", labels: ["a"], values: [1] }, [{ kind: "line", labels: ["a"], values: [2] }]), /^그래프 값이 달라요$/);
+  // 이름 하나짜리 series(legend 하나)와 values 기대도 값으로 비교
+  assert.equal(chartMismatch({ kind: "line", labels: ["a"], values: [1] }, [{ kind: "line", labels: ["a"], series: [{ name: "x", values: [1] }] }]), null);
+});
+
+test("cleanCharts: series 그림을 살리고 깨진 것은 버림", () => {
+  assert.deepEqual(cleanCharts([multi]), [multi]);
+  const bad = [
+    { ...multi, kind: "bar" },
+    { ...multi, series: [] },
+    { ...multi, series: [...multi.series, ...multi.series] },          // 4개
+    { ...multi, series: [{ values: [1, 2] }, multi.series[1]] },       // 길이 다름
+    { ...multi, series: [{ values: [1, 2, "3"] }, multi.series[1]] },
+    { ...multi, values: [1, 2, 3] },                                   // 둘 다
+    { kind: "line", labels: ["a"] },
+  ];
+  for (const c of bad) assert.deepEqual(cleanCharts([c]), [], JSON.stringify(c));
+  assert.deepEqual(cleanCharts([{ ...multi, series: [{ name: 7, values: [1, 2, 3] }] }])[0].series, [{ name: "7", values: [1, 2, 3] }]);
+});
+
+test("chartText: 선마다 이름과 값", () => {
+  assert.equal(chartText({ ...multi, title: "기록" }), "꺾은선 그래프 「기록」: 월, 화, 수 / 철수: 3, 5, 4 / 영희: 1, 2, 6");
+  assert.equal(chartText({ kind: "line", labels: ["a", "b"], series: [{ values: [1, 2] }, { values: [0.5, 0] }] }),
+    "꺾은선 그래프: a, b / 선 1: 1, 2 / 선 2: 0.5, 0");
+});
+
+test("chartSVG: 선마다 다른 색·점선 모양·점 모양, 세로 범위는 모든 선을 합쳐서, 이름표 한 줄", () => {
+  const three = { ...multi, series: [...multi.series, { name: "<준>", values: [-2, 0, 9] }] };
+  const svg = chartSVG(three);
+  assert.equal((svg.match(/<polyline /g) || []).length, 3);
+  for (const k of [1, 2, 3]) assert.match(svg, new RegExp(`class="c-line c-line-${k}"`));
+  const dashes = [...svg.matchAll(/<polyline class="c-line c-line-\d"[^>]*?stroke-dasharray="([^"]*)"/g)].map((m) => m[1]);
+  assert.equal(new Set(dashes).size, 2, "1번 선은 실선, 2·3번은 서로 다른 점선");
+  assert.doesNotMatch(svg.match(/<polyline class="c-line c-line-1"[^>]*>/)[0], /dasharray/);
+  assert.equal((svg.match(/class="c-leg"/g) || []).length, 3);
+  assert.match(svg, />철수</);
+  assert.match(svg, /&lt;준&gt;/);
+  assert.doesNotMatch(svg, /class="c-val"/, "선이 여럿이면 값 글자를 생략");
+  assert.match(svg, />-/, "다른 선의 음수까지 세로 범위에 들어감");
+  assert.match(svg, />10</);
+  assert.doesNotMatch(svg, /NaN|Infinity/);
+  // 점 모양: 원·네모·세모
+  assert.match(svg, /<circle class="c-dot c-dot-1"/);
+  assert.match(svg, /<rect class="c-dot c-dot-2"/);
+  assert.match(svg, /<path class="c-dot c-dot-3"/);
+  // 이름 없는 선은 「선 n」
+  assert.match(chartSVG({ kind: "line", labels: ["a", "b"], series: [{ values: [1, 2] }, { values: [2, 1] }] }), />선 2</);
+  // 선 하나 그림은 예전 그대로(이름표 없음)
+  const one = chartSVG({ kind: "line", labels: ["a", "b"], values: [1, 2] });
+  assert.doesNotMatch(one, /c-leg/);
+  assert.match(one, /class="c-line"/);
+});
+
+test("chartsHTML: series 그림도 figure + 설명", () => {
+  const html = chartsHTML([multi]);
+  assert.match(html, /<figcaption class="chart-desc">꺾은선 그래프: 월, 화, 수 \/ 철수: 3, 5, 4 \/ 영희: 1, 2, 6<\/figcaption>/);
+});

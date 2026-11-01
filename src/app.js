@@ -7,6 +7,7 @@ import { PyRun, PYODIDE_CDN } from "./pyrun.js";
 import { OUTFITS } from "../data/outfits.js";
 import { localDate, daysSince } from "./today.js";
 import { finishLesson } from "./finish.js";
+import { ensureDaily, dailyStatus, recordDaily, finishDaily, finishedItems } from "./daily.js";
 import { createPersist } from "./persist.js";
 import { readResume, writeResume, clearResume } from "./resume.js";
 import { createLessonData, chaptersForConcepts } from "./lessondata.js";
@@ -25,7 +26,7 @@ import * as badges from "./ui/badges.js";
 import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 
-export const VERSION = "v0.8";
+export const VERSION = "v0.9";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -96,6 +97,7 @@ function dayStart() {
   else if (r.broke) app.greetOverride = "streak_broken";
   if (r.usedFreezes > 0) toast(`기록 보호권 ${r.usedFreezes}개로 연속 기록을 지켰어요.`);
   s = ensureQuests(s, today);
+  s = ensureDaily(s, today, app.chapters);
   if (JSON.stringify(s) !== before) commit(s);
   else app.save = s;
 }
@@ -189,6 +191,28 @@ function finish(info) {
   return result;
 }
 
+// ---- 매일 도전 (v0.9) ----
+/** 오늘 문제를 저장에 고정(필요할 때만 저장)하고 홈 카드 상태를 돌려준다 */
+function daily() {
+  const today = localDate();
+  const next = ensureDaily(app.save, today, app.chapters);
+  if (next !== app.save) commit(next);
+  return dailyStatus(app.save, today, app.chapters);
+}
+/** 도전 화면이 문제를 하나 끝낼 때마다: 끝난 문제 번호(+건너뛴 문제)와 새 개념 점수를 바로 저장 */
+function dailyStep(lesson, S) {
+  const idx = finishedItems(S.flow).map((i) => lesson.items[i] && lesson.items[i].dailyIndex).filter(Number.isInteger);
+  const marks = S.marks.slice(S.dailyMarked || 0);
+  S.dailyMarked = S.marks.length;
+  const next = recordDaily(app.save, lesson.date, [...idx, ...(lesson.skipped || [])], marks);
+  if (JSON.stringify(next.daily) !== JSON.stringify(app.save.daily) || marks.length) commit(next);
+}
+function finishDailyChallenge(info) {
+  const { save, result } = finishDaily(app.save, { ...info, advancedIds: advancedIds(app.chapters) }, new Date());
+  commit(save);
+  return result;
+}
+
 // ---- 홈 화면에 추가 안내 (표시 여부는 저장과 따로 둔 칸에) ----
 function installShown() {
   try { return localStorage.getItem(INSTALL_HINT_KEY) === "1"; } catch { return false; }
@@ -225,6 +249,7 @@ const ctx = {
   version: VERSION,
   get save() { return app.save; },
   commit, show, say, sound, toast, finish,
+  daily, dailyStep, finishDaily: finishDailyChallenge,
   get chapters() { return app.chapters; },
   get lessons() { return app.lessons; },
   get advanced() { return app.advanced; },

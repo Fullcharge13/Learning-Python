@@ -820,3 +820,47 @@ export const ADVANCED = [
     ],
   },
 ];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+export const TEMPLATES = [
+  {
+    id: "4-T1", concept: "call", type: "choice",
+    q: "점수 차이를 구해요. 화면에 무엇이 출력될까요?",
+    code: "print(max({A}, {B}, {C}) - min({A}, {B}, {C}))",
+    wrong: ["print(max({A}, {B}, {C}) + min({A}, {B}, {C}))", "print(max({A}, {B}, {C}) - {B})"],
+    vars: { A: { min: 2, max: 9 }, B: { min: 10, max: 19 }, C: { min: 20, max: 29 } },
+    explain: "max는 가장 큰 값, min은 가장 작은 값을 돌려줘요. 그래서 차이는 {OUT}. 돌려받은 값은 바로 계산에 쓸 수 있어요.",
+  },
+  {
+    id: "4-T2", concept: "def", type: "blank",
+    q: "가격에 세금 10%를 더해 주는 함수를 만들도록 빈칸을 채워 보세요.",
+    code: "___ add_tax(price):\n    return price + price // 10\n\nprint(add_tax({P}))",
+    chips: ["def", "return", "func"], answer: 0,
+    vars: { P: [1500, 2000, 2500, 3000, 4000, 4500] },
+    explain: "함수를 만들 때는 def로 시작해요. 그다음 이름, 괄호, 콜론이 와요. func는 Python의 예약어가 아니라서 SyntaxError예요.",
+  },
+  {
+    id: "4-T3", concept: "param", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: "def discount(price, coupon):\n    return price - coupon\n\nprint(discount({P}, {C}))",
+    wrong: ["def discount(price, coupon):\n    return price - coupon\n\nprint(discount({C}, {P}))", "def discount(price, coupon):\n    return price - coupon\n\nprint(discount({P}))"],
+    vars: { P: { min: 5000, max: 9000 }, C: { min: 500, max: 2000 } },
+    explain: "재료는 쓴 순서대로 매개변수에 들어가요. 첫 값은 price에, 둘째 값은 coupon에 들어가 {OUT}. 재료를 빼먹으면 TypeError예요.",
+  },
+  {
+    id: "4-T4", concept: "return", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: "def area(w, h):\n    return w * h\n\nprint(area({W}, {H}) + {K})",
+    wrong: ["def area(w, h):\n    w * h\n\nprint(area({W}, {H}) + {K})", "def area(w, h):\n    return w + h\n\nprint(area({W}, {H}) + {K})", "def area(w, h):\n    return w * h\n\nprint(area({W}, {H}))"],
+    vars: { W: { min: 3, max: 9 }, H: { min: 3, max: 9 }, K: { min: 2, max: 9 } },
+    explain: "area가 가로 * 세로 값을 돌려줘요. 그 값에 더하는 수를 더해 {OUT}. return이 없으면 None이 돌아와 None + 숫자는 TypeError예요.",
+  },
+  {
+    id: "4-T5", concept: "return", type: "blank",
+    q: "합계(가격 + 세금)를 돌려주도록 빈칸을 채워 보세요.",
+    code: "def tax(p):\n    return p // 10\n\ndef total(p):\n    ___ p + tax(p)\n\nprint(total({P}))",
+    chips: ["return", "print", "def"], answer: 0,
+    vars: { P: [1200, 2400, 3600, 4800, 6000, 7200] },
+    explain: "total이 tax를 불러 얻은 값을 더해 return으로 돌려줘요. print는 괄호 없이 쓰면 SyntaxError이고, def는 함수를 만들 때만 써요.",
+  },
+];

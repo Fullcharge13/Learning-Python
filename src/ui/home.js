@@ -84,6 +84,30 @@ function questCard(save) {
   </section>`;
 }
 
+// 매일 도전(v0.9): 3문제 점, 「도전 n일째」, 시작/이어서/완료됨. 1장 전에는 잠긴 작은 카드
+function dailyCard(st) {
+  if (!st) return "";
+  if (st.state === "locked") {
+    return `<section class="panel daily locked" aria-labelledby="d-title">
+      <span class="daily-ic" aria-hidden="true">${icon("lock")}</span>
+      <div class="daily-text"><h2 id="d-title">오늘의 도전</h2><p>1장을 끝내면 열려요</p></div>
+    </section>`;
+  }
+  const dots = Array.from({ length: st.total }, (_, i) => `<span class="d-dot${i < st.done ? " on" : ""}"></span>`).join("");
+  const label = st.state === "done" ? "완료됨" : st.state === "partial" ? "이어서" : "시작";
+  const streak = st.streak > 0 ? `도전 ${st.streak}일째` : "첫 도전";
+  const note = st.state === "done" ? "내일 새 문제가 와요" : "3문제 · XP 15 · 바이트 10";
+  return `<section class="panel daily ${st.state}" aria-labelledby="d-title">
+    <div class="daily-text">
+      <h2 id="d-title">오늘의 도전</h2>
+      <p class="daily-streak">${icon("flame")}<span>${esc(streak)}</span></p>
+      <div class="daily-dots" role="img" aria-label="${esc(`${st.total}문제 중 ${st.done}문제 풀었어요`)}">${dots}</div>
+      <p class="daily-note">${esc(note)}</p>
+    </div>
+    <button class="btn ${st.state === "done" ? "ghost" : "sun"} daily-go" id="daily"${st.state === "done" ? " disabled" : ""}>${icon(st.state === "done" ? "check" : "play")}${label}</button>
+  </section>`;
+}
+
 function reviewCard(save) {
   const queue = save.review_queue || [];
   if (!queue.length) return "";
@@ -152,6 +176,7 @@ export function render(root, ctx) {
   const notice = ctx.takeNotice ? ctx.takeNotice() : null; // 환불 안내가 있으면 그날 인사보다 먼저(판정 C42)
   const special = notice ? null : ctx.takeGreeting();
   const line = notice || ctx.say(special || "greet");
+  const dst = ctx.daily ? ctx.daily() : null;   // 오늘 문제 고정(저장) + 카드 상태
   const allDone = ctx.lessons.length > 0 && ctx.lessons.every((l) => save.completed_lessons.includes(l.id));
   let start = 0;
   const sections = ctx.chapters.map((c) => { const html = pathSection(ctx, c, start, currentId); start += c.lessons.length; return html; }).join("");
@@ -159,11 +184,13 @@ export function render(root, ctx) {
     ${statusBar(save)}
     <main>
       <h1 class="sr">학습 길</h1>
+      ${dst && dst.state !== "locked" ? dailyCard(dst) : ""}
       <section class="hello">
         ${riaSays({ outfit: save.outfit, face: line.face, text: line.text, size: 92, cls: notice ? "refund-notice" : "" })}
         ${cur && !allDone ? `<button class="btn primary wide" id="continue">${icon("play")}<span>${save.completed_lessons.length ? "이어서 하기" : "첫 레슨 시작"} · ${esc(cur.id)} ${esc(cur.title)}</span></button>` : ""}
         ${allDone ? `<p class="all-done">준비된 레슨을 모두 끝냈어요. 다시 풀거나 복습하며 XP를 모아 봐요.</p>` : ""}
       </section>
+      ${dst && dst.state === "locked" ? dailyCard(dst) : ""}
       ${reviewCard(save)}
       ${questCard(save)}
       ${sections || '<p class="panel">레슨을 불러오지 못했어요. 새로고침해 주세요.</p>'}
@@ -174,6 +201,8 @@ export function render(root, ctx) {
   bindTabs(root, ctx);
   const go = root.querySelector("#continue");
   if (go) go.addEventListener("click", () => ctx.show("lesson", { id: currentId }));
+  const dg = root.querySelector("#daily");
+  if (dg) dg.addEventListener("click", () => ctx.show("lesson", { daily: true }));
   const rv = root.querySelector("#review");
   if (rv) rv.addEventListener("click", () => ctx.show("lesson", { review: true }));
   root.querySelectorAll("[data-lesson]").forEach((b) => b.addEventListener("click", async () => {
@@ -193,5 +222,7 @@ export function render(root, ctx) {
   }));
   // 지금 레슨이 화면 안에 오게
   const curNode = root.querySelector(".node.current");
-  if (curNode && ctx.save.completed_lessons.length > 2) curNode.scrollIntoView({ block: "center" });
+  // 오늘의 도전이 남아 있으면 맨 위 카드가 보이게 그대로 둔다(v0.9)
+  const dailyOpen = dst && (dst.state === "new" || dst.state === "partial");
+  if (curNode && ctx.save.completed_lessons.length > 2 && !dailyOpen) curNode.scrollIntoView({ block: "center" });
 }

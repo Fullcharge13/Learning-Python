@@ -119,3 +119,22 @@ test("dev_mode: 장 파일 표가 없으면 불러온 모듈을 그대로 씀(�
   assert.equal(l.items[1].task, "작성 2-1");
   assert.equal(f.calls.length, 0);
 });
+
+// v0.9 매일 도전: 틀(TEMPLATES)은 장 파일에, 레슨 목록에는 틀 id·개념만(문제 고르기는 목록만 보고 함)
+const TPL = (n) => [{ id: `${n}-T1`, concept: `c${n}a`, type: "choice", q: "비밀 문제 {A}", code: "print({A})", wrong: ["print(1)", "print(2)"], vars: { A: { min: 3, max: 9 } }, explain: "해설" }];
+
+test("templates_index: 목록에는 틀 id·개념만, 틀 없는 장은 templates 칸 없음", () => {
+  const idx = buildLessonIndex([{ ...mod(1), TEMPLATES: TPL(1) }, mod(2)]);
+  assert.deepEqual(idx[0].templates, [{ id: "1-T1", concept: "c1a" }]);
+  assert.equal("templates" in idx[1], false);
+  assert.ok(!JSON.stringify(idx).includes("비밀 문제"));
+});
+
+test("templates_chapter: 개발판·배포판 모두 getChapter가 TEMPLATES를 돌려줌(없으면 [])", async () => {
+  const dev = createLessonData({ modules: [{ ...mod(1), TEMPLATES: TPL(1) }, mod(2)] });
+  assert.equal((await dev.getChapter(1)).TEMPLATES[0].q, "비밀 문제 {A}");
+  assert.deepEqual((await dev.getChapter(2)).TEMPLATES, []);
+  const f = fakeFetch(() => ok({ ...mod(1), TEMPLATES: TPL(1) }));
+  const split = createLessonData({ index: buildLessonIndex([{ ...mod(1), TEMPLATES: TPL(1) }]), files: FILES, base: BASE, fetch: f });
+  assert.equal((await split.getChapter(1)).TEMPLATES[0].id, "1-T1");
+});

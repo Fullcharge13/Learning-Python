@@ -1079,3 +1079,47 @@ export const ADVANCED = [
     ],
   },
 ];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+export const TEMPLATES = [
+  {
+    id: "10-T1", concept: "try", type: "choice",
+    q: "숫자가 아닌 글자를 정수로 바꿔요. 화면에 무엇이 출력될까요?",
+    code: 's = "{X}"\ntry:\n    n = int(s)\n    print(n)\nexcept ValueError:\n    print(s, "→ 숫자 아님")',
+    wrong: ['s = "{X}"\ntry:\n    n = int(s)\n    print(n)\nexcept TypeError:\n    print(s, "→ 숫자 아님")', 's = "{X}"\ntry:\n    n = int(s)\n    print(n)\nexcept ValueError:\n    print(0)'],
+    vars: { X: ["사과", "abc", "열두개", "3.5"] },
+    explain: "int()가 바꾸지 못하면 ValueError가 나요. except ValueError가 받아서 안내 글을 찍어요. TypeError는 다른 종류의 오류라 못 잡아요.",
+  },
+  {
+    id: "10-T2", concept: "try", type: "blank",
+    q: "0으로 나누는 오류를 받으려고 해요. 빈칸을 채워 보세요.",
+    code: 'n = 0\ntry:\n    print({A} / n)\nexcept ___:\n    print("0으로 못 나눠요")',
+    chips: ["ZeroDivisionError", "ValueError", "KeyError"], answer: 0,
+    vars: { A: { min: 10, max: 99 } },
+    explain: "0으로 나누면 ZeroDivisionError가 나요. 오류 이름이 맞아야 except가 받아요. 다른 이름이면 오류가 그대로 나요.",
+  },
+  {
+    id: "10-T3", concept: "excmulti", type: "choice",
+    q: "except가 두 개 있어요. 화면에 무엇이 출력될까요?",
+    code: 'nums = [{A}, {B}]\ntry:\n    print(nums[5])\nexcept ValueError:\n    print("값 오류")\nexcept IndexError:\n    print("범위 밖")',
+    wrong: ['nums = [{A}, {B}]\ntry:\n    print(nums[1])\nexcept ValueError:\n    print("값 오류")\nexcept IndexError:\n    print("범위 밖")', 'nums = [{A}, {B}]\ntry:\n    print(nums[5])\nexcept ValueError:\n    print("값 오류")'],
+    vars: { A: { min: 1, max: 9 }, B: { min: 10, max: 19 } },
+    explain: "nums[5]는 범위를 벗어나 IndexError가 나요. 오류 종류에 맞는 except가 실행돼요. 맞는 except가 없으면 오류가 그대로 나요.",
+  },
+  {
+    id: "10-T4", concept: "raise", type: "choice",
+    q: "음수 나이를 막는 함수예요. 화면에 무엇이 출력될까요?",
+    code: 'def check(age):\n    msg = \"{M}\"\n    if age < 0:\n        raise ValueError(msg)\n    return age\n\ntry:\n    print(check(-{N}))\nexcept ValueError as e:\n    print(e)',
+    wrong: ['def check(age):\n    msg = \"{M}\"\n    if age < 0:\n        raise ValueError(msg)\n    return age\n\ntry:\n    print(check(-{N}))\nexcept ValueError as e:\n    print("e")', 'def check(age):\n    msg = \"{M}\"\n    if age < 0:\n        raise ValueError(msg)\n    return age\n\ntry:\n    print(check({N}))\nexcept ValueError as e:\n    print(e)'],
+    vars: { M: ["0살보다 작을 수 없어요", "음수는 안 돼요", "다시 입력하세요"], N: { min: 1, max: 9 } },
+    explain: "raise ValueError(글)로 던진 글은 except … as e 의 e에 담겨요. print(e)가 그 글을 보여 줘요. 따옴표로 감싼 \"e\"는 그냥 글자 e예요.",
+  },
+  {
+    id: "10-T5", concept: "try", type: "blank",
+    q: "숫자가 아니면 0으로 보고 이어서 계산하려고 해요. 빈칸을 채워 보세요.",
+    code: 'try:\n    n = int("{X}")\nexcept ValueError:\n    n = ___\nprint(n + {A})',
+    chips: ["0", '"0"', "None"], answer: 0,
+    vars: { X: ["사과", "abc", "열두개", "3.5"], A: { min: 10, max: 99 } },
+    explain: "except 안에서 n에 숫자 0을 넣어 두면 그 뒤 계산이 이어져요. \"0\"은 글자라서 더할 때, None은 아무 값도 아니라서 더할 때 오류가 나요.",
+  },
+];

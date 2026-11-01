@@ -454,7 +454,8 @@ const out = {};
 for (const f of fs.readdirSync(dir).filter((f) => /^ch\d+\.js$/.test(f))) {
   const m = await import(url.pathToFileURL(path.join(dir, f)).href);
   out[f] = { CHAPTER: m.CHAPTER, LESSONS: m.LESSONS,
-    ...(Array.isArray(m.ADVANCED) && m.ADVANCED.length ? { ADVANCED: m.ADVANCED.map((l) => ({ ...l, isAdvanced: true })) } : {}) };
+    ...(Array.isArray(m.ADVANCED) && m.ADVANCED.length ? { ADVANCED: m.ADVANCED.map((l) => ({ ...l, isAdvanced: true })) } : {}),
+    ...(Array.isArray(m.TEMPLATES) && m.TEMPLATES.length ? { TEMPLATES: m.TEMPLATES } : {}) };  // v0.9 매일 도전 틀
 }
 process.stdout.write(JSON.stringify(out));
 """
@@ -555,7 +556,7 @@ def test_split_advanced():
     """v0.7 작업 1: 장 파일의 ADVANCED는 그 장 JSON에, 목록(index)에는 장의 advanced 칸에 stub만. 없는 장은 그대로"""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from fixtures.advanced_dir import make
-    make(_snapshot(), ADV_SNAP, chapters=(1, 2))
+    make(_snapshot(), ADV_SNAP, chapters=(1, 2), strip_advanced=(17,))
     _build("--out", ADV_OUT, "--lessons-dir", ADV_SNAP)
     html = _read(os.path.join(ADV_OUT, "index.html"))
     src = _source_lessons(ADV_SNAP)
@@ -578,6 +579,29 @@ def test_split_advanced():
     for n in no_adv:
         assert "advanced" not in idx[n]
     assert "심화 시험 작성 1-A1" not in html and "심화 시험 카드 1-A2" not in html, "advanced lesson text leaked into index.html"
+
+
+def test_split_templates():
+    """v0.9 매일 도전: 장 파일의 TEMPLATES는 그 장 JSON에(오프라인 저장본에 함께), 목록에는 장의 templates 칸에 id·개념만.
+    틀이 없는 장은 칸도 없고 파일 내용도 그대로(지문이 바뀌지 않음)"""
+    snap = _snapshot()
+    out = _build("--out", SPLIT_OUT, "--lessons-dir", snap)
+    assert "lessons/" in out
+    html = _read(os.path.join(SPLIT_OUT, "index.html"))
+    src = _source_lessons(snap)
+    with_tpl = sorted(int(k[2:-3]) for k, m in src.items() if m.get("TEMPLATES"))
+    assert 1 in with_tpl and 2 in with_tpl, with_tpl
+    table = _chapter_table(html)
+    idx = {c["id"]: c for c in _lesson_index(html)}
+    for n in table:
+        got = json.loads(_read(os.path.join(SPLIT_OUT, table[n])))
+        if n in with_tpl:
+            assert got["TEMPLATES"] == src["ch%d.js" % n]["TEMPLATES"], n
+            assert idx[n]["templates"] == [{"id": t["id"], "concept": t["concept"]} for t in got["TEMPLATES"]], idx[n].get("templates")
+            for t in got["TEMPLATES"]:
+                assert t["q"] not in html and t["explain"] not in html, "template text leaked into index.html: " + t["id"]
+        else:
+            assert "TEMPLATES" not in got and "templates" not in idx[n], n
 
 
 UPD_SNAP = os.path.join(OUT, "lessons-upd")

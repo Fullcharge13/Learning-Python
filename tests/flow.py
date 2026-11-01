@@ -25,6 +25,10 @@
 - test_advanced_branch: 시험 심화(tests/fixtures/advanced.js)를 1·2장에 끼운 빌드. 1-5까지 끝낸 저장 → 1장 별 노드 3개 열림,
                         2장은 잠김 → 1-A1 풀기 → XP 15(+보너스)·바이트 15, 배지 「심화 첫걸음」, 지금 레슨은 2-1 그대로
                         → 설정 「심화 1/3」·펼친 목록 「심화」 (v0.7 작업 1). 캡처: adv-*.png
+- test_daily_challenge: 새 저장은 잠긴 카드 「1장을 끝내면 열려요」. 1~2장을 끝낸 저장 → 홈 맨 위 「오늘의 도전」(시작, 점 0)
+                        → 1문제 풀고 새로고침 → 같은 3문제·「이어서」·점 1 → 남은 2문제(틀 1 + 직접 작성) → 「오늘의 도전 완료!」
+                        XP 15·바이트 10·도전 1일째 → 홈 「완료됨」 → 새로고침해도 같은 문제·완료됨 (v0.9 작업 2).
+                        캡처: daily-home.png, daily-item.png, daily-write.png, daily-done.png, daily-home-done.png (iPhone 17)
 """
 
 import atexit
@@ -905,7 +909,7 @@ def adv_url():
     env()
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from fixtures.advanced_dir import make
-    lessons = make(os.path.join(ROOT, "data", "lessons"), os.path.join(OUT, "lessons-adv"), chapters=(1, 2))
+    lessons = make(os.path.join(ROOT, "data", "lessons"), os.path.join(OUT, "lessons-adv"), chapters=(1, 2), strip_advanced=(17,))
     dist = os.path.join(OUT, "dist-adv")
     r = subprocess.run([sys.executable, os.path.join(ROOT, "build.py"), "--dev-pyodide", "--out", dist, "--lessons-dir", lessons],
                        cwd=ROOT, capture_output=True, text=True)
@@ -1093,6 +1097,123 @@ def test_new_content_dot():
         a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
         a.start()
         assert _dots(a) == [], _dots(a)
+        assert not a.errors, a.errors
+
+
+
+# ---------------------------------------------------------------- 매일 도전 (v0.9 작업 2)
+
+DAILY_JS = "() => { const l = window.__ria.app.dailyLesson; return l ? l.items : null; }"
+
+
+def _daily_card(a):
+    return a.js("""() => { const c = document.querySelector('.panel.daily'); if (!c) return null;
+      const b = c.querySelector('#daily');
+      return { cls: c.className, text: c.innerText, btn: b ? b.innerText.trim() : null, disabled: b ? b.disabled : null,
+               on: c.querySelectorAll('.d-dot.on').length, dots: c.querySelectorAll('.d-dot').length,
+               first: [...document.querySelector('main').children].filter((e) => !e.classList.contains('sr'))[0] === c }; }""")
+
+
+def _daily_answer_one(a, shots):
+    """도전 화면의 지금 문제 하나를 맞게 풀고 「계속」. 돌려줌: 문제 종류"""
+    a.page.wait_for_selector("article.item", timeout=PY_READY_MS)
+    items = a.js(DAILY_JS)
+    idx = a.which_item(items)
+    it = items[idx]
+    if it["type"] == "write":
+        a.page.wait_for_selector(".cm-content")
+        if "write" in shots:
+            a.shot(shots.pop("write"))
+        a.submit_write(it["solution"])
+    else:
+        assert a.page.query_selector(".tag.daily"), "daily tag missing"
+        if "item" in shots:
+            a.shot(shots.pop("item"))
+        a.answer_touch(it)
+        a.page.wait_for_selector("#result:not([hidden])")
+    assert a.cont(), "daily item %d (%s) judged wrong" % (idx, it["type"])
+    return it["type"]
+
+
+def test_daily_challenge():
+    with App("iPhone 17") as a:   # 새 저장: 잠긴 카드
+        a.start()
+        c = _daily_card(a)
+        assert c and "locked" in c["cls"] and "1장을 끝내면 열려요" in c["text"] and c["btn"] is None, c
+        assert a.save()["daily"]["picks"] == [], "no picks before chapter 1"
+        assert not a.errors, a.errors
+
+    done12 = ["%d-%d" % (c, k) for c in (1, 2) for k in range(1, 6)]
+    base = {"saveVer": 2, "completed_lessons": done12, "current_chapter": 3, "current_lesson": "3-1",
+            "settings": {"sound": False, "dailyGoal": 10, "name": ""}}
+    with App("iPhone 17", save=base) as a:
+        a.start()
+        c = _daily_card(a)
+        assert c and c["first"] and "daily new" in c["cls"] and c["btn"] == "시작" and c["on"] == 0 and c["dots"] == 3, c
+        assert "첫 도전" in c["text"], c["text"]
+        assert a.js("() => window.scrollY") == 0, "home must stay at the top while today's challenge is open"
+        a.shot("daily-home.png")
+        box = a.page.eval_on_selector("#daily", "e => { const r = e.getBoundingClientRect(); return [r.width, r.height]; }")
+        assert box[0] >= 44 and box[1] >= 44, box
+        m = measure(a, "home-daily")
+        assert not m["problems"], m["problems"]
+        assert not [x for x in m["small"] if "daily" in x], m["small"]
+        s0 = a.save()
+        picks = s0["daily"]["picks"]
+        assert s0["daily"]["date"] == today() and len(picks) == 3, s0["daily"]
+        assert [p["kind"] for p in picks] == ["tpl", "tpl", "write"], picks
+        assert all(p["chapter"] in (1, 2) for p in picks), picks
+        assert picks[2]["lesson"] in done12, picks
+        xp0, bytes0 = s0["xp"], s0["bytes"]
+
+        a.wait_py()
+        a.page.click("#daily")
+        shots = {"item": "daily-item.png", "write": "daily-write.png"}
+        kinds = [_daily_answer_one(a, shots)]
+        a.page.wait_for_selector("article.item")
+        s1 = a.save()
+        assert s1["daily"]["done"] == [0], s1["daily"]
+
+        # 새로고침(같은 날) → 같은 문제, 「이어서」, 점 1
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.start()
+        c = _daily_card(a)
+        assert c["btn"] == "이어서" and c["on"] == 1 and "partial" in c["cls"], c
+        assert a.save()["daily"]["picks"] == picks, "same picks after reload"
+        a.wait_py()
+        a.page.click("#daily")
+        for _ in range(2):
+            kinds.append(_daily_answer_one(a, shots))
+        assert "write" in kinds and kinds.count("write") == 1, kinds
+        a.page.wait_for_selector(".screen.done", timeout=10_000)
+        a.page.wait_for_timeout(300)
+        title = a.page.inner_text(".done-hero h1")
+        assert title == "오늘의 도전 완료!", title
+        assert "도전 1일째" in a.page.inner_text(".daily-done"), a.page.inner_text(".daily-done")
+        assert a.page.inner_text(".tile.xp b") == "+15"
+        a.shot("daily-done.png", full=True)
+        r = a.result()
+        s2 = a.save()
+        assert r["mode"] == "daily" and r["xp"] == 15 and r["lessonBytes"] == 10, r
+        assert s2["xp"] == xp0 + 15, (s2["xp"], xp0)
+        assert s2["bytes"] == bytes0 + 10 + r["questBytes"] + r["milestoneBytes"], (s2["bytes"], bytes0, r)
+        assert s2["daily"]["streak"] == 1 and s2["daily"]["last_done_date"] == today() and s2["daily"]["done"] == [0, 1, 2], s2["daily"]
+        assert s2["streak"]["todayXp"] >= 15 and s2["streak"]["lastGoalDate"] == today(), s2["streak"]
+        assert s2["completed_lessons"] == done12, "daily does not change course progress"
+
+        a.page.click("#home")
+        a.page.wait_for_selector(".screen.home")
+        c = _daily_card(a)
+        assert c["btn"] == "완료됨" and c["disabled"] and c["on"] == 3 and "도전 1일째" in c["text"], c
+        a.js("() => window.scrollTo(0, 0)")
+        a.shot("daily-home-done.png")
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.start()
+        c = _daily_card(a)
+        assert c["btn"] == "완료됨" and c["disabled"], c
+        assert a.save()["daily"]["picks"] == picks
         assert not a.errors, a.errors
 
 

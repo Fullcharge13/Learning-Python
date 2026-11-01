@@ -14,6 +14,7 @@
   index.html              CSS·앱·작업자·runner.py·레슨 목록이 들어간 한 장. 외부 <script src> 없음
   lessons/chN-<지문>.json  장 하나의 레슨 전체(v0.3 작업 1). 지문 = 파일 내용 sha256 앞 8자
                           장 파일에 ADVANCED(심화 레슨, v0.7)가 있으면 함께 넣고, 목록에는 그 stub을 장의 advanced 칸에
+                          매일 도전 틀 TEMPLATES(v0.9)도 있으면 함께 넣고, 목록에는 장의 templates 칸에 id·개념만
   manifest.webmanifest    홈 화면 앱 설명
   sw.js                   서비스 작업자(판 번호·내용 지문·Pyodide 주소를 채움)
   icons/*.png             리아 얼굴 아이콘(tools/icon.py)
@@ -90,16 +91,30 @@ for (const f of names) {
     if (seen.has(lid)) throw new Error(`${f}: ADVANCED lesson id ${lid} is used twice`);
     seen.add(lid);
   }
+  // 매일 도전 틀(v0.9): export const TEMPLATES = [{ id: "N-T1", … }]. 없어도 됨. 내용 검사는 tests/content.py
+  const tpl = m.TEMPLATES === undefined ? [] : m.TEMPLATES;
+  if (!Array.isArray(tpl)) throw new Error(`${f}: TEMPLATES must be an array`);
+  const tseen = new Set();
+  for (const t of tpl) {
+    const tid = t && t.id;
+    if (!new RegExp(`^${n}-T[1-9]\\d*$`).test(String(tid))) throw new Error(`${f}: template id ${tid} must look like ${n}-T1`);
+    if (tseen.has(tid)) throw new Error(`${f}: template id ${tid} is used twice`);
+    tseen.add(tid);
+  }
   // ADVANCED 안에 있으면 심화다: isAdvanced를 빠뜨렸으면 채워 넣는다(앱·README가 같은 표시를 봄)
   mods.push({ n, CHAPTER: m.CHAPTER || { id: n, title: "" }, LESSONS: m.LESSONS,
-    ADVANCED: adv.map((l) => (l.isAdvanced === true ? l : { ...l, isAdvanced: true })) });
+    ADVANCED: adv.map((l) => (l.isAdvanced === true ? l : { ...l, isAdvanced: true })), TEMPLATES: tpl });
 }
 mods.sort((a, b) => a.n - b.n);
 const index = lib.buildLessonIndex(mods);
 const files = {}, contents = {}, tasks = [];
 for (const m of mods) {
   // ADVANCED가 없는 장은 v0.6과 같은 내용(지문이 바뀌지 않아 저장본을 다시 받지 않음)
-  const text = JSON.stringify(m.ADVANCED.length ? { CHAPTER: m.CHAPTER, LESSONS: m.LESSONS, ADVANCED: m.ADVANCED } : { CHAPTER: m.CHAPTER, LESSONS: m.LESSONS });
+  // 틀(TEMPLATES)도 있을 때만 칸을 둔다
+  const body = { CHAPTER: m.CHAPTER, LESSONS: m.LESSONS };
+  if (m.ADVANCED.length) body.ADVANCED = m.ADVANCED;
+  if (m.TEMPLATES.length) body.TEMPLATES = m.TEMPLATES;
+  const text = JSON.stringify(body);
   const hash = crypto.createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex").slice(0, 8);
   const name = lib.chapterFileName(m.n, hash);
   files[m.n] = name;

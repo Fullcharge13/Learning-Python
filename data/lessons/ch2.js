@@ -831,3 +831,40 @@ export const ADVANCED = [
     ],
   },
 ];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+export const TEMPLATES = [
+  {
+    id: "2-T1", concept: "assign", type: "choice",
+    q: "동전 저금통이에요. 화면에 무엇이 출력될까요?",
+    code: "coins = {A}\ncoins = coins + {B}\nprint(coins)",
+    wrong: ["coins = {A}\nprint(coins)", 'coins = {A}\ncoins = coins + {B}\nprint("coins")'],
+    vars: { A: { min: 3, max: 20 }, B: { min: 2, max: 9 } },
+    explain: "오른쪽 계산(coins + {B})을 먼저 하고 그 값을 다시 coins에 넣어요. 따옴표로 감싼 \"coins\"는 변수가 아니라 글자예요.",
+  },
+  {
+    id: "2-T2", concept: "convert", type: "blank",
+    q: "글자로 된 나이를 정수로 바꿔 1을 더한 값이 나오게 빈칸을 채워 보세요.",
+    code: 'age = "{N}"\nprint(___(age) + 1)',
+    chips: ["int", "str", "float"], answer: 0,
+    vars: { N: { min: 10, max: 60 } },
+    explain: "따옴표 안의 숫자는 글자예요. int()로 정수로 바꿔야 1을 더할 수 있어요. float()는 소수점이 붙은 값이 나와요.",
+  },
+  {
+    id: "2-T3", concept: "type", type: "choice",
+    q: "화면에 무엇이 출력될까요?",
+    code: 'n = "{N}"\nprint(n * 2)',
+    wrong: ["n = {N}\nprint(n * 2)", 'n = "{N}"\nprint(n + "2")'],
+    vars: { N: { min: 3, max: 9 } },
+    explain: "따옴표 안의 숫자는 글자예요. 글자 * 2는 두 번 이어 붙이기, 숫자 * 2는 곱하기예요. 그래서 화면에는 {OUT}.",
+  },
+  {
+    id: "2-T4", concept: "input", type: "choice",
+    q: "숫자 두 개를 차례로 입력했어요. 화면에 무엇이 출력될까요?",
+    code: "a = input()\nb = input()\nprint(a + b)",
+    stdin: "{A}\n{B}",
+    wrong: ["a = input()\nb = input()\nprint(int(a) + int(b))", "a = input()\nb = input()\nprint(a, b)"],
+    vars: { A: { min: 2, max: 9 }, B: { min: 2, max: 9 } },
+    explain: "input()으로 받은 값은 언제나 글자예요. 글자끼리 + 는 이어 붙이기라서 덧셈이 되지 않아요.",
+  },
+];

@@ -57,3 +57,18 @@ test("advanced 옵션: 심화를 끝내고, 본 과정 길이는 그대로, 같�
     assert.ok(a.lessonDay[`${n}-5`] <= day, `${id} on day ${day} before ${n}-5`);
   }
 });
+
+// v0.9 작업 2: 매일 도전을 하는 학습자 — 같은 씨앗 같은 결과, 1장 뒤에만, 바이트가 늘고 첫 의상은 3~4일 안팎
+test("daily 옵션: 결정적, 도전한 날이 있고 바이트가 기준보다 많음", () => {
+  const base = runSim(1);
+  const d = runSim(1, { daily: true });
+  assert.deepEqual(d, runSim(1, { daily: true }));
+  assert.equal(base.dailyDone, 0);
+  assert.ok(d.dailyDone > 10 && d.dailyDone <= d.activeDays, `dailyDone=${d.dailyDone}`);
+  assert.ok(d.sources.daily >= d.dailyDone * 10, JSON.stringify(d.sources));
+  assert.ok(d.bytesPerActiveDay > base.bytesPerActiveDay);
+  assert.equal(d.courseLength, base.courseLength);
+  const fods = [1, 2, 3, 4, 5, 6].map((s) => runSim(s, { daily: true }).firstOutfitDay).sort((a, b) => a - b);
+  const med = (fods[2] + fods[3]) / 2;
+  assert.ok(med >= 3 && med <= 4, `first outfit median ${med}`);
+});

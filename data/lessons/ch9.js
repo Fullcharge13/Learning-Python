@@ -749,3 +749,47 @@ export const ADVANCED = [
     ],
   },
 ];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+export const TEMPLATES = [
+  {
+    id: "9-T1", concept: "tuple", type: "choice",
+    q: "좌표를 튜플에 담았어요. 화면에 무엇이 출력될까요?",
+    code: "p = ({A}, {B})\nprint(p[1])",
+    wrong: ["p = ({A}, {B})\nprint(p[0])", "p = ({A}, {B})\np[1] = {C}\nprint(p[1])"],
+    vars: { A: { min: 1, max: 9 }, B: { min: 10, max: 19 }, C: { min: 20, max: 29 } },
+    explain: "튜플도 인덱스는 0부터예요. p[1]은 두 번째 값이에요. 튜플은 값을 바꿀 수 없어서 p[1] = … 은 오류가 나요.",
+  },
+  {
+    id: "9-T2", concept: "unpack", type: "blank",
+    q: "두 값을 서로 바꿔서 {B} {A} 순서로 나오게 빈칸을 채워 보세요.",
+    code: "a, b = ({A}, {B})\n___\nprint(a, b)",
+    chips: ["a, b = b, a", "a = b", "b = a"], answer: 0,
+    vars: { A: { min: 1, max: 9 }, B: { min: 11, max: 19 } },
+    explain: "a, b = b, a는 두 값을 한꺼번에 바꿔요. a = b 만 쓰면 a만 바뀌어 같은 값이 두 번 나와요.",
+  },
+  {
+    id: "9-T3", concept: "set", type: "choice",
+    q: "손님 번호가 겹쳐 적혔어요. 화면에 무엇이 출력될까요?",
+    code: "nums = [{L}]\nprint(len(set(nums)))",
+    wrong: ["nums = [{L}]\nprint(len(nums))", "nums = [{L}]\nprint(len(set(nums)) + 1)"],
+    vars: { L: ["3, 7, 3, 9, 7", "5, 5, 5, 8", "2, 4, 6, 4, 2, 6", "1, 1, 2, 3, 3, 8", "9, 9, 1, 9", "4, 8, 4, 4, 1, 8, 6"] },
+    explain: "set()은 겹치는 값을 하나로 합쳐요. 서로 다른 값만 세면 → {OUT}",
+  },
+  {
+    id: "9-T4", concept: "set", type: "blank",
+    q: "두 반에 모두 있는 번호만 나오게 빈칸을 채워 보세요.",
+    code: "a = {{A}, {B}, {C}}\nb = {{B}, {C}, {D}}\nprint(sorted(a ___ b))",
+    chips: ["&", "|", "-"], answer: 0,
+    vars: { A: { min: 1, max: 9 }, B: { min: 10, max: 19 }, C: { min: 20, max: 29 }, D: { min: 30, max: 39 } },
+    explain: "& 는 양쪽에 모두 있는 값(교집합)이에요. | 는 모두 합치고, - 는 앞에만 있는 값만 남겨요.",
+  },
+  {
+    id: "9-T5", concept: "items", type: "choice",
+    q: "점수표를 이름순으로 정렬했어요. 화면에 무엇이 출력될까요?",
+    code: 'sc = {"{N2}": {A}, "{N1}": {B}}\nprint(sorted(sc.items())[0])',
+    wrong: ['sc = {"{N2}": {A}, "{N1}": {B}}\nprint(sorted(sc)[0])', 'sc = {"{N2}": {A}, "{N1}": {B}}\nprint(sorted(sc.values())[0])'],
+    vars: { N1: ["가온", "나래", "다솜"], N2: ["마루", "바다", "사랑"], A: { min: 50, max: 69 }, B: { min: 70, max: 99 } },
+    explain: "items()는 (이름, 점수) 묶음을 돌려주고, sorted는 앞에서부터 비교해 이름순으로 세워요. sorted(sc)는 이름만, values()는 점수만 정렬해요.",
+  },
+];

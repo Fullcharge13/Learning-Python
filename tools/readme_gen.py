@@ -34,7 +34,7 @@ const nums = fs.readdirSync(new URL("data/lessons/", root))
   .map((f) => /^ch(\d+)\.js$/.exec(f)).filter(Boolean).map((m) => +m[1]).sort((a, b) => a - b);
 for (const n of nums) {
   const m = await imp("data/lessons/ch" + n + ".js");
-  chapters.push({ chapter: m.CHAPTER, lessons: m.LESSONS, advanced: Array.isArray(m.ADVANCED) ? m.ADVANCED : [] });
+  chapters.push({ chapter: m.CHAPTER, lessons: m.LESSONS, advanced: Array.isArray(m.ADVANCED) ? m.ADVANCED : [], templates: Array.isArray(m.TEMPLATES) ? m.TEMPLATES : [] });
 }
 const { CONCEPTS } = await imp("data/concepts.js");
 const { QUESTS } = await imp("data/quests.js");
@@ -185,6 +185,12 @@ def build(d):
         w("")
         w("**심화**(선택): 장 평가를 통과하면 그 장의 심화 레슨 3개가 한꺼번에 열려요. 건너뛰어도 다음 장은 열리고, "
           "과정 완주와 「레슨 N개 중 M개 완료」에는 들어가지 않아요. 학습 길에서는 장 평가 아래 별 노드로 보여요.")
+    n_tmpl = sum(len(ch.get("templates") or []) for ch in d["chapters"])
+    if n_tmpl:
+        w("")
+        w(f"**매일 도전**(v0.9): 홈 맨 위 「오늘의 도전」 카드. 하루 3문제 — 문제 틀 {n_tmpl}개에서 이름·숫자를 바꿔 만든 터치 2문제와 "
+          "끝낸 레슨의 직접 작성 1문제(틀린 개념이 든 레슨을 더 자주). 끝낸 장에서만 나오고, 같은 날 다시 열면 같은 문제예요. "
+          "다 풀면 XP 15 · 바이트 10, 「도전 n일째」 연속 7일마다 바이트 +20. 비행기 모드에서도 돼요.")
     w("")
     for ch in d["chapters"]:
         c = ch["chapter"]
@@ -285,6 +291,7 @@ def build(d):
         "사파리는 홈 화면에 추가하지 않은 웹사이트의 저장을 7일 동안 방문이 없으면 지울 수 있어요. 홈 화면에 추가를 안내하고, 브라우저에 저장 보존을 요청하며(`navigator.storage.persist`), 설정에 저장 내보내기·가져오기를 두었어요.",
         "서버가 없어 「숨은 시험」의 답도 앱 파일 안에 들어 있어요. 마음먹고 파일을 열어 보면 볼 수 있어요.",
         "채점은 출력과 「꼭 쓸 문법」(함수·반복·주석·elif·else 등)을 보지만, 「객체에 이름을 담았는지」처럼 값의 흐름까지는 보지 않아요(15-1, 16-1에 작은 빈틈).",
+        "심화 채점의 남은 빈틈: SQL 문제는 JOIN·HAVING 낱말이 SQL 글자 안에 있는지만 보고(16-A1~A3), 15-A1은 starter 아래쪽을 지우고 직접 찍으면 통과하며, 14-A2는 다시 읽은 값을 꼭 쓰지 않아도, 13-A1은 정해진 답 표로도 통과해요. 일부러 꾀를 내야 하는 빈틈이라 그대로 두었어요.",
         "레슨 중간 진행은 24시간 동안만 이어서 할 수 있어요. 다른 휴대폰이나 브라우저로는 이어지지 않아요.",
         "PC에서도 열리지만 휴대폰 폭 그대로 가운데에 놓여요.",
     ]

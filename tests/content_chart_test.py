@@ -170,6 +170,86 @@ def test_show_only_not_on_items():
     assert has(rep.errors, "모르는 칸: show_only"), rep.errors
 
 
+# ── v0.9 17장 심화: 한 그림에 꺾은선 여러 개(series) ─────────────────────
+MULTI = {"kind": "line", "labels": ["월", "화", "수"],
+         "series": [{"name": "철수", "values": [3, 5, 4]}, {"name": "영희", "values": [1, 2, 6]}]}
+MULTI_CODE = ("import chart\nd = ['월', '화', '수']\nchart.line(d, [3, 5, 4])\nchart.line(d, [1, 2, 6])\n"
+              "chart.legend(['철수', '영희'])\nchart.show()")
+
+
+def test_series_mismatch_rules_match_js():
+    import copy
+    assert chart_mismatch(MULTI, [copy.deepcopy(MULTI)]) is None
+    no_names = {"kind": "line", "labels": MULTI["labels"], "series": [{"values": [3, 5, 4]}, {"values": [1, 2, 6.0]}]}
+    assert chart_mismatch(no_names, [MULTI]) is None
+    assert chart_mismatch(MULTI, [dict(MULTI, series=MULTI["series"][:1])]) == "선 개수가 달라요(기대 2개, 내 코드 1개)"
+    assert chart_mismatch(MULTI, [dict(MULTI, series=[MULTI["series"][0], {"name": "민지", "values": [1, 2, 6]}])]) \
+        == "2번째 선 이름이 달라요"
+    assert chart_mismatch(MULTI, [dict(MULTI, series=[MULTI["series"][0], {"name": "영희", "values": [1, 2, 7]}])]) \
+        == "2번째 선 값이 달라요"
+    one = {"kind": "line", "labels": MULTI["labels"], "values": [3, 5, 4]}
+    assert chart_mismatch(MULTI, [one]) == "선 개수가 달라요(기대 2개, 내 코드 1개)"
+    assert chart_mismatch(one, [MULTI]) == "선 개수가 달라요(기대 1개, 내 코드 2개)"
+    assert chart_mismatch({"kind": "line", "labels": ["a"], "values": [1]},
+                          [{"kind": "line", "labels": ["a"], "values": [2]}]) == "그래프 값이 달라요"
+    assert chart_mismatch({"kind": "line", "labels": ["a"], "values": [1]},
+                          [{"kind": "line", "labels": ["a"], "series": [{"name": "x", "values": [1]}]}]) is None
+
+
+def test_series_chart_shape():
+    def shape(v):
+        rep = Lesson("t")
+        return chart_of(rep, "x", {"chart": v}), rep.errors
+    assert shape(MULTI) == (MULTI, [])
+    assert shape(dict(MULTI, series=[{"values": [1, 2, 3]}] * 3, title="t"))[1] == []
+    assert shape(dict(MULTI, series=[{"name": "a", "values": [1, 2, 3]}]))[1] == []
+    for bad in (dict(MULTI, kind="bar"), dict(MULTI, series=[]), dict(MULTI, series=[{"values": [1, 2, 3]}] * 4),
+                dict(MULTI, series=[{"values": [1, 2]}]), dict(MULTI, series=[{"values": [1, 2, "3"]}]),
+                dict(MULTI, series=[{"values": [1, 2, 3], "color": "red"}]),
+                dict(MULTI, series=[{"name": "", "values": [1, 2, 3]}]),
+                dict(MULTI, series=[{"name": 3, "values": [1, 2, 3]}]),
+                dict(MULTI, values=[1, 2, 3]), dict(MULTI, series={"values": [1, 2, 3]})):
+        v, errs = shape(bad)
+        assert v is None and has(errs, "chart"), (bad, errs)
+
+
+def test_series_write_and_card_in_advanced():
+    adv = content.AdvancedChapter(17)
+    item = write_item(concept="multichart", solution=MULTI_CODE, task="두 사람 기록을 꺾은선 두 개로 겹쳐 그려요.",
+                      tests=[{"stdin": "", "expect": "", "public": True, "chart": MULTI}],
+                      hints=["다시 봐요.", "line을 두 번 불러요.", "legend로 이름표를 달아요.", "chart.line(___, ___)"])
+    rep = Lesson("t")
+    check_write(rep, "items[0] write", item, adv)
+    assert rep.errors == [], rep.errors
+    # 본 과정 17장 레슨이 여러 선 그림을 그리면 오류(정적 검사로 못 잡는 line 두 번도 실행 결과로 잡음)
+    two_lines = MULTI_CODE.replace("chart.legend(['철수', '영희'])\n", "")
+    item2 = dict(item, solution=two_lines,
+                 tests=[{"stdin": "", "expect": "", "public": True,
+                         "chart": dict(MULTI, series=[{"values": [3, 5, 4]}, {"values": [1, 2, 6]}])}])
+    rep = Lesson("t")
+    check_write(rep, "items[0] write", item2, 17)
+    assert has(rep.errors, "본 과정") and has(rep.errors, "선"), rep.errors
+    # 카드·터치 문제도
+    card = {"say": "선 두 개를 그려요.", "code": two_lines, "out": "",
+            "chart": dict(MULTI, series=[{"values": [3, 5, 4]}, {"values": [1, 2, 6]}])}
+    assert has(card_errs(card), "본 과정"), card_errs(card)
+    choice = {"type": "choice", "concept": "line", "q": "선은 몇 개?", "code": two_lines, "options": ["1개", "2개", "3개"],
+              "answer": 1, "explain": "두 번 불렀어요.", "chart": card["chart"]}
+    rep = Lesson("t")
+    check_choice(rep, "items[0]", choice, 17)
+    assert has(rep.errors, "본 과정"), rep.errors
+    rep = Lesson("t")
+    check_choice(rep, "items[0]", dict(choice, concept="multichart"), adv)
+    assert [e for e in rep.errors if "본 과정" in e] == [], rep.errors
+
+
+def test_series_main_single_line_unchanged():
+    # 선 하나 그림은 예전 모양 그대로라 본 과정에서 괜찮다
+    rep = Lesson("t")
+    check_write(rep, "items[0] write", write_item(), 17)
+    assert not has(rep.errors, "본 과정"), rep.errors
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     bad = 0

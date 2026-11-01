@@ -341,10 +341,12 @@ export const LESSONS = [
   {
     id: "7-4", chapter: 7, title: "정렬과 복사",
     goal: "sorted, sum 등을 쓰고 리스트 복사를 구분한다",
+    updated: "v0.9",
     summary: [
       "sum, max, min, len은 리스트에도 씀",
       "sorted는 새 리스트, sort()는 원본 변경",
       "b = a 는 복사가 아니라 list(a)가 복사",
+      "리스트도 a[:2]로 잘라 새 리스트",
     ],
     cards: [
       {
@@ -356,6 +358,11 @@ export const LESSONS = [
         say: "b = a 는 복사가 아니라 이름표를 하나 더 붙인 거예요. 한쪽을 바꾸면 다른 쪽도 바뀌어요. 진짜 복사본은 list(a)로 만들고, index(값)은 위치를 알려줘요.",
         code: "a = [1, 2]\nb = a\nc = list(a)\na.append(3)\nprint(b)\nprint(c)\nprint(a.index(3))",
         out: "[1, 2, 3]\n[1, 2]\n2",
+      },
+      {
+        say: "문자열처럼 리스트도 잘라요. b[:2]는 앞 두 칸, b[2:]는 셋째 칸부터 끝까지예요. 잘라 낸 것은 새 리스트이고 원래 리스트는 그대로예요.",
+        code: "a = [5, 1, 4, 2]\nb = sorted(a)\nprint(b[:2])\nprint(b[2:])\nprint(a)",
+        out: "[1, 2]\n[4, 5]\n[5, 1, 4, 2]",
       },
     ],
     items: [
@@ -405,6 +412,14 @@ export const LESSONS = [
         lines: ["a = [5, 2, 9]", "a.sort()", "print(a[0])"],
         expect: "2",
         explain: "sort()로 a를 정렬한 뒤에 맨 앞 칸을 꺼내야 가장 작은 값이에요. 정렬 전에 꺼내면 5가 나와요.",
+      },
+      {
+        type: "choice", concept: "listfunc",
+        q: "화면에 무엇이 출력될까요?",
+        code: "a = [30, 10, 40, 20]\nb = sorted(a)\nprint(b[:3])",
+        options: ["[10, 20, 30]", "[10, 20]", "[20, 30, 40]"],
+        answer: 0,
+        explain: "sorted(a)는 [10, 20, 30, 40]이에요. b[:3]은 앞 세 칸이라 [10, 20, 30]이에요. 앞 두 칸이면 b[:2]예요.",
       },
       {
         type: "write", concept: "listfunc",
@@ -824,5 +839,49 @@ export const ADVANCED = [
         explain: "2번째 줄은 번호 1, 3번째 칸은 번호 2예요. 사람이 세는 번호에서 하나씩 빼요.",
       },
     ],
+  },
+];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+export const TEMPLATES = [
+  {
+    id: "7-T1", concept: "list", type: "choice",
+    q: "가게 메뉴판이에요. 화면에 무엇이 출력될까요?",
+    code: 'menu = ["{F1}", "{F2}", "{F3}", "{F4}"]\nprint(menu[2])',
+    wrong: ['menu = ["{F1}", "{F2}", "{F3}", "{F4}"]\nprint(menu[3])', 'menu = ["{F1}", "{F2}", "{F3}", "{F4}"]\nprint(menu[4])'],
+    vars: { F1: ["밥", "국", "전"], F2: ["떡", "김", "밤"], F3: ["콩", "팥", "쑥"], F4: ["배", "귤", "감"] },
+    explain: "인덱스는 0부터 세요. menu[2]는 세 번째 값이에요. menu[4]는 범위를 벗어나 오류가 나요.",
+  },
+  {
+    id: "7-T2", concept: "listmod", type: "choice",
+    q: "장바구니에 한 개를 더 담아요. 화면에 무엇이 출력될까요?",
+    code: "cart = [{A}, {B}]\ncart.append({C})\nprint(cart)",
+    wrong: ["cart = [{A}, {B}]\ncart = cart.append({C})\nprint(cart)", "cart = [{A}, {B}]\ncart.insert(0, {C})\nprint(cart)"],
+    vars: { A: { min: 1, max: 9 }, B: { min: 10, max: 19 }, C: { min: 20, max: 29 } },
+    explain: "append는 리스트 맨 뒤에 값을 붙여요. append의 결과를 다시 변수에 넣으면 None이 되고, insert(0, …)은 맨 앞에 넣어요.",
+  },
+  {
+    id: "7-T3", concept: "listmod", type: "blank",
+    q: "목록에서 「{X}」 항목만 지우고 나머지는 남기려고 해요. 빈칸을 채워 보세요.",
+    code: 'menu = ["김밥", "{X}", "우동"]\nmenu.___("{X}")\nprint(menu)',
+    chips: ["remove", "append", "insert"], answer: 0,
+    vars: { X: ["라면", "떡볶이", "순대", "튀김"] },
+    explain: "remove(값)은 리스트에서 그 값을 찾아 지워요. append는 뒤에 붙이고, insert는 자리와 값 두 개가 필요해요.",
+  },
+  {
+    id: "7-T4", concept: "listfunc", type: "blank",
+    q: "점수 세 개의 합계가 나오게 빈칸을 채워 보세요.",
+    code: "scores = [{A}, {B}, {C}]\nprint(___(scores))",
+    chips: ["sum", "len", "max"], answer: 0,
+    vars: { A: { min: 60, max: 70 }, B: { min: 71, max: 85 }, C: { min: 86, max: 99 } },
+    explain: "sum()은 리스트 값을 모두 더해요. len()은 개수, max()는 가장 큰 값을 돌려줘요.",
+  },
+  {
+    id: "7-T5", concept: "listloop", type: "choice",
+    q: "점수 중 {K}점 이상만 세어 봐요. 화면에 무엇이 출력될까요?",
+    code: "nums = [{A}, 50, {B}, 95]\ncount = 0\nfor n in nums:\n    if n >= {K}:\n        count += 1\nprint(count)",
+    wrong: ["nums = [{A}, 50, {B}, 95]\ncount = 0\nfor n in nums:\n    if n >= {K}:\n        count = n\nprint(count)", "nums = [{A}, 50, {B}, 95]\ncount = 0\nfor n in nums:\n    if n >= {K}:\n        count += n\nprint(count)"],
+    vars: { A: { min: 30, max: 89 }, B: { min: 30, max: 89 }, K: { min: 60, max: 69 } },
+    explain: "조건이 맞을 때마다 count에 1을 더해 개수를 세요. 값을 그대로 넣거나(count = n) n을 더하면 개수가 아니라 점수가 나와요.",
   },
 ];

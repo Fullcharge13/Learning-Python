@@ -881,3 +881,47 @@ print("1등", best_name)`,
     ],
   },
 ];
+
+// 매일 도전 틀(v0.9, 판정 C54). 형식: docs/lesson-writing-guide.md 7절. 점검: python3 tests/content.py (씨앗 0~99를 실제로 돌려 봄)
+export const TEMPLATES = [
+  {
+    id: "8-T1", concept: "dict", type: "choice",
+    q: "과일 가격표예요. 화면에 무엇이 출력될까요?",
+    code: 'price = {"{F1}": {A}, "{F2}": {B}}\nprint(price["{F2}"])',
+    wrong: ['price = {"{F1}": {A}, "{F2}": {B}}\nprint(price["{F1}"])', 'price = {"{F1}": {A}, "{F2}": {B}}\nprint(price[{B}])'],
+    vars: { F1: ["사과", "배", "귤"], F2: ["포도", "감", "딸기"], A: { min: 100, max: 500 }, B: { min: 600, max: 900 } },
+    explain: "딕셔너리는 번호가 아니라 키로 값을 꺼내요. 없는 키를 쓰면 KeyError가 나요.",
+  },
+  {
+    id: "8-T2", concept: "dictget", type: "blank",
+    q: "「{X}」 키가 없어도 오류 대신 0이 나오게 빈칸을 채워 보세요.",
+    code: 'stock = {"사과": {A}, "배": {B}}\nprint(stock.get("{X}", ___))',
+    chips: ["0", "None", '"없음"'], answer: 0,
+    vars: { X: ["귤", "감", "포도", "딸기"], A: { min: 3, max: 9 }, B: { min: 10, max: 19 } },
+    explain: "get(키, 기본값)은 키가 없을 때 기본값을 돌려줘요. 기본값에 0을 쓰면 0이 나오고, None이나 글자를 쓰면 그 값이 나와요.",
+  },
+  {
+    id: "8-T3", concept: "dictmod", type: "choice",
+    q: "사과를 {N}개 더 사 왔어요. 화면에 무엇이 출력될까요?",
+    code: 'stock = {"사과": {A}, "배": {B}}\nstock["사과"] = stock["사과"] + {N}\nprint(stock)',
+    wrong: ['stock = {"사과": {A}, "배": {B}}\nstock["사과"] + {N}\nprint(stock)', 'stock = {"사과": {A}, "배": {B}}\nstock["사과"] = {N}\nprint(stock)'],
+    vars: { A: { min: 3, max: 9 }, B: { min: 10, max: 19 }, N: { min: 20, max: 29 } },
+    explain: "계산만 하면 딕셔너리는 그대로예요. 계산한 값을 stock[\"사과\"]에 다시 넣어야 바뀌고, =만 쓰면 원래 값이 사라져요.",
+  },
+  {
+    id: "8-T4", concept: "count", type: "choice",
+    q: "단어가 몇 번 나왔는지 세요. 화면에 무엇이 출력될까요?",
+    code: 'ws = ["{A}", "{B}", "{A}", "{A}"]\ncounts = {}\nfor w in ws:\n    counts[w] = counts.get(w, 0) + 1\nprint(counts)',
+    wrong: ['ws = ["{A}", "{B}", "{A}", "{A}"]\ncounts = {}\nfor w in ws:\n    counts[w] = 1\nprint(counts)', 'ws = ["{A}", "{B}", "{A}", "{A}"]\ncounts = {}\nfor w in ws:\n    counts[w] += 1\nprint(counts)'],
+    vars: { A: ["하나", "가을", "바다", "구름"], B: ["하늘", "겨울", "나무", "노을"] },
+    explain: "get(w, 0) + 1은 처음 보는 단어는 0에서 시작해 1을 더해요. counts[w] = 1은 매번 1로 덮고, +=는 없는 키에서 KeyError가 나요.",
+  },
+  {
+    id: "8-T5", concept: "dictmod", type: "choice",
+    q: "{K} 모둠에 이름을 두 명 넣어요. 화면에 무엇이 출력될까요?",
+    code: 'groups = {}\ngroups["{K}"] = []\ngroups["{K}"].append("{A}")\ngroups["{K}"].append("{B}")\nprint(groups["{K}"])',
+    wrong: ['groups = {}\ngroups["{K}"].append("{A}")\ngroups["{K}"].append("{B}")\nprint(groups["{K}"])', 'groups = {}\ngroups["{K}"] = []\ngroups["{K}"].append("{A}")\ngroups["{K}"] = []\ngroups["{K}"].append("{B}")\nprint(groups["{K}"])'],
+    vars: { K: ["파랑", "노랑", "초록", "보라"], A: ["민수", "지아", "서준"], B: ["하린", "도윤", "예은"] },
+    explain: "먼저 빈 리스트를 만들어야 append를 쓸 수 있어요. 안 만들면 KeyError, 다시 [] 를 넣으면 앞 이름이 사라져요.",
+  },
+];

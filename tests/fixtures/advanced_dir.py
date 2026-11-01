@@ -14,10 +14,18 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FIXTURE = os.path.join(HERE, "advanced.js")
 
 
-def make(src_dir, dst_dir, chapters=(1,), updated=None):
+def make(src_dir, dst_dir, chapters=(1,), updated=None, strip_advanced=()):
+    """strip_advanced: 이 장들은 ADVANCED를 빼고 내보낸다(v0.9부터 모든 장에 심화가 있어 「심화 없는 장」 경로 시험용)."""
     updated = dict(updated or {})
     shutil.rmtree(dst_dir, ignore_errors=True)
     shutil.copytree(src_dir, dst_dir)
+    for n in strip_advanced:
+        orig = "ch%d.orig.mjs" % n
+        os.rename(os.path.join(dst_dir, "ch%d.js" % n), os.path.join(dst_dir, orig))
+        with open(os.path.join(dst_dir, "ch%d.js" % n), "w", encoding="utf-8") as f:
+            f.write('import * as M from "./%s";\n' % orig)
+            f.write("export const CHAPTER = M.CHAPTER;\nexport const LESSONS = M.LESSONS;\n")
+            f.write("export const TEMPLATES = M.TEMPLATES;\n")
     upd_ch = {int(k.split("-")[0]) for k in updated}
     for n in sorted(set(chapters) | upd_ch):
         orig = "ch%d.orig.mjs" % n

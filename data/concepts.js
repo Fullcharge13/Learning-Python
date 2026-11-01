@@ -127,4 +127,20 @@ export const CONCEPTS = [
   // 12장 심화
   { id: "namedgroup", name: "이름 붙인 묶음", chapter: 12, advanced: true },
   { id: "backref", name: "묶음 참조로 바꾸기", chapter: 12, advanced: true },
+  // 13장 심화(v0.9)
+  { id: "queryparam", name: "요청에 값 붙이기(쿼리)", chapter: 13, advanced: true },
+  { id: "statuscode", name: "상태 코드별 처리", chapter: 13, advanced: true },
+  { id: "pagecrawl", name: "여러 페이지 모으기", chapter: 13, advanced: true },
+  // 14장 심화
+  { id: "apipaging", name: "쪽 나뉜 결과 모으기", chapter: 14, advanced: true },
+  { id: "jsonsave", name: "JSON 만들어 저장하기", chapter: 14, advanced: true },
+  // 15장 심화
+  { id: "dunder", name: "특수 메서드 __str__·__eq__", chapter: 15, advanced: true },
+  { id: "classattr", name: "클래스 속성과 묶음 관리", chapter: 15, advanced: true },
+  // 16장 심화
+  { id: "sqljoin", name: "표 두 개 합치기(JOIN)", chapter: 16, advanced: true },
+  { id: "sqlhaving", name: "묶은 결과 거르기(HAVING)", chapter: 16, advanced: true },
+  // 17장 심화
+  { id: "multichart", name: "그래프 여러 선 겹치기", chapter: 17, advanced: true },
+  { id: "filterchart", name: "데이터 골라 그리기", chapter: 17, advanced: true },
 ];

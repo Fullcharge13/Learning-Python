@@ -17,6 +17,8 @@
 // - 심화(v0.7, --advanced / { advanced: true }): 장 평가를 끝내면 다음 차례에 그 장 심화 3개를 먼저 한다(새 본 과정 레슨보다 앞).
 //   장 파일의 ADVANCED를 쓰고, v0.7 계획의 1~6장 중 아직 ADVANCED가 없는 장은 자리 표시 3개(N-A1..3, 개념은 그 장 평가의 것)로 채운다.
 //   보상은 rules.js lessonReward({ isAdvanced: true }) 그대로. 배지 「깊이 파는 사람」은 이 심화 목록 전부가 기준.
+// - 매일 도전(v0.9, --daily / { daily: true }): 1장(1-5)을 끝낸 뒤 학습한 날마다 DAILY_P 확률로 그날 레슨 뒤에 도전 3문제를 끝냄.
+//   보상은 src/daily.js finishDaily 그대로(XP 15·바이트 10·도전 7일마다 +20, XP 퀘스트·하루 목표·연속 기록에 반영).
 import { readdirSync } from "node:fs";
 import { newSave } from "../../src/save.js";
 import { lessonReward, reviewReward, earnXp, rollDay, buyFreeze, markConcept, FREEZE_PRICE } from "../../src/rules.js";
@@ -24,6 +26,7 @@ import { ensureQuests, tick } from "../../src/quests.js";
 import { checkBadges } from "../../src/badges.js";
 import { buy } from "../../src/shop.js";
 import { OUTFITS } from "../../data/outfits.js";
+import { finishDaily, newDaily } from "../../src/daily.js";
 
 const ADV_PLACEHOLDER_CHAPTERS = [1, 2, 3, 4, 5, 6];   // v0.7 계획: 1~6장 심화
 
@@ -33,6 +36,7 @@ const LESSONS_PER_DAY = 2;
 const TOUCH_ITEMS = 6;
 const HINTFREE_P = 0.5;
 const WRITE_ERROR_P = 0.3;
+const DAILY_P = 0.85;
 
 // 실제 레슨 표(data/lessons/ch*.js)를 장 번호순으로 읽는다. 경제에는 id·장 평가 여부·쓰기 문제의 개념만 쓰인다.
 const ADVANCED_LIST = [];
@@ -100,7 +104,7 @@ function cheapestOutfit(save) {
   return forSale[0] || null;
 }
 
-export function runSim(seed, { policy = "plan", lessons = null, advanced = false } = {}) {
+export function runSim(seed, { policy = "plan", lessons = null, advanced = false, daily: withDaily = false } = {}) {
   const COURSE = lessons ? FULL_COURSE.slice(0, lessons) : FULL_COURSE;
   const inCourse = new Set(COURSE.map((l) => l.id));
   const ADV = advanced ? ADVANCED_LIST.filter((l) => inCourse.has(`${l.chapter}-5`)) : [];
@@ -116,7 +120,8 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
   let streakBroken = 0;
   let freezesBought = 0;
   const milestones = [];
-  const src = { lesson: 0, quest: 0, milestone: 0 };
+  const src = { lesson: 0, quest: 0, milestone: 0, daily: 0 };
+  let dailyDone = 0;
   let replayIdx = 0;
   let newPhaseEarned = 0, newPhaseDays = 0, lastNewDay = null;
   const daily = [];
@@ -235,6 +240,16 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
       else if (s.review_queue.length > 0) playReview(today);
       else { playLesson(COURSE[replayIdx % COURSE.length], false, today); replayIdx++; }
     }
+    if (withDaily && s.completed_lessons.includes("1-5") && rng() < DAILY_P) {
+      const prev = s;
+      const d0 = s.daily || newDaily();
+      s = { ...s, daily: { ...d0, date: today, picks: [{ kind: "tpl", id: "1-T1", chapter: 1, seed: 0 }], done: [] } };
+      const r = finishDaily(s, { itemsSolved: 3 }, new Date(today + "T20:00:00"));
+      s = r.save;
+      if (r.result.milestone) milestones.push(r.result.milestone);
+      gain(prev, s, "daily");
+      dailyDone++;
+    }
     shop(d + 1);
     const de = earned - earnedBefore;
     daily.push({ day: d + 1, bytes: de, xp: s.streak.todayXp, streak: s.streak.days });
@@ -256,7 +271,9 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
     finalStreak: s.streak.days,
     outfitsOwned: s.outfits.filter((o) => o !== "basic").length,
     milestones,
-    sources: { lesson: src.lesson, quest: src.quest, milestone: src.milestone },
+    sources: { lesson: src.lesson, quest: src.quest, milestone: src.milestone, daily: src.daily },
+    dailyDone,
+    dailyBest: s.daily ? s.daily.best : 0,
     skipDays: [...skips].sort((a, b) => a - b).map((x) => x + 1),
     badges: s.badges.length,
     endBytes: s.bytes,
@@ -279,6 +296,7 @@ function main() {
   const li = process.argv.indexOf("--lessons");
   const lessons = li > 0 ? parseInt(process.argv[li + 1]) : null;
   if (process.argv.includes("--advanced")) return compareAdvanced(lessons);
+  if (process.argv.includes("--daily")) return compareDaily(lessons);
   console.log(`레슨 ${lessons ? Math.min(lessons, FULL_COURSE.length) : FULL_COURSE.length}개로 시뮬레이션 (불러온 전체 ${FULL_COURSE.length}개)\n`);
   const seeds = Array.from({ length: 12 }, (_, i) => i + 1);
   const runs = seeds.map((sd) => runSim(sd, { lessons }));
@@ -326,6 +344,26 @@ function compareAdvanced(lessons) {
       + `${med(rs, (r) => r.outfitsOwned)} | ${med(rs, (r) => r.advancedDone)} | ${med(rs, (r) => Object.keys(r.lessonDay).length)} |`);
   }
   console.log("\n12판뿐이라 중앙값은 판마다 흔들릴 수 있음.");
+}
+
+// 매일 도전 없이 / 매일 도전까지 하는 학습자 비교(v0.9 작업 2): node tests/sim/economy.js --daily
+function compareDaily(lessons) {
+  const seeds = Array.from({ length: 12 }, (_, i) => i + 1);
+  const base = seeds.map((sd) => runSim(sd, { lessons }));
+  const dly = seeds.map((sd) => runSim(sd, { lessons, daily: true }));
+  const r1 = (x) => (x === null ? "-" : Math.round(x * 10) / 10);
+  const med = (rs, f) => r1(median(rs.map(f)));
+  console.log(`매일 도전: 1장 뒤 학습한 날의 ${DAILY_P * 100}%에 도전 3문제, 30일 × 12판\n`);
+  console.log("| 학습자 | B/active day | 1st outfit day | outfits | 도전한 날 | 도전 최고 연속 | 바이트 도전/레슨/퀘스트/연속 | 하루 목표 미달 |");
+  console.log("|---|---|---|---|---|---|---|---|");
+  for (const [name, rs] of [["도전 없음(기준)", base], ["매일 도전", dly]]) {
+    console.log(`| ${name} | ${med(rs, (r) => r.bytesPerActiveDay)} | ${med(rs, (r) => r.firstOutfitDay)} | ${med(rs, (r) => r.outfitsOwned)} | `
+      + `${med(rs, (r) => r.dailyDone)} | ${med(rs, (r) => r.dailyBest)} | ${med(rs, (r) => r.sources.daily)}/${med(rs, (r) => r.sources.lesson)}/`
+      + `${med(rs, (r) => r.sources.quest)}/${med(rs, (r) => r.sources.milestone)} | ${med(rs, (r) => r.goalMissDays)} |`);
+  }
+  const fod = median(dly.map((r) => r.firstOutfitDay));
+  console.log(`\n판정: 매일 도전 학습자 첫 의상 중앙값 ${fod}일째 (목표 3~4) ${fod >= 3 && fod <= 4 ? "OK" : "밖"}`);
+  console.log("12판뿐이라 중앙값은 판마다 흔들릴 수 있음.");
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();

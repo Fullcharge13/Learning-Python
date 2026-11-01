@@ -8,8 +8,8 @@ import { esc, icon, bar, codeBlock, dialog, riaSays, filesNote, chartNote, stdin
 import { mountWrite } from "./write.js";
 import { shuffleChoices, shuffleOrder, newSeed } from "../shuffle.js";
 import { isCodey } from "../textkind.js";
+import { reviewPool } from "../lessondata.js";
 
-const TOUCH = new Set(["choice", "blank", "order", "check"]);
 const GUARD_MS = 400;
 const WAIT_MS = 300;    // 장 파일이 이보다 늦으면 「준비 중」 (v0.3 작업 1)
 const LOAD_TIMEOUT_MS = 12000;  // 이보다 오래 걸리면 「준비 중」을 그만두고 안내
@@ -25,21 +25,12 @@ function shuffle(arr) {
   return a;
 }
 
-/** 복습 묶음: review_queue 개념의 터치 문제 5개. 그 개념이 든 장만 받는다.
+/** 복습 묶음: review_queue 개념의 터치 문제 5개. 그 개념이 든 장만 받는다(심화는 끝낸 것만, v0.7).
  *  일부 장만 받아져도 문제가 있으면 진행하고, 하나도 못 받았으면 실패로 알린다. */
 async function buildReview(ctx) {
   const concepts = ctx.save.review_queue || [];
-  const queue = new Set(concepts);
   const got = await Promise.allSettled(ctx.chaptersForConcepts(concepts).map((n) => ctx.getChapter(n)));
-  const pool = [];
-  for (const r of got) {
-    if (r.status !== "fulfilled") continue;
-    for (const l of r.value.LESSONS) {
-      for (const it of l.items) {
-        if (TOUCH.has(it.type) && queue.has(it.concept)) pool.push({ ...it, type: it.type === "check" ? "choice" : it.type, from: l.id });
-      }
-    }
-  }
+  const pool = reviewPool(got.filter((r) => r.status === "fulfilled").map((r) => r.value), concepts, ctx.save.completed_lessons);
   const failed = got.find((r) => r.status === "rejected");
   if (!pool.length && failed) throw failed.reason;
   return { id: "review", title: "복습", cards: [], items: shuffle(pool).slice(0, 5) };

@@ -489,3 +489,293 @@ export const LESSONS = [
     ],
   },
 ];
+
+// ---- 심화 레슨(v0.7~): 점검 python3 tests/content.py --advanced 5 ----
+// 짝수만 구구단 표 기대 출력(숨은 시험용): 2단부터 n단까지, 곱이 짝수인 값만
+const evenTable = (n) => Array.from({ length: n - 1 }, (_, k) => {
+  const d = k + 2;
+  const v = [];
+  for (let j = 1; j < 10; j++) if ((d * j) % 2 === 0) v.push(d * j);
+  return `${d}단 ${v.join(" ")}`;
+}).join("\n");
+
+export const ADVANCED = [
+  {
+    id: "5-A1", chapter: 5, title: "중첩 반복", isAdvanced: true,
+    goal: "반복 안에 반복을 넣어 표 모양을 찍을 수 있다",
+    summary: [
+      "바깥 한 바퀴마다 안쪽이 처음부터 끝까지 돎",
+      "end=\"\"로 줄 바꿈 없이 이어 찍음",
+      "안쪽이 끝나면 print()로 줄을 바꿈",
+    ],
+    cards: [
+      {
+        say: "여기는 한 걸음 더 가 보는 곳이에요. 몰라도 다음 장은 열려 있어요. 반복 안에 반복을 또 넣을 수 있어요. 바깥이 한 바퀴 돌 때마다 안쪽은 처음부터 끝까지 다 돌아요.",
+        code: "for a in range(1, 3):\n    for b in range(1, 3):\n        print(a, b)",
+        out: "1 1\n1 2\n2 1\n2 2",
+      },
+      {
+        say: "print 끝에 end=\"\"를 주면 줄을 바꾸지 않고 이어 찍어요. 안쪽 반복으로 한 줄을 채우고, 바깥에서 print()로 줄을 바꾸면 표 모양이 돼요.",
+        code: 'for r in range(2):\n    for c in range(3):\n        print("*", end="")\n    print()',
+        out: "***\n***",
+      },
+    ],
+    items: [
+      {
+        type: "choice", concept: "nestedloop",
+        q: "「x」는 몇 번 찍힐까요?",
+        code: 'for i in range(3):\n    for j in range(2):\n        print("x")',
+        options: ["6번", "5번", "3번"],
+        answer: 0,
+        explain: "바깥이 3바퀴 도는 동안, 매 바퀴 안쪽이 2번씩 돌아요. 3 × 2 = 6번이에요.",
+      },
+      {
+        type: "choice", concept: "nestedloop",
+        q: "화면에 무엇이 출력될까요?",
+        code: "for a in range(1, 3):\n    for b in range(1, 4):\n        print(a * b)",
+        options: ["1\n2\n3\n2\n4\n6", "1\n2\n2\n4", "1\n2\n3\n4\n6\n9"],
+        answer: 0,
+        explain: "a가 1일 때 b는 1, 2, 3이라 1, 2, 3이 나와요. 그다음 a가 2일 때 안쪽이 다시 처음부터 돌아 2, 4, 6이 나와요.",
+      },
+      {
+        type: "blank", concept: "nestedloop",
+        q: "별이 한 줄에 세 개씩 붙어 찍히게 빈칸을 채워 보세요.",
+        code: 'for r in range(2):\n    for c in range(3):\n        print("*", end=___)\n    print()',
+        chips: ['""', '" "', '"-"'],
+        answer: 0,
+        explain: "end에 빈 글자를 주면 줄도 칸도 바뀌지 않고 붙어서 ***이 돼요. 빈칸 한 개를 주면 * * * 로 떨어지고, 「-」를 주면 *-*-*- 가 돼요.",
+      },
+      {
+        type: "order", concept: "nestedloop",
+        q: "#이 4개씩 두 줄 찍히게 줄을 놓아 보세요.",
+        lines: ["for r in range(2):", "    for c in range(4):", '        print("#", end="")', "    print()"],
+        expect: "####\n####",
+        explain: "안쪽 반복이 한 줄을 채우고, 안쪽이 끝난 뒤 바깥 반복 몸통의 마지막에서 print()로 줄을 바꿔요.",
+      },
+      {
+        type: "choice", concept: "nestedloop",
+        q: "안쪽 print()를 빼먹으면 무엇이 출력될까요?",
+        code: 'for r in range(2):\n    for c in range(3):\n        print("*", end="")',
+        options: ["******", "***\n***", "*\n*\n*\n*\n*\n*"],
+        answer: 0,
+        explain: "줄을 바꾸는 print()가 없어서 별 6개가 한 줄에 모두 이어져요.",
+      },
+      {
+        type: "write", concept: "nestedloop",
+        task: "별 계단을 찍어요. n(1 이상)을 input()으로 받아 int()로 바꾸세요(괄호는 비워 두세요). 바깥 for와 안쪽 for를 겹쳐 i번째 줄에 별을 i개 찍고, 한 줄은 print의 end=\"\"로 이어요. 예: 3을 입력하면 *, **, *** 세 줄",
+        starter: "n = int(input())\n",
+        tests: [
+          { stdin: "3", expect: "*\n**\n***", public: true },
+          { stdin: "1", expect: "*", public: false },
+          { stdin: "2", expect: "*\n**", public: false },
+          { stdin: "5", expect: "*\n**\n***\n****\n*****", public: false },
+        ],
+        require: ["For", "Call:range", "Name:n"],
+        hints: [
+          "1번째 줄은 별 1개, 2번째 줄은 별 2개예요. 예시에서 줄마다 별이 몇 개인지 세어 볼까요?",
+          "바깥 반복은 줄을, 안쪽 반복은 그 줄의 별을 맡아요. 한 줄이 끝나면 print()로 줄을 바꿔요.",
+          "바깥은 1부터 n까지 줄 번호 i를 돌고, 안쪽은 i번 돌며 별 하나를 이어 찍어요. 줄 바꿈은 안쪽이 끝난 뒤에 해요.",
+          'n = int(input())\nfor i in range(1, ___):\n    for j in range(___):\n        print("*", end="")\n    print()',
+        ],
+        solution: 'n = int(input())\nfor i in range(1, n + 1):\n    for j in range(i):\n        print("*", end="")\n    print()',
+        explain: "안쪽 반복 횟수가 줄 번호 i에 따라 달라지는 게 핵심이에요. 1을 입력해도 별 한 줄만 나와서 경계까지 맞아요.",
+      },
+      {
+        type: "check", concept: "nestedloop",
+        q: "바깥 반복이 한 바퀴 도는 동안 안쪽 반복은?",
+        options: ["처음부터 끝까지 다 돈다", "딱 한 번만 돈다", "바깥이 끝난 뒤에 돈다"],
+        answer: 0,
+        explain: "안쪽 반복은 바깥이 한 바퀴 돌 때마다 새로 시작해서 끝까지 돌아요. 그래서 전체 횟수는 바깥 횟수 × 안쪽 횟수예요.",
+      },
+    ],
+  },
+  {
+    id: "5-A2", chapter: 5, title: "반복의 else", isAdvanced: true,
+    goal: "break와 for…else로 찾기 코드를 짤 수 있다",
+    summary: [
+      "for에도 else를 붙일 수 있음",
+      "break 없이 끝까지 돌면 else 실행",
+      "break로 나가면 else는 건너뜀",
+    ],
+    cards: [
+      {
+        say: "한 걸음 더 가 볼게요. 몰라도 다음 장은 열려 있어요. for 뒤에도 else를 붙일 수 있어요. break 없이 끝까지 다 돌았을 때만 else가 실행돼요. 7은 나누어떨어지는 수가 없어서 else로 가요.",
+        code: 'n = int(input())\nfor i in range(2, n):\n    if n % i == 0:\n        print("소수 아님")\n        break\nelse:\n    print("소수")',
+        out: "소수",
+        stdin: "7",
+      },
+      {
+        say: "continue는 else에 영향이 없어요. 한 바퀴만 건너뛸 뿐 반복은 끝까지 도니까요. else를 건너뛰게 하는 건 break뿐이에요. 앞 코드에 9를 넣으면 3에서 break해서 else는 실행되지 않아요.",
+        code: 'for i in range(1, 6):\n    if i % 2 == 0:\n        continue\n    print(i, end=" ")\nelse:\n    print("끝")',
+        out: "1 3 5 끝",
+      },
+    ],
+    items: [
+      {
+        type: "choice", concept: "loopelse",
+        q: "7을 입력하면 무엇이 출력될까요?",
+        code: 'n = int(input())\nfor i in range(2, n):\n    if n % i == 0:\n        print("소수 아님")\n        break\nelse:\n    print("소수")',
+        stdin: "7",
+        options: ["소수", "소수 아님", "아무것도 찍히지 않는다"],
+        answer: 0,
+        explain: "2부터 6까지 어느 것으로도 나누어떨어지지 않아 break를 만나지 않아요. 끝까지 돌았으니 else의 「소수」가 나와요.",
+      },
+      {
+        type: "choice", concept: "loopelse",
+        q: "9를 입력하면 무엇이 출력될까요?",
+        code: 'n = int(input())\nfor i in range(2, n):\n    if n % i == 0:\n        print("소수 아님")\n        break\nelse:\n    print("소수")',
+        stdin: "9",
+        options: ["소수 아님", "소수 아님\n소수", "소수"],
+        answer: 0,
+        explain: "i가 3일 때 9 % 3 == 0 이라 「소수 아님」을 찍고 break로 나가요. break로 나갔으니 else는 건너뛰어요.",
+      },
+      {
+        type: "choice", concept: "loopelse",
+        q: "화면에 무엇이 출력될까요?",
+        code: 'for i in range(3):\n    if i == 1:\n        continue\n    print(i)\nelse:\n    print("끝")',
+        options: ["0\n2\n끝", "0\n2", "0\n1\n2\n끝"],
+        answer: 0,
+        explain: "continue는 1번 바퀴만 건너뛰고 반복은 끝까지 돌아요. break가 없었으니 else의 「끝」까지 나와요.",
+      },
+      {
+        type: "blank", concept: "loopelse",
+        q: "break 없이 다 돌면 「전부 돌았어요」가 찍히게 채워 보세요.",
+        code: 'for i in range(1, 4):\n    if i == 5:\n        break\n___:\n    print("전부 돌았어요")',
+        chips: ["else", "elif", "if"],
+        answer: 0,
+        explain: "반복이 끝까지 돌았을 때 실행되는 건 else예요. elif나 if는 조건 없이 쓸 수 없어서 SyntaxError가 나요.",
+      },
+      {
+        type: "order", concept: "loopelse",
+        q: "5를 찾지 못하면 「없음」이 찍히게 줄을 놓아 보세요.",
+        lines: ["for i in range(1, 4):", "    if i == 5:", "        break", "else:", '    print("없음")'],
+        expect: "없음",
+        explain: "for 줄, 몸통(if와 break), 그리고 for와 같은 들여쓰기의 else 순서예요. 1~3 중에 5가 없으니 break 없이 끝나 else가 실행돼요.",
+      },
+      {
+        type: "write", concept: "loopelse",
+        task: "소수 판별기예요. n(2 이상)을 input()으로 받아 int()로 바꾸세요(괄호는 비워 두세요). for와 range로 2부터 n - 1까지 나눠 보다가 나누어떨어지면 「소수 아님」을 찍고 break해요. 끝까지 없으면 for의 else에서 「소수」를 찍어요. 예: 7을 입력하면 소수, 9를 입력하면 소수 아님",
+        starter: "n = int(input())\n",
+        tests: [
+          { stdin: "7", expect: "소수", public: true },
+          { stdin: "9", expect: "소수 아님", public: false },
+          { stdin: "2", expect: "소수", public: false },
+          { stdin: "15", expect: "소수 아님", public: false },
+        ],
+        require: ["For", "Break", "Else", "Name:n"],
+        hints: [
+          "n이 소수인지 나눠 봐요. 약수가 하나라도 나오면 소수가 아니에요. 예시 7과 9를 비교해 볼까요?",
+          "for…else에서 else는 break 없이 끝까지 돌았을 때만 실행돼요. 「못 찾았다」를 else가 알려 주는 셈이에요.",
+          "2부터 n - 1까지 도는 for 안에서 n을 i로 나눈 나머지를 살펴요. 0이면 알리고 멈추고, 그렇지 않을 때의 결과는 else에 둬요.",
+          'n = int(input())\nfor i in range(2, ___):\n    if n % i == ___:\n        print("소수 아님")\n        ___\nelse:\n    print("소수")',
+        ],
+        solution: 'n = int(input())\nfor i in range(2, n):\n    if n % i == 0:\n        print("소수 아님")\n        break\nelse:\n    print("소수")',
+        explain: "break와 else를 짝지어 「찾았으면 멈추고, 못 찾았으면 else」로 풀었어요. 2를 넣으면 range(2, 2)가 비어 바로 else로 가서 소수가 되는 경계까지 맞아요.",
+      },
+      {
+        type: "check", concept: "loopelse",
+        q: "for…else에서 else가 실행되는 때는?",
+        options: [
+          "반복이 break 없이 끝까지 돌았을 때",
+          "반복 안에서 break를 만났을 때",
+          "반복이 한 번도 돌지 않았을 때만",
+        ],
+        answer: 0,
+        explain: "else는 「break로 나가지 않고 반복이 끝났다」는 뜻이에요. 한 번도 돌지 않고 끝난 경우에도 break가 없었으니 실행돼요.",
+      },
+    ],
+  },
+  {
+    id: "5-A3", chapter: 5, title: "구구단 표 만들기", isAdvanced: true,
+    goal: "중첩 반복과 continue로 작은 표를 만들 수 있다",
+    summary: [
+      "바깥은 단, 안쪽은 곱하는 수",
+      "continue로 필요 없는 칸을 건너뜀",
+      "end=\" \"로 잇고 print()로 줄 바꿈",
+    ],
+    cards: [
+      {
+        say: "한 걸음 더, 앞에서 배운 걸 묶어 작은 표를 만들어요. 몰라도 다음 장은 열려 있어요. 바깥 반복은 단, 안쪽 반복은 곱하는 수예요. 단 이름을 end=\"단 \"으로 먼저 찍고 곱을 이어요.",
+        code: 'for dan in range(2, 4):\n    print(dan, end="단 ")\n    for j in range(1, 5):\n        print(dan * j, end=" ")\n    print()',
+        out: "2단 2 4 6 8\n3단 3 6 9 12",
+      },
+      {
+        say: "표에서 어떤 칸만 빼고 싶을 땐 continue가 좋아요. 아래는 3단 곱 중 홀수를 건너뛰고 짝수만 찍어요. 안쪽 반복이 끝나면 print()로 줄을 바꿔요.",
+        code: "for j in range(1, 7):\n    if (3 * j) % 2 == 1:\n        continue\n    print(3 * j, end=\" \")\nprint()",
+        out: "6 12 18",
+      },
+    ],
+    items: [
+      {
+        type: "choice", concept: "nestedloop",
+        q: "화면에 무엇이 출력될까요?",
+        code: 'for a in range(1, 3):\n    for b in range(1, 4):\n        print(a * b, end=" ")\n    print()',
+        options: ["1 2 3\n2 4 6", "1 2 3 2 4 6", "1 2\n2 4\n3 6"],
+        answer: 0,
+        explain: "안쪽이 한 줄을 칸 하나씩 띄워 채우고, 안쪽이 끝날 때마다 print()가 줄을 바꿔요. a가 1이면 1 2 3, 2이면 2 4 6이에요.",
+      },
+      {
+        type: "blank", concept: "nestedloop",
+        q: "곱을 한 줄씩 끊어 찍도록 빈칸을 채워 보세요.",
+        code: 'for a in range(1, 3):\n    for b in range(1, 4):\n        print(a * b, end=" ")\n    ___',
+        chips: ["print()", "print(a)", 'print(end=" ")'],
+        answer: 0,
+        explain: "안쪽 반복이 끝난 자리에서 print()를 한 번 불러 줄을 바꿔요. print(a)는 숫자가 하나 더 찍히고, 세 번째는 줄을 바꾸지 못해요.",
+      },
+      {
+        type: "choice", concept: "break",
+        q: "화면에 무엇이 출력될까요?",
+        code: 'for j in range(1, 6):\n    if j % 2 == 0:\n        continue\n    print(j, end=" ")',
+        options: ["1 3 5", "2 4", "1 2 3 4 5"],
+        answer: 0,
+        explain: "j가 짝수일 때는 continue로 print를 건너뛰어서 홀수 1, 3, 5만 이어 찍혀요.",
+      },
+      {
+        type: "choice", concept: "loopelse",
+        q: "화면에 무엇이 출력될까요?",
+        code: 'for j in range(1, 10):\n    if 3 * j == 20:\n        break\nelse:\n    print("20 없음")',
+        options: ["20 없음", "아무것도 찍히지 않는다", "20 있음"],
+        answer: 0,
+        explain: "3단에는 20이 없어서 break를 만나지 않고 끝까지 돌아요. 그래서 else의 「20 없음」이 나와요.",
+      },
+      {
+        type: "order", concept: "break",
+        q: "3만 빼고 1 2 4가 한 줄에 찍히게 줄을 놓아 보세요.",
+        lines: ["for j in range(1, 5):", "    if j == 3:", "        continue", '    print(j, end=" ")', "print()"],
+        expect: "1 2 4",
+        explain: "continue로 3의 바퀴를 건너뛰고, 나머지는 이어 찍어요. 줄 바꿈 print()는 반복이 끝난 뒤 한 번만 실행해요.",
+      },
+      {
+        type: "write", concept: "nestedloop",
+        task: "짝수만 모은 구구단 표예요. n(2~9)을 input()으로 받아 int()로 바꾸세요(괄호는 비워 두세요). 2단부터 n단까지 한 단씩 한 줄에, 「2단 」으로 시작해요. 1~9를 곱한 값 중 홀수는 continue로 건너뛰고 짝수만 end=\" \"로 이어 찍어요. 예: 3이면 「2단 2 4 6 8 10 12 14 16 18」, 「3단 6 12 18 24」",
+        starter: "n = int(input())\n",
+        tests: [
+          { stdin: "3", expect: evenTable(3), public: true },
+          { stdin: "2", expect: evenTable(2), public: false },
+          { stdin: "4", expect: evenTable(4), public: false },
+          { stdin: "5", expect: evenTable(5), public: false },
+        ],
+        require: ["For", "Continue", "Call:range", "Name:n"],
+        hints: [
+          "단마다 한 줄이에요. 3단은 3 x 2, 3 x 4 …처럼 곱이 짝수인 칸만 남겨요. 예시의 3단 줄을 다시 볼까요?",
+          "바깥 반복은 단, 안쪽 반복은 곱하는 수예요. 안쪽에서 곱이 홀수면 continue, 아니면 이어 찍어요.",
+          "바깥에서 「단 」을 end로 먼저 찍고, 안쪽을 돈 뒤 print()로 줄을 바꿔요. 홀수 판단은 곱을 2로 나눈 나머지가 1인지로 해요.",
+          'n = int(input())\nfor dan in range(2, ___):\n    print(dan, end="단 ")\n    for j in range(1, 10):\n        if dan * j % 2 == ___:\n            ___\n        print(dan * j, end=" ")\n    print()',
+        ],
+        solution: 'n = int(input())\nfor dan in range(2, n + 1):\n    print(dan, end="단 ")\n    for j in range(1, 10):\n        if (dan * j) % 2 == 1:\n            continue\n        print(dan * j, end=" ")\n    print()',
+        explain: "바깥은 단, 안쪽은 곱하는 수로 나누고 continue로 홀수 칸만 걸러 냈어요. 2를 입력해도 2단 한 줄만 나와서 경계까지 맞아요.",
+      },
+      {
+        type: "check", concept: "nestedloop",
+        q: "표를 찍을 때 줄을 바꾸는 print()는 어디에 둘까요?",
+        options: [
+          "안쪽 반복이 끝난 뒤, 바깥 반복 몸통 안",
+          "안쪽 반복 몸통 안",
+          "바깥 반복이 모두 끝난 뒤",
+        ],
+        answer: 0,
+        explain: "한 줄을 다 채운 직후에 줄을 바꿔야 해요. 안쪽 몸통에 두면 칸마다 줄이 바뀌고, 바깥 반복 뒤에 두면 줄이 한 번만 바뀌어요.",
+      },
+    ],
+  },
+];

@@ -31,17 +31,22 @@ function courseCard(ctx) {
   const hiddenSet = new Set(win.hidden);
   return `<section class="panel course" aria-labelledby="course-title">
     <h2 id="course-title">학습 내용</h2>
-    <p class="course-sum">${c.total}개 레슨 중 <b>${c.done}개</b> 완료${c.current ? ` · 지금: ${esc(c.current.id)} ${esc(c.current.title)}` : ""}</p>
+    <p class="course-sum">${c.total}개 레슨 중 <b>${c.done}개</b> 완료${c.current ? ` · 지금: ${esc(c.current.id)} ${esc(c.current.title)}` : ""}${c.advTotal ? `<br><small>심화(선택) ${c.advTotal}개 중 ${c.advDone}개 완료</small>` : ""}</p>
     <ul class="course-chapters" id="course-chapters">${c.chapters.map((ch) => `<li${hiddenSet.has(ch.id) ? ' class="ch-extra" hidden' : ""}>
       <button class="ch-row" aria-expanded="false" aria-controls="ch-${ch.id}">
         <span class="ch-no">${ch.id}장</span>
         <span class="ch-main"><b>${esc(ch.title)}</b><small>${esc(ch.topics)}</small></span>
-        <span class="ch-count${ch.done === ch.total ? " full" : ""}">${ch.done}/${ch.total} 완료</span>
+        <span class="ch-side"><span class="ch-count${ch.done === ch.total ? " full" : ""}">${ch.done}/${ch.total} 완료</span>
+          ${ch.advTotal ? `<span class="ch-adv${ch.advDone === ch.advTotal ? " full" : ""}">${icon("star")}심화 ${ch.advDone}/${ch.advTotal}</span>` : ""}</span>
       </button>
       <ol class="ch-lessons" id="ch-${ch.id}" hidden>${ch.lessons.map((l) => `<li class="ls ${l.status}">
         <span class="ls-st">${icon(ST[l.status][0])}<span>${ST[l.status][1]}</span></span>
         <span class="ls-main"><b>${esc(l.id)} ${esc(l.title)}</b><small>${esc(l.goal)}</small></span>
-      </li>`).join("")}</ol>
+      </li>`).join("")}
+      ${ch.advTotal ? `<li class="ch-adv-head">${icon("star")}심화 <small>장 평가를 통과하면 열려요 · 선택</small></li>${ch.advanced.map((l) => `<li class="ls adv ${l.status}">
+        <span class="ls-st">${icon(ST[l.status][0])}<span>${ST[l.status][1]}</span></span>
+        <span class="ls-main"><b>${esc(l.id)} ${esc(l.title)}</b><small>${esc(l.goal)}</small></span>
+      </li>`).join("")}` : ""}</ol>
     </li>`).join("")}</ul>
     ${win.hidden.length ? `<button class="btn ghost small wide" id="ch-more" aria-expanded="false" aria-controls="course-chapters" data-n="${win.hidden.length}">다른 장 ${win.hidden.length}개 더 보기</button>` : ""}
     ${c.upcoming.length ? `<p class="muted course-next">다음 업데이트 예정: ${esc(first.map(upName).join(" · "))}${rest.length ? `<span id="up-rest" hidden> · ${esc(rest.map(upName).join(" · "))}</span><span id="up-dots"> …</span>` : ""}</p>

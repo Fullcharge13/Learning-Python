@@ -43,7 +43,15 @@ export function newSeed() {
 }
 
 const REQ_KO = { If: "if 문", BoolOp: "and/or", Mult: "곱하기 *", Add: "더하기 +", Sub: "빼기 -", Div: "나누기 /", Compare: "비교(==, < 같은 것)", For: "for 문", While: "while 문",
-  Comment: "# 주석", Elif: "elif", Else: "else" };   // 판정 C44
+  Comment: "# 주석", Elif: "elif", Else: "else",   // 판정 C44
+  SelfCall: "재귀 호출", FormatSpec: "f-문자열 서식", TripleStr: "세 따옴표 문자열" };   // 판정 C45
+
+// 판정 C45: 「…를 써서」로 읽히지 않는 조건은 문장째 쓴다(…해서 풀어야 해요)
+const REQ_PHRASE = {
+  SelfCall: "함수 안에서 자기 자신을 다시 불러서",
+  FormatSpec: "f-문자열 안에 :로 서식(자릿수·정렬)을 넣어서",
+  TripleStr: '큰따옴표 세 개(""")로 여러 줄 문자열을 써서',
+};
 
 export function requireKo(name) {
   const s = String(name);
@@ -64,6 +72,9 @@ function eul(word) {
 }
 
 export function missingMessage(missing) {
-  const words = (missing || []).map(requireKo).join(", ");
-  return `정답은 나왔지만 이번 문제는 ${words}${eul(words)} 써서 풀어야 해요.`;
+  const list = (missing || []).map(String);
+  const words = list.filter((n) => !Object.hasOwn(REQ_PHRASE, n)).map(requireKo).join(", ");
+  const parts = words ? [`${words}${eul(words)} 써서`] : [];
+  for (const n of list) if (Object.hasOwn(REQ_PHRASE, n)) parts.push(REQ_PHRASE[n]);
+  return `정답은 나왔지만 이번 문제는 ${parts.join(", ")} 풀어야 해요.`;
 }

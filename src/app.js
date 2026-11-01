@@ -10,6 +10,7 @@ import { finishLesson } from "./finish.js";
 import { createPersist } from "./persist.js";
 import { readResume, writeResume, clearResume } from "./resume.js";
 import { createLessonData, chaptersForConcepts } from "./lessondata.js";
+import { advancedState, advancedIds, isAdvancedId } from "./advanced.js";
 import { loadDevChapters } from "./lessondev.js";
 import { createSound } from "./sound.js";
 import { toast } from "./ui/dom.js";
@@ -24,7 +25,7 @@ import * as badges from "./ui/badges.js";
 import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 
-export const VERSION = "v0.6.2";
+export const VERSION = "v0.7";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -53,7 +54,8 @@ async function initLessonData() {
 
 const app = {
   save: null, screen: null, params: null, modal: null,
-  chapters: [], lessons: [],   // 레슨 목록(문제·카드 없음). 전체는 ctx.getLesson / getChapter
+  chapters: [], lessons: [],   // 레슨 목록(문제·카드 없음). 전체는 ctx.getLesson / getChapter. lessons는 본 과정만
+  advanced: [],                // 심화 레슨 목록(v0.7, 선택 레슨)
   data: null,
   swChanged: false,      // 이 페이지를 다루던 서비스 작업자가 새 판으로 바뀜 → 장 파일 이름표가 옛것일 수 있음
   cleanup: null,
@@ -136,8 +138,11 @@ function show(name, params = {}) {
 
 // ---- 레슨 길 ----
 function lessonIndex(id) { return app.lessons.findIndex((l) => l.id === id); }
+function lessonById(id) { return app.lessons.find((l) => l.id === id) || app.advanced.find((l) => l.id === id); }
 function lessonState(id) {
   const s = app.save;
+  // 심화(v0.7): 장 평가를 끝내면 열림. 지금 레슨 계산(아래)은 본 과정 lessons만 본다
+  if (isAdvancedId(id)) return advancedState(app.chapters, s, id) || "locked";
   const i = lessonIndex(id);
   if (i < 0) return "locked";
   if (s.completed_lessons.includes(id)) return s.grading_results[id] && s.grading_results[id].perfect ? "perfect" : "done";
@@ -175,7 +180,7 @@ function finish(info) {
     nextChapter = next.chapter;
   }
   const firstEver = info.mode !== "review" && app.save.completed_lessons.length === 0;
-  const { save, result } = finishLesson(app.save, { ...info, nextLessonId, nextChapter }, new Date());
+  const { save, result } = finishLesson(app.save, { ...info, nextLessonId, nextChapter, advancedIds: advancedIds(app.chapters) }, new Date());
   commit(save);
   if (firstEver) {
     requestPersist();
@@ -209,7 +214,7 @@ async function afterDone() {
 
 // 하던 레슨 기록(v0.6.2 다): 본 저장과 따로 한 칸. 없는 레슨·24시간 지난 기록은 읽을 때 지운다
 const resume = {
-  read: () => readResume(storage, { now: Date.now(), exists: (id) => app.lessons.some((l) => l.id === id) }),
+  read: () => readResume(storage, { now: Date.now(), exists: (id) => !!lessonById(id) }),
   write: (rec) => writeResume(storage, rec),
   clear: () => clearResume(storage),
 };
@@ -222,10 +227,12 @@ const ctx = {
   commit, show, say, sound, toast, finish,
   get chapters() { return app.chapters; },
   get lessons() { return app.lessons; },
-  lessonById: (id) => app.lessons.find((l) => l.id === id),
+  get advanced() { return app.advanced; },
+  advancedIds: () => advancedIds(app.chapters),
+  lessonById,
   getLesson: (id) => (app.data ? app.data.getLesson(id) : Promise.resolve(null)),
   getChapter: (n) => app.data.getChapter(n),
-  chaptersForConcepts: (concepts) => chaptersForConcepts(app.chapters, concepts),
+  chaptersForConcepts: (concepts) => chaptersForConcepts(app.chapters, concepts, app.save.completed_lessons),
   swChanged: () => app.swChanged,
   get chapterFiles() { return app.data ? app.data.fileList() : []; },
   lessonState, currentLessonId,
@@ -265,6 +272,7 @@ async function boot() {
     app.chapters = [];
   }
   app.lessons = app.chapters.flatMap((c) => c.lessons);
+  app.advanced = app.chapters.flatMap((c) => c.advanced || []);
   if (app.lessons.length) resume.read();   // 낡은 기록 치우기(레슨 목록을 못 받았으면 건드리지 않음)
   dayStart();
   show("splash");

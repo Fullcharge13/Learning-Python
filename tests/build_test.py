@@ -453,7 +453,8 @@ const dir = process.argv[1];
 const out = {};
 for (const f of fs.readdirSync(dir).filter((f) => /^ch\d+\.js$/.test(f))) {
   const m = await import(url.pathToFileURL(path.join(dir, f)).href);
-  out[f] = { CHAPTER: m.CHAPTER, LESSONS: m.LESSONS };
+  out[f] = { CHAPTER: m.CHAPTER, LESSONS: m.LESSONS,
+    ...(Array.isArray(m.ADVANCED) && m.ADVANCED.length ? { ADVANCED: m.ADVANCED.map((l) => ({ ...l, isAdvanced: true })) } : {}) };
 }
 process.stdout.write(JSON.stringify(out));
 """
@@ -538,6 +539,73 @@ def test_split_static():
     leaked = [t for t in _lesson_texts() if t in html]
     assert not leaked, "lesson text found in index.html: %r" % leaked[:3]
     assert "lessons/" in out and "KB" in out
+
+
+ADV_SNAP = os.path.join(OUT, "lessons-adv")
+ADV_OUT = os.path.join(OUT, "dist-adv")
+
+
+def _lesson_index(html):
+    m = re.search(r"window\.RIA_LESSON_INDEX = (.*?);\nwindow\.RIA_CHAPTER_FILES", html, re.S)
+    assert m, "RIA_LESSON_INDEX not in index.html"
+    return json.loads(m.group(1))
+
+
+def test_split_advanced():
+    """v0.7 작업 1: 장 파일의 ADVANCED는 그 장 JSON에, 목록(index)에는 장의 advanced 칸에 stub만. 없는 장은 그대로"""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fixtures.advanced_dir import make
+    make(_snapshot(), ADV_SNAP, chapters=(1, 2))
+    _build("--out", ADV_OUT, "--lessons-dir", ADV_SNAP)
+    html = _read(os.path.join(ADV_OUT, "index.html"))
+    src = _source_lessons(ADV_SNAP)
+    table = _chapter_table(html)
+    for n in (1, 2):
+        got = json.loads(_read(os.path.join(ADV_OUT, table[n])))
+        assert [l["id"] for l in got["ADVANCED"]] == ["%d-A1" % n, "%d-A2" % n, "%d-A3" % n], got.get("ADVANCED")
+        assert got == src["ch%d.js" % n], "chapter %d file differs from source" % n
+    no_adv = [n for n in table if n > 2 and "ADVANCED" not in src["ch%d.js" % n]]
+    assert no_adv, "need a chapter without ADVANCED"
+    for n in no_adv:
+        got = json.loads(_read(os.path.join(ADV_OUT, table[n])))
+        assert "ADVANCED" not in got, "chapter %d without ADVANCED must not get an empty list" % n
+    idx = {c["id"]: c for c in _lesson_index(html)}
+    stubs = idx[1]["advanced"]
+    assert [x["id"] for x in stubs] == ["1-A1", "1-A2", "1-A3"], stubs
+    assert set(stubs[0]) == {"id", "chapter", "title", "goal", "concepts", "isAdvanced"}, stubs[0]
+    assert stubs[0]["isAdvanced"] is True and stubs[0]["chapter"] == 1 and stubs[0]["concepts"] == ["print"]
+    assert [l["id"] for l in idx[1]["lessons"]] == ["1-%d" % k for k in range(1, 6)], "main lessons unchanged"
+    for n in no_adv:
+        assert "advanced" not in idx[n]
+    assert "심화 시험 작성 1-A1" not in html and "심화 시험 카드 1-A2" not in html, "advanced lesson text leaked into index.html"
+
+
+def test_split_advanced_bad_id():
+    """ADVANCED 레슨 id가 N-Ak 꼴이 아니거나 isAdvanced가 없으면 빌드가 멈춘다"""
+    bad = os.path.join(OUT, "lessons-adv-bad")
+    shutil.rmtree(bad, ignore_errors=True)
+    shutil.copytree(_snapshot(), bad)
+    os.rename(os.path.join(bad, "ch1.js"), os.path.join(bad, "ch1.orig.mjs"))
+    for body, why in (('export const ADVANCED = [{ id: "1-B1", chapter: 1, isAdvanced: true, title: "x", items: [] }];', "id"),
+                      ('export const ADVANCED = [{ id: "1-A1", chapter: 1, isAdvanced: false, title: "x", items: [] }];', "isAdvanced"),
+                      ('export const ADVANCED = [{ id: "2-A1", chapter: 1, isAdvanced: true, title: "x", items: [] }];', "id")):
+        with open(os.path.join(bad, "ch1.js"), "w", encoding="utf-8") as f:
+            f.write('export * from "./ch1.orig.mjs";\n' + body + "\n")
+        r = _run_build("--out", os.path.join(OUT, "dist-adv-bad"), "--lessons-dir", bad)
+        assert r.returncode != 0, "build must fail for bad ADVANCED (%s)" % why
+        assert "ADVANCED" in (r.stdout + r.stderr), r.stdout + r.stderr
+    # isAdvanced를 빠뜨린 것은 멈추지 않고 채워 넣는다(ADVANCED 안이면 심화)
+    with open(os.path.join(bad, "ch1.js"), "w", encoding="utf-8") as f:
+        f.write('export * from "./ch1.orig.mjs";\nexport const ADVANCED = [{ id: "1-A1", chapter: 1, title: "x", goal: "", items: [] }];\n')
+    out = os.path.join(OUT, "dist-adv-bad")
+    r = _run_build("--out", out, "--lessons-dir", bad)
+    assert r.returncode == 0, r.stdout + r.stderr
+    html = _read(os.path.join(out, "index.html"))
+    got = json.loads(_read(os.path.join(out, _chapter_table(html)[1])))
+    assert got["ADVANCED"][0]["isAdvanced"] is True
+    assert {c["id"]: c for c in _lesson_index(html)}[1]["advanced"][0]["isAdvanced"] is True
+    shutil.rmtree(bad, ignore_errors=True)
+    shutil.rmtree(out, ignore_errors=True)
 
 
 def test_split_deterministic():

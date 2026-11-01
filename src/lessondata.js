@@ -1,7 +1,8 @@
 // 장 따로 불러오기 (v0.3 작업 1, 설계 docs/specs/2026-10-30-장-따로-불러오기-설계.md)
 //
 // - 레슨 목록(index): 장 번호·제목, 레슨 id·title·goal·summary·isExam, 레슨이 쓰는 개념 id. 학습 길·설정·진도·배지는 이것만 쓴다.
-// - 장 파일(lessons/chN-<지문8자>.json): 장 하나의 { CHAPTER, LESSONS } 전체. 레슨을 열 때 getChapter(n)으로 받는다.
+//   심화 레슨(v0.7)은 장의 `advanced` 칸에 따로(id·title·goal·concepts·isAdvanced). ADVANCED가 없는 장은 이 칸이 없다.
+// - 장 파일(lessons/chN-<지문8자>.json): 장 하나의 { CHAPTER, LESSONS, ADVANCED? } 전체. 레슨을 열 때 getChapter(n)으로 받는다.
 // - 배포판: build.py가 window.RIA_LESSON_INDEX와 window.RIA_CHAPTER_FILES를 index.html에 넣는다 → 네트워크(서비스 작업자 저장본)로.
 // - 개발판(tools/dev.py): 두 값이 없다 → app.js가 data/lessons/chN.js를 import해 modules로 넘긴다(네트워크 없음).
 // 이 파일은 데이터 파일을 import하지 않는다(build.py도 레슨 목록·파일 이름을 이 함수로 만든다).
@@ -18,37 +19,70 @@ export function chapterFileName(n, hash8) {
 function chapterOfModule(m) {
   if (!m || !Array.isArray(m.LESSONS)) return null;
   const ch = m.CHAPTER || { id: m.LESSONS[0] && m.LESSONS[0].chapter, title: "" };
-  return { id: ch.id, title: ch.title || "", lessons: m.LESSONS };
+  return { id: ch.id, title: ch.title || "", lessons: m.LESSONS, advanced: Array.isArray(m.ADVANCED) ? m.ADVANCED : [] };
 }
 
-/** 레슨 하나의 목록 칸(문제·카드 없음) */
-export function lessonStub(l, chapterId) {
+function conceptsOf(l) {
   const concepts = [];
   for (const it of Array.isArray(l.items) ? l.items : []) {
     if (it && it.concept && !concepts.includes(it.concept)) concepts.push(it.concept);
   }
+  return concepts;
+}
+
+/** 레슨 하나의 목록 칸(문제·카드 없음) */
+export function lessonStub(l, chapterId) {
   return {
     id: l.id, chapter: l.chapter ?? chapterId, title: l.title, goal: l.goal || "",
-    summary: Array.isArray(l.summary) ? l.summary.slice() : [], isExam: !!l.isExam, concepts,
+    summary: Array.isArray(l.summary) ? l.summary.slice() : [], isExam: !!l.isExam, concepts: conceptsOf(l),
   };
 }
 
-/** 장 모듈들({CHAPTER, LESSONS}) → 레슨 목록 [{ id, title, lessons: [stub] }] (장 번호 순) */
+/** 심화 레슨 하나의 목록 칸(v0.7): id·장·제목·목표·개념·isAdvanced */
+export function advancedStub(l, chapterId) {
+  return { id: l.id, chapter: l.chapter ?? chapterId, title: l.title, goal: l.goal || "", concepts: conceptsOf(l), isAdvanced: true };
+}
+
+/** 장 모듈들({CHAPTER, LESSONS, ADVANCED?}) → 레슨 목록 [{ id, title, lessons: [stub], advanced?: [stub] }] (장 번호 순) */
 export function buildLessonIndex(modules) {
   const out = [];
   for (const m of modules || []) {
     const ch = chapterOfModule(m);
     if (!ch) continue;
-    out.push({ id: ch.id, title: ch.title, lessons: ch.lessons.map((l) => lessonStub(l, ch.id)) });
+    const c = { id: ch.id, title: ch.title, lessons: ch.lessons.map((l) => lessonStub(l, ch.id)) };
+    if (ch.advanced.length) c.advanced = ch.advanced.map((l) => advancedStub(l, ch.id));
+    out.push(c);
   }
   return out.sort((a, b) => a.id - b.id);
 }
 
-/** 복습: 이 개념들이 들어 있는 장 번호(오름차순) */
-export function chaptersForConcepts(index, concepts) {
+/** 복습: 이 개념들이 들어 있는 장 번호(오름차순). completed를 주면 심화는 끝낸 것만 본다 */
+export function chaptersForConcepts(index, concepts, completed = null) {
   const want = new Set(concepts || []);
   if (!want.size) return [];
-  return (index || []).filter((c) => c.lessons.some((l) => (l.concepts || []).some((k) => want.has(k)))).map((c) => c.id);
+  const doneSet = completed ? new Set(completed) : null;
+  const has = (l) => (l.concepts || []).some((k) => want.has(k));
+  return (index || []).filter((c) => c.lessons.some(has)
+    || (c.advanced || []).some((l) => (!doneSet || doneSet.has(l.id)) && has(l))).map((c) => c.id);
+}
+
+const TOUCH = new Set(["choice", "blank", "order", "check"]);
+
+/** 복습 문제 후보: 받은 장들({LESSONS, ADVANCED?})의 본 과정 레슨 + 끝낸 심화 레슨에서, 복습 개념의 터치 문제.
+ *  check는 choice로 바꾸고, 어느 레슨에서 왔는지 from에 적는다 */
+export function reviewPool(chapters, concepts, completed) {
+  const queue = new Set(concepts || []);
+  const doneSet = new Set(completed || []);
+  const pool = [];
+  for (const ch of chapters || []) {
+    const ls = [...(ch.LESSONS || []), ...(ch.ADVANCED || []).filter((l) => doneSet.has(l.id))];
+    for (const l of ls) {
+      for (const it of l.items || []) {
+        if (it && TOUCH.has(it.type) && queue.has(it.concept)) pool.push({ ...it, type: it.type === "check" ? "choice" : it.type, from: l.id });
+      }
+    }
+  }
+  return pool;
 }
 
 export class ChapterLoadError extends Error {
@@ -72,16 +106,17 @@ export class ChapterLoadError extends Error {
 export function createLessonData({ index, files, modules, base, fetch: fetchImpl } = {}) {
   const split = !!files;
   const idx = split ? (index || []) : buildLessonIndex(modules);
-  const done = new Map();     // n → {CHAPTER, LESSONS}
+  const done = new Map();     // n → {CHAPTER, LESSONS, ADVANCED}
   const pending = new Map();  // n → Promise (동시에 여러 번 불러도 한 번만 받음)
   if (!split) {
     for (const m of modules || []) {
       const ch = chapterOfModule(m);
-      if (ch) done.set(ch.id, { CHAPTER: { id: ch.id, title: ch.title }, LESSONS: ch.lessons });
+      if (ch) done.set(ch.id, { CHAPTER: { id: ch.id, title: ch.title }, LESSONS: ch.lessons, ADVANCED: ch.advanced });
     }
   }
-  const lessons = idx.flatMap((c) => c.lessons);
-  const chapterOf = (id) => { const l = lessons.find((x) => x.id === id); return l ? l.chapter : null; };
+  const lessons = idx.flatMap((c) => c.lessons);            // 본 과정만
+  const advanced = idx.flatMap((c) => c.advanced || []);    // 심화(v0.7)
+  const chapterOf = (id) => { const l = lessons.find((x) => x.id === id) || advanced.find((x) => x.id === id); return l ? l.chapter : null; };
 
   async function fetchChapter(n) {
     const name = files[n];
@@ -105,7 +140,7 @@ export function createLessonData({ index, files, modules, base, fetch: fetchImpl
     }
     const ch = chapterOfModule(data);
     if (!ch || ch.id !== n) throw new ChapterLoadError(n, `chapter ${n}: file holds chapter ${ch && ch.id}`);
-    return { CHAPTER: { id: ch.id, title: ch.title }, LESSONS: ch.lessons };
+    return { CHAPTER: { id: ch.id, title: ch.title }, LESSONS: ch.lessons, ADVANCED: ch.advanced };
   }
 
   /** 장 n의 { CHAPTER, LESSONS }. 실패는 기억하지 않아 다음 부름에서 다시 받는다 */
@@ -127,11 +162,11 @@ export function createLessonData({ index, files, modules, base, fetch: fetchImpl
     const n = chapterOf(id);
     if (n == null) return null;
     const c = await getChapter(n);
-    return c.LESSONS.find((l) => l.id === id) || null;
+    return c.LESSONS.find((l) => l.id === id) || (c.ADVANCED || []).find((l) => l.id === id) || null;
   }
 
   return {
-    split, index: idx, lessons, chapterOf, getChapter, getLesson,
+    split, index: idx, lessons, advanced, chapterOf, getChapter, getLesson,
     isLoaded: (n) => done.has(Number(n)),
     fileList: () => (split ? Object.values(files) : []),
   };

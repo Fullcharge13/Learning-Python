@@ -536,3 +536,52 @@ def test_require_else():
 def test_require_new_kinds_mixed_order():
     r = run("print(1)", [], ["Else", "If", "Comment", "Elif"])
     assert r["missing"] == ["Else", "If", "Comment", "Elif"]
+
+
+# ── v0.7 (판정 C45): SelfCall / FormatSpec / TripleStr ──────────────────
+FACT = "def fact(n):\n    if n <= 1:\n        return 1\n    return n * fact(n - 1)\n\nprint(fact(5))\n"
+
+
+def test_require_selfcall():
+    assert run(FACT, [], ["SelfCall"])["missing"] == []
+    # 함수 밖에서만 부름 → 재귀 아님
+    outside = "def f(n):\n    return n + 1\n\nprint(f(f(1)))\n"
+    assert run(outside, [], ["SelfCall"])["missing"] == ["SelfCall"]
+    # 다른 함수가 부름 → 재귀 아님(f 안에서 g를, g 안에서 f를: 직접 재귀만 셈)
+    mutual = ("def f(n):\n    return 0 if n == 0 else g(n - 1)\n\n"
+              "def g(n):\n    return 0 if n == 0 else f(n - 1)\n\nprint(f(4))\n")
+    assert run(mutual, [], ["SelfCall"])["missing"] == ["SelfCall"]
+    # 메서드처럼 점으로 부르는 것은 이름 호출이 아님
+    attr = "import math\ndef floor(x):\n    return math.floor(x)\n\nprint(floor(2.5))\n"
+    assert run(attr, [], ["SelfCall"])["missing"] == ["SelfCall"]
+    # 함수 없음
+    assert run("print(1)", [], ["SelfCall"])["missing"] == ["SelfCall"]
+    # 안쪽 함수의 본문에 있어도 바깥 함수 이름을 부르면 셈(단순 규칙, 가려짐은 안 따짐)
+    inner = ("def walk(n):\n    def step():\n        return walk(n - 1)\n"
+             "    return 0 if n == 0 else step()\n\nprint(walk(3))\n")
+    assert run(inner, [], ["SelfCall"])["missing"] == []
+
+
+def test_require_formatspec():
+    for code in ('x = 3\nprint(f"{x:>8}")', 'n = 12345\nprint(f"{n:,}")',
+                 'v = 2.5\nprint(f"{v:.2f}")', 'x = "a"\nprint(f"{x!r:>5}")',
+                 'w = 6\nx = 1\nprint(f"{x:>{w}}")'):
+        assert run(code, [], ["FormatSpec"])["missing"] == [], code
+    for code in ('x = "a"\nprint(f"{x!r}")', 'x = 3\nprint(f"{x}")',
+                 'x = 3\nprint(format(x, ">8"))', 'print("{:>8}".format(3))',
+                 'print("{x:>8}")', 'x = 3\nprint(f"{x:}")'):
+        assert run(code, [], ["FormatSpec"])["missing"] == ["FormatSpec"], code
+
+
+def test_require_triplestr():
+    for code in ('print("""가\n나""")', "print('''가\n나''')", 's = f"""{1}\n줄"""\nprint(s)',
+                 'print(r"""a\\b""")', 'def f():\n    """설명"""\n    return 1\nprint(f())'):
+        assert run(code, [], ["TripleStr"])["missing"] == [], code
+    for code in ('print("가\\n나")', 'print(1)  #"""', '#"""\nprint(1)', 'print("\'\'\'")',
+                 "print('\"\"\"')", 'print(f"{1}")', 'print("" "")'):
+        assert run(code, [], ["TripleStr"])["missing"] == ["TripleStr"], code
+
+
+def test_require_c45_mixed_order():
+    r = run("print(1)", [], ["TripleStr", "If", "SelfCall", "FormatSpec"])
+    assert r["missing"] == ["TripleStr", "If", "SelfCall", "FormatSpec"]

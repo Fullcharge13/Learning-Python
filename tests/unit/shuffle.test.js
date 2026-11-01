@@ -62,3 +62,18 @@ test("requireKo: Comment·Elif·Else (판정 C44)", () => {
   assert.equal(missingMessage(["Elif"]), "정답은 나왔지만 이번 문제는 elif를 써서 풀어야 해요.");
   assert.equal(missingMessage(["Else"]), "정답은 나왔지만 이번 문제는 else를 써서 풀어야 해요.");
 });
+
+test("missingMessage: SelfCall·FormatSpec·TripleStr (판정 C45)", () => {
+  assert.equal(missingMessage(["SelfCall"]), "정답은 나왔지만 이번 문제는 함수 안에서 자기 자신을 다시 불러서 풀어야 해요.");
+  assert.equal(missingMessage(["FormatSpec"]), "정답은 나왔지만 이번 문제는 f-문자열 안에 :로 서식(자릿수·정렬)을 넣어서 풀어야 해요.");
+  assert.equal(missingMessage(["TripleStr"]), "정답은 나왔지만 이번 문제는 큰따옴표 세 개(\"\"\")로 여러 줄 문자열을 써서 풀어야 해요.");
+  // 다른 조건과 섞이면: 「…을 써서」 다음에 문장형 조건을 잇는다
+  assert.equal(missingMessage(["If", "SelfCall"]),
+    "정답은 나왔지만 이번 문제는 if 문을 써서, 함수 안에서 자기 자신을 다시 불러서 풀어야 해요.");
+  assert.equal(missingMessage(["FormatSpec", "Call:int", "TripleStr"]),
+    "정답은 나왔지만 이번 문제는 int()를 써서, f-문자열 안에 :로 서식(자릿수·정렬)을 넣어서, 큰따옴표 세 개(\"\"\")로 여러 줄 문자열을 써서 풀어야 해요.");
+  // 짧은 이름(다른 곳에서 쓸 때)
+  assert.equal(requireKo("SelfCall"), "재귀 호출");
+  assert.equal(requireKo("FormatSpec"), "f-문자열 서식");
+  assert.equal(requireKo("TripleStr"), "세 따옴표 문자열");
+});

@@ -5,7 +5,7 @@
     python3 tools/readme_gen.py --check   # README.md가 데이터와 어긋나면 실패(종료 코드 1)
 
 읽는 것 (node로 ES 모듈을 불러 JSON으로 꺼냄)
-- data/lessons/ch1~3.js  레슨 표
+- data/lessons/chN.js    레슨 표(LESSONS) + 심화 레슨(ADVANCED, v0.7, 없을 수 있음)
 - data/concepts.js       개념 이름
 - data/quests.js         일일 퀘스트
 - data/badges.js         배지
@@ -34,7 +34,7 @@ const nums = fs.readdirSync(new URL("data/lessons/", root))
   .map((f) => /^ch(\d+)\.js$/.exec(f)).filter(Boolean).map((m) => +m[1]).sort((a, b) => a - b);
 for (const n of nums) {
   const m = await imp("data/lessons/ch" + n + ".js");
-  chapters.push({ chapter: m.CHAPTER, lessons: m.LESSONS });
+  chapters.push({ chapter: m.CHAPTER, lessons: m.LESSONS, advanced: Array.isArray(m.ADVANCED) ? m.ADVANCED : [] });
 }
 const { CONCEPTS } = await imp("data/concepts.js");
 const { QUESTS } = await imp("data/quests.js");
@@ -82,11 +82,13 @@ def build(d):
     concept_name = {c["id"]: c["name"] for c in d["CONCEPTS"]}
 
     lessons = [l for ch in d["chapters"] for l in ch["lessons"]]
+    adv = [l for ch in d["chapters"] for l in ch.get("advanced", [])]
     n_lessons = len(lessons)
+    n_adv = len(adv)
     n_badges = len(d["BADGES"])
     n_outfits = len(d["OUTFITS"])
     n_quests = len(d["QUESTS"])
-    n_items = sum(len(l["items"]) for l in lessons)
+    n_items = sum(len(l["items"]) for l in lessons + adv)
 
     L = []
     w = L.append
@@ -110,7 +112,8 @@ def build(d):
     w("**배우는 것** — " + " · ".join(f"{c['chapter']['id']}장 {c['chapter']['title']}" for c in d["chapters"]))
     w("")
     w(f"- 판: **{version}** (게임 안 버전 표시, `LOG.md`의 판 번호와 같음)")
-    w(f"- 내용: {len(d['chapters'])}장 · 레슨 {n_lessons}개 · 문제 {n_items}개 · 일일 퀘스트 {n_quests}종 · "
+    adv_part = f"심화 레슨 {n_adv}개 · " if n_adv else ""
+    w(f"- 내용: {len(d['chapters'])}장 · 레슨 {n_lessons}개 · {adv_part}문제 {n_items}개 · 일일 퀘스트 {n_quests}종 · "
       f"배지 {n_badges}개 · 리아 교수 의상 {n_outfits}벌 · 표정 {len(d['faces'])}가지")
     w("- 서버 없음: Python 실행은 브라우저 안의 **Pyodide**(브라우저에서 돌아가는 Python) "
       f"`{pyodide}`이 맡고, 진도는 휴대폰 안(`localStorage`, 브라우저 저장 칸)에 저장돼요.")
@@ -174,10 +177,14 @@ def build(d):
     w("")
 
     # ---- 레슨
-    w(f"## 레슨 {n_lessons}개")
+    w(f"## 레슨 {n_lessons}개" + (f" + 심화 {n_adv}개" if n_adv else ""))
     w("")
     w("한 레슨: 학습 목표 → 개념 카드 1~2장 → 터치 문제(객관식·빈칸·순서) → 직접 작성 1문제 → 이해도 확인 → "
       "틀린 문제 다시 풀기 → 완료 요약. 레슨은 차례로 열려요.")
+    if n_adv:
+        w("")
+        w("**심화**(선택): 장 평가를 통과하면 그 장의 심화 레슨 3개가 한꺼번에 열려요. 건너뛰어도 다음 장은 열리고, "
+          "과정 완주와 「레슨 N개 중 M개 완료」에는 들어가지 않아요. 학습 길에서는 장 평가 아래 별 노드로 보여요.")
     w("")
     for ch in d["chapters"]:
         c = ch["chapter"]
@@ -185,7 +192,7 @@ def build(d):
         w("")
         w("| 레슨 | 제목 | 학습 목표 | 직접 작성 과제 | 핵심 개념 | 문제 |")
         w("|---|---|---|---|---|---|")
-        for l in ch["lessons"]:
+        for l in ch["lessons"] + ch.get("advanced", []):
             writes = [i for i in l["items"] if i["type"] == "write"]
             task = "<br>".join(cell(first_line(i["task"])) for i in writes) or "-"
             concepts = []
@@ -197,18 +204,18 @@ def build(d):
             for i in l["items"]:
                 counts[i["type"]] = counts.get(i["type"], 0) + 1
             kinds = " · ".join(f"{TYPE_KO.get(k, k)} {v}" for k, v in counts.items())
-            title = cell(l["title"]) + (" **(장 평가)**" if l.get("isExam") else "")
+            title = cell(l["title"]) + (" **(장 평가)**" if l.get("isExam") else "") + (" **(심화)**" if l.get("isAdvanced") else "")
             w(f"| {l['id']} | {title} | {cell(l['goal'])} | {task} | {cell(', '.join(concepts))} | {kinds} |")
         w("")
 
     # ---- 게임 장치 요약
     w("## 게임 장치")
     w("")
-    w("- **XP**(경험치): 레슨 첫 완료 10 (장 평가 30) + 실수 없음 5 + 힌트 없이 직접 작성 통과 5. "
+    w("- **XP**(경험치): 레슨 첫 완료 10 (장 평가 30, 심화 15) + 실수 없음 5 + 힌트 없이 직접 작성 통과 5. "
       "다시 하기는 10 (장 평가 15), 복습 한 판 10.")
     w("- **하루 목표와 연속 기록**: 하루 목표 10·20·30 XP(기본 20)를 채운 날마다 +1. "
       "기록 보호권(200바이트, 최대 2개)이 빠진 날을 메워 줘요. 7·30·100일에 축하와 보상.")
-    w("- **바이트**: 게임 속 돈. 레슨 첫 완료 10 + 실수 없음 5, 퀘스트, 보물상자 10, 연속 7일 50. 의상과 보호권을 사요.")
+    w("- **바이트**: 게임 속 돈. 레슨 첫 완료 10 (심화 15) + 실수 없음 5, 퀘스트, 보물상자 10, 연속 7일 50. 의상과 보호권을 사요.")
     w("")
     w(f"### 일일 퀘스트 ({n_quests}종 중 매일 3개)")
     w("")
@@ -286,7 +293,7 @@ def build(d):
     w("")
     w("개발 과정과 결정 기록은 `LOG.md`, 설계는 `docs/specs/`, 작업 계획과 판정 기록은 `docs/plans/`에 있어요.")
     w("")
-    return "\n".join(L), {"lessons": n_lessons, "badges": n_badges, "outfits": n_outfits,
+    return "\n".join(L), {"lessons": n_lessons, "advanced": n_adv, "badges": n_badges, "outfits": n_outfits,
                           "quests": n_quests, "items": n_items, "version": version}
 
 
@@ -301,7 +308,7 @@ def main():
         sys.exit(2)
     check = "--check" in args
     text, n = build(load_data())
-    summary = (f"레슨 {n['lessons']} · 문제 {n['items']} · 퀘스트 {n['quests']} · "
+    summary = (f"레슨 {n['lessons']} · 심화 {n['advanced']} · 문제 {n['items']} · 퀘스트 {n['quests']} · "
                f"배지 {n['badges']} · 의상 {n['outfits']} · 판 {n['version']}")
     if check:
         try:

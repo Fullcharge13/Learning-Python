@@ -4,6 +4,7 @@
 실행: python3 tests/content.py          있는 장(data/lessons/ch*.js)만 점검
       python3 tests/content.py --full N 정확히 1~N장(N×5개 레슨)이 있어야 통과
                                         (N을 빼면 있는 장 파일 수. 장 파일은 늘 1장부터 이어져야 함)
+      python3 tests/content.py --advanced N  1~N장 파일에 심화 레슨(ADVANCED)이 모두 있어야 통과
 
 데이터는 node로 ES 모듈을 import해 JSON으로 꺼낸다(실행 기록 C8).
 코드는 src/py/runner.py의 run()으로 CPython에서 실제로 돌린다(앱의 Pyodide 작업자와 같은 파일).
@@ -14,6 +15,8 @@
     export const LESSONS = [ { id: "N-1", chapter: N, title, goal, summary: [3줄], isExam?,
                                cards: [{ say, code, out }], items: [...] }, ... ];
     items = 터치 문제(choice/blank/order) 4~6개(장 평가는 4~8개) → write 1개 → check 1개, 이 순서.
+    export const ADVANCED = [ { id: "N-A1", chapter: N, isAdvanced: true, … }, N-A2, N-A3 ];  (선택, v0.7)
+    심화 레슨은 본 과정 레슨과 모양이 같고(isExam 없음) 규칙은 N장 + ADVANCED_EXTRA[1..N](심화끼리 누적).
 아래 ITEM_KEYS가 문제 형태별로 허용하는 칸이다(오타를 잡으려고 모르는 칸은 오류).
 카드·choice·blank·order·check는 stdin 칸("\n"으로 나눈 문자열, 판정 C23)을 둘 수 있다. 없으면 "".
 카드·choice·check·blank·order·write는 선택 칸 files·server를 둘 수 있다(v0.4 E1·E2, 뜻은 FILES_SERVER_DOC).
@@ -24,6 +27,7 @@ write의 시험(tests[i])은 files를 따로 둘 수 있고, 있으면 문제의
 """
 
 import ast
+import io
 import itertools
 import json
 import keyword
@@ -32,6 +36,8 @@ import re
 import signal
 import subprocess
 import sys
+import time
+import tokenize
 import unicodedata
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -54,7 +60,7 @@ EXPLAIN_MAX = 160     # 해설
 TASK_MAX = 200        # 직접 작성 과제 설명
 HINT_MAX = 120
 
-LESSON_KEYS = {"id", "chapter", "title", "goal", "summary", "isExam", "cards", "items"}
+LESSON_KEYS = {"id", "chapter", "title", "goal", "summary", "isExam", "isAdvanced", "cards", "items"}
 CARD_KEYS = {"say", "code", "out"}
 ENV_KEYS = {"files", "server"}   # v0.4 가상 파일·연습 서버
 CARD_OPT = {"stdin", "chart", "show_only"} | ENV_KEYS
@@ -195,6 +201,60 @@ def _build_tables(rules):
 
 FORBID_BY_CHAPTER, NAMES_BY_CHAPTER, CALLS_BY_CHAPTER, MODULES_BY_CHAPTER = _build_tables(CHAPTER_RULES)
 INPUT_FROM_CHAPTER = 2  # input()은 2장부터
+
+# ── 심화 레슨(v0.7, 설계서 「심화학습」 1절) ─────────────────────────────────
+# 심화 N-Ak = N장까지의 본 과정 규칙 + ADVANCED_EXTRA[1..N](심화끼리 누적).
+# ADVANCED_ONLY는 심화에서만 여는 문법이라 본 과정 레슨에서는 모든 장에서 금지한다(본 과정만 하는 학습자).
+# ast 마디가 아닌 가짜 이름(advanced_features가 찾음):
+#   FormatSpec   f"{x:>8}"처럼 f-문자열의 서식 지정자(: 뒤). 지정자 안의 {…}(FormatSpecNested)는 늘 금지
+#   TripleQuote  """…"""·'''…''' 여러 줄 문자열
+#   DivmodUnpack q, r = divmod(a, b) 풀기만(튜플 일반은 9장). 마디로 알리지 않고 Tuple 금지에서 빼 주기만 함
+#   DefaultArg   def f(x, end="!"): 기본값(숫자·문자열·True/False/None 상수만)
+#   Recursion    함수가 자기 자신을 부름
+#   LoopElse     for…else / while…else
+# Match는 ast 마디. 쓸 수 있는 패턴: 글자·숫자·None/True/False 값, | 여러 값, _ 나머지(check_match).
+ADVANCED_ONLY = {"FormatSpec", "TripleQuote", "DivmodUnpack", "DefaultArg", "Recursion", "LoopElse", "Match"}
+ADVANCED_EXTRA = {
+    # 1장 심화: 자릿수·정렬(f"{3.14159:.2f}", f"{'커피':>6}") — 변수는 아직이라 상수만. 여러 줄 문자열
+    1: {"allow": {"JoinedStr", "FormatSpec", "TripleQuote"}},
+    # 2장 심화: round(2장부터 있음)로 실수 오차 다루기, divmod와 그 결과 풀기
+    2: {"allow": {"DivmodUnpack"}, "calls": {"divmod"}},
+    # 3장 심화: match(값 패턴만). 조건 묶기(and·or, 3 < x < 7, … if … else …)는 본 과정 3장부터 허용됨
+    3: {"allow": {"Match"}},
+    # 4장 심화: 기본값 매개변수, 재귀. 내 함수에 이름 붙은 인자(f(b=1))는 본 과정 4장부터 허용됨
+    4: {"allow": {"DefaultArg", "Recursion"}},
+    # 5장 심화: for…else·while…else. 중첩 반복·break·continue는 본 과정 5장부터 허용됨
+    5: {"allow": {"LoopElse"}},
+    # 6장 심화: 새 문법 없음. center·ljust·rjust·zfill·count·title 등 메서드는 본 과정 6장부터(Attribute),
+    #           채우기·정렬 서식(f"{s:*^9}")은 1장 심화의 FormatSpec으로 이미 열림
+    6: {},
+    # 7장 이후(v0.8~): 컴프리헨션(7), lambda(9), 특수 메서드(15) 등을 여기에 더한다
+}
+ADV_RUN_SECONDS = 1.0       # 심화 직접 작성: 정답이 시험마다 이 시간 안에 끝나야 함(앱 제한 3초의 여유)
+ADV_RECURSION_DEPTH = 100   # 심화 재귀 정답이 쓸 수 있는 깊이(Pyodide 스택 여유)
+
+
+class AdvancedChapter(int):
+    """심화 레슨의 장 번호. int처럼 쓰되(비교·%d·표 찾기), 점검기가 심화 규칙을 고르게 한다.
+    concepts 표에서는 심화 개념의 장을 이것으로 담는다(본 과정 레슨에서 못 쓰게)."""
+
+
+def _build_adv_tables():
+    forbid, calls = {}, {}
+    allow, extra_calls = set(), set()
+    for ch in range(1, max(max(CHAPTER_RULES), max(ADVANCED_EXTRA)) + 1):
+        r = ADVANCED_EXTRA.get(ch, {})
+        allow |= set(r.get("allow", ()))
+        extra_calls |= set(r.get("calls", ()))
+        base = FORBID_BY_CHAPTER.get(ch, FORBID_ALL)
+        forbid[ch] = (set(base) | ADVANCED_ONLY) - allow
+        calls[ch] = set(CALLS_BY_CHAPTER.get(ch, set())) | extra_calls
+    return forbid, calls
+
+
+MAIN_FORBID_BY_CHAPTER = {ch: set(f) | ADVANCED_ONLY for ch, f in FORBID_BY_CHAPTER.items()}
+ADV_FORBID_BY_CHAPTER, ADV_CALLS_BY_CHAPTER = _build_adv_tables()
+ADVANCED_PER_CHAPTER = 3
 
 # 앱이 채우는 자리 표시가 그대로 남은 것만 막는다(f-문자열 예시의 { }는 허용, 판정 C23).
 PLACEHOLDER = re.compile(r"\{(name|streak|xp|outfit|line|seconds|type)\}")
@@ -474,9 +534,39 @@ def check_code_shape(rep, where, code, chapter):
         tree = ast.parse(code)
     except SyntaxError:
         return
-    forbid = FORBID_BY_CHAPTER.get(chapter, FORBID_ALL)
+    adv = isinstance(chapter, AdvancedChapter)
+    if adv:
+        forbid = ADV_FORBID_BY_CHAPTER.get(chapter, FORBID_ALL | ADVANCED_ONLY)
+        calls = ADV_CALLS_BY_CHAPTER.get(chapter, set())
+    else:
+        forbid = MAIN_FORBID_BY_CHAPTER.get(chapter, FORBID_ALL | ADVANCED_ONLY)
+        calls = CALLS_BY_CHAPTER.get(chapter, set())
     names = NAMES_BY_CHAPTER.get(chapter)
-    calls = CALLS_BY_CHAPTER.get(chapter, set())
+    where_ch = "%d장 심화" % chapter if adv else "%d장" % chapter
+
+    def forbidden(kind, line):
+        if kind in ADVANCED_ONLY and not adv:
+            rep.err(where, "%s 은 심화 레슨에서만 쓰는 문법 — %d장 본 과정 레슨에서는 쓰지 않음(%s줄)"
+                    % (kind, chapter, line))
+        else:
+            rep.err(where, "%s에서 아직 배우지 않은 문법 %s (%s줄)" % (where_ch, kind, line))
+
+    for kind, line, problem in advanced_features(tree, code):
+        if problem:
+            if kind not in forbid:   # 금지된 문법이면 위의 한 줄로 충분
+                rep.err(where, "%s: %s (%s줄)" % (kind, problem, line))
+        elif kind in forbid:
+            forbidden(kind, line)
+    if "Match" not in forbid:
+        check_match(rep, where, tree)
+    divmod_targets = set()
+    if "DivmodUnpack" not in forbid:
+        divmod_targets = {id(n.targets[0]) for n in ast.walk(tree)
+                          if isinstance(n, ast.Assign) and len(n.targets) == 1
+                          and isinstance(n.targets[0], ast.Tuple)
+                          and all(isinstance(e, ast.Name) for e in n.targets[0].elts)
+                          and isinstance(n.value, ast.Call) and isinstance(n.value.func, ast.Name)
+                          and n.value.func.id == "divmod"}
     if "FunctionDef" not in forbid:  # 직접 만든 함수는 부를 수 있음(4장부터)
         calls = calls | {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
     if "ClassDef" not in forbid:     # 직접 만든 클래스로 객체 만들기(15장부터)
@@ -493,19 +583,81 @@ def check_code_shape(rep, where, code, chapter):
         calls = calls | set(from_names)
     for node in ast.walk(tree):
         kind = type(node).__name__
-        if kind == "Tuple" and id(node) in for_targets:
+        if kind == "Tuple" and (id(node) in for_targets or id(node) in divmod_targets):
             pass
         elif kind in forbid:
-            rep.err(where, "%d장에서 아직 배우지 않은 문법 %s (%s줄)" % (chapter, kind, getattr(node, "lineno", "?")))
+            forbidden(kind, getattr(node, "lineno", "?"))
         elif (kind == "For" and "ForNonRange" in forbid
               and not (isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name)
                        and node.iter.func.id == "range")):
-            rep.err(where, "%d장에서 아직 배우지 않은 문법 ForNonRange: for는 range(…)만 돎(%s줄)"
-                    % (chapter, node.lineno))
+            rep.err(where, "%s에서 아직 배우지 않은 문법 ForNonRange: for는 range(…)만 돎(%s줄)"
+                    % (where_ch, node.lineno))
         if isinstance(node, ast.Name) and names is not None and node.id not in names:
-            rep.err(where, "%d장에서 쓸 수 없는 이름 %r(변수는 2장부터)" % (chapter, node.id))
+            rep.err(where, "%s에서 쓸 수 없는 이름 %r(변수는 2장부터)" % (where_ch, node.id))
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id not in calls:
-            rep.err(where, "%d장에서 아직 배우지 않은 함수 %s()" % (chapter, node.func.id))
+            rep.err(where, "%s에서 아직 배우지 않은 함수 %s()" % (where_ch, node.func.id))
+
+
+def _const_default(node):
+    """기본값으로 쓸 수 있는 상수(숫자·문자열·True/False/None, -1 같은 음수)인지"""
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        node = node.operand
+        return isinstance(node, ast.Constant) and isinstance(node.value, (int, float)) and not isinstance(node.value, bool)
+    return isinstance(node, ast.Constant) and not isinstance(node.value, bytes)
+
+
+def advanced_features(tree, code):
+    """심화 가짜 문법 찾기 → [(이름, 줄, 문제)]. 문제가 None이면 그 문법을 쓴 것, 아니면 허용돼도 틀린 쓰임."""
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FormattedValue) and node.format_spec is not None:
+            found.append(("FormatSpec", node.lineno, None))
+            if any(isinstance(n, ast.FormattedValue) for n in ast.walk(node.format_spec)):
+                found.append(("FormatSpecNested", node.lineno, "서식 지정자 안에 {…}를 넣지 않음(자릿수는 숫자로 적음)"))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            defaults = list(node.args.defaults) + [d for d in node.args.kw_defaults if d is not None]
+            if defaults:
+                found.append(("DefaultArg", node.lineno, None))
+                if not all(_const_default(d) for d in defaults):
+                    found.append(("DefaultArg", node.lineno,
+                                  "기본값은 숫자·문자열·True/False/None 상수만(목록·계산 결과는 부를 때마다 같은 것을 써서 헷갈림)"))
+            if not isinstance(node, ast.Lambda) and any(
+                    isinstance(c, ast.Call) and isinstance(c.func, ast.Name) and c.func.id == node.name
+                    for b in node.body for c in ast.walk(b)):
+                found.append(("Recursion", node.lineno, None))
+        elif isinstance(node, (ast.For, ast.While)) and node.orelse:
+            found.append(("LoopElse", node.lineno, None))
+    try:
+        starts = {tokenize.STRING} | ({tokenize.FSTRING_START} if hasattr(tokenize, "FSTRING_START") else set())
+        for tok in tokenize.generate_tokens(io.StringIO(code).readline):
+            if tok.type in starts and tok.string.lstrip("rRbBuUfF")[:3] in ('"""', "'''"):
+                found.append(("TripleQuote", tok.start[0], None))
+    except (tokenize.TokenError, SyntaxError, IndentationError):
+        pass
+    return found
+
+
+def check_match(rep, where, tree):
+    """심화 match: 값 패턴(글자·숫자·None/True/False, 음수), | 여러 값, _ 나머지만. 이름 잡기·guard·
+    클래스·목록·사전 패턴은 쓰지 않는다(값으로 경우 나누기만 배움)."""
+    def ok(p):
+        if isinstance(p, ast.MatchValue):
+            return _const_default(p.value) and not (isinstance(p.value, ast.Constant) and p.value.value is None)
+        if isinstance(p, ast.MatchSingleton):
+            return True
+        if isinstance(p, ast.MatchOr):
+            return all(ok(x) for x in p.patterns)
+        return isinstance(p, ast.MatchAs) and p.pattern is None and p.name is None   # _
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Match):
+            continue
+        for case in node.cases:
+            line = getattr(case.pattern, "lineno", node.lineno)
+            if case.guard is not None:
+                rep.err(where, "MatchGuard: case … if … 는 쓰지 않음(조건은 case 안의 if로, %s줄)" % line)
+            if not ok(case.pattern):
+                rep.err(where, "MatchPattern: case에는 글자·숫자 값, | 로 묶은 값, _ 만 씀 — %s 은 안 됨(%s줄)"
+                        % (ast.unparse(case.pattern), line))
 
 
 def check_classes(rep, where, tree, chapter):
@@ -812,12 +964,13 @@ def uses_input(code):
 # 판정 C34: "Method:get" = 메서드 .get(…)을 부름(d.get(…), s.upper() 등)
 REQUIRE_PREFIXES = ("Call", "Name", "Method")
 # 판정 C44: ast 마디 이름이 아니지만 runner가 알아보는 조건(주석·elif·else)
-REQUIRE_EXTRA = ("Comment", "Elif", "Else")
+# 판정 C45: 심화용 재귀 호출·f-문자열 서식·세 따옴표 문자열
+REQUIRE_EXTRA = ("Comment", "Elif", "Else", "SelfCall", "FormatSpec", "TripleStr")
 
 
 def check_require(rep, where, req):
     """require 항목: ast 마디 이름(예: "If", "Mult"), "Call:<이름>"·"Name:<이름>"·"Method:<이름>",
-    또는 REQUIRE_EXTRA("Comment"·"Elif"·"Else")."""
+    또는 REQUIRE_EXTRA("Comment"·"Elif"·"Else"·"SelfCall"·"FormatSpec"·"TripleStr")."""
     for name in req:
         if isinstance(name, str) and ":" in name:
             kind, _, ident = name.partition(":")
@@ -840,6 +993,7 @@ def check_write(rep, where, item, chapter):
     if not isinstance(starter, str):
         rep.err(where, "starter가 문자열이 아님(비우려면 \"\")")
         return
+    adv = isinstance(chapter, AdvancedChapter)
     check_code_shape(rep, where + ".solution", sol, chapter)
     if starter.strip():
         check_code_shape(rep, where + ".starter", starter, chapter)
@@ -896,7 +1050,10 @@ def check_write(rep, where, item, chapter):
         envs.append(tenv)
         stdins.append((t["stdin"], json.dumps(tenv["files"], sort_keys=True, ensure_ascii=False)))
         charts[i] = chart_of(rep, tw, t)
-        r = safe_run(rep, tw, sol, t["stdin"], req, **tenv)
+        if adv:
+            r = adv_run(rep, tw, sol, t["stdin"], req, tenv)
+        else:
+            r = safe_run(rep, tw, sol, t["stdin"], req, **tenv)
         why = judge(r, t["expect"], charts[i])
         if why:
             rep.err(tw, "solution이 통과하지 못함 — " + why)
@@ -908,6 +1065,38 @@ def check_write(rep, where, item, chapter):
            and judge(safe_run(rep, where, starter, t["stdin"], req, **envs[i]), t["expect"], charts.get(i)) is None
            for i, t in enumerate(tests)):
         rep.err(where, "starter만으로 모든 시험을 통과함")
+
+
+def _frame_depth():
+    f, n = sys._getframe(), 0
+    while f is not None:
+        f, n = f.f_back, n + 1
+    return n
+
+
+def adv_run(rep, where, code, stdin, req, env):
+    """심화 정답 실행: ADV_RUN_SECONDS 안에 끝나야 하고, 재귀가 있으면 ADV_RECURSION_DEPTH단계 안에서 끝나야 한다
+    (앱 제한 3초·휴대폰 Pyodide 스택의 여유). 재귀 깊이는 실행 동안 재귀 한도를 낮춰서 본다."""
+    try:
+        recursive = any(k == "Recursion" for k, _, _ in advanced_features(ast.parse(code), code))
+    except SyntaxError:
+        recursive = False
+    old_limit = sys.getrecursionlimit()
+    if recursive:
+        # safe_run → run → exec → <module> 몇 단계 + 학습자 재귀 깊이
+        sys.setrecursionlimit(_frame_depth() + 10 + ADV_RECURSION_DEPTH)
+    t0 = time.perf_counter()
+    try:
+        r = safe_run(rep, where, code, stdin, req, **env)
+    finally:
+        took = time.perf_counter() - t0
+        sys.setrecursionlimit(old_limit)
+    if took > ADV_RUN_SECONDS and not (r["error"] and r["error"]["type"] == "Timeout"):
+        rep.err(where, "심화 직접 작성은 정답이 시험마다 %g초 안에 끝나야 함(지금 %.2f초)" % (ADV_RUN_SECONDS, took))
+    if recursive and r["error"] and r["error"]["type"] == "RecursionError":
+        rep.err(where, "재귀가 너무 깊음 — 심화 정답의 재귀는 %d단계 안에서 끝나야 함(휴대폰 여유)"
+                % ADV_RECURSION_DEPTH)
+    return r
 
 
 def check_item(rep, where, item, chapter, concepts):
@@ -930,6 +1119,8 @@ def check_item(rep, where, item, chapter, concepts):
         rep.err(where, "개념 %r 이 concepts.js에 없음" % (concept,))
     elif isinstance(concepts[concept], int) and concepts[concept] > chapter:
         rep.err(where, "개념 %s 은 %d장 개념이라 %d장에서 쓸 수 없음" % (concept, concepts[concept], chapter))
+    elif isinstance(concepts[concept], AdvancedChapter) and not isinstance(chapter, AdvancedChapter):
+        rep.err(where, "심화 개념 %s 은 본 과정 레슨에서 쓰지 않음(심화 레슨 전용)" % concept)
     check_text(rep, where + ".explain", item.get("explain"), EXPLAIN_MAX, one_line=False)
     if missing:
         return
@@ -947,14 +1138,23 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
     extra = set(lesson) - LESSON_KEYS
     if extra:
         rep.err("", "모르는 칸: " + ", ".join(sorted(extra)))
-    want_id = "%d-%d" % (chapter, pos)
+    adv = isinstance(chapter, AdvancedChapter)
+    want_id = ("%d-A%d" if adv else "%d-%d") % (chapter, pos)
     if lesson.get("id") != want_id:
         rep.err("id", "%r 이어야 함(파일 안 순서)" % want_id)
-    if lesson.get("chapter") != chapter:
+    if lesson.get("chapter") != chapter or isinstance(lesson.get("chapter"), bool):
         rep.err("chapter", "%r — 파일 ch%d.js와 다름" % (lesson.get("chapter"), chapter))
-    exam = pos == LESSONS_PER_CHAPTER
-    if bool(lesson.get("isExam")) != exam or ("isExam" in lesson and not isinstance(lesson["isExam"], bool)):
-        rep.err("isExam", "장의 마지막 레슨(%d-%d)만 true" % (chapter, LESSONS_PER_CHAPTER))
+    exam = not adv and pos == LESSONS_PER_CHAPTER
+    if adv:
+        if "isExam" in lesson:
+            rep.err("isExam", "심화 레슨에는 isExam을 두지 않음(평가 없음)")
+        if lesson.get("isAdvanced") is not True:
+            rep.err("isAdvanced", "심화 레슨에는 isAdvanced: true가 필요함")
+    else:
+        if "isAdvanced" in lesson:
+            rep.err("isAdvanced", "본 과정 레슨(LESSONS)에는 isAdvanced를 두지 않음 — 심화는 ADVANCED 목록에")
+        if bool(lesson.get("isExam")) != exam or ("isExam" in lesson and not isinstance(lesson["isExam"], bool)):
+            rep.err("isExam", "장의 마지막 레슨(%d-%d)만 true" % (chapter, LESSONS_PER_CHAPTER))
     check_text(rep, "title", lesson.get("title"), TITLE_MAX)
     check_text(rep, "goal", lesson.get("goal"), GOAL_MAX)
     summ = lesson.get("summary")
@@ -1006,6 +1206,37 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
         check_item(rep, "items[%d] %s" % (i, kinds[i]), item, chapter, concepts)
 
 
+def check_advanced(advanced, chapter, concepts):
+    """장 파일의 ADVANCED(심화 레슨 3개, N-A1~N-A3) 점검 → (파일 오류 목록, [레슨별 Lesson])."""
+    if not isinstance(advanced, list):
+        return ["export const ADVANCED = [...] 는 레슨 목록이어야 함"], []
+    errs = []
+    if len(advanced) != ADVANCED_PER_CHAPTER:
+        errs.append("심화 레슨은 %d개여야 함(지금 %d개)" % (ADVANCED_PER_CHAPTER, len(advanced)))
+    ids = [l.get("id") if isinstance(l, dict) else None for l in advanced]
+    ids = [i if isinstance(i, (str, int, type(None))) else repr(i) for i in ids]
+    if len(set(ids)) != len(ids):
+        errs.append("심화 레슨 id 중복: %s" % ids)
+    reps = []
+    for pos, lesson in enumerate(advanced, 1):
+        label = lesson.get("id", "?") if isinstance(lesson, dict) else "?"
+        rep = Lesson(label if isinstance(label, str) else repr(label))
+        try:
+            check_lesson(rep, lesson, AdvancedChapter(chapter), pos, concepts)
+        except Exception as e:  # noqa: BLE001
+            rep.err("", "형식이 잘못되어 점검을 마치지 못함(%s: %s)" % (type(e).__name__, e))
+        reps.append(rep)
+    return errs, reps
+
+
+def advanced_file_errors(found_adv, upto):
+    """--advanced N: 1~N장 파일에 ADVANCED가 모두 있어야 함."""
+    if upto is None:
+        return []
+    lack = [c for c in range(1, upto + 1) if c not in found_adv]
+    return ["--advanced %d: 심화 레슨(ADVANCED)이 없는 장: %s" % (upto, ", ".join("ch%d.js" % c for c in lack))] if lack else []
+
+
 def check_show_only_card(rep, w, c):
     """show_only 카드(판정 C38): 보여 주기만 하는 코드. 실행·문법·모듈 검사 없이 줄 폭만 본다."""
     if c.get("show_only") is not True:
@@ -1044,7 +1275,9 @@ def check_exam_coverage(rep, lessons):
 
 def main(argv):
     full = parse_full(argv)  # None | 0(있는 장 수) | N
+    adv_upto = parse_advanced(argv)  # None | N(1~N장에 심화가 있어야 함)
     failed = 0
+    adv_total, found_adv = 0, []
 
     # 개념 목록
     if not os.path.exists(CONCEPTS_FILE):
@@ -1074,8 +1307,11 @@ def main(argv):
                 cerr.append("개념 %s 의 한국어 이름이 없음" % c["id"])
             elif not isinstance(c.get("chapter"), int) or isinstance(c.get("chapter"), bool) or c["chapter"] < 1:
                 cerr.append("개념 %s 의 chapter(처음 배우는 장 번호)가 없음" % c["id"])
+            elif "advanced" in c and c["advanced"] is not True:
+                cerr.append("개념 %s 의 advanced는 true만 씀(본 과정 개념이면 칸을 지움)" % c["id"])
             else:
-                concepts[c["id"]] = c["chapter"]
+                # 심화 개념은 AdvancedChapter로 담아 본 과정 레슨에서 못 쓰게 한다(check_item)
+                concepts[c["id"]] = AdvancedChapter(c["chapter"]) if c.get("advanced") else c["chapter"]
     print("개념 %d개 %s" % (len(concepts), "✓" if not cerr else "✗"))
     for e in cerr:
         print("    - " + e)
@@ -1129,12 +1365,36 @@ def main(argv):
                 print("       - " + e)
             failed += len(rep.errors)
 
+        if "ADVANCED" in mod:   # 심화 레슨(v0.7). 아직 없는 장은 건너뜀(--advanced N이면 오류)
+            found_adv.append(chapter)
+            aerr, areps = check_advanced(mod["ADVANCED"], chapter, concepts)
+            print("  ── 심화")
+            for e in aerr:
+                print("    ✗ " + e)
+            failed += len(aerr)
+            for lesson, rep in zip(mod["ADVANCED"] if isinstance(mod["ADVANCED"], list) else [], areps):
+                adv_total += 1
+                d = lesson if isinstance(lesson, dict) else {}
+                n_items = len(d["items"]) if isinstance(d.get("items"), list) else 0
+                n_cards = len(d["cards"]) if isinstance(d.get("cards"), list) else 0
+                name = d.get("title") if isinstance(d.get("title"), str) else ""
+                mark = "✓ 통과" if not rep.errors else "✗ 오류 %d" % len(rep.errors)
+                print("  %-5s %s  (카드 %d, 문제 %d)  %s" % (rep.label, name, n_cards, n_items, mark))
+                for e in rep.errors:
+                    print("       - " + e)
+                failed += len(rep.errors)
+
+    for e in advanced_file_errors(found_adv, adv_upto):
+        print("\n✗ " + e)
+        failed += 1
     for e in chapter_file_errors(found, full):
         print("\n✗ " + e)
         failed += 1
     planned = full if full is not None else len(found)
     absent = [c for c in range(1, planned + 1) if c not in found]
     note = " (아직 없음: %s)" % ", ".join("ch%d.js" % c for c in absent) if absent else ""
+    if found_adv or adv_upto:
+        print("\n심화: 레슨 %d개 (%s)" % (adv_total, ", ".join("%d장" % c for c in found_adv) or "없음"))
     print("\n합계: 레슨 %d/%d%s, 오류 %d" % (total, planned * LESSONS_PER_CHAPTER, note, failed))
     return 1 if failed else 0
 
@@ -1149,6 +1409,16 @@ def chapter_file_errors(found, full=None):
         errs.append("--full %d: 1~%d장이 정확히 있어야 함(지금 %s)"
                     % (full, full, ", ".join("ch%d.js" % c for c in found) or "없음"))
     return errs
+
+
+def parse_advanced(argv):
+    """--advanced N: 1~N장에 심화 레슨이 있어야 함. 없으면 None."""
+    if "--advanced" not in argv:
+        return None
+    i = argv.index("--advanced")
+    if i + 1 < len(argv) and argv[i + 1].isdigit() and int(argv[i + 1]) >= 1:
+        return int(argv[i + 1])
+    return None
 
 
 def parse_full(argv):

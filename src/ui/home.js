@@ -10,6 +10,46 @@ const ROW = 112;          // 레슨 한 칸 높이
 const W = 320;            // 길 폭
 const NODE = 68;
 const OFF = [0, 62, 88, 62, 0, -62, -88, -62];
+// 심화 가지(v0.7): 장 평가 노드 아래로 갈라지는 별 노드 3개
+const BR = 124;           // 가지가 차지하는 높이(장 아래에 더함)
+const STAR = 52;          // 별 노드 크기(터치 44px 이상)
+const STAR_GAP = 66;      // 별 노드 사이(중심 간격)
+const BR_DY = 150;        // 장 평가 노드 중심 → 별 줄 중심
+
+/** 별 모양(채움·테두리는 CSS가 상태별로) + 가운데 번호 */
+function starGlyph(k, st) {
+  return `<svg viewBox="0 0 48 48" width="44" height="44" aria-hidden="true" class="star-svg">
+    <path d="M24 3.5l6.1 12.6 13.9 1.9-10.1 9.7 2.5 13.8L24 34.9 11.6 41.5l2.5-13.8L4 18l13.9-1.9z" class="star-shape"/>
+    ${st === "locked" ? `<g class="star-lock" transform="translate(16.5 17)"><rect x="1" y="6" width="13" height="9.5" rx="2"/><path d="M4 6V4.2a3.5 3.5 0 0 1 7 0V6"/></g>`
+      : `<text x="24" y="31" text-anchor="middle" class="star-no">${k}</text>`}
+  </svg>`;
+}
+
+/** 장 평가 노드(ex, ey) 아래 심화 가지: 이어 주는 점선(SVG 안)과 별 노드들(HTML) */
+function advBranch(ctx, chapter, ex, ey) {
+  const adv = chapter.advanced || [];
+  if (!adv.length) return { links: "", nodes: "" };
+  const span = (adv.length - 1) * STAR_GAP;
+  const cx = Math.min(Math.max(ex, span / 2 + STAR / 2 + 8), W - span / 2 - STAR / 2 - 8);
+  const sy = ey + BR_DY;
+  const states = adv.map((l) => ctx.lessonState(l.id));
+  const opened = states.some((st) => st !== "locked");
+  const doneN = states.filter((st) => st === "done" || st === "perfect").length;
+  const links = adv.map((l, i) => {
+    const x = cx - span / 2 + i * STAR_GAP;
+    return `<path d="M ${ex} ${ey} C ${ex} ${ey + 70} ${x} ${sy - 80} ${x} ${sy - STAR / 2}" class="adv-link${opened ? " open" : ""}"/>`;
+  }).join("");
+  const stars = adv.map((l, i) => {
+    const st = states[i];
+    const k = String(l.id).split("-A")[1] || String(i + 1);
+    const x = cx - span / 2 + i * STAR_GAP;
+    const stateKo = { locked: "잠김, 장 평가를 통과하면 열려요", open: "열림", done: "완료", perfect: "실수 없이 완료" }[st];
+    return `<button class="star-node ${st}" style="left:${x - STAR / 2}px;top:${sy - STAR / 2}px" data-lesson="${esc(l.id)}"
+      aria-label="${esc(`심화 ${l.id} ${l.title}, ${stateKo}`)}">${starGlyph(k, st)}</button>`;
+  }).join("");
+  const cap = `<span class="adv-cap${opened ? " open" : ""}" style="top:${sy + STAR / 2 + 6}px">심화 ${doneN}/${adv.length}${opened ? "" : " · 장 평가 뒤 열림"}</span>`;
+  return { links, nodes: stars + cap };
+}
 
 function questCard(save) {
   const q = save.quests;
@@ -52,7 +92,8 @@ function reviewCard(save) {
 
 function pathSection(ctx, chapter, startIndex, currentId) {
   const lessons = chapter.lessons;
-  const H = lessons.length * ROW;
+  const hasAdv = (chapter.advanced || []).length > 0;
+  const H = lessons.length * ROW + (hasAdv ? BR : 0);
   const pts = lessons.map((l, i) => ({ x: W / 2 + OFF[(startIndex + i) % OFF.length], y: i * ROW + NODE / 2 + 6 }));
   const seg = (a, b) => `C ${a.x} ${a.y + ROW / 2} ${b.x} ${b.y - ROW / 2} ${b.x} ${b.y}`;
   let full = `M ${pts[0].x} ${pts[0].y - 30} L ${pts[0].x} ${pts[0].y}`;
@@ -78,14 +119,19 @@ function pathSection(ctx, chapter, startIndex, currentId) {
       ${cur ? `<span class="node-ria ${side}" aria-hidden="true">${riaSVG({ outfit: ctx.save.outfit, face: "cheer", size: 58 })}</span>` : ""}
     </div>`;
   }).join("");
+  const last = pts[pts.length - 1];
+  const br = hasAdv ? advBranch(ctx, chapter, last.x, last.y) : { links: "", nodes: "" };
+  const advAll = hasAdv && chapter.advanced.every((l) => ["done", "perfect"].includes(ctx.lessonState(l.id)));
   return `<section class="chapter" aria-label="${esc(`${chapter.id}장 ${chapter.title}`)}">
-    <h2 class="chapter-title"><span class="ch-no">${chapter.id}장</span>${esc(chapter.title)}</h2>
+    <h2 class="chapter-title"><span class="ch-no">${chapter.id}장</span>${esc(chapter.title)}${advAll ? `<span class="ch-star" title="심화 모두 완료">${icon("star", "fill")}<span class="sr">심화 모두 완료</span></span>` : ""}</h2>
     <div class="path" style="width:${W}px;height:${H}px">
       <svg class="snake" viewBox="0 ${-30} ${W} ${H + 30}" width="${W}" height="${H + 30}" aria-hidden="true">
+        ${br.links}
         <path d="${full}" class="snake-bed"/>
         ${doneD ? `<path d="${doneD}" class="snake-body"/><path d="${doneD}" class="snake-scales"/>` : ""}
       </svg>
       ${nodes}
+      ${br.nodes}
     </div>
   </section>`;
 }
@@ -124,7 +170,7 @@ export function render(root, ctx) {
   root.querySelectorAll("[data-lesson]").forEach((b) => b.addEventListener("click", async () => {
     const id = b.dataset.lesson;
     const st = ctx.lessonState(id);
-    if (st === "locked") { toast("앞 레슨을 끝내면 열려요."); return; }
+    if (st === "locked") { toast(b.classList.contains("star-node") ? "장 평가를 통과하면 심화 레슨이 열려요." : "앞 레슨을 끝내면 열려요."); return; }
     if (st === "done" || st === "perfect") {
       const l = ctx.lessonById(id);
       const ok = await dialog({

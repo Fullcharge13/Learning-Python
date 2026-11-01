@@ -31,7 +31,7 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
 run(code, stdin, require, files=None, server=None) -> {
     "stdout": str, "stderr": str,
     "error": None | {"type": str, "line": int | None, "msg": str},
-    "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:, Comment·Elif·Else)
+    "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr)
     "charts": [{"kind": "bar" | "line", "labels": [str], "values": [int | float],
                 "title"?: str, "xlabel"?: str, "ylabel"?: str}, ...],
 }
@@ -187,6 +187,40 @@ def _has_comment(code):
     return False
 
 
+def _has_triple_str(code):
+    """코드에 세 따옴표 문자열(\"\"\"…\"\"\" 또는 '''…''')이 있나(판정 C45).
+    tokenize로 문자열 토큰의 앞머리(r·b·f 같은 글자 뒤)를 본다 — 주석 안의 \"\"\"은 셈하지 않음.
+    3.12부터 f-문자열은 FSTRING_START 토큰(3.14의 t-문자열은 TSTRING_START)으로 따로 나온다."""
+    kinds = {tokenize.STRING}
+    for extra in ("FSTRING_START", "TSTRING_START"):
+        if hasattr(tokenize, extra):
+            kinds.add(getattr(tokenize, extra))
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(code).readline):
+            if tok.type in kinds:
+                body = tok.string.lstrip("rRbBuUfFtT")
+                if body.startswith('"""') or body.startswith("'''"):
+                    return True
+    except BaseException:  # noqa: BLE001
+        return False
+    return False
+
+
+def _has_self_call(tree):
+    """어떤 def 함수가 자기 본문 안에서 자기 이름으로 자신을 부르나(직접 재귀, 판정 C45).
+    단순 규칙: 함수 f의 본문(body) 어디든 — 안쪽 def·lambda 안이라도 — f(...) 호출이 있으면 셈.
+    안쪽에서 같은 이름을 다시 정의해 가리는 경우는 따지지 않는다. 함수 밖의 f(...),
+    obj.f(...) 같은 점 호출, 서로 부르는 두 함수(f→g→f), lambda에 붙인 이름은 세지 않는다."""
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for stmt in fn.body:
+                for node in ast.walk(stmt):
+                    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                            and node.func.id == fn.name):
+                        return True
+    return False
+
+
 def _is_elif(node, lines):
     """If 마디가 elif로 쓰였나. ast는 elif와 「else: 아래 if」를 똑같이 만들므로
     마디가 시작하는 자리(줄·바이트 칸)의 원문이 elif로 시작하는지 본다."""
@@ -209,6 +243,11 @@ def _missing(tree, require, code=""):
     #   "Comment"     — # 주석이 하나라도 있음(문자열 안의 #은 아님)
     #   "Elif"        — elif로 쓴 갈래가 있음(else: 아래에 따로 쓴 if는 아님)
     #   "Else"        — if·for·while·try에 elif가 아닌 else: 가 있음(a if c else b 식은 아님)
+    # 판정 C45(심화 레슨용):
+    #   "SelfCall"    — def 함수가 자기 본문 안에서 자기 이름으로 자신을 부름(직접 재귀)
+    #   "FormatSpec"  — f-문자열 {…} 안에 :서식이 있음({x:>8}, {n:,}, {v:.2f}).
+    #                   {x!r}만 있거나 {x:}처럼 비었거나 format()·.format()은 아님
+    #   "TripleStr"   — 세 따옴표 문자열 리터럴(""" 또는 ''', f-문자열 포함, 주석 안은 아님)
     lines = code.splitlines()
     found = set()
     for node in ast.walk(tree):
@@ -227,8 +266,16 @@ def _missing(tree, require, code=""):
                 found.add("Else")
         elif isinstance(node, getattr(ast, "TryStar", ())) and node.orelse:
             found.add("Else")
+        if isinstance(node, ast.FormattedValue) and node.format_spec is not None:
+            spec = node.format_spec
+            if not (isinstance(spec, ast.JoinedStr) and not spec.values):
+                found.add("FormatSpec")
     if "Comment" in require and _has_comment(code):
         found.add("Comment")
+    if "SelfCall" in require and _has_self_call(tree):
+        found.add("SelfCall")
+    if "TripleStr" in require and _has_triple_str(code):
+        found.add("TripleStr")
     return [name for name in require if name not in found]
 
 

@@ -13,6 +13,7 @@
 결과물 (out 폴더):
   index.html              CSS·앱·작업자·runner.py·레슨 목록이 들어간 한 장. 외부 <script src> 없음
   lessons/chN-<지문>.json  장 하나의 레슨 전체(v0.3 작업 1). 지문 = 파일 내용 sha256 앞 8자
+                          장 파일에 ADVANCED(심화 레슨, v0.7)가 있으면 함께 넣고, 목록에는 그 stub을 장의 advanced 칸에
   manifest.webmanifest    홈 화면 앱 설명
   sw.js                   서비스 작업자(판 번호·내용 지문·Pyodide 주소를 채움)
   icons/*.png             리아 얼굴 아이콘(tools/icon.py)
@@ -77,18 +78,33 @@ for (const f of names) {
   const n = Number(f.slice(2, -3));
   const id = m.CHAPTER ? m.CHAPTER.id : (m.LESSONS && m.LESSONS[0] && m.LESSONS[0].chapter);
   if (id !== n) throw new Error(`${f}: chapter id ${id} does not match file name`);
-  mods.push({ n, CHAPTER: m.CHAPTER || { id: n, title: "" }, LESSONS: m.LESSONS });
+  // 심화 레슨(v0.7): export const ADVANCED = [{ id: "N-A1", chapter: N, isAdvanced: true, ... }]. 없어도 됨
+  const adv = m.ADVANCED === undefined ? [] : m.ADVANCED;
+  if (!Array.isArray(adv)) throw new Error(`${f}: ADVANCED must be an array`);
+  const seen = new Set(m.LESSONS.map((l) => l.id));
+  for (const l of adv) {
+    const lid = l && l.id;
+    if (!new RegExp(`^${n}-A[1-9]$`).test(String(lid))) throw new Error(`${f}: ADVANCED lesson id ${lid} must look like ${n}-A1`);
+    if (l.isAdvanced !== undefined && l.isAdvanced !== true) throw new Error(`${f}: ADVANCED lesson ${lid} has isAdvanced ${l.isAdvanced}`);
+    if (l.chapter !== undefined && l.chapter !== n) throw new Error(`${f}: ADVANCED lesson ${lid} has chapter ${l.chapter}`);
+    if (seen.has(lid)) throw new Error(`${f}: ADVANCED lesson id ${lid} is used twice`);
+    seen.add(lid);
+  }
+  // ADVANCED 안에 있으면 심화다: isAdvanced를 빠뜨렸으면 채워 넣는다(앱·README가 같은 표시를 봄)
+  mods.push({ n, CHAPTER: m.CHAPTER || { id: n, title: "" }, LESSONS: m.LESSONS,
+    ADVANCED: adv.map((l) => (l.isAdvanced === true ? l : { ...l, isAdvanced: true })) });
 }
 mods.sort((a, b) => a.n - b.n);
 const index = lib.buildLessonIndex(mods);
 const files = {}, contents = {}, tasks = [];
 for (const m of mods) {
-  const text = JSON.stringify({ CHAPTER: m.CHAPTER, LESSONS: m.LESSONS });
+  // ADVANCED가 없는 장은 v0.6과 같은 내용(지문이 바뀌지 않아 저장본을 다시 받지 않음)
+  const text = JSON.stringify(m.ADVANCED.length ? { CHAPTER: m.CHAPTER, LESSONS: m.LESSONS, ADVANCED: m.ADVANCED } : { CHAPTER: m.CHAPTER, LESSONS: m.LESSONS });
   const hash = crypto.createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex").slice(0, 8);
   const name = lib.chapterFileName(m.n, hash);
   files[m.n] = name;
   contents[name] = text;
-  for (const l of m.LESSONS) for (const it of l.items || []) if (it && it.task) tasks.push(it.task);
+  for (const l of [...m.LESSONS, ...m.ADVANCED]) for (const it of l.items || []) if (it && it.task) tasks.push(it.task);
 }
 process.stdout.write(JSON.stringify({ index, files, contents, tasks }));
 """

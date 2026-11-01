@@ -89,4 +89,24 @@ export const CONCEPTS = [
   { id: "bar", name: "막대 그래프", chapter: 17 },
   { id: "line", name: "꺾은선 그래프", chapter: 17 },
   { id: "vizstyle", name: "제목과 축 이름", chapter: 17 },
+  // 심화 레슨(v0.7~, advanced: true) — 심화 N-Ak에서만 쓴다(본 과정 레슨은 점검기 오류). A3 응용은 A1·A2 개념을 다시 쓴다.
+  // 1장 심화
+  { id: "fmtspec", name: "f-string 자릿수·정렬", chapter: 1, advanced: true },
+  { id: "multiline", name: "여러 줄 문자열", chapter: 1, advanced: true },
+  // 2장 심화
+  { id: "floaterr", name: "실수 오차와 round", chapter: 2, advanced: true },
+  { id: "divmod", name: "몫과 나머지 활용", chapter: 2, advanced: true },
+  // 3장 심화
+  { id: "condsimple", name: "조건 묶기·간단히 쓰기", chapter: 3, advanced: true },
+  { id: "match", name: "match로 경우 나누기", chapter: 3, advanced: true },
+  // 4장 심화
+  { id: "defaultarg", name: "기본값 매개변수", chapter: 4, advanced: true },
+  { id: "kwarg", name: "이름 붙여 값 넘기기", chapter: 4, advanced: true },
+  { id: "recursion", name: "재귀 함수", chapter: 4, advanced: true },
+  // 5장 심화
+  { id: "nestedloop", name: "중첩 반복", chapter: 5, advanced: true },
+  { id: "loopelse", name: "반복의 else", chapter: 5, advanced: true },
+  // 6장 심화
+  { id: "strfmt", name: "서식 고급(채우기·정렬)", chapter: 6, advanced: true },
+  { id: "strmore", name: "문자열 메서드 묶음", chapter: 6, advanced: true },
 ];

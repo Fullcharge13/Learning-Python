@@ -22,6 +22,9 @@
 - test_resume_lesson: 1-2 문제 2개 → 새로고침 → 「이어서 하기」 → 같은 문제 / write 초안 → 새로고침 → 초안 그대로
                       → 끝까지: 보상·저장이 끊지 않은 판과 같음, 이어 하기 칸 지워짐 (v0.6.2 다)
 - test_resume_decline: 「처음부터」 → 카드 1부터, 칸 지워짐 / 「그만두기」도 칸을 지움
+- test_advanced_branch: 시험 심화(tests/fixtures/advanced.js)를 1·2장에 끼운 빌드. 1-5까지 끝낸 저장 → 1장 별 노드 3개 열림,
+                        2장은 잠김 → 1-A1 풀기 → XP 15(+보너스)·바이트 15, 배지 「심화 첫걸음」, 지금 레슨은 2-1 그대로
+                        → 설정 「심화 1/3」·펼친 목록 「심화」 (v0.7 작업 1). 캡처: adv-*.png
 """
 
 import atexit
@@ -132,7 +135,7 @@ def today(n=0):
 class App:
     """기기 하나 + 새 저장소의 앱 한 판."""
 
-    def __init__(self, device="iPhone 17", save=None, reduced=False):
+    def __init__(self, device="iPhone 17", save=None, reduced=False, url=None):
         e = env()
         opts = device_opts(device)
         if reduced:
@@ -148,7 +151,7 @@ class App:
             self.page.add_init_script(
                 "if (!sessionStorage.getItem('flow-seeded')) { localStorage.setItem(%s, %s); sessionStorage.setItem('flow-seeded', '1'); }"
                 % (json.dumps(SAVE_KEY), json.dumps(json.dumps(save))))
-        self.page.goto(e["url"])
+        self.page.goto(url or e["url"])
         self.page.wait_for_selector(".screen.splash #go", timeout=20_000)
 
     def close(self):
@@ -889,6 +892,109 @@ def test_resume_decline():
 
 
 # ---------------------------------------------------------------- 실행
+
+# ---------------------------------------------------------------- 심화 (v0.7 작업 1)
+
+_adv_env = {}
+
+
+def adv_url():
+    """시험 심화를 1·2장에 끼운 빌드를 따로 띄운다(실제 심화 내용이 없어도 엔진·화면을 시험)."""
+    if _adv_env:
+        return _adv_env["url"]
+    env()
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from fixtures.advanced_dir import make
+    lessons = make(os.path.join(ROOT, "data", "lessons"), os.path.join(OUT, "lessons-adv"), chapters=(1, 2))
+    dist = os.path.join(OUT, "dist-adv")
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "build.py"), "--dev-pyodide", "--out", dist, "--lessons-dir", lessons],
+                       cwd=ROOT, capture_output=True, text=True)
+    assert r.returncode == 0, "build.py (advanced fixture) failed:\n" + r.stdout + r.stderr
+    httpd = _Server(("127.0.0.1", 0), functools.partial(_Handler, directory=dist))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    atexit.register(httpd.shutdown)
+    _adv_env["url"] = "http://127.0.0.1:%d/" % httpd.server_address[1]
+    return _adv_env["url"]
+
+
+def _adv_classes(a, chapter):
+    return a.js("(n) => [1, 2, 3].map((k) => document.querySelector(`.star-node[data-lesson='${n}-A${k}']`)?.className || null)", chapter)
+
+
+def test_advanced_branch():
+    url = adv_url()
+    ch1 = ["1-%d" % k for k in range(1, 6)]
+    seed = {"saveVer": 2, "xp": 120, "bytes": 0, "completed_lessons": ch1, "current_lesson": "2-1", "current_chapter": 2,
+            "grading_results": {k: {"perfect": True, "attempts": 1} for k in ch1}, "outfits": ["basic"], "outfit": "basic"}
+    with App("iPhone 17", save=seed, url=url) as a:
+        a.start()
+        # 학습 길: 1장 별 3개 열림, 2장 별 3개 잠김, 지금 레슨 2-1
+        c1, c2 = _adv_classes(a, 1), _adv_classes(a, 2)
+        assert all(c and "open" in c for c in c1), c1
+        assert all(c and "locked" in c for c in c2), c2
+        assert "current" in a.page.get_attribute('.node[data-lesson="2-1"]', "class")
+        assert "2-1" in a.page.inner_text("#continue")
+        a.js("() => document.querySelector(`.star-node[data-lesson='1-A1']`).scrollIntoView({ block: 'center' })")
+        a.page.wait_for_timeout(200)
+        a.shot("adv-home.png")
+        m = measure(a, "home-adv")
+        assert not m["problems"] and not m["small"], m
+        # 잠긴 별: 열리지 않음
+        a.page.click(".star-node[data-lesson='2-A1']")
+        a.page.wait_for_timeout(300)
+        assert a.page.query_selector(".screen.home"), "locked advanced star must not open"
+        # 1-A1 풀기(첫 문제 한 번 틀림 → 실수 없음 아님, 힌트 없이 통과)
+        a.page.click(".star-node[data-lesson='1-A1']")
+        a.page.wait_for_selector(".screen.lesson")
+        a.play("1-A1", wrong=(0,))
+        r = a.result()
+        s = a.save()
+        title = a.page.inner_text(".done-hero h1")
+        print("    advanced: %s xp +%s, lessonBytes %s, perfect %s, hintfree %s, badges %s" % (
+            title, r["xp"], r["lessonBytes"], r["perfect"], r["hintFreeWrite"], r["newBadges"]))
+        assert title == "1-A1 심화 완료!", title
+        assert r["firstTime"] and not r["perfect"] and r["hintFreeWrite"], r
+        assert r["xp"] == 15 + 5 and r["lessonBytes"] == 15, r
+        assert "advanced1" in r["newBadges"], r["newBadges"]
+        assert "심화 첫걸음" in a.page.inner_text(".screen.done")
+        assert "1-A1" in s["completed_lessons"] and s["current_lesson"] == "2-1" and s["current_chapter"] == 2, s
+        a.shot("adv-done.png")
+        a.dismiss()
+        a.page.click("#home")
+        a.page.wait_for_selector(".screen.home")
+        a.dismiss()
+        c1 = _adv_classes(a, 1)
+        assert "done" in c1[0] and "open" in c1[1] and "open" in c1[2], c1
+        assert "2-1" in a.page.inner_text("#continue"), "current lesson stays 2-1"
+        # 설정: 「심화 1/3」, 펼치면 「심화」 아래 3개
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        row = a.page.query_selector('.ch-row[aria-controls="ch-1"]')
+        assert "심화 1/3" in row.inner_text(), row.inner_text()
+        plain = a.js("() => (window.__ria.app.chapters.find((c) => !(c.advanced || []).length) || {}).id")
+        assert plain, "need a chapter without ADVANCED"
+        assert a.page.query_selector('.ch-row[aria-controls="ch-%d"] .ch-adv' % plain) is None, "chapter without ADVANCED shows no 심화 count"
+        assert "심화 0/3" in a.page.inner_text('.ch-row[aria-controls="ch-2"]')
+        assert "레슨 중 5개 완료" in a.page.inner_text(".course-sum"), a.page.inner_text(".course-sum")
+        row.click()
+        a.page.wait_for_selector("#ch-1:not([hidden])")
+        assert a.page.inner_text("#ch-1 .ch-adv-head").startswith("심화")
+        assert a.page.eval_on_selector_all("#ch-1 .ls.adv", "es => es.map(e => e.className)") == ["ls adv done", "ls adv open", "ls adv open"]
+        a.js("() => document.querySelector('#ch-1').scrollIntoView({ block: 'start' })")
+        a.page.wait_for_timeout(150)
+        a.shot("adv-settings.png")
+        m = measure(a, "settings-adv")
+        assert not m["problems"] and not m["small"], m
+        # 배지: 15개
+        a.page.click('[data-go="badges"]')
+        a.page.wait_for_selector(".screen.badges")
+        assert "/15" in a.page.inner_text(".page-title"), a.page.inner_text(".page-title")
+        assert "끝낸 심화" in a.page.inner_text(".stat-grid")
+        a.shot("adv-badges.png", full=True)
+        m = measure(a, "badges-adv")
+        assert not m["problems"] and not m["small"], m
+        assert not a.errors, a.errors
+
 
 def main():
     only = sys.argv[1:]

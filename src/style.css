@@ -271,6 +271,29 @@ main { padding: 16px calc(16px + var(--sar)) 0 calc(16px + var(--sal)); }
 .node-ria.right { left: 78px; }
 .node-ria.left { right: 78px; }
 .path-end { text-align: center; color: var(--ink-2); font-size: .88rem; margin: 18px 0 8px; }
+/* 심화 가지 (v0.7): 장 평가 아래 별 노드 3개. 선택 레슨이라 본 길보다 작고 가볍게 */
+.adv-link { fill: none; stroke: var(--line); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 2 7; }
+.adv-link.open { stroke: var(--sun-deep); }
+.star-node {
+  position: absolute; width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%;
+  background: none; display: grid; place-items: center; color: var(--ink);
+}
+.star-node .star-svg { overflow: visible; filter: drop-shadow(0 3px 0 rgba(34, 48, 74, .9)); }
+.star-shape { fill: var(--card); stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+.star-no { font-family: var(--mono); font-weight: 800; font-size: 13px; fill: var(--ink); }
+.star-node.open .star-shape { fill: var(--sun-soft); }
+.star-node.done .star-shape, .star-node.perfect .star-shape { fill: var(--sun); }
+.star-node.perfect .star-svg { filter: drop-shadow(0 3px 0 var(--sun-deep)) drop-shadow(0 0 6px rgba(255, 212, 59, .8)); }
+.star-node.locked .star-svg { filter: drop-shadow(0 3px 0 #CFC5AE); }
+.star-node.locked .star-shape { fill: var(--paper-2); stroke: #BDB29A; }
+.star-lock rect, .star-lock path { fill: none; stroke: #8B8371; stroke-width: 2; stroke-linecap: round; }
+.star-node:active { transform: translateY(3px); }
+.adv-cap {
+  position: absolute; left: 0; right: 0; text-align: center; font-size: .76rem; font-weight: 800; color: var(--ink-2);
+}
+.adv-cap.open { color: var(--sun-ink); }
+.ch-star { display: inline-grid; margin-left: auto; align-self: center; color: var(--sun-deep); }
+.ch-star .ic { width: 22px; height: 22px; fill: var(--sun); }
 
 /* ---------- 레슨 ---------- */
 .lesson { min-height: 100dvh; }
@@ -575,6 +598,16 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .ls-main { display: grid; font-size: .9rem; line-height: 1.4; }
 .ls-main small { font-size: .78rem; }
 .course-next { margin: 4px 0 0; }
+/* 심화 (v0.7): 장 줄의 「심화 n/3」과 펼친 목록의 작은 제목 */
+.ch-side { display: grid; justify-items: end; gap: 2px; }
+.ch-adv { font-size: .74rem; font-weight: 800; color: var(--sun-ink); white-space: nowrap; display: inline-flex; align-items: center; gap: 2px; }
+.ch-adv .ic { width: 13px; height: 13px; }
+.ch-adv.full .ic { fill: var(--sun); }
+.ch-adv-head { margin: 8px 0 0 6px; font-size: .78rem; font-weight: 800; color: var(--sun-ink); display: flex; align-items: center; gap: 4px; }
+.ch-adv-head .ic { width: 14px; height: 14px; }
+.ls.adv { border-left-style: dashed; border-left-color: var(--sun-deep); }
+.ls.adv.done { border-left-style: solid; border-left-color: var(--sun-deep); }
+.ls.adv.done .ls-st { color: var(--sun-ink); }
 /* 정답 공개: 코드·여러 줄 정답은 줄바꿈 그대로 한 덩어리로 */
 .answer .mono { display: block; margin-top: 4px; white-space: pre-wrap; font-weight: 700; }
 #ch-more { margin: 0 0 10px; }

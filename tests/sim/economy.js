@@ -14,6 +14,9 @@
 // - 레슨마다 id, isExam, 쓰기 문제의 개념만 읽어 쓴다(터치 문제도 그 개념으로 표시).
 // - 쇼핑은 학습한 날 끝에: 보호권이 0개이고 200바이트 이상이면 보호권 1개를 먼저, 그다음 살 수 있는 가장 싼 의상.
 //   (「strict」 방식: 보호권이 0개면 의상을 사지 않고 보호권 값을 먼저 모음 — 비교용으로만 계산)
+// - 심화(v0.7, --advanced / { advanced: true }): 장 평가를 끝내면 다음 차례에 그 장 심화 3개를 먼저 한다(새 본 과정 레슨보다 앞).
+//   장 파일의 ADVANCED를 쓰고, v0.7 계획의 1~6장 중 아직 ADVANCED가 없는 장은 자리 표시 3개(N-A1..3, 개념은 그 장 평가의 것)로 채운다.
+//   보상은 rules.js lessonReward({ isAdvanced: true }) 그대로. 배지 「깊이 파는 사람」은 이 심화 목록 전부가 기준.
 import { readdirSync } from "node:fs";
 import { newSave } from "../../src/save.js";
 import { lessonReward, reviewReward, earnXp, rollDay, buyFreeze, markConcept, FREEZE_PRICE } from "../../src/rules.js";
@@ -21,6 +24,8 @@ import { ensureQuests, tick } from "../../src/quests.js";
 import { checkBadges } from "../../src/badges.js";
 import { buy } from "../../src/shop.js";
 import { OUTFITS } from "../../data/outfits.js";
+
+const ADV_PLACEHOLDER_CHAPTERS = [1, 2, 3, 4, 5, 6];   // v0.7 계획: 1~6장 심화
 
 const DAYS = 30;
 const START = "2026-11-02";
@@ -30,6 +35,8 @@ const HINTFREE_P = 0.5;
 const WRITE_ERROR_P = 0.3;
 
 // 실제 레슨 표(data/lessons/ch*.js)를 장 번호순으로 읽는다. 경제에는 id·장 평가 여부·쓰기 문제의 개념만 쓰인다.
+const ADVANCED_LIST = [];
+let ADVANCED_PLACEHOLDERS = 0;
 async function loadCourse() {
   const dir = new URL("../../data/lessons/", import.meta.url);
   const files = readdirSync(dir).filter((f) => /^ch\d+\.js$/.test(f))
@@ -38,9 +45,16 @@ async function loadCourse() {
   for (const f of files) {
     try {
       const mod = await import(new URL(f, dir).href);
-      for (const l of mod.LESSONS) {
-        const w = (l.items || []).find((it) => it.type === "write");
-        course.push({ id: l.id, isExam: !!l.isExam, concepts: [w ? w.concept : "print"] });
+      const n = parseInt(f.slice(2));
+      const concept = (l) => { const w = (l.items || []).find((it) => it.type === "write"); return [w ? w.concept : "print"]; };
+      for (const l of mod.LESSONS) course.push({ id: l.id, isExam: !!l.isExam, concepts: concept(l) });
+      const adv = Array.isArray(mod.ADVANCED) ? mod.ADVANCED : [];
+      if (adv.length) {
+        for (const l of adv) ADVANCED_LIST.push({ id: l.id, chapter: n, isAdvanced: true, isExam: false, concepts: concept(l) });
+      } else if (ADV_PLACEHOLDER_CHAPTERS.includes(n)) {
+        const exam = mod.LESSONS[mod.LESSONS.length - 1];
+        for (const k of [1, 2, 3]) ADVANCED_LIST.push({ id: `${n}-A${k}`, chapter: n, isAdvanced: true, isExam: false, concepts: concept(exam) });
+        ADVANCED_PLACEHOLDERS += 3;
       }
     } catch (e) {
       console.error(`(건너뜀: ${f} — ${e.message})`);
@@ -86,8 +100,12 @@ function cheapestOutfit(save) {
   return forSale[0] || null;
 }
 
-export function runSim(seed, { policy = "plan", lessons = null } = {}) {
+export function runSim(seed, { policy = "plan", lessons = null, advanced = false } = {}) {
   const COURSE = lessons ? FULL_COURSE.slice(0, lessons) : FULL_COURSE;
+  const inCourse = new Set(COURSE.map((l) => l.id));
+  const ADV = advanced ? ADVANCED_LIST.filter((l) => inCourse.has(`${l.chapter}-5`)) : [];
+  const advIds = ADV.map((l) => l.id);
+  const lessonDay = {}, advancedDay = {};
   const rng = mulberry32(seed);
   const skips = pickSkips(rng);
   let s = newSave();
@@ -122,7 +140,7 @@ export function runSim(seed, { policy = "plan", lessons = null } = {}) {
     doTick("xp", today, xp);
   };
   const badges = () => {
-    const got = checkBadges(s, { lessonDone: true, hour: 20 });
+    const got = checkBadges(s, { lessonDone: true, hour: 20, advancedIds: advIds });
     if (got.length) s = { ...s, badges: [...s.badges, ...got] };
   };
 
@@ -142,7 +160,7 @@ export function runSim(seed, { policy = "plan", lessons = null } = {}) {
     if (!writeErr && hintFree) s = markConcept(s, wc, "right");
     const perfect = wrong === 0;
 
-    const rw = lessonReward({ firstTime, perfect, hintFreeWrite: hintFree, isExam: lesson.isExam });
+    const rw = lessonReward({ firstTime, perfect, hintFreeWrite: hintFree, isExam: lesson.isExam, isAdvanced: !!lesson.isAdvanced });
     const prev = s;
     s = {
       ...s,
@@ -209,8 +227,11 @@ export function runSim(seed, { policy = "plan", lessons = null } = {}) {
     const earnedBefore = earned;
     let newToday = false;
     for (let k = 0; k < LESSONS_PER_DAY; k++) {
-      const next = COURSE.find((l) => !s.completed_lessons.includes(l.id));
-      if (next) { playLesson(next, true, today); newToday = true; lastNewDay = d + 1; }
+      const has = (id) => s.completed_lessons.includes(id);
+      const adv = ADV.find((l) => !has(l.id) && has(`${l.chapter}-5`));
+      if (adv) { playLesson(adv, true, today); newToday = true; advancedDay[adv.id] = d + 1; continue; }
+      const next = COURSE.find((l) => !has(l.id));
+      if (next) { playLesson(next, true, today); newToday = true; lastNewDay = d + 1; lessonDay[next.id] = d + 1; }
       else if (s.review_queue.length > 0) playReview(today);
       else { playLesson(COURSE[replayIdx % COURSE.length], false, today); replayIdx++; }
     }
@@ -239,6 +260,11 @@ export function runSim(seed, { policy = "plan", lessons = null } = {}) {
     skipDays: [...skips].sort((a, b) => a - b).map((x) => x + 1),
     badges: s.badges.length,
     endBytes: s.bytes,
+    advancedTotal: ADV.length,
+    advancedDone: Object.keys(advancedDay).length,
+    advancedPlaceholders: advanced ? ADVANCED_PLACEHOLDERS : 0,
+    lessonDay,
+    advancedDay,
   };
 }
 
@@ -252,6 +278,7 @@ function median(xs) {
 function main() {
   const li = process.argv.indexOf("--lessons");
   const lessons = li > 0 ? parseInt(process.argv[li + 1]) : null;
+  if (process.argv.includes("--advanced")) return compareAdvanced(lessons);
   console.log(`레슨 ${lessons ? Math.min(lessons, FULL_COURSE.length) : FULL_COURSE.length}개로 시뮬레이션 (불러온 전체 ${FULL_COURSE.length}개)\n`);
   const seeds = Array.from({ length: 12 }, (_, i) => i + 1);
   const runs = seeds.map((sd) => runSim(sd, { lessons }));
@@ -281,6 +308,24 @@ function main() {
   console.log(`\n판정: 하루 바이트 중앙값 전체 ${bpd} (${inB(bpd)}), 새 레슨이 있는 날 ${bnew} (${inB(bnew)}) — 목표 40~50`);
   console.log(`      첫 의상 중앙값 ${fod}일째 (목표 3~4) ${fod >= 3 && fod <= 4 ? "OK" : "밖"}`);
   console.log("12판뿐이라 중앙값은 판마다 흔들릴 수 있음(빠지는 날 위치·정확도 무작위).");
+}
+
+// 심화 없이 / 심화까지 하는 학습자 비교(v0.7 작업 1): node tests/sim/economy.js --advanced
+function compareAdvanced(lessons) {
+  const seeds = Array.from({ length: 12 }, (_, i) => i + 1);
+  const base = seeds.map((sd) => runSim(sd, { lessons }));
+  const adv = seeds.map((sd) => runSim(sd, { lessons, advanced: true }));
+  const r1 = (x) => (x === null ? "-" : Math.round(x * 10) / 10);
+  const med = (rs, f) => r1(median(rs.map(f)));
+  const a0 = adv[0];
+  console.log(`심화 ${a0.advancedTotal}개(자리 표시 ${a0.advancedPlaceholders}개) — 장 평가 뒤 그 장 심화를 먼저 하는 학습자, 30일 × 12판\n`);
+  console.log("| 학습자 | B/active day | B/day (new lessons) | 1st outfit day | outfits | 끝낸 심화 | 30일 동안 끝낸 본 과정 레슨 |");
+  console.log("|---|---|---|---|---|---|---|");
+  for (const [name, rs] of [["본 과정만", base], ["심화까지", adv]]) {
+    console.log(`| ${name} | ${med(rs, (r) => r.bytesPerActiveDay)} | ${med(rs, (r) => r.bytesPerNewLessonDay)} | ${med(rs, (r) => r.firstOutfitDay)} | `
+      + `${med(rs, (r) => r.outfitsOwned)} | ${med(rs, (r) => r.advancedDone)} | ${med(rs, (r) => Object.keys(r.lessonDay).length)} |`);
+  }
+  console.log("\n12판뿐이라 중앙값은 판마다 흔들릴 수 있음.");
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();

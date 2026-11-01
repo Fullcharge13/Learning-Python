@@ -170,6 +170,17 @@ def test_require_comment_elif_else_in_pyodide():
     assert _run(else_if, "", ["Elif", "Else"])["missing"] == ["Elif"]
 
 
+
+def test_require_selfcall_formatspec_triplestr_in_pyodide():
+    # 판정 C45: 재귀·f-문자열 서식·세 따옴표 문자열을 Pyodide에서도 가려낸다(한 번에)
+    code = ('def fact(n):\n    """세 따옴표"""\n    return 1 if n <= 1 else n * fact(n - 1)\n\n'
+            'v = fact(5)\nprint(f"{v:>6}")\n')
+    r = _run(code, "", ["SelfCall", "FormatSpec", "TripleStr"])
+    assert r["stdout"] == "   120\n" and r["missing"] == [], r
+    plain = 'def f(n):\n    return n\n\nx = f(1)\nprint(f"{x!r}")  #"""\n'
+    r = _run(plain, "", ["SelfCall", "FormatSpec", "TripleStr"])
+    assert r["missing"] == ["SelfCall", "FormatSpec", "TripleStr"], r
+
 def test_error_line():
     r = _run("x = 1\nprint(y)")
     assert r["error"]["type"] == "NameError", r
@@ -466,7 +477,7 @@ def test_idle_worker_error_event():
 
 
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,
-         test_require_comment_elif_else_in_pyodide,
+         test_require_comment_elif_else_in_pyodide, test_require_selfcall_formatspec_triplestr_in_pyodide,
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
          test_practice_server_in_pyodide, test_chart_in_pyodide, test_sqlite3_in_pyodide, test_queue, test_timeout_then_ok,
          test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,

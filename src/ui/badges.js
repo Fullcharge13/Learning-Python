@@ -9,6 +9,7 @@ const ART = {
   streak7: ["coral", "7일"], streak30: ["coral", "30일"], streak100: ["coral", "100"],
   fixer: ["navy", "fix"], hintfree10: ["navy", "10"], perfectionist: ["sun", "★"],
   reviewer: ["navy", "30"], collector: ["sun", "3벌"], night_owl: ["navy", "☾"],
+  advanced1: ["teal", "A+"], advancedAll: ["sun", "A★"],   // v0.7 심화
 };
 const COL = { teal: ["#1F9E93", "#12756D"], coral: ["#F08A5D", "#C4512F"], navy: ["#3C5170", "#1F2B3D"], sun: ["#FFD43B", "#C99A00"] };
 
@@ -32,6 +33,12 @@ export function render(root, ctx) {
   const st = s.stats || {};
   const weak = Object.entries(s.weak_concepts || {}).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
   const n = (v) => Math.max(0, Number(v) || 0);
+  // 본 과정과 심화(v0.7)는 따로 센다
+  const doneSet = new Set(s.completed_lessons || []);
+  const mainDone = ctx.lessons.filter((l) => doneSet.has(l.id)).length;
+  const advIds = ctx.advancedIds ? ctx.advancedIds() : [];
+  const advTotal = advIds.length;
+  const advDone = advIds.filter((id) => doneSet.has(id)).length;
   root.innerHTML = `<div class="screen badges with-tabs">
     ${statusBar(s)}
     <main>
@@ -47,7 +54,8 @@ export function render(root, ctx) {
       <section class="panel">
         <h2>학습 기록</h2>
         <dl class="stat-grid">
-          <div><dt>끝낸 레슨</dt><dd>${n(s.completed_lessons.length)}<small>/${ctx.lessons.length}</small></dd></div>
+          <div><dt>끝낸 레슨</dt><dd>${n(mainDone)}<small>/${ctx.lessons.length}</small></dd></div>
+          ${advTotal ? `<div><dt>끝낸 심화</dt><dd>${n(advDone)}<small>/${advTotal}</small></dd></div>` : ""}
           <div><dt>맞힌 문제</dt><dd>${n(st.items)}</dd></div>
           <div><dt>실수 없는 레슨</dt><dd>${n(st.perfect)}</dd></div>
           <div><dt>힌트 없이 통과</dt><dd>${n(st.hintfree)}</dd></div>

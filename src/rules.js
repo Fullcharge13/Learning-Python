@@ -1,5 +1,6 @@
 // 진도 규칙 (작업 2) — 순수 함수만. 실제 시계는 읽지 않고 "YYYY-MM-DD" 문자열을 받는다.
 // 모든 함수는 받은 저장을 고치지 않고, 변화가 없어도 언제나 새 객체를 돌려준다.
+import { ADV_XP, ADV_BYTES } from "./advanced.js";
 
 export const FREEZE_PRICE = 200;
 export const FREEZE_MAX = 2;
@@ -47,12 +48,13 @@ function copy(save) {
 }
 
 // ---- 보상 ----
-// 다시 하기(판정 C24): 고정 XP 10(평가 15), 보너스·바이트 없음.
+// 다시 하기(판정 C24): 고정 XP 10(평가 15), 보너스·바이트 없음. 심화도 같은 규칙(10).
 // 15레슨을 다 끝낸 뒤에도 하루 목표 20을 다시 하기 2번으로 채울 수 있게 한 값.
-export function lessonReward({ firstTime, perfect, hintFreeWrite, isExam }) {
+// 심화(v0.7): 처음 끝내면 XP 15·바이트 15 + 보통 레슨과 같은 보너스(실수 없음 +5 XP·+5 바이트, 힌트 없음 +5 XP).
+export function lessonReward({ firstTime, perfect, hintFreeWrite, isExam, isAdvanced }) {
   if (!firstTime) return { xp: isExam ? 15 : 10, bytes: 0 };
-  const xp = (isExam ? 30 : 10) + (perfect ? 5 : 0) + (hintFreeWrite ? 5 : 0);
-  return { xp, bytes: 10 + (perfect ? 5 : 0) };
+  const xp = (isExam ? 30 : isAdvanced ? ADV_XP : 10) + (perfect ? 5 : 0) + (hintFreeWrite ? 5 : 0);
+  return { xp, bytes: (isAdvanced ? ADV_BYTES : 10) + (perfect ? 5 : 0) };
 }
 
 // 복습 한 판(판정 C24): XP 10

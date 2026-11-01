@@ -825,6 +825,16 @@ def test_require_unknown_pseudo_still_error():
     assert has(require_errors(["Elsee"]), "ast 마디 이름이 아님")
 
 
+
+# ── require: SelfCall·FormatSpec·TripleStr (판정 C45) ────────────────
+def test_require_selfcall_formatspec_triplestr_ok():
+    assert require_errors(["SelfCall", "FormatSpec", "TripleStr", "Elif"]) == []
+
+
+def test_require_c45_typo_still_error():
+    assert has(require_errors(["Selfcall"]), "ast 마디 이름이 아님")
+    assert has(require_errors(["TripleQuote"]), "ast 마디 이름이 아님")
+
 def _write_item(lesson_id):
     ch = lesson_id.split("-")[0]
     path = os.path.join(content.LESSON_DIR, "ch%s.js" % ch)
@@ -855,6 +865,364 @@ def test_ch3_else_elif_requires_match_task_text():
         w = _write_item(lid)
         for word, req in (("elif", "Elif"), ("else", "Else")):
             assert (req in w["require"]) == (word in w["task"]), (lid, req)
+
+
+
+# ── v0.7 심화 레슨 규칙 (계획 작업 2) ─────────────────────────────────────
+# 심화 N-Ak = N장 규칙 + 심화 N장까지 연 문법(ADVANCED_EXTRA, 누적). 심화 문법은 본 과정에 새지 않는다.
+import json as _json  # noqa: E402
+import tempfile as _tempfile  # noqa: E402
+
+TQ = '"' * 3   # 여러 줄 문자열 따옴표(이 파일 안에서 헷갈리지 않게)
+
+
+def adv_errors(code, chapter):
+    rep = Lesson("t")
+    check_code_shape(rep, "code", code, content.AdvancedChapter(chapter))
+    return rep.errors
+
+
+def test_adv_tables_cumulative_and_main_never_opens_advanced_only():
+    for ch in range(1, 18):
+        assert content.ADVANCED_ONLY <= content.MAIN_FORBID_BY_CHAPTER[ch], ch
+        assert content.CALLS_BY_CHAPTER[ch] <= content.ADV_CALLS_BY_CHAPTER[ch], ch
+        assert content.ADV_FORBID_BY_CHAPTER[ch] <= content.MAIN_FORBID_BY_CHAPTER[ch], ch
+    for a in range(1, 17):
+        assert content.ADV_FORBID_BY_CHAPTER[a + 1] <= content.ADV_FORBID_BY_CHAPTER[a], a
+    # 1~6장 심화에서도 lambda·컴프리헨션은 아직(7·9장 심화, v0.8)
+    for ch in range(1, 7):
+        assert {"Lambda", "ListComp", "DictComp", "SetComp", "GeneratorExp"} <= content.ADV_FORBID_BY_CHAPTER[ch]
+
+
+# 1장 심화: f-string 서식 지정자(상수만, 변수는 2장), 여러 줄 문자열
+CH1A_OK = ('print(f"{3.14159:.2f}")\n'
+           'print(f"{\'커피\':>6}|{4500:>7,}")\n'
+           'print(' + TQ + '영수증\n------' + TQ + ')')
+
+
+def test_adv1_allowed():
+    assert adv_errors(CH1A_OK, 1) == []
+
+
+def test_adv1_fstring_forbidden_in_main_1_and_spec_in_main_2():
+    assert has(shape_errors('print(f"{3.14159:.2f}")', 1), "JoinedStr")
+    e = shape_errors('x = 3.14159\nprint(f"{x:.2f}")', 2)
+    assert has(e, "FormatSpec") and has(e, "심화")
+    assert has(shape_errors('w = 7\nprint(f"{w:>8}")', 17), "FormatSpec")
+
+
+def test_adv1_multiline_forbidden_in_main():
+    assert has(shape_errors("print(" + TQ + "가\n나" + TQ + ")", 1), "TripleQuote")
+    assert has(shape_errors("s = '''가\n나'''\nprint(s)", 12), "TripleQuote")
+    assert has(shape_errors("x = 1\nprint(f" + TQ + "{x}\n나" + TQ + ")", 12), "TripleQuote")
+
+
+def test_adv1_still_forbids_variables_and_nested_spec():
+    assert has(adv_errors('x = 1\nprint(f"{x:>3}")', 1), "Assign")
+    assert has(adv_errors('x = 5\nw = 4\nprint(f"{x:>{w}}")', 2), "FormatSpecNested")
+
+
+# 2장 심화: divmod(몫·나머지), q, r = divmod(…) 풀기만
+CH2A_OK = "m = int(input())\nh, mm = divmod(m, 60)\nprint(h, mm, round(0.1 + 0.2, 2))"
+
+
+def test_adv2_allowed():
+    assert adv_errors(CH2A_OK, 2) == []
+
+
+def test_adv2_forbids():
+    assert has(shape_errors("print(divmod(7, 2))", 2), "divmod")   # 본 과정에는 없음
+    assert has(shape_errors("print(divmod(7, 2))", 17), "divmod")
+    assert has(adv_errors("print(divmod(7, 2))", 1), "divmod")
+    assert has(adv_errors("a, b = 1, 2\nprint(a)", 2), "Tuple")       # 풀기는 divmod만
+    assert has(shape_errors("h, m = divmod(130, 60)\nprint(h)", 3), "Tuple")
+    assert has(adv_errors("x = 1\nmatch x:\n    case 1:\n        print(1)", 2), "Match")
+
+
+# 3장 심화: match(글자·숫자 값, | 여러 값, _ 나머지). 이름 잡기·guard·클래스·목록 패턴은 안 됨
+CH3A_OK = """cmd = input()
+match cmd:
+    case "아메리카노" | "라테":
+        print("커피")
+    case 1:
+        print("하나")
+    case _:
+        print("기타")"""
+
+
+def test_adv3_allowed():
+    assert adv_errors(CH3A_OK, 3) == []
+    assert adv_errors(CH3A_OK, 9) == []   # 뒤 장 심화에도 누적
+
+
+def test_adv3_match_forbidden_in_main_and_earlier_adv():
+    assert has(shape_errors(CH3A_OK, 3), "Match")
+    assert has(shape_errors(CH3A_OK, 17), "Match")
+    assert has(adv_errors(CH3A_OK, 2), "Match")
+
+
+def test_adv3_match_pattern_limits():
+    head = "x = 1\nmatch x:\n"
+    assert has(adv_errors(head + "    case n:\n        print(n)", 3), "MatchPattern")
+    assert has(adv_errors(head + "    case 1 if x > 0:\n        print(1)", 3), "MatchGuard")
+    assert has(adv_errors(head + "    case int():\n        print(1)", 3), "MatchPattern")
+    assert has(adv_errors(head + "    case [1, 2]:\n        print(1)", 9), "MatchPattern")
+    assert has(adv_errors(head + "    case {\"a\": 1}:\n        print(1)", 9), "MatchPattern")
+    assert adv_errors(head + "    case -1:\n        print(1)\n    case None:\n        print(0)", 3) == []
+
+
+# 4장 심화: 기본값 매개변수(상수만), 재귀
+CH4A_OK = """def greet(name, end="!"):
+    return name + end
+
+def fact(n):
+    if n <= 1:
+        return 1
+    return n * fact(n - 1)
+
+print(greet("리아"))
+print(greet("리아", end="?"))
+print(fact(5))"""
+
+
+def test_adv4_allowed():
+    assert adv_errors(CH4A_OK, 4) == []
+
+
+def test_adv4_forbids():
+    d = 'def greet(name, end="!"):\n    return name + end\nprint(greet("a"))'
+    assert has(shape_errors(d, 4), "DefaultArg")       # 4-2 같은 본 과정
+    assert has(shape_errors(d, 15), "DefaultArg")
+    assert has(adv_errors(d, 3), "FunctionDef")
+    r = "def f(n):\n    if n == 0:\n        return 0\n    return f(n - 1)\nprint(f(3))"
+    assert has(shape_errors(r, 4), "Recursion")
+    assert has(shape_errors(r, 17), "Recursion")
+    assert has(adv_errors(r, 3), "FunctionDef")
+    assert has(adv_errors("def f(x=[]):\n    return x\nprint(f())", 7), "DefaultArg")   # 바뀌는 기본값 금지
+    assert has(adv_errors("def f(x=len('ab')):\n    return x\nprint(f())", 4), "DefaultArg")
+
+
+def test_keyword_call_to_own_function_is_main_rule():
+    assert shape_errors("def f(a, b):\n    return a - b\nprint(f(b=1, a=3))", 4) == []
+
+
+# 5장 심화: for…else / while…else (중첩 반복·break·continue는 본 과정 5장부터)
+CH5A_OK = """for i in range(2, 4):
+    for j in range(1, 3):
+        print(i * j, end=" ")
+    print()
+n = 7
+for d in range(2, n):
+    if n % d == 0:
+        break
+else:
+    print("소수")"""
+
+
+def test_adv5_allowed():
+    assert adv_errors(CH5A_OK, 5) == []
+
+
+def test_adv5_forbids():
+    assert has(shape_errors(CH5A_OK, 5), "LoopElse")
+    assert has(shape_errors("n = 0\nwhile n < 2:\n    n += 1\nelse:\n    print(n)", 10), "LoopElse")
+    assert has(adv_errors(CH5A_OK, 4), "For")
+    nested = "for i in range(2):\n    for j in range(2):\n        if j:\n            continue\n        print(i, j)"
+    assert shape_errors(nested, 5) == []
+
+
+# 6장 심화: 서식 고급(채우기·정렬)은 1장 심화부터 누적, 문자열 메서드는 본 과정 6장부터
+CH6A_OK = ('s = "ria"\nprint(s.center(7, "*"))\nprint(s.ljust(5) + "|", s.rjust(4))\n'
+           'print("7".zfill(3), s.title())\nprint(f"{s:*^9}", "-".join("abc"))')
+
+
+def test_adv6_allowed():
+    assert adv_errors(CH6A_OK, 6) == []
+
+
+def test_adv6_forbids():
+    assert has(shape_errors(CH6A_OK, 6), "FormatSpec")
+    assert has(adv_errors("f = lambda x: x\nprint(f(1))", 6), "Lambda")
+    assert has(adv_errors('print([c for c in "ab"])', 6), "ListComp")
+
+
+# ── 심화 레슨 묶음(장 파일의 ADVANCED) — 임시 폴더의 작은 장 파일로 ────────────
+def _lesson(lid, ch, code, out, concept, require, adv=True):
+    choice = {"type": "choice", "concept": concept, "q": "이 코드의 출력은?", "code": code,
+              "options": [out, "오류", "아무것도 안 나옴"], "answer": 0, "explain": "실행하면 이렇게 나와요."}
+    write = {"type": "write", "concept": concept, "task": "카드처럼 코드를 써서 같은 출력을 내 봐요.",
+             "starter": "", "tests": [{"stdin": "", "expect": out, "public": True}], "require": require,
+             "hints": ["문제를 다시 읽어 봐요.", "카드에서 본 방법을 떠올려요.", "출력 모양을 먼저 정해요.", "___"],
+             "solution": code, "explain": "잘했어요."}
+    check = dict(choice, type="check")
+    lesson = {"id": lid, "chapter": ch, "title": "한 걸음 더", "goal": "심화 문법을 써 봐요",
+              "summary": ["하나", "둘", "셋"],
+              "cards": [{"say": "한 걸음 더 가 봐요.", "code": code, "out": out}],
+              "items": [dict(choice) for _ in range(4)] + [write, check]}
+    if adv:
+        lesson["isAdvanced"] = True
+    return lesson
+
+
+MATCH3 = 'x = "라테"\nmatch x:\n    case "아메리카노" | "라테":\n        print("커피")\n    case _:\n        print("기타")'
+DEF4 = 'def tag(s, mark="!"):\n    return s + mark\nprint(tag("안녕"))'
+
+
+def _fixture_module(ch, advanced):
+    """임시 폴더에 chN.js를 써서 실제 앱과 같은 방식(node import)으로 읽는다."""
+    d = _tempfile.mkdtemp()
+    path = os.path.join(d, "ch%d.js" % ch)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("export const CHAPTER = { id: %d, title: \"시험\" };\nexport const LESSONS = [];\n" % ch)
+        f.write("export const ADVANCED = %s;\n" % _json.dumps(advanced, ensure_ascii=False))
+    return content.load_modules([path])[path]
+
+
+def _concepts():
+    c = {"print": 1, "if": 3, "def": 4}
+    c.update({k: content.AdvancedChapter(v) for k, v in (("match", 3), ("defaultarg", 4), ("fmtspec", 1))})
+    return c
+
+
+def _adv_errors_of(mod, ch):
+    file_errs, reps = content.check_advanced(mod.get("ADVANCED"), ch, _concepts())
+    return file_errs, {r.label: r.errors for r in reps}
+
+
+def test_adv_fixture_ch3_match_lesson_passes():
+    adv = [_lesson("3-A%d" % k, 3, MATCH3, "커피", "match", ["Match"]) for k in (1, 2, 3)]
+    file_errs, errs = _adv_errors_of(_fixture_module(3, adv), 3)
+    assert file_errs == [] and errs == {"3-A1": [], "3-A2": [], "3-A3": []}, (file_errs, errs)
+
+
+def test_adv_fixture_match_leaks_into_main_lesson_3_4():
+    rep = Lesson("3-4")
+    content.check_lesson(rep, _lesson("3-4", 3, MATCH3, "커피", "if", ["Match"], adv=False), 3, 4, _concepts())
+    assert has(rep.errors, "Match")
+
+
+def test_adv_fixture_advanced_concept_not_in_main_lesson():
+    rep = Lesson("3-4")
+    content.check_lesson(rep, _lesson("3-4", 3, 'print("a")', "a", "match", [], adv=False), 3, 4, _concepts())
+    assert has(rep.errors, "심화 개념")
+
+
+def test_adv_fixture_ch4_default_arg():
+    adv = [_lesson("4-A%d" % k, 4, DEF4, "안녕!", "defaultarg", ["FunctionDef"]) for k in (1, 2, 3)]
+    file_errs, errs = _adv_errors_of(_fixture_module(4, adv), 4)
+    assert file_errs == [] and all(v == [] for v in errs.values()), errs
+    rep = Lesson("4-2")
+    content.check_lesson(rep, _lesson("4-2", 4, DEF4, "안녕!", "def", ["FunctionDef"], adv=False), 4, 2, _concepts())
+    assert has(rep.errors, "DefaultArg")
+    # 3장 심화에서는 아직(함수는 4장)
+    adv3 = [_lesson("3-A%d" % k, 3, DEF4, "안녕!", "if", []) for k in (1, 2, 3)]
+    _, errs = _adv_errors_of(_fixture_module(3, adv3), 3)
+    assert has(errs["3-A1"], "FunctionDef")
+
+
+def test_adv_fixture_shape_errors():
+    good = _lesson("3-A1", 3, MATCH3, "커피", "match", ["Match"])
+    file_errs, _ = content.check_advanced([good], 3, _concepts())
+    assert has(file_errs, "3개")
+    bad_id = dict(good, id="3-A9")
+    no_flag = {k: v for k, v in good.items() if k != "isAdvanced"}
+    no_flag["id"] = "3-A2"
+    exam = dict(good, id="3-A3", isExam=True)
+    _, reps = content.check_advanced([bad_id, no_flag, exam], 3, _concepts())
+    e = {i: r.errors for i, r in enumerate(reps)}
+    assert has(e[0], "3-A1") and has(e[1], "isAdvanced") and has(e[2], "isExam"), e
+    # 뒤 장 심화 개념은 쓸 수 없음
+    later = [_lesson("1-A%d" % k, 1, 'print("가")', "가", "match", []) for k in (1, 2, 3)]
+    _, reps = content.check_advanced(later, 1, _concepts())
+    assert has(reps[0].errors, "3장 개념")
+    # 본 과정 레슨에 isAdvanced를 두면 오류
+    rep = Lesson("3-4")
+    content.check_lesson(rep, _lesson("3-4", 3, 'print("a")', "a", "if", [], adv=True), 3, 4, _concepts())
+    assert has(rep.errors, "isAdvanced")
+
+
+def test_adv_fixture_lambda_forbidden_in_6_a1():
+    code = 'f = lambda s: s.upper()\nprint(f("ab"))'
+    adv = [_lesson("6-A%d" % k, 6, code, "AB", "fmtspec", []) for k in (1, 2, 3)]
+    _, errs = _adv_errors_of(_fixture_module(6, adv), 6)
+    assert has(errs["6-A1"], "Lambda")
+
+
+def test_adv_write_time_guard():
+    slow = "n = 0\nwhile n < 300000:\n    n += 1\nprint(n)"
+    it = _lesson("5-A1", 5, slow, "300000", "print", [])["items"][4]
+    old = content.ADV_RUN_SECONDS
+    try:
+        content.ADV_RUN_SECONDS = 0.001
+        rep = Lesson("t")
+        check_write(rep, "w", it, content.AdvancedChapter(5))
+        assert has(rep.errors, "초 안에"), rep.errors
+        rep = Lesson("t")
+        check_write(rep, "w", it, 5)    # 본 과정에는 이 제한이 없음
+        assert not has(rep.errors, "초 안에")
+    finally:
+        content.ADV_RUN_SECONDS = old
+
+
+def test_adv_write_recursion_depth_guard():
+    deep = "def f(n):\n    if n == 0:\n        return 0\n    return 1 + f(n - 1)\nprint(f(%d))"
+    it = _lesson("4-A2", 4, deep % 400, "400", "print", [])["items"][4]
+    rep = Lesson("t")
+    check_write(rep, "w", it, content.AdvancedChapter(4))
+    assert has(rep.errors, "재귀"), rep.errors
+    it = _lesson("4-A2", 4, deep % 30, "30", "print", [])["items"][4]
+    rep = Lesson("t")
+    check_write(rep, "w", it, content.AdvancedChapter(4))
+    assert rep.errors == [], rep.errors
+
+
+def test_advanced_file_errors():
+    assert content.advanced_file_errors([1, 2, 3], 3) == []
+    assert content.advanced_file_errors([1, 3], 3) != []
+    assert content.advanced_file_errors([1, 2], None) == []
+
+
+def test_concepts_v07_advanced():
+    path = content.CONCEPTS_FILE
+    cs = content.load_modules([path])[path]["CONCEPTS"]
+    adv = {c["id"]: c["chapter"] for c in cs if c.get("advanced") is True}
+    for cid in ("fmtspec", "multiline", "floaterr", "divmod", "condsimple", "match", "defaultarg",
+                "recursion", "nestedloop", "loopelse", "strfmt", "strmore"):
+        assert cid in adv, cid
+    assert all(1 <= ch <= 6 for ch in adv.values())
+    ids = [c["id"] for c in cs]
+    assert len(ids) == len(set(ids))
+
+
+def test_adv_main_reads_advanced_from_chapter_file():
+    """임시 폴더에 실제 ch1.js + ADVANCED(1장 심화 서식 지정자)를 두고 main()을 돌린다."""
+    import io as _io
+    import contextlib as _ctx
+    d = _tempfile.mkdtemp()
+    src = os.path.join(content.LESSON_DIR, "ch1.js")
+    code = 'print(f"{3.14159:.2f}")'
+    adv = [_lesson("1-A%d" % k, 1, code, "3.14", "fmtspec", ["JoinedStr"]) for k in (1, 2, 3)]
+    with open(src, encoding="utf-8") as f:
+        text = f.read()
+    # 실제 ch1.js에 이미 ADVANCED가 있으면 떼어 낸다(이 시험은 실제 심화 내용과 무관해야 함)
+    start = text.find("\nexport const ADVANCED")
+    if start >= 0:
+        nxt = text.find("\nexport ", start + 1)
+        text = text[:start] + ("\n" + text[nxt:] if nxt >= 0 else "\n")
+    with open(os.path.join(d, "ch1.js"), "w", encoding="utf-8") as g:
+        g.write(text + "\nexport const ADVANCED = %s;\n" % _json.dumps(adv, ensure_ascii=False))
+    old = content.LESSON_DIR
+    try:
+        content.LESSON_DIR = d
+        out = _io.StringIO()
+        with _ctx.redirect_stdout(out):
+            code_ok = content.main(["--advanced", "1"])
+        assert code_ok == 0, out.getvalue()[-800:]
+        assert "1-A3" in out.getvalue() and "심화: 레슨 3개" in out.getvalue()
+        # 같은 코드를 1장 본 과정에 두면 오류(JoinedStr·FormatSpec)
+        assert has(shape_errors(code, 1), "JoinedStr") and has(shape_errors(code, 1), "FormatSpec")
+    finally:
+        content.LESSON_DIR = old
 
 
 if __name__ == "__main__":

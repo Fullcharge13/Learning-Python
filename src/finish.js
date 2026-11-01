@@ -4,6 +4,7 @@ import { lessonReward, reviewReward, earnXp, markConcept } from "./rules.js";
 import { tick, ensureQuests } from "./quests.js";
 import { checkBadges } from "./badges.js";
 import { localDate } from "./today.js";
+import { isAdvancedLesson } from "./advanced.js";
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0);
 
@@ -11,7 +12,8 @@ const num = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0
  * @param save  현재 저장(바꾸지 않음)
  * @param info  { lesson, mode: "lesson"|"review", perfect, accuracy, marks: [concept, outcome][],
  *               write: { passed, hintUsed, solutionSeen, fixedError } | null,
- *               itemsSolved, reviewCorrect, logs, nextLessonId, nextChapter }
+ *               itemsSolved, reviewCorrect, logs, nextLessonId, nextChapter,
+ *               advancedIds: 지금 과정의 심화 id 전부(배지 「깊이 파는 사람」) }
  * @param now   Date
  */
 export function finishLesson(save, info, now = new Date()) {
@@ -32,7 +34,7 @@ export function finishLesson(save, info, now = new Date()) {
   const perfect = !isReview && !!info.perfect;
   const reward = isReview
     ? reviewReward()
-    : lessonReward({ firstTime, perfect, hintFreeWrite, isExam: !!lesson.isExam });
+    : lessonReward({ firstTime, perfect, hintFreeWrite, isExam: !!lesson.isExam, isAdvanced: isAdvancedLesson(lesson) });
 
   const goalBefore = s.streak.lastGoalDate;
   const bytesBeforeXp = num(s.bytes);
@@ -87,7 +89,7 @@ export function finishLesson(save, info, now = new Date()) {
   s.last_active_at = now.toISOString();
 
   // 배지 (이정표 100일 배지는 earnXp가 이미 넣음)
-  const got = checkBadges(s, { hour: now.getHours(), lessonDone: !isReview });
+  const got = checkBadges(s, { hour: now.getHours(), lessonDone: !isReview, advancedIds: info.advancedIds || [] });
   s.badges = [...s.badges, ...got];
   const had = new Set(save.badges || []);
   const newBadges = s.badges.filter((b) => !had.has(b));

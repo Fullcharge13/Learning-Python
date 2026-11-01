@@ -21,10 +21,10 @@ function mkSave(over = {}) {
 }
 const stats = (o) => ({ lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0, ...o });
 
-test("BADGES table: 13 ids (ledger 12 + streak100) with Korean name/desc", () => {
-  assert.equal(BADGES.length, 13);
+test("BADGES table: 15 ids (ledger 12 + streak100 + v0.7 심화 2) with Korean name/desc", () => {
+  assert.equal(BADGES.length, 15);
   assert.deepEqual(BADGES.map((b) => b.id), ["first_print", "ch1", "ch2", "ch3", "streak7", "streak30", "streak100",
-    "fixer", "hintfree10", "perfectionist", "reviewer", "collector", "night_owl"]);
+    "fixer", "hintfree10", "perfectionist", "reviewer", "collector", "night_owl", "advanced1", "advancedAll"]);
   for (const b of BADGES) {
     assert.match(b.name, /[가-힣]/);
     assert.match(b.desc, /[가-힣]/);
@@ -104,4 +104,12 @@ test("does not mutate save", () => {
 test("every BADGES id has a rule (and no extra rules)", () => {
   for (const b of BADGES) assert.equal(typeof RULES[b.id], "function", b.id);
   assert.deepEqual(Object.keys(RULES).sort(), BADGES.map((b) => b.id).sort());
+});
+
+test("every badge has its own art (no '?' fallback), incl. v0.7 심화 2개", async () => {
+  const { badgeArt } = await import("../../src/ui/badges.js");
+  for (const b of BADGES) {
+    const svg = badgeArt(b.id, true);
+    assert.ok(!/>\?<\/text>/.test(svg), `${b.id} uses fallback art`);
+  }
 });

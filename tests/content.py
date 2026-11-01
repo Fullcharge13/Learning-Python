@@ -1179,8 +1179,9 @@ def check_lesson(rep, lesson, chapter, pos, concepts):
     check_text(rep, "title", lesson.get("title"), TITLE_MAX)
     check_text(rep, "goal", lesson.get("goal"), GOAL_MAX)
     summ = lesson.get("summary")
-    if not isinstance(summ, list) or len(summ) != 3:  # 문자열 하나도 여기서 걸림
-        rep.err("summary", "정확히 3줄")
+    summ_hi = 4 if lesson.get("updated") else 3  # 판정 C49: 보강 레슨은 새 주제 한 줄을 더할 수 있음
+    if not isinstance(summ, list) or not (3 <= len(summ) <= summ_hi):  # 문자열 하나도 여기서 걸림
+        rep.err("summary", "정확히 3줄" if summ_hi == 3 else "3~4줄(보강 레슨)")
     else:
         for i, s in enumerate(summ):
             check_text(rep, "summary[%d]" % i, s, SUMMARY_MAX, need_hangul=False)

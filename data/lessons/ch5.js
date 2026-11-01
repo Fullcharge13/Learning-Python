@@ -110,7 +110,7 @@ export const LESSONS = [
     summary: [
       "for i in range(n): n번 반복, i는 0부터",
       "range(a, b)는 a부터 b 바로 앞까지",
-      "끝값은 포함하지 않음",
+      "끝값은 포함하지 않음", 'end=" "로 이어 찍기, print()로 줄 바꿈',
     ],
     cards: [
       {
@@ -220,7 +220,7 @@ export const LESSONS = [
     summary: [
       "반복 전에 total = 0 으로 준비",
       "total = total + i 로 한 바퀴씩 더함",
-      "결과는 반복이 끝난 뒤 들여쓰기 없이 출력",
+      "결과는 반복이 끝난 뒤 들여쓰기 없이 출력", "반복 안에 반복을 넣으면 줄×칸 모양",
     ],
     cards: [
       {

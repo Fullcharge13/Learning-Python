@@ -303,7 +303,7 @@ export const LESSONS = [
     summary: [
       "and: 둘 다 참일 때만 참",
       "or: 하나라도 참이면 참, not은 뒤집기",
-      "13 <= age < 19 처럼 범위를 한 번에",
+      "13 <= age < 19 처럼 범위를 한 번에", "조건 결과(True·False)를 변수에 담기",
     ],
     cards: [
       {

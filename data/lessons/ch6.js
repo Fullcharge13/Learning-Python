@@ -187,7 +187,7 @@ export const LESSONS = [
     summary: [
       "변수.메서드()꼴로 문자열에 일을 시킴",
       "메서드는 새 문자열을 돌려주고 원본은 그대로",
-      "strip은 앞뒤 공백, replace는 바꿔치기",
+      "strip은 앞뒤 공백, replace는 바꿔치기", "zfill은 앞에 0, center는 가운데 맞춤",
     ],
     cards: [
       {

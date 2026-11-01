@@ -1335,6 +1335,26 @@ def test_c48_updated_lesson_upper_limits():
     assert has(_size_errors(0, 5, "v0.7.1"), "cards")
 
 
+
+# ── C49: 보강 레슨(updated)만 요약 3~4줄, 나머지는 정확히 3줄 ───────────
+def _summary_errors(lines, updated=None):
+    lesson = _lesson("1-2", 1, 'print("a")', "a", "print", [])
+    lesson["summary"] = lines
+    if updated:
+        lesson["updated"] = updated
+    rep = Lesson("1-2")
+    content.check_lesson(rep, lesson, 1, 2, _concepts())
+    return [e for e in rep.errors if "summary" in e]
+
+
+def test_c49_summary_four_lines_only_when_updated():
+    four = ["가", "나", "다", "라"]
+    assert _summary_errors(four, "v0.7.1") == []
+    assert _summary_errors(four) != []
+    assert _summary_errors(["가", "나", "다"], "v0.7.1") == []
+    assert _summary_errors(["가", "나", "다", "라", "마"], "v0.7.1") != []
+    assert _summary_errors(["가", "나"], "v0.7.1") != []
+
 if __name__ == "__main__":
     tests =[(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     bad = 0

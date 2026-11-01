@@ -106,7 +106,7 @@ export const LESSONS = [
     summary: [
       "정수는 int, 소수는 float, 문자열은 str",
       "type()은 값의 종류를 알려 줌",
-      "/ 로 나눈 결과는 언제나 float",
+      "/ 로 나눈 결과는 언제나 float", "round(값, 자릿수)로 소수 자리 줄이기",
     ],
     cards: [
       {

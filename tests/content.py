@@ -811,15 +811,20 @@ def uses_input(code):
 # 판정 C26: "Call:print" = print(…)를 부름, "Name:price" = 이름 price를 씀
 # 판정 C34: "Method:get" = 메서드 .get(…)을 부름(d.get(…), s.upper() 등)
 REQUIRE_PREFIXES = ("Call", "Name", "Method")
+# 판정 C44: ast 마디 이름이 아니지만 runner가 알아보는 조건(주석·elif·else)
+REQUIRE_EXTRA = ("Comment", "Elif", "Else")
 
 
 def check_require(rep, where, req):
-    """require 항목: ast 마디 이름(예: "If", "Mult") 또는 "Call:<이름>"·"Name:<이름>"·"Method:<이름>"."""
+    """require 항목: ast 마디 이름(예: "If", "Mult"), "Call:<이름>"·"Name:<이름>"·"Method:<이름>",
+    또는 REQUIRE_EXTRA("Comment"·"Elif"·"Else")."""
     for name in req:
         if isinstance(name, str) and ":" in name:
             kind, _, ident = name.partition(":")
             if kind not in REQUIRE_PREFIXES or not ident.isidentifier() or keyword.iskeyword(ident):
                 rep.err(where, "require %r 형식이 틀림(Call:이름, Name:이름, Method:이름 중 하나, 이름은 Python 식별자)" % (name,))
+            continue
+        if name in REQUIRE_EXTRA:
             continue
         node = getattr(ast, name, None) if isinstance(name, str) else None
         if not (isinstance(node, type) and issubclass(node, ast.AST)):

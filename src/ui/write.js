@@ -15,11 +15,38 @@ export function runEnv(item, t) {
   return { files: files || null, server: item.server || null };
 }
 
-export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log, showCards }) {
+export const DRAFT_DEBOUNCE_MS = 500;
+
+// initial(이어 하기, v0.6.2 다): { code, hintsShown, solutionSeen, submits, hadError } — 초안·힌트·정답 보기·제출 수를 되살림.
+// onState(state): 같은 모양으로 지금 상태를 알림. 초안은 DRAFT_DEBOUNCE_MS 뒤에, 힌트·정답·틀린 제출은 바로.
+// (통과한 제출은 알리지 않음 — 그 뒤 상태는 레슨 쪽이 다음 문제로 넘기며 저장)
+export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log, showCards, initial = null, onState = null }) {
   const tests = Array.isArray(item.tests) ? item.tests : [];
   const pub = tests.find((t) => t.public) || tests[0] || { stdin: "", expect: "" };
   const hints = Array.isArray(item.hints) ? item.hints : [];
   const st = { hintsShown: 0, solutionSeen: false, submits: 0, hadError: false, busy: false, destroyed: false };
+  const init = initial && typeof initial === "object" ? initial : null;
+  if (init) {
+    st.submits = Math.max(0, init.submits | 0);
+    st.hadError = !!init.hadError;
+  }
+  let draftTimer = null;
+  const stateNow = () => ({ code: ed.getCode(), hintsShown: st.hintsShown, solutionSeen: st.solutionSeen, submits: st.submits, hadError: st.hadError });
+  function notify() {
+    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    if (!onState || st.destroyed) return;
+    try { onState(stateNow()); } catch (e) { console.error(e); }
+  }
+  function draftChanged() {
+    if (!onState) return;
+    if (draftTimer) clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => { draftTimer = null; notify(); }, DRAFT_DEBOUNCE_MS);
+  }
+  // 페이지를 닫거나 숨길 때 남은 초안을 바로 남긴다
+  const flushDraft = () => { if (draftTimer) notify(); };
+  const onVis = () => { if (document.visibilityState === "hidden") flushDraft(); };
+  window.addEventListener("pagehide", flushDraft);
+  document.addEventListener("visibilitychange", onVis);
   const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // 문제 글 끝에 기대 출력이 그대로 붙어 있으면 아래 「기대 출력」 칸과 겹치므로 뺀다
@@ -75,7 +102,10 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     const dockTop = foot.getBoundingClientRect().top;
     return { top: top + 8, bottom: Math.max(0, vh - dockTop) + 8 };
   };
-  const ed = createEditor(body.querySelector("#ed"), { doc: item.starter || "", label: "코드 입력창. 여기에 Python 코드를 써요", margins });
+  const ed = createEditor(body.querySelector("#ed"), {
+    doc: init && typeof init.code === "string" ? init.code : (item.starter || ""),
+    label: "코드 입력창. 여기에 Python 코드를 써요", margins, onChange: draftChanged,
+  });
   const consoleEl = body.querySelector("#console");
   const runBtn = foot.querySelector("#run");
   const subBtn = foot.querySelector("#submit");
@@ -290,6 +320,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       html = `<p class="submit-count">제출 ${st.submits}번째 · 시험 ${tests.length}개 중 ${v.failedIndex}개 통과</p>` + html;
       consoleEl.innerHTML = html;
       if (st.submits >= 3 && !st.solutionSeen) revealSolution(true);
+      notify();
       // 틀린 까닭이 보이도록 설명 쪽으로 이동
       const room = window.innerHeight - 80 - 160; // style.css의 scroll-margin 위·아래와 같은 값
       consoleEl.scrollIntoView({ behavior: reduced() ? "auto" : "smooth", block: consoleEl.offsetHeight < room ? "end" : "start" });
@@ -301,10 +332,17 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
   const hintList = body.querySelector("#hints");
   function showHint() {
     if (st.hintsShown >= hints.length) return;
-    const i = st.hintsShown++;
+    const i = st.hintsShown;
     if (i === 0) onHint();
     // 리아 반응(힌트 대사, 상황별 직전 줄은 ctx.say가 피함)
     consoleEl.innerHTML = riaLine("hint", "");
+    paintHint(i);
+    // 새 힌트 바로 아래의 리아 반응까지 보이게(아래 줄에 가리지 않도록 scroll-margin 적용)
+    consoleEl.scrollIntoView({ block: "nearest" });
+    notify();
+  }
+  function paintHint(i) {
+    st.hintsShown = i + 1;
     const h = hints[i];
     const isCode = i === hints.length - 1 && /[()"=]/.test(h);
     const li = document.createElement("li");
@@ -315,14 +353,16 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     if (cb) cb.addEventListener("click", showCards);
     body.querySelector("#hn").textContent = String(st.hintsShown);
     if (st.hintsShown >= hints.length) hintBtn.disabled = true;
-    // 새 힌트 바로 아래의 리아 반응까지 보이게(아래 줄에 가리지 않도록 scroll-margin 적용)
-    consoleEl.scrollIntoView({ block: "nearest" });
   }
   hintBtn.addEventListener("click", showHint);
 
   const solEl = body.querySelector("#solution");
   function revealSolution(auto) {
     if (!st.solutionSeen) onHint();
+    paintSolution(auto);
+    if (!auto) { solEl.scrollIntoView({ block: "nearest" }); notify(); }
+  }
+  function paintSolution(auto) {
     st.solutionSeen = true;
     solEl.hidden = false;
     solEl.innerHTML = `<h2>${auto ? "세 번 제출했으니 정답을 같이 볼까요?" : "정답과 해설"}</h2>
@@ -331,15 +371,24 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       <button class="btn ghost small" id="usesol">정답을 입력창에 넣기</button>`;
     solEl.querySelector("#usesol").addEventListener("click", () => { ed.setCode(item.solution || ""); ed.focus(); });
     body.querySelector("#sol").disabled = true;
-    if (!auto) solEl.scrollIntoView({ block: "nearest" });
   }
   body.querySelector("#sol").addEventListener("click", () => revealSolution(false));
+
+  // 이어 하기: 보던 힌트·정답을 다시 펼친다(개념 점수 표시는 이미 레슨 쪽에 남아 있어 다시 부르지 않음)
+  if (init) {
+    const n = Math.min(hints.length, Math.max(0, init.hintsShown | 0));
+    for (let i = 0; i < n; i++) paintHint(i);
+    if (init.solutionSeen) paintSolution(st.submits >= 3);
+  }
 
   runBtn.addEventListener("click", doRun);
   subBtn.addEventListener("click", doSubmit);
 
   return () => {
     st.destroyed = true;
+    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    window.removeEventListener("pagehide", flushDraft);
+    document.removeEventListener("visibilitychange", onVis);
     offPy();
     if (vv) { vv.removeEventListener("resize", place); vv.removeEventListener("scroll", place); }
     window.removeEventListener("resize", place);

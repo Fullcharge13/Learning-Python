@@ -342,7 +342,7 @@ export const LESSONS = [
         task: "오늘은 맑아서 우산이 필요 없어요. 「우산 챙기기」 줄을 지우지 말고 주석으로 바꿔서, 아래 한 줄만 출력되게 해 보세요.\n선크림 챙기기",
         starter: 'print("우산 챙기기")\nprint("선크림 챙기기")\n',
         tests: [{ stdin: "", expect: "선크림 챙기기", public: true }],
-        require: [],
+        require: ["Comment"],
         hints: [
           "지금은 두 줄이 출력돼요. 오늘 필요 없는 줄은 어느 쪽일까요?",
           "줄 맨 앞에 #을 붙이면 Python이 그 줄을 건너뛰었죠. 두 번째 카드를 떠올려 봐요.",

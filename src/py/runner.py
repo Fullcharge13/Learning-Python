@@ -31,7 +31,7 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
 run(code, stdin, require, files=None, server=None) -> {
     "stdout": str, "stderr": str,
     "error": None | {"type": str, "line": int | None, "msg": str},
-    "missing": [str, ...],   # require 중 코드에 없는 ast 마디 이름
+    "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:, Comment·Elif·Else)
     "charts": [{"kind": "bar" | "line", "labels": [str], "values": [int | float],
                 "title"?: str, "xlabel"?: str, "ylabel"?: str}, ...],
 }
@@ -47,6 +47,7 @@ import os
 import shutil
 import sys
 import tempfile
+import tokenize
 import traceback
 
 USER_FILE = "<user>"
@@ -175,7 +176,28 @@ def _format_tb(e, tb):
         return "%s: %s\n" % (type(e).__name__, _safe_str(e))
 
 
-def _missing(tree, require):
+def _has_comment(code):
+    """코드에 # 주석이 하나라도 있나(tokenize로 봄 — 문자열 안의 #은 주석이 아님)."""
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(code).readline):
+            if tok.type == tokenize.COMMENT:
+                return True
+    except BaseException:  # noqa: BLE001 — compile을 통과한 코드라 드묾
+        return False
+    return False
+
+
+def _is_elif(node, lines):
+    """If 마디가 elif로 쓰였나. ast는 elif와 「else: 아래 if」를 똑같이 만들므로
+    마디가 시작하는 자리(줄·바이트 칸)의 원문이 elif로 시작하는지 본다."""
+    try:
+        line = lines[node.lineno - 1].encode("utf-8")
+        return line[node.col_offset:].startswith(b"elif")
+    except BaseException:  # noqa: BLE001
+        return False
+
+
+def _missing(tree, require, code=""):
     if not require:
         return []
     # require 항목(판정 C26):
@@ -183,6 +205,11 @@ def _missing(tree, require):
     #   "Call:type"   — 이름으로 부르는 호출 type(...) (obj.type(...)은 아님)
     #   "Name:count"  — 변수 count를 어딘가에서 읽음(ast.Name, Load)
     #   "Method:get"  — 점으로 부르는 호출 d.get(...) (판정 C34, 그냥 get(...)은 아님)
+    # 판정 C44(ast 마디 이름이 아닌 세 가지):
+    #   "Comment"     — # 주석이 하나라도 있음(문자열 안의 #은 아님)
+    #   "Elif"        — elif로 쓴 갈래가 있음(else: 아래에 따로 쓴 if는 아님)
+    #   "Else"        — if·for·while·try에 elif가 아닌 else: 가 있음(a if c else b 식은 아님)
+    lines = code.splitlines()
     found = set()
     for node in ast.walk(tree):
         found.add(type(node).__name__)
@@ -192,6 +219,16 @@ def _missing(tree, require):
             found.add("Method:" + node.func.attr)
         elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
             found.add("Name:" + node.id)
+        if isinstance(node, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try)) and node.orelse:
+            if (isinstance(node, ast.If) and len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If)
+                    and _is_elif(node.orelse[0], lines)):
+                found.add("Elif")
+            else:
+                found.add("Else")
+        elif isinstance(node, getattr(ast, "TryStar", ())) and node.orelse:
+            found.add("Else")
+    if "Comment" in require and _has_comment(code):
+        found.add("Comment")
     return [name for name in require if name not in found]
 
 
@@ -403,7 +440,7 @@ def run(code, stdin=None, require=None, files=None, server=None):
         return result
 
     try:
-        result["missing"] = _missing(ast.parse(code, USER_FILE), require)
+        result["missing"] = _missing(ast.parse(code, USER_FILE), require, code)
     except BaseException:  # noqa: BLE001 — compile이 통과했으면 드묾
         result["missing"] = []
 

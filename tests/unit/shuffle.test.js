@@ -53,3 +53,12 @@ test("require_ko: 조건 이름을 한국어로 (C26)", () => {
   assert.equal(missingMessage(["If"]), "정답은 나왔지만 이번 문제는 if 문을 써서 풀어야 해요.");
   assert.equal(missingMessage(["If", "Call:int"]), "정답은 나왔지만 이번 문제는 if 문, int()를 써서 풀어야 해요.");
 });
+
+test("requireKo: Comment·Elif·Else (판정 C44)", () => {
+  assert.equal(requireKo("Comment"), "# 주석");
+  assert.equal(requireKo("Elif"), "elif");
+  assert.equal(requireKo("Else"), "else");
+  assert.equal(missingMessage(["Comment"]), "정답은 나왔지만 이번 문제는 # 주석을 써서 풀어야 해요.");
+  assert.equal(missingMessage(["Elif"]), "정답은 나왔지만 이번 문제는 elif를 써서 풀어야 해요.");
+  assert.equal(missingMessage(["Else"]), "정답은 나왔지만 이번 문제는 else를 써서 풀어야 해요.");
+});

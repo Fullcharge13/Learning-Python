@@ -479,3 +479,60 @@ def test_chart_positional_only_korean_error():
     assert "color" in r["error"]["msg"] and any("가" <= ch <= "힣" for ch in r["error"]["msg"]), r
     r2 = run("import chart\nchart.title(text='t')\n", "", [])
     assert r2["error"]["type"] == "TypeError" and any("가" <= ch <= "힣" for ch in r2["error"]["msg"]), r2
+
+
+# ── v0.6.2 가 (판정 C44): Comment / Elif / Else ─────────────────────────
+
+def test_require_comment():
+    assert run('# 메모\nprint(1)', [], ["Comment"])["missing"] == []
+    assert run('print(1)  # 끝에 단 주석', [], ["Comment"])["missing"] == []
+    assert run('print(1)', [], ["Comment"])["missing"] == ["Comment"]
+    # 문자열 안의 #은 주석이 아님
+    assert run('print("# 아님")', [], ["Comment"])["missing"] == ["Comment"]
+    assert run("print('''\n# 여러 줄 문자열\n''')", [], ["Comment"])["missing"] == ["Comment"]
+    assert run('print(f"{1}#")', [], ["Comment"])["missing"] == ["Comment"]
+
+
+def test_require_comment_cheat_1_4():
+    # 1-4: 줄을 지우면 출력은 같지만 주석이 없음 → 조건 미달
+    r = run('print("선크림 챙기기")\n', [], ["Comment"])
+    assert r["stdout"] == "선크림 챙기기\n" and r["missing"] == ["Comment"]
+    r = run('# print("우산 챙기기")\nprint("선크림 챙기기")\n', [], ["Comment"])
+    assert r["missing"] == []
+
+
+IF_ELSE_IF = "x = 5\nif x > 9:\n    print(1)\nelse:\n    if x > 3:\n        print(2)\n"
+IF_ELIF = "x = 5\nif x > 9:\n    print(1)\nelif x > 3:\n    print(2)\n"
+IF_ELIF_ELSE = IF_ELIF + "else:\n    print(3)\n"
+IF_ELSE = "x = 5\nif x > 9:\n    print(1)\nelse:\n    print(2)\n"
+IF_ONLY = "x = 5\nif x > 9:\n    print(1)\n"
+
+
+def test_require_elif():
+    assert run(IF_ELIF, [], ["Elif"])["missing"] == []
+    assert run(IF_ELIF_ELSE, [], ["Elif"])["missing"] == []
+    assert run(IF_ONLY, [], ["Elif"])["missing"] == ["Elif"]
+    assert run(IF_ELSE, [], ["Elif"])["missing"] == ["Elif"]
+    # else: 아래에 if를 따로 쓴 것은 elif가 아님(ast 모양은 같음)
+    assert run(IF_ELSE_IF, [], ["Elif"])["missing"] == ["Elif"]
+    # 한 줄로 쓴 else: if … 도 elif가 아님
+    one_line = "x = 5\nif x > 9:\n    print(1)\nelse:\n    if x > 3: print(2)\n"
+    assert run(one_line, [], ["Elif"])["missing"] == ["Elif"]
+
+
+def test_require_else():
+    assert run(IF_ELSE, [], ["Else"])["missing"] == []
+    assert run(IF_ELIF_ELSE, [], ["Else"])["missing"] == []
+    assert run(IF_ELSE_IF, [], ["Else"])["missing"] == []      # 진짜 else:
+    assert run(IF_ONLY, [], ["Else"])["missing"] == ["Else"]
+    assert run(IF_ELIF, [], ["Else"])["missing"] == ["Else"]   # elif만 있고 else 없음
+    assert run("for i in range(2):\n    print(i)\nelse:\n    print(9)\n", [], ["Else"])["missing"] == []
+    assert run("n = 0\nwhile n < 1:\n    n += 1\nelse:\n    print(n)\n", [], ["Else"])["missing"] == []
+    assert run("try:\n    print(1)\nexcept ValueError:\n    pass\nelse:\n    print(2)\n", [], ["Else"])["missing"] == []
+    # 조건 표현식(a if c else b)은 else 문이 아님
+    assert run("x = 1 if True else 2\nprint(x)", [], ["Else"])["missing"] == ["Else"]
+
+
+def test_require_new_kinds_mixed_order():
+    r = run("print(1)", [], ["Else", "If", "Comment", "Elif"])
+    assert r["missing"] == ["Else", "If", "Comment", "Elif"]

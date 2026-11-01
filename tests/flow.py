@@ -19,6 +19,9 @@
 - test_timeout_recovery: while True: pass → 시간 초과 설명 → 다음 실행은 정상 출력
 - test_reduced_motion: 동작 줄이기에서 리아 .ria-body 움직임 없음
 - test_status_after_milestone: 연속 6일(어제 달성) → 레슨 완료로 7일 축하 창이 떠 있는 동안 상태 줄 7일
+- test_resume_lesson: 1-2 문제 2개 → 새로고침 → 「이어서 하기」 → 같은 문제 / write 초안 → 새로고침 → 초안 그대로
+                      → 끝까지: 보상·저장이 끊지 않은 판과 같음, 이어 하기 칸 지워짐 (v0.6.2 다)
+- test_resume_decline: 「처음부터」 → 카드 1부터, 칸 지워짐 / 「그만두기」도 칸을 지움
 """
 
 import atexit
@@ -37,6 +40,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "tests", "out", "flow")
 DIST = os.path.join(OUT, "dist")
 SAVE_KEY = "ria-python.save"
+RESUME_KEY = "ria-python.resume"
 GUARD_WAIT = 450          # 결과 창 입력 보호(400ms)보다 조금 길게
 PY_READY_MS = 120_000
 
@@ -759,6 +763,129 @@ def test_status_after_milestone():
         if a.errors:
             fails.append("settings path errors: %s" % a.errors)
     assert not fails, "\n".join(fails)
+
+
+# ---------------------------------------------------------------- 이어 하기 (v0.6.2 다)
+
+SEED_AFTER_11 = {"saveVer": 2, "xp": 20, "bytes": 15, "completed_lessons": ["1-1"], "current_lesson": "1-2",
+                 "current_chapter": 1, "grading_results": {"1-1": {"perfect": True, "attempts": 1}}}
+
+
+def _resume_rec(a):
+    return a.js("() => JSON.parse(localStorage.getItem(%s))" % json.dumps(RESUME_KEY))
+
+
+def _answer_items(a, items, n):
+    """카드를 넘기고 터치 문제 n개를 맞힌다. 푼 문제 번호 목록"""
+    done = []
+    for _ in range(40):
+        if len(done) >= n:
+            return done
+        a.page.wait_for_timeout(80)
+        if a.page.query_selector(".card-view"):
+            a.page.click("#act")
+            continue
+        if a.page.query_selector("article.item"):
+            idx = a.which_item(items)
+            a.answer_touch(items[idx])
+            a.page.wait_for_selector("#result:not([hidden])")
+            a.cont()
+            done.append(idx)
+    raise AssertionError("items not answered: %s" % done)
+
+
+def _reload_to_prompt(a, lid):
+    a.page.reload()
+    a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+    a.start()
+    assert lid in a.page.inner_text("#continue")
+    a.page.click("#continue")
+    a.page.wait_for_selector(".modal .resume-ask", timeout=10_000)
+    assert "하던 곳부터 이어서 할까요?" in a.page.inner_text(".modal")
+
+
+def _strip_times(save):
+    s = dict(save)
+    s.pop("last_active_at", None)
+    s["submission_logs"] = [{k: v for k, v in e.items() if k != "at"} for e in s.get("submission_logs", [])]
+    return s
+
+
+def test_resume_lesson():
+    # 끊지 않은 판(같은 답: 전부 정답, write는 첫 제출에 정답)
+    with App("iPhone 17", save=SEED_AFTER_11) as a:
+        a.start()
+        a.page.click("#continue")
+        a.play("1-2")
+        whole_r, whole_s = a.result(), a.save()
+        a.dismiss()
+    with App("iPhone 17", save=SEED_AFTER_11) as a:
+        a.start()
+        a.page.click("#continue")
+        items = a.lesson("1-2")["items"]
+        done = _answer_items(a, items, 2)
+        a.page.wait_for_selector("article.item")
+        on_screen = a.which_item(items)
+        rec = _resume_rec(a)
+        assert rec and rec["lessonId"] == "1-2" and rec["flow"]["answered"] == 2, rec
+        # 새로고침 → 묻기 → 이어서 하기 → 같은 문제
+        _reload_to_prompt(a, "1-2")
+        path = a.shot("resume-prompt-iphone-17.png")
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector("article.item")
+        assert a.which_item(items) == on_screen, (done, on_screen)
+        assert a.page.inner_text(".lesson-tag") == "1-2"
+        # write까지 가서 초안을 쓰고 새로고침 → 초안 그대로
+        _to_write(a, "1-2")
+        draft = 'print("리아 카페")\n# 초안 메모'
+        a.set_code(draft)
+        a.page.wait_for_timeout(800)   # 초안은 0.5초 뒤 저장
+        rec = _resume_rec(a)
+        assert rec["item"] and rec["item"]["code"] == draft, rec and rec["item"]
+        _reload_to_prompt(a, "1-2")
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".item.write .cm-content")
+        got = a.js("() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent).join('\\n')")
+        assert got == draft, got
+        # 끝까지 → 보상이 끊지 않은 판과 같음
+        a.play("1-2")
+        r, s = a.result(), a.save()
+        print("    resumed: xp +%s bytes +%s perfect %s | whole: xp +%s bytes +%s perfect %s | prompt %s" % (
+            r["xp"], r["totalBytes"], r["perfect"], whole_r["xp"], whole_r["totalBytes"], whole_r["perfect"], path))
+        assert r == whole_r, (r, whole_r)
+        assert _strip_times(s) == _strip_times(whole_s)
+        assert _resume_rec(a) is None
+        a.dismiss()
+        assert not a.errors, a.errors
+
+
+def test_resume_decline():
+    with App("iPhone 17", save=SEED_AFTER_11) as a:
+        a.start()
+        a.page.click("#continue")
+        items = a.lesson("1-2")["items"]
+        _answer_items(a, items, 2)
+        assert _resume_rec(a) is not None
+        _reload_to_prompt(a, "1-2")
+        a.page.click(".modal .btn:not(.primary)")       # 처음부터
+        a.page.wait_for_selector(".card-view")
+        assert "오늘의 목표" in a.page.inner_text(".card-view")   # 첫 카드
+        assert _resume_rec(a) is None
+        # 카드 하나 넘기면 다시 기록 → 그만두기로 지움
+        a.page.click("#act")
+        a.page.wait_for_timeout(150)
+        assert _resume_rec(a) is not None
+        a.page.click("#quit")
+        a.page.wait_for_selector(".modal")
+        a.page.click(".modal .btn:not(.primary)")       # 그만두기
+        a.page.wait_for_selector(".screen.home")
+        assert _resume_rec(a) is None
+        # 다시 들어가도 묻지 않음
+        a.page.click("#continue")
+        a.page.wait_for_selector(".card-view")
+        assert not a.page.query_selector(".modal")
+        assert not a.errors, a.errors
 
 
 # ---------------------------------------------------------------- 실행

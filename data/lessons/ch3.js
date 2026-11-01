@@ -169,14 +169,14 @@ export const LESSONS = [
       },
       {
         type: "write", concept: "else",
-        task: "놀이기구 탑승 안내를 만들어요. 키(cm)를 input()으로 받아 int()로 바꿔 주세요(질문 글자 없이). 120 이상이면 「탑승 가능」, 아니면 「다음에 만나요」를 출력해요. 예: 130을 입력하면 「탑승 가능」",
+        task: "놀이기구 탑승 안내를 만들어요. 키(cm)를 input()으로 받아 int()로 바꿔 주세요(질문 글자 없이). 120 이상이면 「탑승 가능」, 아니면 else로 「다음에 만나요」를 출력해요. 예: 130을 입력하면 「탑승 가능」",
         starter: "height = int(input())\n",
         tests: [
           { stdin: "130", expect: "탑승 가능", public: true },
           { stdin: "120", expect: "탑승 가능", public: false },
           { stdin: "119", expect: "다음에 만나요", public: false },
         ],
-        require: ["If"],
+        require: ["If", "Else"],
         hints: [
           "키가 딱 120이면 탈 수 있을까요? 「이상」은 그 숫자도 포함이에요.",
           "if는 참일 때, else는 그렇지 않을 때 실행됐죠. 이상은 >= 로 썼어요.",
@@ -266,7 +266,7 @@ export const LESSONS = [
       },
       {
         type: "write", concept: "elif",
-        task: "미세먼지 안내판을 만들어요. 농도를 input()으로 받아 int()로 바꿔 주세요(질문 글자 없이). 30 이하면 「좋음」, 31~80이면 「보통」, 81 이상이면 「나쁨」을 출력해요. 예: 31을 입력하면 「보통」",
+        task: "미세먼지 안내판을 만들어요. 농도를 input()으로 받아 int()로 바꿔 주세요(질문 글자 없이). elif를 써서 30 이하면 「좋음」, 31~80이면 「보통」, 81 이상이면 「나쁨」을 출력해요. 예: 31을 입력하면 「보통」",
         starter: "dust = int(input())\n",
         tests: [
           { stdin: "31", expect: "보통", public: true },
@@ -274,7 +274,7 @@ export const LESSONS = [
           { stdin: "80", expect: "보통", public: false },
           { stdin: "81", expect: "나쁨", public: false },
         ],
-        require: ["If"],
+        require: ["If", "Elif"],
         hints: [
           "갈래가 세 개예요. 경계인 30과 80은 각각 어느 쪽에 들어가는지 다시 볼까요?",
           "if, elif, else 순서로 쓰면 위에서부터 처음 참인 곳 하나만 실행됐죠. 이하는 <= 예요.",

@@ -42,7 +42,8 @@ export function newSeed() {
   return Math.floor(Math.random() * 4294967296) >>> 0;
 }
 
-const REQ_KO = { If: "if 문", BoolOp: "and/or", Mult: "곱하기 *", Add: "더하기 +", Sub: "빼기 -", Div: "나누기 /", Compare: "비교(==, < 같은 것)", For: "for 문", While: "while 문" };
+const REQ_KO = { If: "if 문", BoolOp: "and/or", Mult: "곱하기 *", Add: "더하기 +", Sub: "빼기 -", Div: "나누기 /", Compare: "비교(==, < 같은 것)", For: "for 문", While: "while 문",
+  Comment: "# 주석", Elif: "elif", Else: "else" };   // 판정 C44
 
 export function requireKo(name) {
   const s = String(name);

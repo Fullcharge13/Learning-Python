@@ -7,6 +7,8 @@ import { PyRun, PYODIDE_CDN } from "./pyrun.js";
 import { OUTFITS } from "../data/outfits.js";
 import { localDate, daysSince } from "./today.js";
 import { finishLesson } from "./finish.js";
+import { createPersist } from "./persist.js";
+import { readResume, writeResume, clearResume } from "./resume.js";
 import { createLessonData, chaptersForConcepts } from "./lessondata.js";
 import { loadDevChapters } from "./lessondev.js";
 import { createSound } from "./sound.js";
@@ -22,7 +24,7 @@ import * as badges from "./ui/badges.js";
 import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 
-export const VERSION = "v0.6.1";
+export const VERSION = "v0.6.2";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -37,6 +39,8 @@ function pickStorage() {
   }
 }
 const storage = pickStorage();
+// 영구 저장 요청(v0.6.2 나): 앱을 열 때 + 첫 진도 저장 뒤. 던지지 않음
+const requestPersist = createPersist();
 
 // 레슨 목록과 장 가져오기(v0.3 작업 1). 배포판: build.py가 넣은 목록·장 파일 이름표 → 장은 열 때 받음.
 // 개발판: 둘 다 없음 → data/lessons/chN.js를 전부 import(lessondev.js, 배포판에서는 빈 모듈).
@@ -174,7 +178,7 @@ function finish(info) {
   const { save, result } = finishLesson(app.save, { ...info, nextLessonId, nextChapter }, new Date());
   commit(save);
   if (firstEver) {
-    try { navigator.storage?.persist?.().catch(() => {}); } catch { /* 지원 안 함 */ }
+    requestPersist();
     app.installHintPending = true;
   }
   return result;
@@ -203,8 +207,15 @@ async function afterDone() {
   await showInstallSheet(kind);
 }
 
+// 하던 레슨 기록(v0.6.2 다): 본 저장과 따로 한 칸. 없는 레슨·24시간 지난 기록은 읽을 때 지운다
+const resume = {
+  read: () => readResume(storage, { now: Date.now(), exists: (id) => app.lessons.some((l) => l.id === id) }),
+  write: (rec) => writeResume(storage, rec),
+  clear: () => clearResume(storage),
+};
+
 const ctx = {
-  app,
+  app, resume,
   afterDone, showInstallSheet,
   version: VERSION,
   get save() { return app.save; },
@@ -240,6 +251,7 @@ async function boot() {
   app.save = save;
   if (readFailed) toast("저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.", "warn");
   initPy();
+  requestPersist();
   try {
     // 처음 설치(작업자 없음 → 생김)는 새 판이 아님. 다루던 작업자가 바뀔 때만
     const sw = navigator.serviceWorker;
@@ -253,6 +265,7 @@ async function boot() {
     app.chapters = [];
   }
   app.lessons = app.chapters.flatMap((c) => c.lessons);
+  if (app.lessons.length) resume.read();   // 낡은 기록 치우기(레슨 목록을 못 받았으면 건드리지 않음)
   dayStart();
   show("splash");
   document.addEventListener("visibilitychange", () => {

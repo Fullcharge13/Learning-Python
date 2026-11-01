@@ -160,6 +160,16 @@ def test_require():
     assert r["missing"] == ["If"], r
 
 
+def test_require_comment_elif_else_in_pyodide():
+    # 판정 C44: Pyodide 안에서도 tokenize로 주석·elif를 가려낸다
+    assert _run('print("# 아님")', "", ["Comment"])["missing"] == ["Comment"]
+    assert _run('# 메모\nprint(1)', "", ["Comment"])["missing"] == []
+    elif_code = "x = 5\nif x > 9:\n    print(1)\nelif x > 3:\n    print(2)\nelse:\n    print(3)\n"
+    assert _run(elif_code, "", ["Elif", "Else"])["missing"] == []
+    else_if = "x = 5\nif x > 9:\n    print(1)\nelse:\n    if x > 3:\n        print(2)\n"
+    assert _run(else_if, "", ["Elif", "Else"])["missing"] == ["Elif"]
+
+
 def test_error_line():
     r = _run("x = 1\nprint(y)")
     assert r["error"]["type"] == "NameError", r
@@ -456,6 +466,7 @@ def test_idle_worker_error_event():
 
 
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,
+         test_require_comment_elif_else_in_pyodide,
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
          test_practice_server_in_pyodide, test_chart_in_pyodide, test_sqlite3_in_pyodide, test_queue, test_timeout_then_ok,
          test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,

@@ -816,6 +816,47 @@ def test_concepts_v05():
     assert len(by) == len(cs)
 
 
+# ── require: Comment·Elif·Else (판정 C44) ─────────────────────────────
+def test_require_comment_elif_else_ok():
+    assert require_errors(["Comment", "Elif", "Else", "If"]) == []
+
+
+def test_require_unknown_pseudo_still_error():
+    assert has(require_errors(["Elsee"]), "ast 마디 이름이 아님")
+
+
+def _write_item(lesson_id):
+    ch = lesson_id.split("-")[0]
+    path = os.path.join(content.LESSON_DIR, "ch%s.js" % ch)
+    lessons = content.load_modules([path])[path]["LESSONS"]
+    lesson = next(l for l in lessons if l["id"] == lesson_id)
+    return next(it for it in lesson["items"] if it["type"] == "write")
+
+
+def test_lesson_1_4_requires_comment_and_cheat_fails():
+    it = _write_item("1-4")
+    assert "Comment" in it["require"] and "주석" in it["task"]
+    from runner import run
+    cheat = run('print("선크림 챙기기")\n', "", it["require"])   # 줄을 지운 풀이
+    assert cheat["stdout"].strip() == it["tests"][0]["expect"] and cheat["missing"] == ["Comment"]
+    assert run(it["solution"], "", it["require"])["missing"] == []
+
+
+def test_ch3_else_elif_requires_match_task_text():
+    two_ifs_32 = "height = int(input())\nif height >= 120:\n    print(\"탑승 가능\")\nif height < 120:\n    print(\"다음에 만나요\")"
+    it = _write_item("3-2")
+    assert "else" in it["task"] and "Else" in it["require"]
+    from runner import run
+    assert run(two_ifs_32, "130", it["require"])["missing"] == ["Else"]
+    it = _write_item("3-3")
+    assert "elif" in it["task"] and "Elif" in it["require"]
+    # 과제 문장에 없는 조건은 넣지 않는다
+    for lid in ("3-1", "3-4", "3-5"):
+        w = _write_item(lid)
+        for word, req in (("elif", "Elif"), ("else", "Else")):
+            assert (req in w["require"]) == (word in w["task"]), (lid, req)
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items()) if n.startswith("test_") and callable(f)]
     bad = 0
@@ -828,3 +869,4 @@ if __name__ == "__main__":
             print("✗ %s: %s: %s" % (name, type(e).__name__, e))
     print("\n%d/%d 통과" % (len(tests) - bad, len(tests)))
     sys.exit(1 if bad else 0)
+

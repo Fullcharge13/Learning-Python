@@ -1,6 +1,8 @@
 // 레슨 화면: 개념 카드 → 터치 문제 → (직접 작성) → 재도전 → 이해도 확인 → 완료
 // 진행 순서는 lessonflow.js 상태 기계가 정하고, 이 파일은 그리기와 채점만 한다.
-import { startFlow, current, nextCard, answer, summary } from "../lessonflow.js";
+import { current, nextCard, answer, summary } from "../lessonflow.js";
+import { newSession, mark as markConcept, touchResult, writePass, writeWrong, writeHint, logSubmit, finishInfo } from "../session.js";
+import { packResume, restoreSession, hasProgress } from "../resume.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, bar, codeBlock, dialog, riaSays, filesNote, chartNote, stdinNote, cardExample } from "./dom.js";
 import { mountWrite } from "./write.js";
@@ -70,6 +72,20 @@ const ERROR_LINES = {
   broken: { say: "레슨을 펼치다가 문제가 생겼어요", note: "「다시 시도」를 눌러 주세요. 지금까지의 진행은 그대로예요.", btn: "다시 시도" },
 };
 
+export const RESUME_ASK = "하던 곳부터 이어서 할까요?";
+
+/** 이어 하기 묻기: "resume" | "restart". 창을 그냥 닫으면(바깥 누르기·Esc) 지운 것 없이 이어 함 */
+async function askResume(ctx, lesson, S0) {
+  const p = Math.round(summary(S0.flow).progress * 100);
+  const v = await dialog({
+    title: "레슨 이어 하기",
+    body: riaSays({ outfit: ctx.save.outfit, face: "smile", text: RESUME_ASK, size: 72, cls: "small resume-ask" })
+      + `<p class="muted resume-meta">${esc(`${lesson.id} ${lesson.title || ""}`.trim())} · ${p}% 했어요</p>`,
+    buttons: [{ label: "이어서 하기", value: "resume", kind: "primary" }, { label: "처음부터", value: "restart" }],
+  });
+  return v === "restart" ? "restart" : "resume";
+}
+
 /** 레슨 화면: 장 파일을 받은 뒤 run()으로. 늦으면 「준비 중」(학습 길로 나갈 수 있음), 12초 넘거나 실패하면 안내와 다시 시도 */
 export function render(root, ctx, params = {}) {
   const review = !!params.review;
@@ -106,21 +122,40 @@ export function render(root, ctx, params = {}) {
       if (!live()) return;
       clear();
       if (!lesson || !lesson.items || !lesson.items.length) { ctx.show("home"); return; }
-      try {
-        inner = run(root, ctx, lesson, review);
-      } catch (e) {
-        // 반쯤 그린 화면을 남기지 않음
-        if (typeof inner === "function") { try { inner(); } catch { /* 무시 */ } }
-        inner = null;
-        document.body.classList.remove("result-open");
-        console.error(e);
-        fail("broken");
-      }
+      start(lesson, live);
     }, (err) => {
       if (!live()) return;
       const stale = (err && err.stale) || (ctx.swChanged && ctx.swChanged());
       fail(stale ? "stale" : "offline", err);
     });
+  }
+  // 하던 기록이 있으면 한 번 묻고(v0.6.2 다), 이어 하기면 기록에서 되살려 시작
+  async function start(lesson, live) {
+    let resumed = null;
+    if (!review && ctx.resume) {
+      const rec = ctx.resume.read();
+      if (rec && rec.lessonId === lesson.id) {
+        const S0 = restoreSession(rec, lesson);
+        if (!S0 || !hasProgress(S0.flow)) ctx.resume.clear();
+        else {
+          const pick = await askResume(ctx, lesson, S0);
+          if (!live()) return;
+          if (pick === "restart") ctx.resume.clear();
+          else resumed = { S: S0, item: rec.item };
+        }
+      }
+    }
+    if (!live()) return;
+    try {
+      inner = run(root, ctx, lesson, review, resumed);
+    } catch (e) {
+      // 반쯤 그린 화면을 남기지 않음
+      if (typeof inner === "function") { try { inner(); } catch { /* 무시 */ } }
+      inner = null;
+      document.body.classList.remove("result-open");
+      console.error(e);
+      fail("broken");
+    }
   }
   attempt();
   return () => {
@@ -130,11 +165,21 @@ export function render(root, ctx, params = {}) {
   };
 }
 
-function run(root, ctx, lesson, review) {
+function run(root, ctx, lesson, review, resumed = null) {
+  // 누적 결과는 session.js 함수로만 바꾼다(이어 하기 기록과 보상이 같은 값을 봄). 나머지 칸은 화면 전용
   const S = {
-    flow: startFlow(lesson), combo: 0, marks: [], logs: [], marked: {},
-    write: null, reviewCorrect: 0, itemsSolved: 0, guardUntil: 0, onContinue: null, cleanupItem: null,
+    ...(resumed ? resumed.S : newSession(lesson)),
+    guardUntil: 0, onContinue: null, cleanupItem: null,
+    itemDone: false,   // 이 문제의 답을 냈고 「계속」을 기다림 → 그동안은 이어 하기 기록을 남기지 않음
+    writeUI: null,     // 지금 write 문제의 { index, code, hintsShown, solutionSeen, submits, hadError }
   };
+  let pendingItem = resumed && resumed.item ? resumed.item : null;   // 처음 그리는 write 문제에만 씀
+
+  // ---- 이어 하기 기록 (v0.6.2 다) ----
+  function saveResume() {
+    if (review || !ctx.resume || S.itemDone || !hasProgress(S.flow)) return;
+    ctx.resume.write(packResume({ lessonId: lesson.id, S, item: S.writeUI, now: Date.now() }));
+  }
 
   root.innerHTML = `<div class="screen lesson">
     <header class="lesson-top">
@@ -159,13 +204,7 @@ function run(root, ctx, lesson, review) {
     progEl.firstElementChild.style.width = p + "%";
   }
 
-  function mark(index, concept, outcome) {
-    if (!concept) return;
-    const key = index + ":" + outcome;
-    if (S.marked[key]) return;
-    S.marked[key] = true;
-    S.marks.push([concept, outcome]);
-  }
+  const mark = (index, concept, outcome) => markConcept(S, index, concept, outcome);
 
   // ---- 결과 패널 ----
   function openResult({ ok, flowCorrect, title, text, answerHTML = "", situation, sfx, onContinue }) {
@@ -207,19 +246,11 @@ function run(root, ctx, lesson, review) {
     // 같은 문제를 두 번 채점하지 않음(빠른 두 번 누르기 등)
     if (S.judged) return;
     S.judged = true;
+    S.itemDone = true;
     const actBtn = foot.querySelector("#act");
     if (actBtn) actBtn.disabled = true;
     const it = cur.item;
-    if (ok) {
-      S.combo++;
-      S.itemsSolved++;
-      if (review) S.reviewCorrect++;
-      if (cur.attempt === 1) mark(cur.index, it.concept, "right");
-    } else {
-      S.combo = 0;
-      mark(cur.index, it.concept, "wrong");
-    }
-    const combo = ok && S.combo >= 3 && S.combo % 3 === 0;
+    const { combo } = touchResult(S, cur, ok, review);
     ctx.sound.play(ok ? (combo ? "combo" : "correct") : "wrong");
     openResult({
       ok, flowCorrect: ok,
@@ -350,31 +381,28 @@ function run(root, ctx, lesson, review) {
   }
 
   function renderWriteItem(cur) {
+    const init = pendingItem && pendingItem.index === cur.index ? pendingItem : null;
+    pendingItem = null;
+    S.writeUI = init ? { ...init } : null;
     S.cleanupItem = mountWrite({
-      ctx, item: cur.item, lesson, body, foot,
+      ctx, item: cur.item, lesson, body, foot, initial: init,
+      onState(st) { S.writeUI = { index: cur.index, ...st }; saveResume(); },
       onPass({ solutionSeen, hintUsed, hadError, firstSubmit }) {
-        const w = S.write || { passed: false, hintUsed: false, solutionSeen: false, fixedError: false };
-        S.write = { passed: true, hintUsed: w.hintUsed || hintUsed, solutionSeen: w.solutionSeen || solutionSeen, fixedError: w.fixedError || hadError };
+        S.itemDone = true;
         const it = cur.item;
-        if (hintUsed || solutionSeen) mark(cur.index, it.concept, "hint");
-        if (firstSubmit && !hintUsed && !solutionSeen) mark(cur.index, it.concept, "right");
-        const clean = !solutionSeen;
-        if (clean) { S.combo++; S.itemsSolved++; } else S.combo = 0;
+        const { flowCorrect } = writePass(S, cur, { solutionSeen, hintUsed, hadError, firstSubmit });
         ctx.sound.play("correct");
         openResult({
-          ok: true, flowCorrect: clean && firstSubmit,
+          ok: true, flowCorrect,
           title: solutionSeen ? "통과했어요" : hadError ? "단서를 따라 고쳐서 통과!" : "통과했어요!",
           text: (solutionSeen ? "정답을 보고 통과했어요. 다음에 혼자 다시 써 보면 금방 익숙해져요. " : "") + (it.explain || ""),
           situation: "correct", sfx: "딩동!",
-          onContinue: () => { S.cleanupItem && S.cleanupItem(); S.cleanupItem = null; S.flow = answer(S.flow, clean && firstSubmit); step(); },
+          onContinue: () => { S.cleanupItem && S.cleanupItem(); S.cleanupItem = null; S.flow = answer(S.flow, flowCorrect); step(); },
         });
       },
-      onWrong() {
-        S.combo = 0;
-        mark(cur.index, cur.item.concept, "wrong");
-      },
-      onHint() { mark(cur.index, cur.item.concept, "hint"); },
-      log(entry) { S.logs.push({ lesson: lesson.id, item: cur.index, pass: !!entry.pass, at: new Date().toISOString() }); },
+      onWrong() { writeWrong(S, cur); },
+      onHint() { writeHint(S, cur); },
+      log(entry) { logSubmit(S, lesson.id, cur.index, entry.pass, new Date().toISOString()); },
       showCards() { showCardsModal(); },
     });
   }
@@ -389,16 +417,16 @@ function run(root, ctx, lesson, review) {
 
   function finishLesson() {
     const sum = summary(S.flow);
-    const res = ctx.finish({
-      lesson, mode: review ? "review" : "lesson", perfect: sum.perfect, accuracy: sum.accuracy,
-      marks: S.marks, write: S.write, itemsSolved: S.itemsSolved, reviewCorrect: S.reviewCorrect, logs: S.logs,
-    });
+    if (!review && ctx.resume) ctx.resume.clear();
+    const res = ctx.finish(finishInfo(S, lesson, review));
     ctx.sound.play("done");
     ctx.show("done", { result: res, lesson: review ? null : lesson, sum });
   }
 
   function step() {
     S.judged = false;
+    S.itemDone = false;
+    S.writeUI = null;
     setProgress();
     const cur = current(S.flow);
     body.scrollTop = 0;
@@ -413,6 +441,7 @@ function run(root, ctx, lesson, review) {
       else if (t === "write") renderWriteItem(cur);
       else { S.flow = answer(S.flow, true); step(); return; }
     }
+    saveResume();
     const h = body.querySelector("h1");
     if (h) { h.setAttribute("tabindex", "-1"); h.focus({ preventScroll: true }); }
   }
@@ -423,7 +452,10 @@ function run(root, ctx, lesson, review) {
       body: "<p>지금까지 푼 내용은 저장되지 않아요. 다음에 이 레슨을 처음부터 다시 해요.</p>",
       buttons: [{ label: "계속 풀기", value: false, kind: "primary" }, { label: "그만두기", value: true }],
     });
-    if (ok) ctx.show("home");
+    if (ok) {
+      if (!review && ctx.resume) ctx.resume.clear();
+      ctx.show("home");
+    }
   });
 
   const onKey = (e) => {

@@ -141,19 +141,20 @@ export function takeRefundNotice(save) {
 export const refundNoticeText = (n) => `없어진 옷 값 ${n}바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!`;
 
 // 깨진 원본을 남긴다. 이미 남긴 것은 덮지 않고 .broken.1 ~ .broken.5 중 빈 칸에 쓴다(모두 차면 .broken.5를 덮음).
-function keepBroken(storage, text) {
-  const keys = [SAVE_KEY + ".broken"];
-  for (let i = 1; i <= BROKEN_SLOTS; i++) keys.push(`${SAVE_KEY}.broken.${i}`);
+// key: 저장 칸(기본 학습 기록. 개발자 모드 저장은 src/devmode.js가 자기 키를 넘김)
+function keepBroken(storage, text, key = SAVE_KEY) {
+  const keys = [key + ".broken"];
+  for (let i = 1; i <= BROKEN_SLOTS; i++) keys.push(`${key}.broken.${i}`);
   try {
     const free = keys.find((k) => storage.getItem(k) === null);
     storage.setItem(free ?? keys[keys.length - 1], text);
   } catch { /* 남기지 못해도 새 저장으로 시작 */ }
 }
 
-export function loadEx(storage) {
+export function loadEx(storage, key = SAVE_KEY) {
   let text;
   try {
-    text = storage.getItem(SAVE_KEY);
+    text = storage.getItem(key);
   } catch {
     return { save: newSave(), readFailed: true };
   }
@@ -162,24 +163,24 @@ export function loadEx(storage) {
   try {
     raw = JSON.parse(text);
   } catch {
-    keepBroken(storage, text);
+    keepBroken(storage, text, key);
     return { save: newSave(), readFailed: false };
   }
   if (!isPlainObject(raw)) {
-    keepBroken(storage, text);
+    keepBroken(storage, text, key);
     return { save: newSave(), readFailed: false };
   }
   return { save: migrate(raw), readFailed: false };
 }
 
-export function load(storage) {
-  return loadEx(storage).save;
+export function load(storage, key = SAVE_KEY) {
+  return loadEx(storage, key).save;
 }
 
-export function store(storage, save) {
+export function store(storage, save, key = SAVE_KEY) {
   const logs = Array.isArray(save.submission_logs) ? save.submission_logs.slice(-LOG_CAP) : [];
   try {
-    storage.setItem(SAVE_KEY, JSON.stringify({ ...save, submission_logs: logs }));
+    storage.setItem(key, JSON.stringify({ ...save, submission_logs: logs }));
     return true;
   } catch {
     return false;

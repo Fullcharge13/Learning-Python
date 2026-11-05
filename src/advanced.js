@@ -4,6 +4,8 @@
 // - 열림: 그 장 평가(마지막 본 과정 레슨, 보통 N-5)를 끝내면 세 개가 함께 열림. 순서 없음, 선택.
 // - 보상: 처음 끝내면 XP 15·바이트 15 (+ 보통 레슨과 같은 실수 없음·힌트 없음 보너스). 다시 하기는 기존 규칙(rules.js).
 
+import { isDev } from "./devgate.js";
+
 export const ADV_XP = 15;
 export const ADV_BYTES = 15;
 const ADV_RE = /^[1-9]\d*-A[1-9]\d*$/;
@@ -24,7 +26,8 @@ export function advancedOpen(chapter, completed) {
   return !!ex && (completed || []).includes(ex);
 }
 
-/** 심화 id의 상태: "locked" | "open" | "done" | "perfect". 심화가 아니거나 목록에 없으면 null */
+/** 심화 id의 상태: "locked" | "open" | "done" | "perfect". 심화가 아니거나 목록에 없으면 null.
+ *  개발자 모드 저장(isDev)이면 끝내지 않은 심화는 모두 open */
 export function advancedState(chapters, save, id) {
   if (!isAdvancedId(id)) return null;
   const ch = (chapters || []).find((c) => (c.advanced || []).some((l) => l.id === id));
@@ -34,7 +37,7 @@ export function advancedState(chapters, save, id) {
     const g = save.grading_results && save.grading_results[id];
     return g && g.perfect ? "perfect" : "done";
   }
-  return advancedOpen(ch, completed) ? "open" : "locked";
+  return isDev(save) || advancedOpen(ch, completed) ? "open" : "locked";
 }
 
 /** 장 하나의 심화 진도 { done, total } */

@@ -15,6 +15,7 @@ import { ensureQuests, tick } from "./quests.js";
 import { checkBadges } from "./badges.js";
 import { localDate } from "./today.js";
 import { hashStr, mulberry32, TEMPLATE_SEEDS } from "./template.js";
+import { gateCompleted } from "./devgate.js";
 
 export const DAILY_XP = 15;
 export const DAILY_BYTES = 10;
@@ -80,9 +81,10 @@ function weightedPick(rng, entries) {
   return entries[entries.length - 1];
 }
 
-/** 오늘의 문제 고르기. 열리지 않았거나 틀이 하나도 없으면 null */
+/** 오늘의 문제 고르기. 열리지 않았거나 틀이 하나도 없으면 null.
+ *  개발자 모드 저장이면(devgate.gateCompleted) 본 과정을 모두 끝낸 것으로 보고 모든 장에서 고른다 */
 export function pickDaily(index, save, today) {
-  const completed = (save && save.completed_lessons) || [];
+  const completed = gateCompleted(save, index);
   if (!dailyOpen(index, completed)) return null;
   const doneSet = new Set(completed);
   const weak = new Set((save && save.review_queue) || []);
@@ -134,7 +136,7 @@ export function dailyStatus(save, today, index) {
   const d = dailyOf(save);
   const alive = d.last_done_date === today || (isDate(today) && d.last_done_date === prevDay(today));
   const streak = alive ? d.streak : 0;
-  if (!dailyOpen(index, save && save.completed_lessons) || d.date !== today || !d.picks.length) {
+  if (!dailyOpen(index, gateCompleted(save, index)) || d.date !== today || !d.picks.length) {
     return { state: "locked", done: 0, total: 3, streak };
   }
   const total = d.picks.length;

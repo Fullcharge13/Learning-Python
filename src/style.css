@@ -48,6 +48,19 @@ body {
   overflow-wrap: anywhere;
   -webkit-tap-highlight-color: transparent;
 }
+/* 개발자 모드(검수용, v0.11.1) 띠: 화면 맨 위에 고정. 켜 있으면 --sat에 띠 높이를 더해
+   위쪽 여백을 --sat로 잡는 모든 화면(상태 줄·레슨 위·텃밭 위·완료·시작·알림)이 띠만큼 내려간다 */
+:root.dev-on { --dev-h: 22px; --sat: calc(env(safe-area-inset-top, 0px) + var(--dev-h)); }
+.dev-banner {
+  position: fixed; z-index: 75; top: 0; left: 0; right: 0; margin: 0 auto; max-width: var(--maxw);
+  height: calc(env(safe-area-inset-top, 0px) + 22px);
+  padding: env(safe-area-inset-top, 0px) calc(12px + var(--sar)) 0 calc(12px + var(--sal));
+  display: flex; align-items: center; justify-content: center;
+  background: repeating-linear-gradient(135deg, var(--navy) 0 12px, #2C3A52 12px 24px);
+  color: var(--sun); font-size: 12px; font-weight: 800; letter-spacing: .12em; line-height: 1;
+  pointer-events: none; user-select: none;
+}
+.dev-banner[hidden] { display: none; }
 #app { max-width: var(--maxw); margin: 0 auto; min-height: 100dvh; overflow-x: clip; }
 @media (min-width: 520px) {
   #app { border-left: 1px solid var(--line); border-right: 1px solid var(--line); background: rgba(251, 246, 234, 0.6); }
@@ -532,6 +545,11 @@ body.kbd-open .lesson-foot.has-dock { padding-bottom: 8px; }
 .switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
 .switch[aria-checked="true"] span { background: var(--teal-ink); }
 .switch[aria-checked="true"] span::after { transform: translateX(34px); }
+/* 개발자 모드 칸(설정 맨 아래): 켜지면 남색 줄무늬 띠와 같은 색 */
+.panel.devmode .row { padding: 0; }
+.panel.devmode .row-label small { font-weight: 500; }
+.panel.devmode .switch[aria-checked="true"] span { background: var(--navy); }
+.dev-note { margin: 8px 0 0; font-size: .85rem; color: var(--sun-ink); background: var(--sun-soft); border-radius: 10px; padding: 6px 10px; }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
 .seg button { min-height: 48px; border-radius: 14px; background: var(--card); border: 2px solid var(--line); font-weight: 800; }
 .seg button[aria-checked="true"] { background: var(--teal-ink); color: #fff; border-color: var(--teal-ink); }

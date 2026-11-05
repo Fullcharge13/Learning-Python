@@ -5,6 +5,8 @@ import { collectOfflineStatus } from "../offline.js";
 import { curriculum, chapterWindow } from "../curriculum.js";
 import { applyGoalChange } from "../finish.js";
 import { newSave } from "../save.js";
+import { isDev } from "../devgate.js";
+import { markDev } from "../devmode.js";
 import { tabBar, bindTabs, statusBar } from "./nav.js";
 import { localDate } from "../today.js";
 
@@ -22,7 +24,7 @@ const ST = {
 /** 학습 내용 카드 (C33): 요약 한 줄, 장마다 펼치기, 다음 업데이트 예정 */
 function courseCard(ctx) {
   const c = curriculum({ chapters: ctx.chapters, completed: ctx.save.completed_lessons, currentId: ctx.currentLessonId(),
-    seenUpdates: ctx.save.seen_updates });
+    seenUpdates: ctx.save.seen_updates, dev: isDev(ctx.save) });
   const dot = (l) => (l.isNew ? '<span class="new-dot inline" role="img" aria-label="새 내용 있음">새 내용</span>' : "");
   const first = c.upcoming.slice(0, 3);
   const rest = c.upcoming.slice(3);
@@ -59,6 +61,8 @@ function courseCard(ctx) {
 export function render(root, ctx) {
   const s = ctx.save;
   const goal = DAILY_GOALS.includes(s.settings.dailyGoal) ? s.settings.dailyGoal : 20;
+  const dev = !!ctx.dev;
+  const devTag = dev ? " (개발자 모드 저장)" : "";
   root.innerHTML = `<div class="screen settings with-tabs">
     ${statusBar(s)}
     <main>
@@ -80,11 +84,11 @@ export function render(root, ctx) {
         </div>
       </section>
       <section class="panel">
-        <h2>저장</h2>
-        <p class="muted">진행은 이 브라우저에만 저장돼요. 휴대폰을 바꾸거나 기록이 지워질까 걱정되면 파일로 내보내 두세요.</p>
+        <h2>저장${dev ? ' <small class="dev-tag">(개발자 모드 저장)</small>' : ""}</h2>
+        <p class="muted">${dev ? "지금은 개발자 모드 저장을 내보내고 가져와요. 학습 기록은 그대로예요." : "진행은 이 브라우저에만 저장돼요. 휴대폰을 바꾸거나 기록이 지워질까 걱정되면 파일로 내보내 두세요."}</p>
         <div class="btn-row">
-          <button class="btn ghost" id="export">저장 내보내기</button>
-          <label class="btn ghost" for="import">저장 가져오기</label>
+          <button class="btn ghost" id="export" aria-label="저장 내보내기${devTag}">저장 내보내기</button>
+          <label class="btn ghost" for="import" aria-label="저장 가져오기${devTag}">저장 가져오기</label>
           <input id="import" type="file" accept="application/json,.json" class="sr">
         </div>
         <p class="offline-status wait" id="offline" role="status" aria-live="polite">${icon("review")}<span>오프라인 준비 상태를 확인하는 중…</span></p>
@@ -93,6 +97,13 @@ export function render(root, ctx) {
         <h2>홈 화면에 추가</h2>
         <p class="muted">아이폰 사파리에서는 홈 화면에 추가해 두면 앱처럼 열리고 기록도 더 안전해요.</p>
         <button class="btn ghost wide" id="install">홈 화면에 추가 방법</button>
+      </section>
+      <section class="panel devmode" aria-labelledby="dev-label">
+        <div class="row">
+          <p class="row-label" id="dev-label">개발자 모드<small>잠긴 곳을 모두 열어 검수해요. 학습 기록과 따로 저장돼요.</small></p>
+          <button class="switch" id="dev" role="switch" aria-checked="${dev}" aria-labelledby="dev-label"><span></span></button>
+        </div>
+        ${dev ? '<p class="dev-note" id="dev-note">켜져 있어요 · 끄면 학습 기록으로 돌아가요</p>' : ""}
       </section>
       <p class="ver center">리아와 파이썬! ${esc(ctx.version)} · <a class="lic-link" href="licenses.txt" target="_blank" rel="noopener">사용한 프로그램</a></p>
     </main>
@@ -167,14 +178,15 @@ export function render(root, ctx) {
 
   root.querySelector("#install").addEventListener("click", () => ctx.showInstallSheet());
   root.querySelector("#export").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify(ctx.save, null, 2)], { type: "application/json" });
+    // 파일에는 개발자 표시를 넣지 않는다(가져올 때 지금 칸에 맞춰 다시 붙음)
+    const blob = new Blob([JSON.stringify(markDev(ctx.save, false), null, 2)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `ria-python-save-${localDate()}.json`;
+    a.download = `ria-python-${dev ? "dev-" : ""}save-${localDate()}.json`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    toast("저장 파일을 내보냈어요.");
+    toast(dev ? "개발자 모드 저장을 내보냈어요." : "저장 파일을 내보냈어요.");
   });
   root.querySelector("#import").addEventListener("change", async (e) => {
     const f = e.target.files && e.target.files[0];
@@ -190,13 +202,32 @@ export function render(root, ctx) {
     const next = ctx.migrate(raw);
     const ok = await dialog({
       title: "이 저장으로 바꿀까요?",
-      body: `<p>끝낸 레슨 ${next.completed_lessons.length}개, XP ${Math.max(0, next.xp)}, 바이트 ${Math.max(0, next.bytes)}, 연속 기록 ${next.streak.days}일</p><p>지금 이 브라우저의 진행은 이 파일 내용으로 바뀌어요.</p>`,
+      body: `<p>끝낸 레슨 ${next.completed_lessons.length}개, XP ${Math.max(0, next.xp)}, 바이트 ${Math.max(0, next.bytes)}, 연속 기록 ${next.streak.days}일</p><p>${dev ? "개발자 모드 저장이 이 파일 내용으로 바뀌어요. 학습 기록은 그대로예요." : "지금 이 브라우저의 진행은 이 파일 내용으로 바뀌어요."}</p>`,
       buttons: [{ label: "그만두기", value: false }, { label: "바꾸기", value: true, kind: "primary" }],
     });
     if (!ok) return;
     ctx.commit(next);
     ctx.dayStart(); // 가져온 저장의 날짜로 연속 기록·퀘스트를 오늘에 맞춤
-    toast("저장을 가져왔어요.");
+    toast(dev ? "개발자 모드 저장으로 가져왔어요." : "저장을 가져왔어요.");
     ctx.show("home");
+  });
+
+  // 개발자 모드(검수용): 켤 때만 확인 창. 켜고 끄면 저장 칸이 바뀌므로 설정 화면을 다시 그림
+  const devBtn = root.querySelector("#dev");
+  devBtn.addEventListener("click", async () => {
+    const on = !ctx.dev;
+    if (on) {
+      const ok = await dialog({
+        title: "개발자 모드를 켤까요?",
+        body: "<p>검수용 모드예요. 켜 두는 동안의 진행은 학습 기록과 따로 저장돼요.</p>",
+        buttons: [{ label: "그만두기", value: false }, { label: "켜기", value: true, kind: "primary" }],
+      });
+      if (!ok) return;
+    }
+    ctx.setDev(on);
+    ctx.show("settings");
+    const sw = document.getElementById("dev");
+    if (sw) { sw.focus({ preventScroll: true }); sw.scrollIntoView({ block: "center" }); }
+    toast(on ? "개발자 모드를 켰어요. 잠긴 곳이 모두 열려요." : "개발자 모드를 껐어요. 학습 기록으로 돌아왔어요.");
   });
 }

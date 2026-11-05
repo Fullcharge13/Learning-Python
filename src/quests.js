@@ -1,6 +1,7 @@
 // 일일 퀘스트: 날짜로 3개 뽑기, 사건 집계, 보물상자
 import { QUESTS } from "../data/quests.js";
 import { ORDERS } from "../data/garden.js";
+import { isDev } from "./devgate.js";
 
 export const CHEST_BYTES = 10;
 
@@ -34,13 +35,14 @@ const GARDEN_CHAPTER = 1;   // 텃밭은 1장 평가를 통과하면 열림(src/
  *  텃밭을 하지 않는 학습자는 v0.10 퀘스트 그대로), 남은 주문이 있고, 지금 주문의 장 평가를 끝냄(기다림 아님) */
 export function gardenOrderOpen(save) {
   const done = save && Array.isArray(save.completed_lessons) ? save.completed_lessons : [];
-  if (!done.includes(examId(GARDEN_CHAPTER))) return false;
+  const dev = isDev(save);   // 개발자 모드 저장: 모든 장을 통과한 것으로(garden/state.js passedChapters와 같은 기준)
+  if (!dev && !done.includes(examId(GARDEN_CHAPTER))) return false;
   const runs = save.garden?.runs;
   if (!(typeof runs === "number" && Number.isFinite(runs) && runs > 0)) return false;
   const raw = save.garden?.order?.idx;
   const idx = Number.isInteger(raw) && raw >= 0 ? raw : 0;   // 없거나 이상하면 state.js cleanGarden처럼 첫 주문
   const order = ORDERS[idx];
-  return !!order && done.includes(examId(order.need));
+  return !!order && (dev || done.includes(examId(order.need)));
 }
 
 const NEEDS = { garden: gardenOrderOpen };

@@ -40,6 +40,10 @@
                  위치 알기 뒤 x 비교(앞에서는 x 없음) → 줄 끝에서 내려가기 완료 / 값 넣어 말하기(앞·뒤 글자 10자, 값 고르기)
                  → 수확 보고 완료 / 코드 모드 NameError 오타 → 「혹시 move?」. 새 창 넘침·터치 44px.
                  캡처: garden11-*.png (iPhone 17)
+- test_dev_mode: 개발자 모드(v0.11.1). 1장을 끝낸 학습 기록 → 설정 맨 아래 스위치 → 확인 창 「그만두기」는 그대로 →
+                 「켜기」 → 모든 화면 위 띠(상태 줄을 가리지 않음) · 새 개발자 저장에서 17-3·13-A1 열림 · 오늘의 도전 ·
+                 텃밭 입구·9장 노드(위치 알기) 열림 → 새로고침해도 켜짐 → 끄기(확인 없음) → 학습 기록 원문 그대로·17-3 잠김.
+                 설정 켬/끔 넘침·터치 44px. 캡처: dev-*.png (iPhone 17)
 """
 
 import atexit
@@ -59,6 +63,8 @@ OUT = os.path.join(ROOT, "tests", "out", "flow")
 DIST = os.path.join(OUT, "dist")
 SAVE_KEY = "ria-python.save"
 RESUME_KEY = "ria-python.resume"
+DEV_FLAG_KEY = "ria-python.dev"
+DEV_SAVE_KEY = "ria-python.dev.save"
 GUARD_WAIT = 450          # 결과 창 입력 보호(400ms)보다 조금 길게
 PY_READY_MS = 120_000
 
@@ -1992,6 +1998,195 @@ def test_garden11_code_error_explain():
         _garden_run(a)
         err = a.page.inner_text(".err-panel")
         assert "ZeroDivisionError" in err and "혹시" not in err, err
+        assert not a.errors, a.errors
+
+
+# ---------------------------------------------------------------- 개발자 모드 (v0.11.1)
+
+def _ls(a, key):
+    return a.js("(k) => localStorage.getItem(k)", key)
+
+
+def _dev_banner(a):
+    return a.js("""() => { const b = document.getElementById('dev-banner'); if (!b) return null;
+        const r = b.getBoundingClientRect(), cs = getComputedStyle(b);
+        return { hidden: b.hidden || cs.display === 'none', text: b.innerText, top: r.top, bottom: r.bottom, w: r.width,
+                 dev: document.documentElement.classList.contains('dev-on') }; }""")
+
+
+def _below_banner(a, sel):
+    """띠가 보이는 동안 sel(화면 위 머리줄의 내용)이 띠 아래에서 시작하나"""
+    b = _dev_banner(a)
+    top = a.js("(s) => { const e = document.querySelector(s); return e ? e.getBoundingClientRect().top : null; }", sel)
+    assert top is not None, sel
+    assert top >= b["bottom"] - 0.5, "%s top %.1f under banner bottom %.1f" % (sel, top, b["bottom"])
+
+
+def _to_settings_dev(a):
+    a.page.click('[data-go="settings"]')
+    a.page.wait_for_selector(".screen.settings")
+    a.page.eval_on_selector("#dev", "e => e.scrollIntoView({block: 'center'})")
+    a.page.wait_for_timeout(150)
+
+
+def _clear_toasts(a):
+    """캡처에 알림이 겹치지 않게(알림 자체는 시험하지 않음)"""
+    a.js("() => { const t = document.getElementById('toasts'); if (t) t.replaceChildren(); }")
+
+
+def _home(a):
+    _clear_toasts(a)
+    a.js("() => window.__ria.ctx.show('home')")
+    a.page.wait_for_selector(".screen.home")
+    a.page.wait_for_timeout(150)
+
+
+def _open_node(a, lid):
+    a.page.eval_on_selector('[data-lesson="%s"]' % lid, "e => e.scrollIntoView({block: 'center'})")
+    cls = a.page.get_attribute('[data-lesson="%s"]' % lid, "class")
+    a.page.click('[data-lesson="%s"]' % lid)
+    a.page.wait_for_selector(".screen.lesson .lesson-tag", timeout=20_000)
+    a.page.wait_for_selector(".card-view, article.item", timeout=20_000)
+    return cls, a.page.inner_text(".lesson-tag")
+
+
+def test_dev_mode():
+    seed = _garden_seed(1, xp=40)
+    with App("iPhone 17", save=seed) as a:
+        a.start()
+        real_before = _ls(a, SAVE_KEY)
+        assert real_before and json.loads(real_before)["xp"] == 40
+        assert _dev_banner(a)["hidden"], "꺼져 있으면 띠 없음"
+        assert "locked" in a.page.get_attribute('[data-lesson="17-3"]', "class")
+
+        # 설정: 맨 아래 칸·스위치(꺼짐)
+        _to_settings_dev(a)
+        info = a.js("""() => { const sw = document.getElementById('dev'), r = sw.getBoundingClientRect();
+            const panels = [...document.querySelectorAll('.screen.settings main > section.panel')];
+            return { checked: sw.getAttribute('aria-checked'), role: sw.getAttribute('role'), w: r.width, h: r.height,
+                     label: document.getElementById(sw.getAttribute('aria-labelledby')).innerText,
+                     last: panels[panels.length - 1].classList.contains('devmode') }; }""")
+        assert info["checked"] == "false" and info["role"] == "switch" and info["w"] >= 44 and info["h"] >= 44, info
+        assert "개발자 모드" in info["label"] and "잠긴 곳을 모두 열어 검수해요. 학습 기록과 따로 저장돼요." in info["label"], info
+        assert info["last"], "개발자 모드 칸은 설정 맨 아래 칸"
+        m = measure(a, "settings-dev-off")
+        assert not m["problems"] and not m["small"], m
+        a.shot("dev-settings-off.png")
+
+        # 켜기: 확인 창 → 「그만두기」는 아무것도 바꾸지 않음
+        a.page.click("#dev")
+        a.page.wait_for_selector(".modal [data-i]")
+        body = a.page.inner_text(".modal")
+        assert "검수용 모드예요. 켜 두는 동안의 진행은 학습 기록과 따로 저장돼요." in body, body
+        labels = a.js("() => [...document.querySelectorAll('.modal [data-i]')].map(b => b.innerText.trim())")
+        assert labels == ["그만두기", "켜기"], labels
+        a.shot("dev-confirm.png")
+        m = measure(a, "dev-confirm")
+        assert not m["problems"] and not m["small"], m
+        a.page.click(".modal [data-i='0']")
+        a.page.wait_for_selector(".modal", state="detached")
+        assert a.page.get_attribute("#dev", "aria-checked") == "false"
+        assert _ls(a, DEV_FLAG_KEY) is None and _dev_banner(a)["hidden"]
+
+        a.page.click("#dev")
+        a.page.wait_for_selector(".modal [data-i]")
+        a.page.click(".modal [data-i='1']")
+        a.page.wait_for_selector(".modal", state="detached")
+        a.page.wait_for_selector('#dev[aria-checked="true"]')
+        b = _dev_banner(a)
+        assert not b["hidden"] and b["text"] == "개발자 모드" and b["dev"] and b["top"] == 0 and b["bottom"] <= 30, b
+        assert _ls(a, DEV_FLAG_KEY) == "1"
+        assert "(개발자 모드 저장)" in a.page.inner_text(".screen.settings")
+        assert "(개발자 모드 저장)" in a.page.get_attribute("#export", "aria-label")
+        assert a.js("() => window.__ria.app.save.completed_lessons.length") == 0, "새 개발자 저장"
+        _below_banner(a, ".status .stats-row")
+        a.page.wait_for_timeout(300)
+        _clear_toasts(a)
+        m = measure(a, "settings-dev-on")
+        assert not m["problems"] and not m["small"], m
+        a.shot("dev-settings-on.png")
+        a.page.evaluate("() => window.scrollTo(0, 0)")
+        a.page.wait_for_timeout(100)
+        a.shot("dev-settings-top.png")
+        assert _ls(a, SAVE_KEY) == real_before, "켜는 것만으로 학습 기록이 바뀌면 안 됨"
+
+        # 홈: 띠·오늘의 도전·텃밭 입구, 17-3·13-A1 열림
+        _home(a)
+        _below_banner(a, ".status .stats-row")
+        m = measure(a, "home-dev")
+        assert not m["problems"] and not m["small"], m
+        assert a.page.query_selector(".panel.daily"), "오늘의 도전 카드"
+        assert a.page.query_selector(".garden-card #garden"), "텃밭 입구 열림"
+        a.shot("dev-home.png")
+        cls = a.page.get_attribute('[data-lesson="17-3"]', "class")
+        assert "locked" not in cls, cls
+        cls, tag = _open_node(a, "17-3")
+        assert "17-3" in tag, tag
+        _below_banner(a, ".lesson-top #quit")
+        a.shot("dev-lesson-17-3.png")
+        _home(a)
+        cls, tag = _open_node(a, "13-A1")
+        assert "locked" not in cls and "13-A1" in tag, (cls, tag)
+        _home(a)
+
+        # 텃밭: 9장 노드(위치 알기)·지금 주문 기다림 없음
+        a.page.eval_on_selector("#garden", "e => e.scrollIntoView({block: 'center'})")
+        a.page.click("#garden")
+        a.page.wait_for_selector(".screen.garden")
+        a.page.wait_for_timeout(200)
+        _below_banner(a, ".g-top #g-back")
+        a.page.click('.g-add[data-parent=""]')
+        a.page.wait_for_selector(".modal.g-sheet")
+        lk = a.js("() => { const b = document.querySelector('.g-sheet [data-kind=where]'); return b && [b.disabled, b.innerText]; }")
+        assert lk and not lk[0] and "9장" not in lk[1], lk
+        a.shot("dev-garden-sheet.png")
+        a.page.click(".gs-close")
+        a.page.wait_for_selector(".modal.g-sheet", state="detached")
+        a.page.evaluate("() => window.scrollTo(0, 0)")
+        a.page.wait_for_timeout(100)
+        a.shot("dev-garden.png")
+        m = measure(a, "garden-dev")
+        assert not m["problems"], m
+
+        # 개발자 저장에서 활동(하루 목표 바꾸기) → 개발자 칸에만
+        a.page.click("#g-back")
+        a.page.wait_for_selector(".screen.home")
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        a.page.click('[data-g="30"]')
+        a.page.wait_for_timeout(200)
+        dev_save = json.loads(_ls(a, DEV_SAVE_KEY))
+        assert dev_save["settings"]["dailyGoal"] == 30 and dev_save.get("dev_mode") is True, dev_save["settings"]
+        assert _ls(a, SAVE_KEY) == real_before
+
+        # 새로고침해도 켜져 있음(깃발이 남음)
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go")
+        assert not _dev_banner(a)["hidden"], "새로고침 뒤에도 띠"
+        _below_banner(a, ".screen.splash h1, .screen.splash #go")
+        a.shot("dev-splash.png")
+        a.start()
+        assert a.js("() => window.__ria.app.save.settings.dailyGoal") == 30
+        assert _ls(a, SAVE_KEY) == real_before
+
+        # 끄기: 확인 창 없음 → 학습 기록 그대로
+        _to_settings_dev(a)
+        a.page.click("#dev")
+        a.page.wait_for_selector('#dev[aria-checked="false"]')
+        assert not a.page.query_selector(".modal"), "끌 때는 확인 창 없음"
+        assert _dev_banner(a)["hidden"] and not _dev_banner(a)["dev"]
+        assert _ls(a, DEV_FLAG_KEY) is None
+        assert "(개발자 모드 저장)" not in a.page.inner_text(".screen.settings")
+        m = measure(a, "settings-dev-off2")
+        assert not m["problems"] and not m["small"], m
+        assert _ls(a, SAVE_KEY) == real_before, "끈 뒤 학습 기록 원문 그대로"
+        st = a.js("() => ({ xp: window.__ria.app.save.xp, n: window.__ria.app.save.completed_lessons.length, dev: 'dev_mode' in window.__ria.app.save })")
+        assert st == {"xp": 40, "n": 5, "dev": False}, st
+        assert _ls(a, DEV_SAVE_KEY), "개발자 저장은 남음"
+        _home(a)
+        assert "locked" in a.page.get_attribute('[data-lesson="17-3"]', "class")
+        assert "locked" in a.page.get_attribute('[data-lesson="13-A1"]', "class")
+        a.shot("dev-off-home.png")
         assert not a.errors, a.errors
 
 

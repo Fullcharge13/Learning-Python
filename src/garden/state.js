@@ -16,6 +16,7 @@ import { ensureQuests, tick } from "../quests.js";
 import { checkBadges } from "../badges.js";
 import { localDate } from "../today.js";
 import { advancedOpen } from "../advanced.js";
+import { isDev } from "../devgate.js";
 
 export const GARDEN_VER = 1;
 export const ORDER_XP = 5;
@@ -447,8 +448,9 @@ export function grantOrderXP(save, order, now = new Date()) {
 }
 
 // ---- 장 ----
-/** 통과한 장 번호 Set: 장 평가를 끝낸 장(심화 해금 advancedOpen과 같은 기준) */
+/** 통과한 장 번호 Set: 장 평가를 끝낸 장(심화 해금 advancedOpen과 같은 기준). 개발자 모드 저장이면 모든 장 */
 export function passedChapters(save, chapters) {
+  if (isDev(save)) return new Set((chapters || []).map((c) => c.id));
   const completed = (save && save.completed_lessons) || [];
   return new Set((chapters || []).filter((c) => advancedOpen(c, completed)).map((c) => c.id));
 }

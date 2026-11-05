@@ -34,12 +34,13 @@ export function packResume({ lessonId, S, item = null, now = Date.now() }) {
   return rec;
 }
 
-export function writeResume(storage, rec) {
-  try { storage.setItem(RESUME_KEY, JSON.stringify(rec)); return true; } catch { return false; }
+// key: 기본은 학습 기록의 이어 하기 칸. 개발자 모드는 src/devmode.js의 DEV_RESUME_KEY를 넘김
+export function writeResume(storage, rec, key = RESUME_KEY) {
+  try { storage.setItem(key, JSON.stringify(rec)); return true; } catch { return false; }
 }
 
-export function clearResume(storage) {
-  try { storage && storage.removeItem(RESUME_KEY); } catch { /* 막혀도 그만 */ }
+export function clearResume(storage, key = RESUME_KEY) {
+  try { storage && storage.removeItem(key); } catch { /* 막혀도 그만 */ }
 }
 
 const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
@@ -60,16 +61,16 @@ function wellFormed(r) {
 }
 
 /** 기록 읽기. 없거나 깨졌거나 24시간 지났거나 없는 레슨이면 지우고 null.
- *  @param opts { now, exists(lessonId) => boolean } */
-export function readResume(storage, { now = Date.now(), exists = () => true } = {}) {
+ *  @param opts { now, exists(lessonId) => boolean, key(기본 RESUME_KEY) } */
+export function readResume(storage, { now = Date.now(), exists = () => true, key = RESUME_KEY } = {}) {
   let text = null;
-  try { text = storage ? storage.getItem(RESUME_KEY) : null; } catch { return null; }
+  try { text = storage ? storage.getItem(key) : null; } catch { return null; }
   if (text == null) return null;
   let r = null;
   try { r = JSON.parse(text); } catch { r = null; }
   let ok = wellFormed(r) && now - r.savedAt <= RESUME_MAX_MS && now - r.savedAt >= -60_000;
   if (ok) { try { ok = !!exists(r.lessonId); } catch { ok = false; } }
-  if (!ok) { clearResume(storage); return null; }
+  if (!ok) { clearResume(storage, key); return null; }
   return r;
 }
 

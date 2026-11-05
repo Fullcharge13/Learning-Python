@@ -4,9 +4,12 @@
 // 재생 규칙은 src/py/runner.py의 farm 모듈을 따라간다(시험 tests/unit/garden_view.test.js가 실제 엔진 결과와 맞춰 봄):
 //   시간 1짜리 사건(move·plant·plant_fail·harvest·harvest_young·harvest_empty)은 지금 clock에 일어나고 clock += 1.
 //   plant는 planted_at = 그때 clock. say는 시간이 들지 않는다.
+//   (v0.12) 창고는 늘 CROPS의 작물 전부(없으면 0), 토마토 씨앗 봉투 seeds(없거나 이상하면 5, 0..20):
+//   토마토 plant −1, 토마토 harvest +2(최대 20). plant_fail(no_tomato_seed 등)·harvest_young은 봉투 그대로.
 // 그림은 이미지 파일 없이 SVG 글자로 만든다. 파이는 ria.js의 뱀 친구 그림(snake)을 작게 다시 쓴다.
 // <defs>·id를 쓰지 않아 같은 입력이면 같은 글자이고, 한 화면에 여러 장이어도 충돌하지 않는다.
 import { CROPS } from "../../data/garden.js";
+import { cleanSeeds, SEEDS_MAX } from "./state.js";
 import { snake } from "../ria.js";
 
 export const CELL = 64;   // 칸 한 변(SVG 단위)
@@ -39,10 +42,13 @@ function copyState(s) {
     cells: (s.cells || []).map((c) => (c ? { crop: c.crop, planted_at: c.planted_at } : null)),
     pie: { x: s.pie.x, y: s.pie.y },
     clock: s.clock,
-    store: { ...s.store },
+    store: Object.fromEntries(Object.keys(CROPS).map((c) => [c, s.store?.[c] ?? 0])),
     upgrades: [...(s.upgrades || [])],
+    seeds: cleanSeeds(s.seeds),
   };
 }
+const TOMATO = "토마토";
+const SEEDS_PER_HARVEST = 2;   // runner FARM_SEEDS_PER_HARVEST
 
 const TIMED = new Set(["move", "plant", "plant_fail", "harvest", "harvest_young", "harvest_empty"]);
 
@@ -71,11 +77,13 @@ export function replayFrames(start, events, facing = "오른쪽") {
           break;
         case "plant":
           if (at >= 0) st.cells[at] = { crop: e.crop, planted_at: now };
+          if (e.crop === TOMATO) st.seeds = Math.max(0, st.seeds - 1);
           fx = { t: "plant", x: e.x, y: e.y, crop: e.crop };
           break;
         case "harvest":
           if (at >= 0) st.cells[at] = null;
           st.store[e.crop] = (st.store[e.crop] || 0) + 1;
+          if (e.crop === TOMATO) st.seeds = Math.min(SEEDS_MAX, st.seeds + SEEDS_PER_HARVEST);
           fx = { t: "harvest", x: e.x, y: e.y, crop: e.crop };
           break;
         case "harvest_young":
@@ -116,12 +124,41 @@ const COL = {
   carrot: "#F28C28", carrotD: "#C9661A", potato: "#D9B77A", potatoD: "#A88550", potLeaf: "#4F9A55",
   pieRing: "#FFD43B", teal: "#1F9E93", ink: "#22304A", card: "#FFFDF8", coral: "#E4664F", coralInk: "#B03A25",
   sun: "#FFD43B", gray: "#8A90A0",
+  tomato: "#E2483A", tomatoD: "#B32E24", tomatoL: "#FF8A7A", tomatoG: "#8CC63F", tomLeaf: "#3F8F3A", stake: "#9C6B3E",
 };
 
 const leafPath = (x, y, h, w, rot) =>
   `<path d="M${x},${y} Q${r1(x - w)},${r1(y - h * 0.55)} ${x},${r1(y - h)} Q${r1(x + w)},${r1(y - h * 0.55)} ${x},${y}Z" transform="rotate(${rot} ${x} ${y})"/>`;
 
+// 토마토(v0.12): 막대에 기대 자라는 줄기 — 씨앗(떡잎 둘) → 자람(줄기·잎·작은 풋열매) → 다 자람(빨간 열매 둘, 꼭지 별)
+function tomatoSVG(st, cx, cy) {
+  const L = COL.tomLeaf;
+  const calyx = (x, y) => `<path d="M${x - 5},${y - 5} L${x},${y - 3} L${x + 5},${y - 5} L${x + 2},${y - 1} L${x},${y - 8} L${x - 2},${y - 1}Z" fill="${L}" stroke="${COL.ol}" stroke-width="1.1" stroke-linejoin="round"/>`;
+  if (st === "seed") {
+    return `<path d="M${cx},${cy + 12} L${cx},${cy + 4}" stroke="${L}" stroke-width="2.4" stroke-linecap="round"/>`
+      + `<g fill="${L}" stroke="${COL.ol}" stroke-width="1.6"><ellipse cx="${cx - 6}" cy="${cy + 3}" rx="6" ry="3.2" transform="rotate(-20 ${cx - 6} ${cy + 3})"/>`
+      + `<ellipse cx="${cx + 6}" cy="${cy + 3}" rx="6" ry="3.2" transform="rotate(20 ${cx + 6} ${cy + 3})"/></g>`
+      + `<ellipse cx="${cx}" cy="${cy + 13}" rx="7" ry="2.5" fill="${COL.furrow}"/>`;
+  }
+  let s = `<path d="M${cx + 13},${cy + 20} L${cx + 13},${cy - 18}" stroke="${COL.stake}" stroke-width="3" stroke-linecap="round"/>`;
+  s += `<path d="M${cx},${cy + 20} Q${cx - 3},${cy + 4} ${cx + 2},${cy - 12}" fill="none" stroke="${L}" stroke-width="3" stroke-linecap="round"/>`;
+  s += `<g fill="${L}" stroke="${COL.ol}" stroke-width="1.5">${leafPath(cx - 1, cy + 6, 14, 5, -60)}${leafPath(cx, cy - 2, 13, 5, 55)}${leafPath(cx + 1, cy - 10, 11, 4, -40)}</g>`;
+  if (st === "grow") {
+    s += `<circle cx="${cx - 6}" cy="${cy + 10}" r="4.5" fill="${COL.tomatoG}" stroke="${COL.ol}" stroke-width="1.5"/>`;
+    return s;
+  }
+  // ripe: 둥근 빨간 열매 둘(빛 반사 한 점) + 반짝
+  for (const [x, y, r] of [[cx - 7, cy + 12, 9], [cx + 6, cy + 2, 7.5]]) {
+    s += `<circle cx="${x}" cy="${y}" r="${r}" fill="${COL.tomato}" stroke="${COL.ol}" stroke-width="1.8"/>`;
+    s += `<path d="M${r1(x - r * 0.55)},${r1(y - r * 0.15)} Q${r1(x - r * 0.45)},${r1(y - r * 0.6)} ${r1(x - r * 0.05)},${r1(y - r * 0.65)}" fill="none" stroke="${COL.tomatoL}" stroke-width="2" stroke-linecap="round"/>`;
+    s += calyx(x, y - r + 3);
+  }
+  s += `<path d="M${cx + 20},${cy - 22} l2,5 5,2 -5,2 -2,5 -2,-5 -5,-2 5,-2z" fill="${COL.sun}" stroke="${COL.ol}" stroke-width="1.2"/>`;
+  return s;
+}
+
 function cropSVG(cell, st, cx, cy) {
+  if (cell.crop === TOMATO) return tomatoSVG(st, cx, cy);
   const potato = cell.crop === "감자";
   const leaf = potato ? COL.potLeaf : COL.leaf;
   let s = "";

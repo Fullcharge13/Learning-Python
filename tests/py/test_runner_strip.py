@@ -48,6 +48,13 @@ CASES = [
     ("while not can_harvest():\n    pass\n", "", [], {"farm": FARM}),
     ("move('앞')\n", "", [], {"farm": FARM}),
     ("with open('a.txt') as f:\n    print(f.read())\n", "", [], {"files": {"a.txt": "hi"}}),
+    # v0.12: 토마토·씨앗 봉투·쪽지함(받는 쪽지 읽기 전용, 농장일지 돌려주기)
+    ("plant('토마토')\nprint(seeds(), store())\n", "", [], {"farm": dict(FARM, seeds=1)}),
+    ("plant('토마토')\nmove('오른쪽')\nplant('토마토')\n", "", [], {"farm": dict(FARM, seeds=1)}),
+    ("with open('주문서.txt') as f:\n    for line in f:\n        crop, n = line.split()\n"
+     "        plant(crop)\nwith open('농장일지.txt', 'a') as f:\n    f.write('심음\\n')\n"
+     "open('주문서.txt', 'a')\n", "", [],
+     {"farm": FARM, "files": {"주문서.txt": "당근 1\n", "농장일지.txt": "어제\n"}}),
 ]
 
 

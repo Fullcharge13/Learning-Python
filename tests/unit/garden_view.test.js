@@ -28,7 +28,7 @@ print(json.dumps({"farm": r.get("farm"), "error": r.get("error")}, ensure_ascii=
   return JSON.parse(p.stdout);
 }
 
-const pick = (s) => ({ size: s.size, cells: s.cells, pie: s.pie, clock: s.clock, store: s.store });
+const pick = (s) => ({ size: s.size, cells: s.cells, pie: s.pie, clock: s.clock, store: s.store, seeds: s.seeds });
 
 function replaysTo(code, farm) {
   const r = runFarm(code, farm);
@@ -151,6 +151,49 @@ test("thinFrames: 150장이 넘으면 k장마다 하나만, 수확·심기·말�
   for (let i = 1; i < idx.length; i++) assert.ok(idx[i] > idx[i - 1] && idx[i] - idx[i - 1] <= k);
 });
 
+// v0.12: 토마토와 씨앗 봉투(심기 −1, 다 자란 토마토 거두기 +2, 최대 20, 빈 봉투면 plant_fail no_tomato_seed + ValueError)
+test("replayFrames v0.12: 토마토 심기·거두기·덜 자람에 따라 씨앗 봉투가 엔진과 같다", () => {
+  const farm = farmSetup(["T.t", "...", "..."], { clock: 30 });
+  assert.equal(farm.seeds, 5, "farmSetup 기본 씨앗 5");
+  assert.equal(farm.store.토마토, 0);
+  const code = [
+    'harvest()',            // 다 자란 토마토 → +2 (5 → 7)
+    'plant("토마토")',      // −1 (6)
+    'move("오른쪽")',
+    'plant("토마토")',      // −1 (5)
+    'move("오른쪽")',
+    'harvest()',            // 덜 자란 토마토 → 씨앗 그대로
+    'print(seeds())',
+  ].join("\n") + "\n";
+  const { r, frames } = replaysTo(code, farm);
+  assert.equal(r.farm.state.seeds, 5);
+  assert.deepEqual(frames.map((f) => f.state.seeds), [7, 6, 6, 5, 5, 5, 5]);
+  assert.equal(frames[0].state.store.토마토, 1);
+});
+
+test("replayFrames v0.12: 씨앗은 20개까지, 빈 봉투는 plant_fail(no_tomato_seed) 뒤 ValueError", () => {
+  const full = farmSetup(["TTT", "...", "..."], { clock: 30, seeds: 19 });
+  const a = replaysTo('for i in range(3):\n    harvest()\n    move("오른쪽")\n', full);
+  assert.equal(a.r.farm.state.seeds, 20);
+  const empty = farmSetup(["...", "...", "..."], { clock: 3, seeds: 0 });
+  const b = replaysTo('plant("당근")\nmove("오른쪽")\nplant("토마토")\n', empty);
+  assert.equal(b.r.error.type, "ValueError");
+  const last = b.frames[b.frames.length - 1];
+  assert.equal(last.event.reason, "no_tomato_seed");
+  assert.equal(last.fx.t, "plant_fail");
+  assert.equal(last.state.seeds, 0);
+  assert.equal(last.state.cells[1], null);
+});
+
+test("replayFrames v0.12: 씨앗·토마토 칸이 없는 옛 시작 상태도 엔진처럼 기본값(씨앗 5, 창고 토마토 0)", () => {
+  const farm = farmSetup(START_ROWS);
+  delete farm.seeds;
+  delete farm.store.토마토;
+  const { frames } = replaysTo('plant("토마토")\n', farm);
+  assert.equal(frames[0].state.seeds, 4);
+  assert.equal(frames[0].state.store.토마토, 0);
+});
+
 test("replayFrames: 사건이 없으면 빈 목록", () => {
   assert.deepEqual(replayFrames(farmSetup(START_ROWS), []), []);
   assert.deepEqual(replayFrames(farmSetup(START_ROWS), undefined), []);
@@ -195,4 +238,22 @@ test("render: 같은 입력이면 같은 글자(id·defs 없음)", () => {
   const farm = farmSetup(START_ROWS);
   assert.equal(render(farm, { say: "a" }), render(farm, { say: "a" }));
   assert.ok(!/ id="/.test(render(farm, {})));
+});
+
+test("render v0.12: 토마토는 단계마다 다른 그림(씨앗 떡잎 → 풋열매 → 빨간 열매), 당근·감자 그림과 다름", () => {
+  const T = (planted_at) => ({ crop: "토마토", planted_at });
+  const st = { size: 3, cells: [T(0), T(15), T(19), { crop: "당근", planted_at: 0 }, null, null, null, null, null],
+    pie: { x: 2, y: 2 }, clock: 20, upgrades: [] };
+  const svg = render(st);
+  assert.match(svg, /data-cell="0" data-crop="토마토" data-stage="ripe"/);
+  assert.match(svg, /data-cell="1" data-crop="토마토" data-stage="grow"/);
+  assert.match(svg, /data-cell="2" data-crop="토마토" data-stage="seed"/);
+  const crops = [...svg.matchAll(/<g class="g-crop">([\s\S]*?)<\/g>(?=<g class="g-crop">|<g class="g-pie")/g)].map((m) => m[1]);
+  assert.equal(crops.length, 4);
+  assert.match(crops[0], /#E2483A/);              // 다 자란 토마토: 빨간 열매
+  assert.doesNotMatch(crops[1], /#E2483A/);       // 자라는 중: 아직 빨갛지 않음
+  assert.match(crops[1], /#8CC63F/);
+  assert.doesNotMatch(crops[2], /#8CC63F|#E2483A/);
+  assert.doesNotMatch(crops[3], /#E2483A/);       // 당근은 그대로
+  assert.equal(render(st), svg);                   // 같은 입력 같은 글자
 });

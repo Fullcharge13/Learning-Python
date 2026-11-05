@@ -33,7 +33,7 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
              꺾은선이 둘 이상이거나 legend가 있으면 values 대신 series: [{"name"?: 글, "values": [수]}, …].
 
 텃밭(v0.10, 설계서 2026-11-05 §2): farm(dict)이 있으면 실행마다 새 `farm` 모듈을 sys.modules에 넣고(끝나면 지움)
-  명령 move(방향)·plant(작물)·harvest()·can_harvest()·what_here()·store()·where()를 실행 전역에도 미리 넣는다(import 없이 씀,
+  명령 move(방향)·plant(작물)·harvest()·can_harvest()·what_here()·store()·where()·seeds()를 실행 전역에도 미리 넣는다(import 없이 씀,
   `from farm import *`·`import farm`도 됨). print는 그대로 출력하면서 say 사건도 남긴다(표준 출력에 쓸 때만).
   받은 상태는 고치지 않고 다듬은 사본(_farm_state) 위에서 돈다. 시간 1짜리 행동(move·plant·harvest, 실패한
   심기·빈 칸 수확 포함)은 지금 clock에 일어나고 clock += 1. 다 자람: clock − planted_at ≥ 자라는 시간(당근 8,
@@ -45,10 +45,33 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
   v0.11(설계서 2026-11-05 6~9장 §1): store()는 창고 사본 {"당근": n, "감자": n}(새 dict — 바꿔도 진짜 창고·결과는
   그대로, 없는 작물 이름은 KeyError), where()는 파이의 자리 튜플 (x, y). 둘 다 확인 하나로 세고 사건은 없다(사건 모양 그대로).
   둘 중 먼저 걸린 이유가 stopped에 남고, 멈춘 뒤로는 행동·확인 모두 다시 던진다.
+  v0.12(설계서 2026-11-05 10~17장 §1·§2·§4):
+  - 토마토: 자라는 시간 10(비료 7), 업그레이드 없이 심어짐(장마다 여는 것은 앱이 함). 토마토 씨앗 봉투 state["seeds"]
+    (없으면 5, 0..20으로 다듬음): 토마토 심기 성공 −1, 다 자란 토마토 거두기 +2(최대 20). 봉투가 비었을 때 plant("토마토")는
+    시간 1을 쓰고 plant_fail(reason "no_tomato_seed")을 남긴 뒤 ValueError("토마토 씨앗이 떨어졌어요")를 던진다
+    (학습자가 try/except ValueError로 잡을 수 있음). 봉투 검사가 먼저이고(빈 봉투면 칸이 차 있어도 이 오류), 씨앗이
+    있는데 칸이 차 있으면 예전처럼 plant_fail "occupied"(씨앗은 그대로). store()는 세 작물 모두, what_here()는 "토마토"도.
+  - seeds(): 남은 토마토 씨앗 수. 시간 0, 확인 하나로 셈(C60), 사건 없음.
+  - 쪽지함: farm과 files를 함께 주면 files 가운데 "농장일지.txt"가 아닌 것은 받는 쪽지(읽기 전용) — 실행 동안
+    builtins.open·io.open을 감싸 그 파일을 쓰기("w"·"a"·"x"·"+")로 열면 PermissionError("받은 쪽지는 읽기만 해요").
+    경로는 realpath로 비교(절대 경로·링크도 막힘). os.open·_io.open 직접 쓰기는 막지 않는다(받는 쪽지는 실행마다
+    새로 놓이므로 남지 않음). 실행이 끝나면(오류·멈춤·SyntaxError 때도) 실행 폴더의 농장일지.txt를 읽어
+    result["farm"]["files"] = {"농장일지.txt": 끝 2000자}로 돌려준다. 지웠거나 없으면 "", 깨진 바이트는 U+FFFD.
+    다른 새 파일은 폴더와 함께 사라진다. files를 안 주면 open은 그대로이고 결과에 files가 없다.
+    텃밭 없이 files만 주면 예전 그대로(모든 파일 쓰기 가능).
+  v0.12 검토(판정 C71):
+  - 농장일지.txt를 쓰기·덧붙이기로 열 때마다(builtins.open·io.open 길) 행동 상한에 하나씩 든다: 시간 1짜리 행동과
+    일지 쓰기 열기를 합쳐 FARM_ACTIONS_MAX(500)번까지, 넘으면 stopped "tired". 시계는 흐르지 않고 사건도 없으며
+    결과의 actions는 시간 1짜리 행동만 센다(앱의 결과 대조 C62가 그대로 맞게). 끝없는 일지 쓰기 반복이 시간 제한
+    대신 「지침」으로 끝난다. 읽기로 여는 것은 세지 않는다.
+  - farm["tomato_ok"]가 False면(앱: 10장 전) plant("토마토")는 시간 1을 쓰고 plant_fail(reason "tomato_locked")을
+    남긴 뒤 ValueError("토마토는 10장을 끝내면 심을 수 있어요")(봉투 검사보다 먼저). seeds()는 그대로 됨.
+    없거나 다른 값이면 열림. 끝 상태(state)에는 넣지 않는다.
+  - 일지를 돌려줄 때 바로가기(symlink)는 따라가지 않는다(일지 없음 "").
   result["farm"] = {
       "events": [ {"t": "move", "line", "dir", "x", "y"}            # x, y = 움직인 뒤 자리
                 | {"t": "plant", "line", "crop", "x", "y"}
-                | {"t": "plant_fail", "line", "reason": "occupied" | "no_seed", "crop", "x", "y"}
+                | {"t": "plant_fail", "line", "reason": "occupied" | "no_seed" | "no_tomato_seed" | "tomato_locked", "crop", "x", "y"}
                 | {"t": "harvest", "line", "crop", "x", "y"}          # 다 자람 → store[crop] += 1
                 | {"t": "harvest_young", "line", "crop", "x", "y"}    # 덜 자람 → 작물만 사라짐
                 | {"t": "harvest_empty", "line", "x", "y"}            # 빈 칸(시간은 1 듦)
@@ -56,8 +79,9 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
                 # line: 그 명령을 부른 학습자 코드 줄(가장 안쪽). say는 FARM_SAYS_MAX(100)개까지만 남긴다(넘는 print는
                 # 출력만). 시간 1짜리 사건은 행동 상한(500) 안이라 하나도 버리지 않는다 → 사건만으로 끝 상태를 다시 만들 수 있다.
       "state": {"size", "cells": [None | {"crop", "planted_at"}] (y*size+x), "pie": {"x", "y"},
-                "clock", "store": {"당근", "감자"}, "upgrades": [str]},   # 끝 상태(오류가 나도 그 직전까지)
-      "stopped": None | "tired" | "waited", "actions": int }   # actions: 이번 실행의 시간 1짜리 행동 수
+                "clock", "store": {"당근", "감자", "토마토"}, "upgrades": [str], "seeds": int},   # 끝 상태(오류가 나도 그 직전까지)
+      "stopped": None | "tired" | "waited", "actions": int,   # actions: 이번 실행의 시간 1짜리 행동 수
+      "files"?: {"농장일지.txt": str} }   # files를 함께 준 텃밭 실행에만(v0.12, 2000자까지)
   결과 farm은 학습자 코드가 닫힘으로 상태·사건을 건드렸어도 다시 다듬은 사본이다(JSON 모양, nan 없음).
   규칙 표는 실행마다 바꿀 수 없는 원본에서 새로 만들고, 이 모듈의 전역 이름은 실행이 끝나면 되돌린다(검토 C62 I1).
   farm=None이면 result에 "farm"이 없다(예전 그대로).
@@ -99,6 +123,7 @@ _chdir = os.chdir
 _getcwd = os.getcwd
 _rmtree = shutil.rmtree
 _BytesIO = io.BytesIO
+_io_open = io.open
 
 NO_SUCH_URL = "연습 서버에 없는 주소예요"
 
@@ -554,7 +579,7 @@ def _make_chart(charts):
 
 
 FARM_ACTIONS_MAX = 500   # 한 실행에 시간 1짜리 행동(move·plant·harvest) 수. 넘으면 파이가 지침
-FARM_CHECKS_MAX = 2000   # 한 실행에 시간이 들지 않는 확인(can_harvest·what_here·store·where) 수. 넘으면 기다리다 멈춤(판정 C60)
+FARM_CHECKS_MAX = 2000   # 한 실행에 시간이 들지 않는 확인(can_harvest·what_here·store·where·seeds) 수. 넘으면 기다리다 멈춤(판정 C60)
 FARM_SAYS_MAX = 100      # 한 실행에 남기는 말풍선(say) 사건 수. 넘는 print는 출력만 되고 사건은 없음(검토 C62 I2)
 FARM_EVENTS_MAX = FARM_ACTIONS_MAX + FARM_SAYS_MAX  # 사건 수 안전 상한 → 시간 1짜리 사건(≤500)은 절대 버리지 않는다
 FARM_SAY_MAX = 40        # 말풍선(say) 글자 수
@@ -562,11 +587,20 @@ FARM_SIZE_MAX = 12       # 밭 한 변의 칸 수 상한(받은 상태를 다듬
 FARM_FERTILIZER = "비료"
 FARM_POTATO_SEED = "감자 씨앗"
 FARM_DIR_MSG = "방향은 위·아래·왼쪽·오른쪽 중 하나예요"
-FARM_CROP_MSG = "작물은 당근·감자 중 하나예요"
-FARM_NAMES = ("move", "plant", "harvest", "can_harvest", "what_here", "store", "where")
+FARM_CROP_MSG = "작물은 당근·감자·토마토 중 하나예요"
+FARM_TOMATO = "토마토"
+FARM_SEEDS_DEFAULT = 5   # 토마토 씨앗 봉투: 받은 상태에 없으면 5개(v0.12)
+FARM_SEEDS_MAX = 20      # 봉투에 담을 수 있는 씨앗 수(받은 상태도 0..20으로 다듬음)
+FARM_SEEDS_PER_HARVEST = 2
+FARM_NO_TOMATO_SEED_MSG = "토마토 씨앗이 떨어졌어요"
+FARM_TOMATO_LOCKED_MSG = "토마토는 10장을 끝내면 심을 수 있어요"   # farm["tomato_ok"]가 False일 때(판정 C71 I1)
+FARM_JOURNAL = "농장일지.txt"   # 쪽지함에서 쓸 수 있는 유일한 파일(v0.12)
+FARM_JOURNAL_MAX = 2000         # 돌려주는 일지 글자 수(넘으면 앞에서부터 잘라 끝 2000자만)
+FARM_NOTE_READONLY_MSG = "받은 쪽지는 읽기만 해요"
+FARM_NAMES = ("move", "plant", "harvest", "can_harvest", "what_here", "store", "where", "seeds")
 # 규칙 표의 원본(검토 C62 I1): 바꿀 수 없는 튜플. 실행마다 _make_farm이 여기서 새 표를 만들어 닫힘(closure)에만 둔다.
 # 아래 FARM_CROPS·FARM_GROW·FARM_GROW_FERTILIZED·FARM_DIRS는 시험·문서가 읽는 읽기 전용 사본이고 엔진은 쓰지 않는다.
-_FARM_CROP_RULES = (("당근", 8, 6), ("감자", 12, 9))   # (작물, 자라는 시간, 비료 뒤 자라는 시간)
+_FARM_CROP_RULES = (("당근", 8, 6), ("감자", 12, 9), ("토마토", 10, 7))   # (작물, 자라는 시간, 비료 뒤 자라는 시간)
 _FARM_DIR_RULES = (("위", 0, -1), ("아래", 0, 1), ("왼쪽", -1, 0), ("오른쪽", 1, 0))
 
 
@@ -640,6 +674,7 @@ def _farm_state(farm):
                 store[k] = max(0, _farm_int(v, 0))
     ups = get(farm, "upgrades")
     ups = [u for u in ups if _type(u) is _str] if _type(ups) in (_list, _tuple) else []
+    seeds = max(0, min(FARM_SEEDS_MAX, _farm_int(get(farm, "seeds"), FARM_SEEDS_DEFAULT)))
     return {
         "size": size,
         "cells": cells,
@@ -647,6 +682,7 @@ def _farm_state(farm):
         "clock": max(0, _farm_int(get(farm, "clock"), 0)),
         "store": store,
         "upgrades": ups,
+        "seeds": seeds,
     }
 
 
@@ -687,20 +723,81 @@ def _farm_events_copy(events):
     return out
 
 
-def _farm_result(fs):
-    """result["farm"]: 사건·끝 상태·멈춤·행동 수를 다듬은 사본(학습자가 닫힘으로 fs를 바꿨어도 JSON 모양)."""
+def _farm_journal_text(v):
+    """일지 글자를 다듬는다: 글자가 아니면 "", 길면 끝 FARM_JOURNAL_MAX자만."""
+    return v[-FARM_JOURNAL_MAX:] if _type(v) is _str else ""
+
+
+def _farm_result(fs, journal=None):
+    """result["farm"]: 사건·끝 상태·멈춤·행동 수를 다듬은 사본(학습자가 닫힘으로 fs를 바꿨어도 JSON 모양).
+    journal이 None이 아니면(files를 받은 텃밭 실행) files = {"농장일지.txt": 끝 2000자}를 붙인다."""
     stopped = _dict.get(fs, "stopped")
-    return {"events": _farm_events_copy(_dict.get(fs, "events")),
-            "state": _farm_copy(_dict.get(fs, "state")),
-            "stopped": stopped if _type(stopped) is _str and stopped in ("tired", "waited") else None,
-            "actions": max(0, _farm_int(_dict.get(fs, "actions"), 0))}
+    res = {"events": _farm_events_copy(_dict.get(fs, "events")),
+           "state": _farm_copy(_dict.get(fs, "state")),
+           "stopped": stopped if _type(stopped) is _str and stopped in ("tired", "waited") else None,
+           "actions": max(0, _farm_int(_dict.get(fs, "actions"), 0))}
+    if journal is not None:
+        res["files"] = {FARM_JOURNAL: _farm_journal_text(journal)}
+    return res
+
+
+def _read_journal(root):
+    """실행 폴더의 농장일지.txt 끝 FARM_JOURNAL_MAX자(없거나·폴더거나·못 읽으면 "").
+    파일이 아무리 커도 끝 4×FARM_JOURNAL_MAX+4 바이트만 읽는다(UTF-8 한 글자 ≤ 4바이트 → 앞쪽 깨진 글자는
+    잘려 나가는 부분에만 있음). 깨진 바이트는 U+FFFD로 바꾼다."""
+    path = os.path.join(root, FARM_JOURNAL)
+    try:
+        # 바로가기(symlink)는 따라가지 않는다(판정 C71): 학습자가 일지 자리에 다른 파일을 가리키게 해도 일지 없음
+        if os.path.islink(path) or not os.path.isfile(path):
+            return ""
+        with _io_open(path, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            take = 4 * FARM_JOURNAL_MAX + 4
+            f.seek(max(0, size - take))
+            data = f.read(take)
+        return _farm_journal_text(data.decode("utf-8", "replace"))
+    except BaseException:  # noqa: BLE001 — 권한·이상한 파일 등: 일지 없음으로 친다
+        return ""
+
+
+def _make_note_guard(readonly, real_open, journal=None, on_journal_write=None):
+    """받는 쪽지(readonly: 실제 경로들)를 쓰기로 열면 PermissionError를 내는 open(v0.12 쪽지함).
+    builtins.open과 io.open 자리에 끼운다(pathlib.Path.write_text 등 io.open을 쓰는 것도 막힘).
+    os.open·_io.open을 직접 쓰는 것까지 막지는 않는다(받는 쪽지는 실행마다 새로 놓이니 남지 않음).
+    journal(일지의 실제 경로)을 쓰기·덧붙이기로 열 때마다 on_journal_write()를 먼저 부른다(판정 C71 C1:
+    행동 상한에 하나씩 듦 → 끝없는 일지 쓰기 반복도 「지침」으로 끝남)."""
+    ro = frozenset(readonly)
+    realpath = os.path.realpath
+    fspath = os.fspath
+    isinst = _isinstance
+    str_t = _str
+    int_t = _int
+    perm = PermissionError
+    msg = FARM_NOTE_READONLY_MSG
+
+    def open(file, mode="r", *args, **kw):  # noqa: A001 — open 이름 그대로(오류 원문·help가 자연스럽게)
+        if isinst(mode, str_t) and ("w" in mode or "a" in mode or "x" in mode or "+" in mode) \
+                and not isinst(file, int_t):
+            try:
+                p = realpath(fspath(file))
+            except BaseException:  # noqa: BLE001 — 이상한 이름은 진짜 open이 알맞은 오류를 낸다
+                p = None
+            if p is not None and p in ro:
+                raise perm(msg)
+            if p is not None and p == journal and on_journal_write is not None:
+                on_journal_write()
+        return real_open(file, mode, *args, **kw)
+
+    return open
 
 
 def _make_farm(fs, out):
     """실행 하나에 쓰는 새 farm 모듈과 print 대신 쓸 함수.
 
     fs: {"state": _farm_state(...), "events": [], "actions": 0, "checks": 0, "says": 0, "stopped": None,
-         "trace_on": False}
+         "trace_on": False, "writes": 0, "tomato_ok": bool}
+    돌려주는 것: (모듈, 명령 dict, print 대신 쓸 함수, 일지 쓰기 열기를 세는 함수)
     규칙(설계서 §2-1)은 여기 한 곳에만 있다. 시간 1짜리 행동은 지금 시계(clock)에 일어나고 그 뒤 clock += 1.
     규칙 표·상한·도구는 여기서 원본(_FARM_CROP_RULES 등)으로 새로 만들어 닫힘에만 둔다(검토 C62 I1): 학습자가
     move.__globals__로 모듈 이름을 바꿔도 이 실행의 규칙은 그대로이고(이름은 run()이 끝에 되돌림), 닫힘을 파고들어
@@ -717,6 +814,12 @@ def _make_farm(fs, out):
     events_max = FARM_EVENTS_MAX
     say_len = FARM_SAY_MAX
     seed = FARM_POTATO_SEED
+    tomato = FARM_TOMATO
+    seeds_max = FARM_SEEDS_MAX
+    seeds_gain = FARM_SEEDS_PER_HARVEST
+    no_tomato_msg = FARM_NO_TOMATO_SEED_MSG
+    tomato_locked_msg = FARM_TOMATO_LOCKED_MSG
+    tomato_ok = fs.get("tomato_ok", True) is not False
     fertilizer = FARM_FERTILIZER
     dir_msg = FARM_DIR_MSG
     crop_msg = FARM_CROP_MSG
@@ -768,14 +871,25 @@ def _make_farm(fs, out):
                 f = f.f_back
         raise stop_exc("파이가 멈췄어요")
 
+    def _spent():
+        # 행동 상한에 드는 수: 시간 1짜리 행동 + 농장일지 쓰기 열기(판정 C71 C1)
+        return fs["actions"] + fs.get("writes", 0)
+
     def _act():
         """시간 1짜리 행동 하나를 센다. 넘치면 지침."""
-        if fs["stopped"] is not None or fs["actions"] >= actions_max:
+        if fs["stopped"] is not None or _spent() >= actions_max:
             _stop("tired")
         fs["actions"] += 1
         now = st["clock"]
         st["clock"] = now + 1
         return now
+
+    def journal_write():
+        """농장일지를 쓰기·덧붙이기로 열 때 하나 센다(판정 C71 C1). 시간은 흐르지 않고(시계 그대로) 사건도 없지만
+        행동 상한(시간 1짜리 행동과 합쳐 actions_max)에 든다. 결과의 actions는 시간 1짜리 행동만 센다(C62 대조)."""
+        if fs["stopped"] is not None or _spent() >= actions_max:
+            _stop("tired")
+        fs["writes"] = fs.get("writes", 0) + 1
 
     def _here():
         return st["pie"]["y"] * st["size"] + st["pie"]["x"]
@@ -796,12 +910,22 @@ def _make_farm(fs, out):
         _ev("move", {"dir": direction, "x": st["pie"]["x"], "y": st["pie"]["y"]})
 
     def plant(crop):
-        """지금 칸에 심는다: plant("당근") 또는 plant("감자")"""
+        """지금 칸에 심는다: plant("당근"), plant("감자"), plant("토마토"). 토마토는 씨앗 봉투에서 하나 씀"""
         if not isinst(crop, str_t) or crop not in crops:
             raise value_error(crop_msg)
         now = _act()
         i = _here()
         pos = {"crop": crop, "x": st["pie"]["x"], "y": st["pie"]["y"]}
+        if crop == tomato and not tomato_ok:
+            # 10장 전(판정 C71 I1): 시간 1은 들고 사건을 남긴 뒤 ValueError(봉투 검사보다 먼저)
+            pos["reason"] = "tomato_locked"
+            _ev("plant_fail", pos)
+            raise value_error(tomato_locked_msg)
+        if crop == tomato and st["seeds"] <= 0:
+            # 봉투가 비면: 시간 1은 들고 사건을 남긴 뒤 ValueError(학습자가 try/except ValueError로 잡을 수 있음)
+            pos["reason"] = "no_tomato_seed"
+            _ev("plant_fail", pos)
+            raise value_error(no_tomato_msg)
         if st["cells"][i] is not None:
             pos["reason"] = "occupied"
             _ev("plant_fail", pos)
@@ -810,6 +934,8 @@ def _make_farm(fs, out):
             _ev("plant_fail", pos)
         else:
             st["cells"][i] = {"crop": crop, "planted_at": now}
+            if crop == tomato:
+                st["seeds"] -= 1
             _ev("plant", pos)
 
     def harvest():
@@ -825,6 +951,8 @@ def _make_farm(fs, out):
         pos["crop"] = cell["crop"]
         if _ripe(cell, now):
             st["store"][cell["crop"]] = st["store"].get(cell["crop"], 0) + 1
+            if cell["crop"] == tomato:
+                st["seeds"] = min(seeds_max, st["seeds"] + seeds_gain)
             _ev("harvest", pos)
         else:
             _ev("harvest_young", pos)
@@ -842,13 +970,13 @@ def _make_farm(fs, out):
         return cell is not None and _ripe(cell, st["clock"])
 
     def what_here():
-        """지금 칸: "당근", "감자", "빈칸"(시간이 들지 않음)"""
+        """지금 칸: "당근", "감자", "토마토", "빈칸"(시간이 들지 않음)"""
         _check()
         cell = st["cells"][_here()]
         return "빈칸" if cell is None else cell["crop"]
 
     def store():
-        """창고 사본 {"당근": n, "감자": n}(시간이 들지 않음). 사본을 바꿔도 진짜 창고는 그대로"""
+        """창고 사본 {"당근": n, "감자": n, "토마토": n}(시간이 들지 않음). 사본을 바꿔도 진짜 창고는 그대로"""
         _check()
         have = st["store"]
         return {c: have.get(c, 0) for c in crops}
@@ -857,6 +985,11 @@ def _make_farm(fs, out):
         """파이의 지금 자리 (x, y)(시간이 들지 않음)"""
         _check()
         return (st["pie"]["x"], st["pie"]["y"])
+
+    def seeds():
+        """남은 토마토 씨앗 수(시간이 들지 않음)"""
+        _check()
+        return st["seeds"]
 
     class _SayTee:
         """print가 쓰는 글을 진짜 출력 통(한도 포함)에 넘기면서 말풍선용으로도 모은다(실행마다 새 클래스)."""
@@ -890,14 +1023,14 @@ def _make_farm(fs, out):
 
     mod = types.ModuleType("farm")
     mod.__doc__ = ("리아와 파이썬! 파이의 텃밭: move(방향), plant(작물), harvest(), "
-                   "can_harvest(), what_here(), store(), where()")
+                   "can_harvest(), what_here(), store(), where(), seeds()")
     mod.__all__ = list(FARM_NAMES)
     cmds = {}
-    for f in (move, plant, harvest, can_harvest, what_here, store, where):
+    for f in (move, plant, harvest, can_harvest, what_here, store, where, seeds):
         f.__module__ = "farm"
         setattr(mod, f.__name__, f)
         cmds[f.__name__] = f
-    return mod, cmds, say_print
+    return mod, cmds, say_print, journal_write
 
 
 def _restore_farm_tables():
@@ -921,8 +1054,16 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
     fs = None
     if farm is not None:
         fs = {"state": _farm_state(farm), "events": [], "actions": 0, "checks": 0, "says": 0, "stopped": None,
-              "trace_on": False}
+              "trace_on": False, "writes": 0,
+              # 토마토 잠금(판정 C71 I1): 앱이 10장 전이면 False로 보냄. 없거나 다른 값이면 열림(예전 호출 그대로)
+              "tomato_ok": not (_type(farm) is _dict and _dict.get(farm, "tomato_ok", True) is False)}
         result["farm"] = {"events": fs["events"], "state": None, "stopped": None, "actions": 0}
+    # 쪽지함(v0.12): 텃밭 실행에 files가 오면 농장일지.txt만 쓸 수 있고, 끝난 뒤 일지를 결과로 돌려준다.
+    farm_notes = fs is not None and files is not None
+    journal_in = None
+    if farm_notes:
+        journal_in = _dict.get(files, FARM_JOURNAL, "") if _type(files) is _dict else ""
+        journal_in = journal_in if _type(journal_in) is _str else ""
 
     # 오류 원문(Traceback)에 학습자 코드 줄이 보이도록 등록한다.
     linecache.cache[USER_FILE] = (len(code), None, code.splitlines(True), USER_FILE)
@@ -942,7 +1083,7 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
         result["stderr"] = text[:2000]
         linecache.cache.pop(USER_FILE, None)
         if fs is not None:
-            result["farm"] = _farm_result(fs)
+            result["farm"] = _farm_result(fs, journal_in)
         return result
 
     try:
@@ -960,6 +1101,8 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
 
     old_cwd = _getcwd()
     run_dir = _make_run_dir(files)
+    note_guard = None
+    journal_path = os.path.realpath(os.path.join(run_dir, FARM_JOURNAL)) if farm_notes else None
 
     old_out, old_err = sys.stdout, sys.stderr
     old_builtins = dict(builtins.__dict__)
@@ -976,10 +1119,16 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
     sys.modules["chart"] = _make_chart(charts)  # 목록 뒤에 넣어 실행이 끝나면 지워지게
     user_globals = {"__name__": "__main__", "__builtins__": builtins}
     if fs is not None:
-        farm_mod, farm_cmds, say_print = _make_farm(fs, out)
+        farm_mod, farm_cmds, say_print, journal_write = _make_farm(fs, out)
+        if farm_notes:
+            readonly = [os.path.realpath(os.path.join(run_dir, str(n))) for n in files if str(n) != FARM_JOURNAL]
+            note_guard = _make_note_guard(readonly, _io_open, journal_path, journal_write)
         sys.modules["farm"] = farm_mod
         user_globals.update(farm_cmds)  # import 없이 move(…) 등을 바로 쓰게(레슨 코드처럼 짧게)
         builtins.print = say_print      # builtins는 끝나면 통째로 되돌린다
+    if note_guard is not None:
+        builtins.open = note_guard      # 받는 쪽지 쓰기 금지(io.open은 finally에서 되돌림)
+        io.open = note_guard
     sys.stdout, sys.stderr = out, err
     builtins.input = _make_input(stdin, out, state)
     caught = None
@@ -1004,10 +1153,13 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
             del sys.modules[name]
         if urlreq is not None:
             urlreq.urlopen = real_urlopen
+        if note_guard is not None:
+            io.open = _io_open
         try:
             _chdir(old_cwd)
         except OSError:
             pass
+        journal_out = _read_journal(run_dir) if farm_notes else None
         _rmtree(run_dir, ignore_errors=True)
 
     tired = fs is not None and fs["stopped"] is not None
@@ -1049,7 +1201,7 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
         err.raw_write("OutputLimit (line %s): output is longer than %d characters\n" % (line, OUTPUT_LIMIT))
 
     if fs is not None:
-        result["farm"] = _farm_result(fs)
+        result["farm"] = _farm_result(fs, journal_out)
 
     result["stdout"] = out.getvalue()
     result["stderr"] = err.getvalue()

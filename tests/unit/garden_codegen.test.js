@@ -7,7 +7,12 @@ import {
   newNode, insertNode, moveNode, removeNode, updateArgs, setElse, findNode, countNodes, kindsUsed,
   defaultProgram, MAX_NODES, MAX_DEPTH,
   LIST_TYPES, LIST_ITEMS, LIST_MAX, POS_NAMES, availableValues, loopVarAvailable,
+  CROP_NAMES, NOTE_FILES, PATTERNS, MARK_LOCKS, COND_LOCKS, noteVarAvailable,
 } from "../../src/garden/nodes.js";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // ---- 작은 도우미 ----
 let seq = 0;
@@ -15,6 +20,7 @@ const N = (kind, args = {}, extra = {}) => {
   const n = { id: `n${++seq}`, kind, args: { ...newNode(kind, 0).args, ...args } };
   if (NODES[kind].body) n.body = extra.body || [];
   if (extra.orelse) n.orelse = extra.orelse;
+  if (NODES[kind].handler) n.handler = extra.handler || [];
   if (extra.id) n.id = extra.id;
   return n;
 };
@@ -27,13 +33,16 @@ const msgs = (errs) => errs.map((e) => e.msg);
 const errOn = (errs, id) => errs.filter((e) => e.nodeId === id).map((e) => e.msg);
 
 // ---- 표 ----
-test("노드 표: 14종(v0.11 6·7·9장 추가), 장·이름·body·orelse가 설계 표와 같다", () => {
+test("노드 표: 19종(v0.11 6·7·9장, v0.12 10~12장 추가), 장·이름·body·orelse가 설계 표와 같다", () => {
   const want = {
     move: [1, "이동"], harvest: [1, "수확"], plant: [1, "심기"], say: [1, "말하기"],
     setvar: [2, "값 기억하기"], addvar: [2, "값 더하기"],
     if: [3, "만약"], def: [4, "내 노드 만들기"], call: [4, "내 노드 부르기"],
     repeat: [5, "반복"], while: [5, "~하는 동안"],
     sayval: [6, "값 넣어 말하기"], foreach: [7, "목록에서 하나씩"], where: [9, "위치 알기"],
+    // v0.12
+    try: [10, "시도하기"], readnote: [11, "쪽지 읽기"], splitline: [11, "줄 나누기"], writelog: [11, "일지 쓰기"],
+    findall: [12, "패턴 찾기"],
   };
   assert.deepEqual(Object.keys(NODES).sort(), Object.keys(want).sort());
   for (const [k, [ch, label]] of Object.entries(want)) {
@@ -48,7 +57,7 @@ test("노드 표: 14종(v0.11 6·7·9장 추가), 장·이름·body·orelse가 �
   assert.equal(NODES.if.orelse, true);
   assert.equal(NODES.repeat.orelse, false);
   assert.deepEqual(NODES.move.args.dir.choices, ["위", "아래", "왼쪽", "오른쪽"]);
-  assert.deepEqual(NODES.plant.args.crop.choices, ["당근", "감자"]);
+  assert.deepEqual(NODES.plant.args.crop.choices, ["당근", "감자", "토마토"]); // 토마토는 10장 표지로 잠금
   assert.equal(NODES.say.args.text.max, 20);
   assert.deepEqual([NODES.repeat.args.n.min, NODES.repeat.args.n.max], [1, 25]);
   assert.deepEqual([NODES.setvar.args.value.min, NODES.setvar.args.value.max], [0, 99]);
@@ -644,7 +653,7 @@ test("6장 sayval: 글자 수·값 이름 검사, 먼저 기억한 값만", () =
 // ---- 7장 목록에서 하나씩 ----
 test("7장 foreach: 작물 목록 crop, 방향 목록 way, 겹치면 crop2·way2", () => {
   assert.deepEqual(LIST_TYPES, ["crop", "dir"]);
-  assert.deepEqual(LIST_ITEMS, { crop: ["당근", "감자"], dir: ["위", "아래", "왼쪽", "오른쪽"] });
+  assert.deepEqual(LIST_ITEMS, { crop: ["당근", "감자", "토마토"], dir: ["위", "아래", "왼쪽", "오른쪽"] });
   assert.equal(LIST_MAX, 6);
   const p1 = N("plant", { crop: LV });
   const f1 = N("foreach", { list: cropList("당근", "감자", "당근") }, { body: [p1, N("move", { dir: "오른쪽" })] });
@@ -965,4 +974,682 @@ test("v0.11 노드도 codegen·validate가 입력을 바꾸지 않는다", () =>
   const before = JSON.stringify(p);
   codegen(p); validate(p, ALL9); kindsUsed(p); availableValues(p, p[1].body[0].id); loopVarAvailable(p, p[1].body[0].id, "crop");
   assert.equal(JSON.stringify(p), before);
+});
+
+// ======================================================================
+// v0.12 작업 2: 10~12장 노드(설계 docs/specs/2026-11-05-텃밭-10-17장-설계.md 1절)
+// ======================================================================
+const upTo = (n) => new Set(Array.from({ length: n }, (_, i) => i + 1));
+const ALL10 = unlockedKinds(upTo(10));
+const ALL12 = unlockedKinds(upTo(12));
+const EMPTY = "안에 노드를 하나 넣어요";
+const EMPTY_H = "안 되면 칸에 노드를 하나 넣어요";
+const NOTE_ONLY = "쪽지 읽기 안에서만 써요";
+const NO_NOTE = (v) => `${v} 값은 줄 나누기·패턴 찾기 뒤에서만 써요`;
+const NOTE_N = "n은 쪽지에서 읽은 글자예요 — 숫자는 count·total에 기억해요";
+const LOG_READING = "농장일지를 읽는 동안에는 일지에 쓸 수 없어요";
+const NV = (v) => ({ noteVar: v });
+const RN = (file, body) => N("readnote", { file }, { body });
+const FA = (pattern, body) => N("findall", { pattern }, { body });
+const lines = (g) => g.code.split("\n");
+
+test("v0.12 표: 토마토·쪽지 목록·패턴·잠금 표지", () => {
+  assert.deepEqual(CROP_NAMES, ["당근", "감자", "토마토"]);
+  assert.deepEqual(NOTE_FILES, ["주문서.txt", "손글씨주문.txt", "농장일지.txt"]);
+  assert.deepEqual(Object.keys(PATTERNS), ["crop_num", "num", "crop"]);
+  assert.equal(PATTERNS.crop_num.re, "(당근|감자|토마토)\\s*(\\d+)");
+  assert.equal(PATTERNS.num.re, "\\d+");
+  assert.equal(PATTERNS.crop.re, "당근|감자|토마토");
+  assert.deepEqual(PATTERNS.crop_num.vars, ["crop", "n"]);
+  assert.deepEqual(PATTERNS.num.vars, ["n"]);
+  assert.deepEqual(PATTERNS.crop.vars, ["crop"]);
+  for (const p of Object.values(PATTERNS)) assert.ok(p.label);
+  assert.deepEqual(MARK_LOCKS, { "cond:store": 8, "crop:토마토": 10 });
+  assert.deepEqual(COND_LOCKS, { "cond:store": 8 }); // 화면이 쓰는 조건 표지는 그대로
+  assert.equal(NODES.try.body, true);
+  assert.equal(NODES.try.handler, true);
+  assert.equal(NODES.try.orelse, false);
+  assert.equal(NODES.readnote.body, true);
+  assert.equal(NODES.findall.body, true);
+  assert.equal(NODES.splitline.body, false);
+  assert.equal(NODES.writelog.body, false);
+  for (const k of Object.keys(NODES)) if (k !== "try") assert.ok(!NODES[k].handler, k);
+  // 열림: 10장 try + 토마토 표지, 11장 셋, 12장 findall
+  assert.equal(unlockedKinds(upTo(9)).size, 15);
+  const u10 = unlockedKinds(upTo(10));
+  assert.ok(u10.has("try") && u10.has("crop:토마토"));
+  assert.equal(u10.size, 17);
+  const u11 = unlockedKinds(upTo(11));
+  for (const k of ["readnote", "splitline", "writelog"]) assert.ok(u11.has(k), k);
+  assert.equal(u11.size, 20);
+  assert.ok(!u11.has("findall"));
+  assert.equal(unlockedKinds(upTo(12)).size, 21);
+  // 새 노드 기본값
+  assert.deepEqual(newNode("try", 1), { id: 1, kind: "try", args: {}, body: [], handler: [] });
+  assert.deepEqual(newNode("readnote", 1), { id: 1, kind: "readnote", args: { file: "주문서.txt" }, body: [] });
+  assert.deepEqual(newNode("splitline", 1), { id: 1, kind: "splitline", args: {} });
+  assert.deepEqual(newNode("findall", 1), { id: 1, kind: "findall", args: { pattern: "crop_num" }, body: [] });
+  const w = newNode("writelog", 1).args;
+  assert.deepEqual(Object.keys(w).sort(), ["post", "pre", "var"]);
+});
+
+test("10장 토마토: 심기·목록·창고 조건 모두 10장을 끝내야", () => {
+  const p = N("plant", { crop: "토마토" });
+  const f = N("foreach", { list: cropList("당근", "토마토") }, { body: [N("plant", { crop: LV })] });
+  const i = N("if", { cond: { store: { crop: "토마토", op: "<", num: 3 } } }, { body: [N("harvest")] });
+  const errs = validate([p, f, i], ALL9);
+  assert.deepEqual(errOn(errs, p.id), ["10장을 끝내면 열려요"]);
+  assert.deepEqual(errOn(errs, f.id), ["10장을 끝내면 열려요"]);
+  assert.deepEqual(errOn(errs, i.id), ["10장을 끝내면 열려요"]);
+  assert.equal(errs.length, 3);
+  assert.deepEqual(validate([p, f, i], ALL10), []);
+  assert.equal(codegen([p]).code, 'plant("토마토")\n');
+  assert.equal(codegen([f]).code, 'for crop in ["당근", "토마토"]:\n    plant(crop)\n');
+  // 당근·감자만 쓰면 표지 없이도 괜찮다
+  assert.deepEqual(validate([N("plant", { crop: "감자" })], ALL9), []);
+  // 쓴 표지
+  assert.ok(kindsUsed([p]).has("crop:토마토"));
+  assert.ok(kindsUsed([f]).has("crop:토마토"));
+  assert.ok(kindsUsed([i]).has("crop:토마토"));
+  assert.ok(!kindsUsed([N("plant", { crop: "당근" })]).has("crop:토마토"));
+});
+
+test("10장 try: try/except ValueError 코드, 두 줄 모두 노드에", () => {
+  const a = N("plant", { crop: "토마토" }), b = N("plant", { crop: "당근" });
+  const t = N("try", {}, { body: [a], handler: [b] });
+  const g = codegen([t]);
+  assert.equal(g.code, 'try:\n    plant("토마토")\nexcept ValueError:\n    plant("당근")\n');
+  assert.deepEqual(g.lineMap, { 1: t.id, 2: a.id, 3: t.id, 4: b.id });
+  assert.deepEqual(g.errors, []);
+  assert.deepEqual(validate([t], ALL10), []);
+  assert.deepEqual(errOn(validate([t], ALL9), t.id), ["10장을 끝내면 열려요"]);
+  // 빈 칸
+  const e1 = N("try", {}, { body: [N("harvest")], handler: [] });
+  assert.equal(codegen([e1]).code, "try:\n    harvest()\nexcept ValueError:\n    pass\n");
+  assert.deepEqual(errOn(validate([e1], ALL10), e1.id), [EMPTY_H]);
+  const e2 = N("try", {}, { body: [], handler: [N("harvest")] });
+  assert.equal(codegen([e2]).code, "try:\n    pass\nexcept ValueError:\n    harvest()\n");
+  assert.deepEqual(errOn(validate([e2], ALL10), e2.id), [EMPTY]);
+  const e3 = N("try");
+  assert.deepEqual(errOn(validate([e3], ALL10), e3.id), [EMPTY, EMPTY_H]);
+  const e4 = { id: "t4", kind: "try", args: {}, body: [N("harvest")] }; // handler가 아예 없음
+  assert.deepEqual(errOn(validate([e4], ALL10), "t4"), [EMPTY_H]);
+  assert.match(codegen([e4]).code, /except ValueError:\n    pass\n$/);
+  // 깊이: 안 되면 칸도 한 단
+  const h = N("harvest");
+  let node = N("try", {}, { body: [N("harvest")], handler: [h] });
+  for (let d = 0; d < 3; d++) node = N("repeat", { n: 1 }, { body: [node] });
+  assert.deepEqual(validate([node], ALL10), []);
+  const deeper = N("repeat", { n: 1 }, { body: [node] });
+  assert.deepEqual(errOn(validate([deeper], ALL10), h.id), ["안쪽으로는 4단까지 넣어요"]);
+});
+
+test("10장 try: 안에서 기억한 값은 뒤에서 못 쓰고(만약과 같음), 안 되면 칸은 try 앞 값만", () => {
+  const NO = "count 값을 먼저 기억해요";
+  const a1 = N("addvar", { name: "count", value: 1 });
+  assert.deepEqual(errOn(validate([N("try", {}, { body: [N("setvar", { name: "count", value: 0 })], handler: [N("harvest")] }), a1], ALL10), a1.id), [NO]);
+  const a2 = N("addvar", { name: "count", value: 1 });
+  assert.deepEqual(errOn(validate([N("try", {}, { body: [N("harvest")], handler: [N("setvar", { name: "count", value: 0 })] }), a2], ALL10), a2.id), [NO]);
+  // 몸통에서 기억했어도 안 되면 칸에서는 못 씀(앞에서 멈췄을 수 있음)
+  const a3 = N("addvar", { name: "count", value: 1 });
+  assert.deepEqual(errOn(validate([N("try", {}, { body: [N("plant", { crop: "토마토" }), N("setvar", { name: "count", value: 0 })], handler: [a3] })], ALL10), a3.id), [NO]);
+  // 같은 칸 안에서 기억한 뒤, 바깥 앞에서 기억한 값은 어디서나
+  assert.deepEqual(validate([N("setvar", { name: "count", value: 0 }), N("try", {}, {
+    body: [N("setvar", { name: "total", value: 0 }), N("addvar", { name: "total", value: 1 }), N("addvar", { name: "count", value: 1 })],
+    handler: [N("addvar", { name: "count", value: 2 })] }), N("addvar", { name: "count", value: 1 })], ALL10), []);
+  // 위치 알기도 같다
+  const sv = N("sayval", { var: "x" });
+  assert.deepEqual(errOn(validate([N("try", {}, { body: [N("where")], handler: [N("harvest")] }), sv], ALL10), sv.id), [NO_POS]);
+  // 목록 변수는 try 안에서도 그 목록 것
+  assert.deepEqual(validate([N("foreach", { list: cropList("토마토") }, { body: [N("try", {}, { body: [N("plant", { crop: LV })], handler: [N("plant", { crop: "당근" })] })] })], ALL10), []);
+  // ~하는 동안 움직임 검사는 try 두 칸을 다 본다
+  const w = N("while", { cond: { var: "x", op: "<", num: 3 } }, { body: [N("try", {}, { body: [N("harvest")], handler: [N("move")] }), N("where")] });
+  assert.deepEqual(validate([N("where"), w], ALL10), []);
+});
+
+test("10장 try: 편집(넣기·옮기기·지우기·값 바꾸기)이 안 되면 칸에서도", () => {
+  const h = N("harvest"), m = N("move");
+  const t = N("try", {}, { body: [N("plant", { crop: "토마토" })], handler: [h, m] });
+  const p = deepFreeze([t]);
+  const p1 = insertNode(p, t.id, "handler", 0, newNode("say", "s1"));
+  assert.deepEqual(findNode(p1, t.id).handler.map((n) => n.id), ["s1", h.id, m.id]);
+  assert.equal(t.handler.length, 2);
+  assert.deepEqual(findNode(moveNode(p, m.id, -1), t.id).handler.map((n) => n.id), [m.id, h.id]);
+  assert.deepEqual(findNode(removeNode(p, h.id), t.id).handler.map((n) => n.id), [m.id]);
+  assert.equal(findNode(updateArgs(p, m.id, { dir: "위" }), m.id).args.dir, "위");
+  assert.equal(findNode(p, m.id), m);
+  assert.equal(countNodes(p), 4);
+  assert.ok(kindsUsed(p).has("move"));
+  assert.throws(() => insertNode(p, t.id, "orelse", 0, newNode("say", "s2")));
+  const r = N("repeat", { n: 1 }, { body: [N("harvest")] });
+  assert.throws(() => insertNode([r], r.id, "handler", 0, newNode("say", "s4")));
+});
+
+test("11장 readnote: with open + for line in f, 두 줄 모두 노드, 안쪽은 두 칸 들여쓰기", () => {
+  const sv = N("sayval", { pre: "", var: NV("line"), post: "" });
+  const r = RN("주문서.txt", [sv]);
+  const g = codegen([r]);
+  assert.equal(g.code, 'with open("주문서.txt") as f:\n    for line in f:\n        print(line.strip())\n');
+  assert.deepEqual(g.lineMap, { 1: r.id, 2: r.id, 3: sv.id });
+  // 쪽지 line은 줄 끝 줄바꿈을 떼어 쓴다(일지 쓰기도 — 빈 줄이 겹치지 않게)
+  const wline = N("writelog", { pre: "> ", var: NV("line"), post: "" });
+  assert.equal(codegen([RN("주문서.txt", [wline])]).code.split("\n")[3], '            f.write("> " + line.strip() + "\\n")');
+  const sv2 = N("sayval", { pre: "", var: NV("crop"), post: "" });
+  assert.match(codegen([RN("주문서.txt", [N("splitline"), sv2])]).code, /print\(str\(crop\)\)/);
+  assert.deepEqual(validate([r], ALL12), []);
+  for (const file of NOTE_FILES) assert.match(codegen([RN(file, [N("harvest")])]).code, new RegExp(`^with open\\("${file.replace(".", "\\.")}"\\) as f:`));
+  // 잘못된 파일, 빈 칸, 잠김
+  const bad = RN("비밀.txt", [N("harvest")]);
+  assert.ok(errOn(validate([bad], ALL12), bad.id).includes("고를 수 없는 값이에요"));
+  const empty = RN("주문서.txt", []);
+  assert.equal(codegen([empty]).code, 'with open("주문서.txt") as f:\n    for line in f:\n        pass\n');
+  assert.deepEqual(errOn(validate([empty], ALL12), empty.id), [EMPTY]);
+  assert.deepEqual(errOn(validate([r], ALL10), r.id), ["11장을 끝내면 열려요"]);
+  // line은 쪽지 읽기 안에서만(뒤에서는 못 씀 — 빈 쪽지면 한 번도 안 돎)
+  const out = N("sayval", { var: NV("line") });
+  assert.deepEqual(errOn(validate([out], ALL12), out.id), [NOTE_ONLY]);
+  const after = N("sayval", { var: NV("line") });
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [N("harvest")]), after], ALL12), after.id), [NOTE_ONLY]);
+  // 안에서 기억한 값도 뒤에서 못 씀
+  const a = N("addvar", { name: "count", value: 1 });
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [N("setvar", { name: "count", value: 0 })]), a], ALL12), a.id), ["count 값을 먼저 기억해요"]);
+  // 깊이는 사용자에게 한 단(코드는 두 칸 들여쓰기)
+  const h = N("harvest");
+  let node = RN("주문서.txt", [h]);
+  for (let d = 0; d < 3; d++) node = N("repeat", { n: 1 }, { body: [node] });
+  assert.deepEqual(validate([node], ALL12), []);
+  assert.match(codegen([node]).code, /\n {20}harvest\(\)\n$/);
+  assert.deepEqual(errOn(validate([N("repeat", { n: 1 }, { body: [node] })], ALL12), h.id), ["안쪽으로는 4단까지 넣어요"]);
+});
+
+test("11장 splitline: 쪽지 읽기 안에서만, 뒤에서 crop(심기)·n(int(n)번 반복)", () => {
+  const sp = N("splitline");
+  const pl = N("plant", { crop: NV("crop") });
+  const rp = N("repeat", { n: { value: "n" } }, { body: [pl] });
+  const r = RN("주문서.txt", [sp, rp]);
+  const g = codegen([r]);
+  assert.equal(g.code, [
+    'with open("주문서.txt") as f:',
+    "    for line in f:",
+    "        crop, n = line.split()",
+    "        for i in range(int(n)):",
+    "            plant(crop)",
+    "",
+  ].join("\n"));
+  assert.deepEqual(g.lineMap, { 1: r.id, 2: r.id, 3: sp.id, 4: rp.id, 5: pl.id });
+  assert.deepEqual(validate([r], ALL12), []);
+  assert.deepEqual(validate([r], unlockedKinds(upTo(11))), []);
+  // 바깥
+  const sp2 = N("splitline");
+  assert.deepEqual(errOn(validate([sp2], ALL12), sp2.id), [NOTE_ONLY]);
+  // 줄 나누기 전·쪽지 읽기 뒤에서는 crop·n을 못 씀
+  const p0 = N("plant", { crop: NV("crop") });
+  const r0 = N("repeat", { n: { value: "n" } }, { body: [N("harvest")] });
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [p0, r0, N("splitline")])], ALL12), p0.id), [NO_NOTE("crop")]);
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [p0, r0, N("splitline")])], ALL12), r0.id), [NO_NOTE("n")]);
+  const p1 = N("plant", { crop: NV("crop") });
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [N("splitline")]), p1], ALL12), p1.id), [NO_NOTE("crop")]);
+  // 만약 안에서 나눈 값은 만약 뒤에서 못 씀(C64), 반복 안에서 나눈 값은 뒤에서 씀
+  const p2 = N("plant", { crop: NV("crop") });
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [N("if", {}, { body: [N("splitline")] }), p2])], ALL12), p2.id), [NO_NOTE("crop")]);
+  assert.deepEqual(validate([RN("주문서.txt", [N("repeat", { n: 1 }, { body: [N("splitline")] }), N("plant", { crop: NV("crop") })])], ALL12), []);
+  // 값 넣어 말하기·일지 쓰기에 crop·n·line
+  assert.deepEqual(validate([RN("주문서.txt", [N("splitline"), N("sayval", { pre: "", var: NV("crop"), post: "" }),
+    N("sayval", { var: NV("n") }), N("sayval", { var: "n" }), N("sayval", { var: NV("line") })])], ALL12), []);
+  // 반복 int(n)은 쪽지 n만(기억한 숫자 n은 그대로 range(n)이 아니라 잘못된 값)
+  const rn = N("repeat", { n: { value: "n" } }, { body: [N("harvest")] });
+  assert.deepEqual(errOn(validate([N("setvar", { name: "n", value: 3 }), rn], ALL12), rn.id), [NO_NOTE("n")]);
+  for (const v of [{ value: "count" }, { value: "line" }, { value: "x" }, "3", null]) {
+    const bad = N("repeat", { n: v }, { body: [N("harvest")] });
+    assert.ok(errOn(validate([bad], ALL12), bad.id).includes("고를 수 없는 값이에요"), JSON.stringify(v));
+  }
+  // 심기 noteVar는 crop만
+  for (const v of [NV("n"), NV("line"), NV("x"), { noteVar: true }]) {
+    const bad = N("plant", { crop: v });
+    assert.ok(errOn(validate([RN("주문서.txt", [N("splitline"), bad])], ALL12), bad.id).includes("고를 수 없는 값이에요"), JSON.stringify(v));
+  }
+  // 이동에는 쪽지 값이 없다
+  const mv = N("move", { dir: NV("crop") });
+  assert.ok(errOn(validate([RN("주문서.txt", [N("splitline"), mv])], ALL12), mv.id).includes("고를 수 없는 값이에요"));
+  // 내 노드 안의 쪽지 읽기도 된다(지역 값)
+  assert.deepEqual(validate([N("def", { name: "tend" }, { body: [RN("주문서.txt", [N("splitline"), N("plant", { crop: NV("crop") })])] }),
+    N("call", { name: "tend" })], ALL12), []);
+});
+
+test("11장 n 이름 겹침: 쪽지 n은 글자라 값 더하기·값 비교에 못 씀(TypeError 막기)", () => {
+  // 쪽지 읽기 안 줄 나누기 뒤 n 더하기
+  const a = N("addvar", { name: "n", value: 1 });
+  assert.deepEqual(errOn(validate([N("setvar", { name: "n", value: 0 }), RN("주문서.txt", [N("splitline"), a])], ALL12), a.id), [NOTE_N]);
+  // 쪽지 읽기 뒤 바깥에서도(쪽지에 줄이 있었으면 n이 글자로 바뀜)
+  const a2 = N("addvar", { name: "n", value: 1 });
+  assert.deepEqual(errOn(validate([N("setvar", { name: "n", value: 0 }), RN("주문서.txt", [N("splitline")]), a2], ALL12), a2.id), [NOTE_N]);
+  const i2 = N("if", { cond: { var: "n", op: "<", num: 3 } }, { body: [N("harvest")] });
+  assert.deepEqual(errOn(validate([N("setvar", { name: "n", value: 0 }), RN("주문서.txt", [N("splitline")]), i2], ALL12), i2.id), [NOTE_N]);
+  // 패턴 찾기(숫자만)도 n을 덮는다, 작물만은 안 덮는다
+  const a3 = N("addvar", { name: "n", value: 1 });
+  assert.deepEqual(errOn(validate([N("setvar", { name: "n", value: 0 }), RN("손글씨주문.txt", [FA("num", [N("harvest")])]), a3], ALL12), a3.id), [NOTE_N]);
+  assert.deepEqual(validate([N("setvar", { name: "n", value: 0 }), RN("손글씨주문.txt", [FA("crop", [N("harvest")])]), N("addvar", { name: "n", value: 1 })], ALL12), []);
+  // 반복 안: 두 번째 바퀴에서는 n이 글자 — 앞에서 더해도 오류
+  const a4 = N("addvar", { name: "n", value: 1 });
+  assert.deepEqual(errOn(validate([N("setvar", { name: "n", value: 0 }), RN("주문서.txt", [N("repeat", { n: 2 }, { body: [a4, N("splitline")] })])], ALL12), a4.id), [NOTE_N]);
+  // 다시 기억하면 숫자 n(그 뒤 int(n)번 반복은 쪽지 n이 아니라 오류)
+  const r5 = N("repeat", { n: { value: "n" } }, { body: [N("harvest")] });
+  const errs5 = validate([RN("주문서.txt", [N("splitline"), N("setvar", { name: "n", value: 1 }), N("addvar", { name: "n", value: 1 }), r5])], ALL12);
+  assert.deepEqual(errs5, [{ nodeId: r5.id, msg: NO_NOTE("n") }]);
+  // n 비교 ~하는 동안 안에서 n을 덮으면
+  const w = N("while", { cond: { var: "n", op: "<", num: 5 } }, { body: [N("addvar", { name: "n", value: 1 }), FA("num", [N("harvest")])] });
+  assert.deepEqual(errOn(validate([RN("손글씨주문.txt", [N("setvar", { name: "n", value: 0 }), w])], ALL12), w.id), [NOTE_N]);
+  // 내 노드 안에 줄 나누기가 있으면 n이 지역 값 — 바깥 n을 먼저 읽으면 UnboundLocalError
+  const sv = N("sayval", { var: "n" });
+  const d = N("def", { name: "tend" }, { body: [sv, RN("주문서.txt", [N("splitline")])] });
+  assert.deepEqual(errOn(validate([N("setvar", { name: "n", value: 0 }), d], ALL12), sv.id), [NOTE_N]);
+  // 겹치지 않는 count·total은 그대로
+  assert.deepEqual(validate([N("setvar", { name: "count", value: 0 }), RN("주문서.txt", [N("splitline"), N("addvar", { name: "count", value: 1 })]),
+    N("addvar", { name: "count", value: 1 })], ALL12), []);
+});
+
+test("11장 writelog: with open(일지, a) + f.write(…\\n), 빈 조각은 빼고 줄바꿈은 늘", () => {
+  const s = N("setvar", { name: "count", value: 3 });
+  const w = N("writelog", { pre: "수확 ", var: "count", post: "개" });
+  const g = codegen([s, w]);
+  assert.equal(g.code, 'count = 3\nwith open("농장일지.txt", "a") as f:\n    f.write("수확 " + str(count) + "개\\n")\n');
+  assert.deepEqual(g.lineMap, { 1: s.id, 2: w.id, 3: w.id });
+  assert.deepEqual(validate([s, w], ALL12), []);
+  const wl = (args) => lines(codegen([s, N("writelog", args)]))[2];
+  assert.equal(wl({ pre: "", var: "count", post: "" }), '    f.write(str(count) + "\\n")');
+  assert.equal(wl({ pre: "수: ", var: "count", post: "" }), '    f.write("수: " + str(count) + "\\n")');
+  assert.equal(wl({ pre: "", var: "count", post: "개" }), '    f.write(str(count) + "개\\n")');
+  // 값 없이 글자만
+  assert.equal(wl({ pre: "오늘 ", var: null, post: "맑음" }), '    f.write("오늘 맑음\\n")');
+  assert.deepEqual(validate([N("writelog", { pre: "맑음", var: null, post: "" })], ALL12), []);
+  // 따옴표 안전
+  assert.equal(wl({ pre: '"', var: "count", post: "\\" }), '    f.write("\\"" + str(count) + "\\\\\\n")');
+  // 잘못된 값: 글자 수·이름·모두 비움
+  for (const args of [{ pre: "가".repeat(11) }, { post: "가".repeat(11) }, { var: "zzz" }, { var: undefined }, { pre: "", var: null, post: "" }]) {
+    const n = N("writelog", args);
+    assert.ok(errOn(validate([s, n], ALL12), n.id).includes("고를 수 없는 값이에요"), JSON.stringify(args));
+  }
+  // 값 범위(값 넣어 말하기와 같음) + 쪽지 값
+  const nw = N("writelog", { var: "total" });
+  assert.deepEqual(errOn(validate([s, nw], ALL12), nw.id), ["total 값을 먼저 기억해요"]);
+  assert.deepEqual(validate([RN("주문서.txt", [N("splitline"), N("writelog", { pre: "", var: NV("crop"), post: "" }),
+    N("writelog", { var: NV("n") }), N("writelog", { var: NV("line"), post: "" })])], ALL12), []);
+  const wo = N("writelog", { var: NV("line") });
+  assert.deepEqual(errOn(validate([wo], ALL12), wo.id), [NOTE_ONLY]);
+  assert.deepEqual(validate([N("foreach", { list: cropList("당근") }, { body: [N("writelog", { var: { loopVar: true, type: "crop" } })] })], ALL12), []);
+  // 잠김
+  assert.deepEqual(errOn(validate([s, w], ALL10), w.id), ["11장을 끝내면 열려요"]);
+});
+
+test("11장 writelog: 농장일지를 읽는 동안에는 일지에 쓸 수 없다(끝없이 늘어남)", () => {
+  const w = N("writelog", { var: NV("line") });
+  assert.deepEqual(errOn(validate([RN("농장일지.txt", [w])], ALL12), w.id), [LOG_READING]);
+  // 안쪽 깊이·다른 쪽지 안에 겹쳐도
+  const w2 = N("writelog", { pre: "x", var: null, post: "" });
+  assert.deepEqual(errOn(validate([RN("농장일지.txt", [RN("주문서.txt", [N("if", {}, { body: [w2] })])])], ALL12), w2.id), [LOG_READING]);
+  // 일지 쓰는 내 노드를 일지 읽기 안에서 부르기
+  const d = N("def", { name: "tend" }, { body: [N("writelog", { pre: "x", var: null, post: "" })] });
+  const d2 = N("def", { name: "go_row" }, { body: [N("call", { name: "tend" })] });
+  const c = N("call", { name: "go_row" });
+  assert.deepEqual(errOn(validate([d, d2, RN("농장일지.txt", [c])], ALL12), c.id), [LOG_READING]);
+  // 다른 쪽지를 읽으며 쓰기, 일지를 다 읽은 뒤 쓰기는 괜찮다
+  assert.deepEqual(validate([RN("주문서.txt", [N("writelog", { var: NV("line") })])], ALL12), []);
+  assert.deepEqual(validate([RN("농장일지.txt", [N("sayval", { var: NV("line") })]), N("writelog", { pre: "끝", var: null, post: "" })], ALL12), []);
+  assert.deepEqual(validate([d, RN("주문서.txt", [N("call", { name: "tend" })])], ALL12), []);
+});
+
+test("12장 findall: 패턴 세 가지, import re는 맨 위 한 줄(첫 패턴 찾기 노드에)", () => {
+  const pl = N("plant", { crop: NV("crop") });
+  const rp = N("repeat", { n: { value: "n" } }, { body: [pl] });
+  const fa = FA("crop_num", [rp]);
+  const r = RN("손글씨주문.txt", [fa]);
+  const g = codegen([N("harvest", {}, { id: "h0" }), r]);
+  assert.equal(g.code, [
+    "import re",
+    "harvest()",
+    'with open("손글씨주문.txt") as f:',
+    "    for line in f:",
+    '        for crop, n in re.findall(r"(당근|감자|토마토)\\s*(\\d+)", line):',
+    "            for i in range(int(n)):",
+    "                plant(crop)",
+    "",
+  ].join("\n"));
+  assert.deepEqual(g.lineMap, { 1: fa.id, 2: "h0", 3: r.id, 4: r.id, 5: fa.id, 6: rp.id, 7: pl.id });
+  assert.deepEqual(validate([r], ALL12), []);
+  assert.deepEqual(errOn(validate([r], unlockedKinds(upTo(11))), fa.id), ["12장을 끝내면 열려요"]);
+  // 숫자만·작물만
+  assert.equal(lines(codegen([RN("손글씨주문.txt", [FA("num", [N("sayval", { var: NV("n") })])])]))[3],
+    '        for n in re.findall(r"\\d+", line):');
+  assert.equal(lines(codegen([RN("손글씨주문.txt", [FA("crop", [N("plant", { crop: NV("crop") })])])]))[3],
+    '        for crop in re.findall(r"당근|감자|토마토", line):');
+  // import re는 패턴 찾기가 여러 개여도 한 번, 첫 노드(프로그램 순서)에
+  const f1 = FA("num", [N("harvest")]), f2 = FA("crop", [N("harvest")]);
+  const g2 = codegen([RN("주문서.txt", [f1]), RN("주문서.txt", [f2])]);
+  assert.equal(g2.code.match(/import re/g).length, 1);
+  assert.equal(g2.lineMap[1], f1.id);
+  // 없으면 import도 없다
+  assert.doesNotMatch(codegen([RN("주문서.txt", [N("splitline")])]).code, /import re/);
+  // 숫자만 패턴은 crop을, 작물만 패턴은 n을 주지 않는다
+  const pc = N("plant", { crop: NV("crop") });
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [FA("num", [pc])])], ALL12), pc.id), [NO_NOTE("crop")]);
+  const rn = N("repeat", { n: { value: "n" } }, { body: [N("harvest")] });
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [FA("crop", [rn])])], ALL12), rn.id), [NO_NOTE("n")]);
+  // 패턴 찾기 뒤(밖)에서는 그 값을 못 씀(한 번도 안 맞을 수 있음)
+  const pa = N("plant", { crop: NV("crop") });
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [FA("crop", [N("harvest")]), pa])], ALL12), pa.id), [NO_NOTE("crop")]);
+  // 쪽지 읽기 밖, 빈 칸, 잘못된 패턴
+  const fo = FA("num", [N("harvest")]);
+  assert.deepEqual(errOn(validate([fo], ALL12), fo.id), [NOTE_ONLY]);
+  const fe = FA("num", []);
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [fe])], ALL12), fe.id), [EMPTY]);
+  assert.match(codegen([RN("주문서.txt", [fe])]).code, /line\):\n {12}pass\n$/);
+  const fb = FA("any", [N("harvest")]);
+  assert.ok(errOn(validate([RN("주문서.txt", [fb])], ALL12), fb.id).includes("고를 수 없는 값이에요"));
+  // 바깥 줄 나누기의 crop은 패턴 찾기(숫자만) 안에서도 씀
+  assert.deepEqual(validate([RN("주문서.txt", [N("splitline"), FA("num", [N("plant", { crop: NV("crop") })])])], ALL12), []);
+});
+
+test("작물 이름 겹침: 쪽지 crop과 작물 목록 변수는 이름이 달라 둘 다 쓸 수 있다", () => {
+  // 쪽지 읽기 안의 작물 목록은 crop2부터(쪽지 crop을 가리지 않게)
+  const pl = N("plant", { crop: LV }), pn = N("plant", { crop: NV("crop") });
+  const fe = N("foreach", { list: cropList("당근", "감자") }, { body: [pl, pn] });
+  const r = RN("주문서.txt", [N("splitline"), fe]);
+  assert.equal(codegen([r]).code, [
+    'with open("주문서.txt") as f:',
+    "    for line in f:",
+    "        crop, n = line.split()",
+    '        for crop2 in ["당근", "감자"]:',
+    "            plant(crop2)",
+    "            plant(crop)",
+    "",
+  ].join("\n"));
+  assert.deepEqual(validate([r], ALL12), []);
+  assert.equal(loopVarAvailable([r], pl.id, "crop"), "crop2");
+  assert.equal(noteVarAvailable([r], pl.id, "crop"), "crop");
+  // 바깥 작물 목록 안에 줄 나누기가 있어도 목록 변수는 crop2
+  const ql = N("plant", { crop: LV }), qn = N("plant", { crop: NV("crop") });
+  const fo = N("foreach", { list: cropList("감자") }, { body: [RN("주문서.txt", [N("splitline"), ql, qn])] });
+  assert.equal(codegen([fo]).code, [
+    'for crop2 in ["감자"]:',
+    '    with open("주문서.txt") as f:',
+    "        for line in f:",
+    "            crop, n = line.split()",
+    "            plant(crop2)",
+    "            plant(crop)",
+    "",
+  ].join("\n"));
+  assert.deepEqual(validate([fo], ALL12), []);
+  // 겹친 목록: 바깥이 crop2면 안쪽은 crop3
+  const inner = N("foreach", { list: cropList("당근") }, { body: [N("plant", { crop: LV })] });
+  const outer = N("foreach", { list: cropList("감자") }, { body: [RN("주문서.txt", [N("splitline"), inner])] });
+  assert.match(codegen([outer]).code, /for crop3 in \["당근"\]:\n\s+plant\(crop3\)/);
+  // 쪽지 없는 목록 이름은 그대로(v0.11과 같음)
+  assert.equal(codegen([N("foreach", { list: cropList("당근") }, { body: [N("plant", { crop: LV })] })]).code, 'for crop in ["당근"]:\n    plant(crop)\n');
+  // 방향 목록은 겹칠 일이 없어 way 그대로
+  assert.match(codegen([RN("주문서.txt", [N("splitline"), N("foreach", { list: dirList("위") }, { body: [N("move", { dir: LV })] })])]).code, /for way in/);
+});
+
+test("availableValues·noteVarAvailable: 쪽지 값(source note)", () => {
+  const s = N("setvar", { name: "count", value: 0 });
+  const h1 = N("harvest"), h2 = N("harvest"), h3 = N("harvest"), h4 = N("harvest");
+  const p = [s, RN("주문서.txt", [h1, N("splitline"), N("foreach", { list: cropList("당근") }, { body: [h2] }), FA("num", [h3])]), h4];
+  assert.deepEqual(availableValues(p, h1.id), [
+    { name: "count", arg: "count", source: "var" },
+    { name: "line", arg: { noteVar: "line" }, source: "note" },
+  ]);
+  assert.deepEqual(availableValues(p, h2.id), [
+    { name: "count", arg: "count", source: "var" },
+    { name: "crop2", arg: { loopVar: true, type: "crop" }, source: "loop" },
+    { name: "line", arg: { noteVar: "line" }, source: "note" },
+    { name: "crop", arg: { noteVar: "crop" }, source: "note" },
+    { name: "n", arg: { noteVar: "n" }, source: "note" },
+  ]);
+  assert.deepEqual(availableValues(p, h3.id).map((v) => v.name), ["count", "line", "crop", "n"]);
+  assert.deepEqual(availableValues(p, h4.id).map((v) => v.name), ["count"]);
+  // 숫자 n과 쪽지 n은 함께 나오지 않는다
+  const k = N("harvest");
+  const p2 = [N("setvar", { name: "n", value: 1 }), RN("주문서.txt", [N("splitline"), k])];
+  assert.deepEqual(availableValues(p2, k.id).filter((v) => v.name === "n"), [{ name: "n", arg: { noteVar: "n" }, source: "note" }]);
+  // 고른 값을 그대로 넣으면 검사 통과
+  for (const v of availableValues(p, h2.id)) {
+    const sv = N("sayval", { var: v.arg });
+    const q = [s, RN("주문서.txt", [N("splitline"), N("foreach", { list: cropList("당근") }, { body: [sv] })])];
+    assert.deepEqual(validate(q, ALL12), [], v.name);
+  }
+  assert.equal(noteVarAvailable(p, h1.id, "line"), "line");
+  assert.equal(noteVarAvailable(p, h1.id, "crop"), null);
+  assert.equal(noteVarAvailable(p, h2.id, "n"), "n");
+  assert.equal(noteVarAvailable(p, h4.id, "line"), null);
+  assert.equal(noteVarAvailable(p, "없음", "line"), null);
+  // 내 노드 안에서는 바깥 쪽지 값이 없다
+  const kd = N("harvest");
+  assert.deepEqual(availableValues([N("def", { name: "tend" }, { body: [kd] })], kd.id), []);
+});
+
+test("kindsUsed: v0.12 표지", () => {
+  const p = [
+    N("try", {}, { body: [N("plant", { crop: "토마토" })], handler: [N("harvest")] }),
+    RN("손글씨주문.txt", [N("splitline"), FA("num", [N("harvest")]), FA("crop_num", [N("harvest")])]),
+    N("writelog", { pre: "끝", var: null, post: "" }),
+  ];
+  const k = kindsUsed(p);
+  for (const m of ["try", "plant", "harvest", "readnote", "readnote:손글씨주문.txt", "splitline", "findall", "findall:num",
+    "findall:crop_num", "writelog", "crop:토마토"]) assert.ok(k.has(m), m);
+  assert.ok(!k.has("findall:crop") && !k.has("readnote:주문서.txt"));
+});
+
+test("v0.12 노드도 codegen·validate가 입력을 바꾸지 않는다", () => {
+  const p = deepFreeze([
+    N("setvar", { name: "n", value: 1 }),
+    N("try", {}, { body: [RN("주문서.txt", [N("splitline"), N("repeat", { n: { value: "n" } }, { body: [N("plant", { crop: NV("crop") })] })])],
+      handler: [N("writelog", { var: "n" })] }),
+    RN("손글씨주문.txt", [FA("crop_num", [N("foreach", { list: cropList("토마토") }, { body: [N("plant", { crop: LV })] })])]),
+  ]);
+  const before = JSON.stringify(p);
+  codegen(p); validate(p, ALL12); kindsUsed(p); availableValues(p, p[2].body[0].id); noteVarAvailable(p, p[2].body[0].id, "crop");
+  assert.equal(JSON.stringify(p), before);
+});
+
+// ---- 진짜 파이썬으로 실행: 검사를 통과한 프로그램은 NameError·TypeError 없이 끝난다 ----
+// 텃밭 명령은 작은 가짜(심은 것 기록, 토마토 씨앗 5개, 모르는 작물은 ValueError), 쪽지 세 개는 임시 폴더에.
+// 프로그램마다 두 번: 쪽지가 있을 때(full)와 세 쪽지가 모두 빌 때(empty — 쪽지 읽기 안에서 정한 값이 밖으로 새면 NameError).
+// 허용하는 오류: ValueError(텃밭 오류·줄 나누기·int 변환 — 10장 try가 잡는 종류), 걸음 상한(끝나지 않는 반복).
+const PY_HARNESS = String.raw`
+import json, os, sys
+progs = json.load(open(sys.argv[1], encoding="utf-8"))
+os.chdir(sys.argv[2])
+FULL = {"주문서.txt": "당근 2\n감자 1\n", "손글씨주문.txt": "리아: 당근3개 부탁! 토마토 2개~\n감자1\n", "농장일지.txt": "수확 3개\n"}
+EMPTY = {k: "" for k in FULL}  # 빈 쪽지: 쪽지 읽기가 한 번도 안 돎(안에서 정한 값이 밖에 없음)
+class Stop(BaseException): pass
+out = []
+for i, (code, NOTES) in enumerate((c, ns) for c in progs for ns in (FULL, EMPTY)):
+    for k, v in NOTES.items():
+        with open(k, "w", encoding="utf-8") as fh: fh.write(v)
+    st = {"x": 0, "y": 0, "seeds": 5, "t": 0, "lines": 0}
+    planted = []
+    def tick():
+        st["t"] += 1
+        if st["t"] > 400: raise Stop()
+    def move(d):
+        tick()
+        if d not in ("위", "아래", "왼쪽", "오른쪽"): raise ValueError("방향")
+        st["x"] += {"오른쪽": 1, "왼쪽": -1}.get(d, 0); st["y"] += {"아래": 1, "위": -1}.get(d, 0)
+    def plant(c):
+        tick()
+        if c not in ("당근", "감자", "토마토"): raise ValueError("모르는 작물")
+        if c == "토마토":
+            if st["seeds"] <= 0: raise ValueError("토마토 씨앗이 떨어졌어요")
+            st["seeds"] -= 1
+        planted.append(c)
+    def harvest(): tick()
+    def can_harvest(): tick(); return st["t"] % 3 == 0
+    def what_here(): tick(); return ["빈칸", "당근", "감자", "토마토"][st["t"] % 4]
+    def store(): tick(); return {"당근": st["t"] % 7, "감자": 1, "토마토": 0}
+    def where(): tick(); return st["x"], st["y"]
+    def seeds(): return st["seeds"]
+    def say(*a): tick()
+    def tracer(frame, event, arg):
+        if event == "line":
+            st["lines"] += 1
+            if st["lines"] > 20000: raise Stop()
+        return tracer
+    g = {"__name__": "__main__", "move": move, "plant": plant, "harvest": harvest, "can_harvest": can_harvest,
+         "what_here": what_here, "store": store, "where": where, "seeds": seeds, "print": say}
+    err = None
+    sys.settrace(tracer)
+    try:
+        exec(compile(code, "<p%d>" % (i // 2), "exec"), g)
+    except (ValueError, Stop):
+        pass
+    except BaseException as e:
+        err = "%s: %s" % (type(e).__name__, e)
+    finally:
+        sys.settrace(None)
+    with open("농장일지.txt", encoding="utf-8") as fh: log = fh.read()
+    out.append({"err": err, "planted": planted, "log": log})
+print(json.dumps([out[i:i + 2] for i in range(0, len(out), 2)], ensure_ascii=False))
+`;
+
+function runPython(codes) {
+  const dir = mkdtempSync(join(tmpdir(), "garden-py-"));
+  try {
+    const notes = join(dir, "notes");
+    spawnSync("mkdir", [notes]);
+    writeFileSync(join(dir, "h.py"), PY_HARNESS);
+    writeFileSync(join(dir, "progs.json"), JSON.stringify(codes));
+    const r = spawnSync("python3", ["-I", join(dir, "h.py"), join(dir, "progs.json"), notes], { encoding: "utf-8", timeout: 120000, maxBuffer: 64 << 20 });
+    assert.equal(r.status, 0, r.stderr);
+    return JSON.parse(r.stdout);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// 작은 결정적 난수(mulberry32)
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomProgram(R) {
+  const pick = (a) => a[Math.floor(R() * a.length)];
+  const VALS = ["count", "n", "total", "x", "y", NV("line"), NV("crop"), NV("n"), { loopVar: true, type: "crop" }, { loopVar: true, type: "dir" }];
+  const leaf = () => {
+    switch (pick(["move", "plant", "plant", "harvest", "setvar", "addvar", "sayval", "where", "splitline", "splitline", "writelog", "call"])) {
+      case "move": return N("move", { dir: R() < 0.3 ? LV : pick(["위", "아래", "왼쪽", "오른쪽"]) });
+      case "plant": return N("plant", { crop: pick(["당근", "토마토", "토마토", LV, NV("crop"), NV("crop")]) });
+      case "harvest": return N("harvest");
+      case "setvar": return N("setvar", { name: pick(VAR_NAMES), value: Math.floor(R() * 4) });
+      case "addvar": return N("addvar", { name: pick(VAR_NAMES), value: 1 });
+      case "sayval": return N("sayval", { var: pick(VALS) });
+      case "where": return N("where");
+      case "splitline": return N("splitline");
+      case "writelog": return N("writelog", { pre: "기록 ", var: R() < 0.2 ? null : pick(VALS), post: "" });
+      default: return N("call", { name: "tend" });
+    }
+  };
+  const tree = (depth) => {
+    const len = 1 + Math.floor(R() * 3);
+    const list = [];
+    for (let i = 0; i < len; i++) {
+      if (depth >= 3 || R() < 0.45) { list.push(leaf()); continue; }
+      const sub = () => tree(depth + 1);
+      switch (pick(["if", "repeat", "repeat", "while", "foreach", "try", "try", "readnote", "readnote", "findall", "findall"])) {
+        case "if": list.push(N("if", { cond: pick(["can_harvest", "here_empty", { var: pick(VAR_NAMES), op: "<", num: 3 }]) }, { body: sub(), ...(R() < 0.4 ? { orelse: sub() } : {}) })); break;
+        case "repeat": list.push(N("repeat", { n: R() < 0.5 ? { value: "n" } : 2 }, { body: sub() })); break;
+        case "while": list.push(N("while", { cond: pick(["can_harvest", "not_can_harvest", { var: pick(VAR_NAMES), op: "<", num: 3 }]) }, { body: sub() })); break;
+        case "foreach": list.push(N("foreach", { list: R() < 0.6 ? cropList("당근", "토마토") : dirList("오른쪽", "아래") }, { body: sub() })); break;
+        case "try": list.push(N("try", {}, { body: sub(), handler: sub() })); break;
+        case "readnote": list.push(RN(pick(NOTE_FILES), sub())); break;
+        default: list.push(FA(pick(Object.keys(PATTERNS)), sub()));
+      }
+    }
+    return list;
+  };
+  // 값을 앞에서 기억해 두면 검사 통과가 늘고, 숫자 n과 쪽지 n이 겹치는 자리도 자주 나온다
+  const pre = R() < 0.6 ? VAR_NAMES.map((name) => N("setvar", { name, value: 1 })) : [];
+  const body = [...pre, ...tree(0)];
+  return R() < 0.3 ? [N("def", { name: "tend" }, { body: tree(1) }), ...body] : body;
+}
+
+test("진짜 파이썬: 손으로 만든 v0.12 프로그램이 오류 없이 돌고 쪽지대로 심는다", () => {
+  const order = [RN("주문서.txt", [N("splitline"), N("repeat", { n: { value: "n" } }, { body: [N("plant", { crop: NV("crop") })] })])];
+  const hand = [RN("손글씨주문.txt", [FA("crop_num", [N("repeat", { n: { value: "n" } }, { body: [N("plant", { crop: NV("crop") })] })])])];
+  const nums = [N("setvar", { name: "total", value: 0 }), RN("손글씨주문.txt", [FA("num", [N("writelog", { pre: "숫자 ", var: NV("n"), post: "" })])])];
+  const seedsOut = [N("repeat", { n: 7 }, { body: [N("try", {}, { body: [N("plant", { crop: "토마토" })], handler: [N("plant", { crop: "감자" })] })] })];
+  const journal = [N("setvar", { name: "count", value: 2 }), N("writelog", { pre: "수확 ", var: "count", post: "개" }),
+    RN("농장일지.txt", [N("sayval", { var: NV("line") })])];
+  const badSplit = [N("try", {}, { body: [RN("손글씨주문.txt", [N("splitline"), N("plant", { crop: NV("crop") })])], handler: [N("writelog", { pre: "못 읽음", var: null, post: "" })] })];
+  const mixed = [RN("주문서.txt", [N("splitline"), N("foreach", { list: cropList("토마토", "감자") }, { body: [N("plant", { crop: LV }), N("plant", { crop: NV("crop") })] })])];
+  const progs = [order, hand, nums, seedsOut, journal, badSplit, mixed];
+  for (const p of progs) assert.deepEqual(validate(p, ALL12), [], JSON.stringify(p));
+  const res = runPython(progs.map((p) => codegen(p).code)).map(([full, empty]) => {
+    assert.equal(empty.err, null);
+    return full;
+  });
+  for (const r of res) assert.equal(r.err, null);
+  assert.deepEqual(res[0].planted, ["당근", "당근", "감자"]);
+  assert.deepEqual(res[1].planted, ["당근", "당근", "당근", "토마토", "토마토", "감자"]);
+  assert.equal(res[2].log, "수확 3개\n숫자 3\n숫자 2\n숫자 1\n");
+  assert.deepEqual(res[3].planted, ["토마토", "토마토", "토마토", "토마토", "토마토", "감자", "감자"]);
+  assert.equal(res[4].log, "수확 3개\n수확 2개\n");
+  assert.equal(res[5].log, "수확 3개\n못 읽음\n");
+  assert.deepEqual(res[6].planted, ["토마토", "당근", "감자", "당근", "토마토", "감자", "감자", "감자"]);
+});
+
+test("진짜 파이썬: 무작위 노드 프로그램 중 검사를 통과한 것은 NameError·TypeError 없이 끝난다", (t) => {
+  const R = rng(20261105);
+  const valid = [];
+  let tried = 0;
+  while (valid.length < 400 && tried < 60000) {
+    tried += 1;
+    const p = randomProgram(R);
+    if (validate(p, ALL12).length === 0 && kindsUsed(p).has("readnote")) valid.push(p);
+  }
+  assert.ok(valid.length >= 200, `검사 통과 ${valid.length}개 / ${tried}`);
+  const kinds = new Set(valid.flatMap((p) => [...kindsUsed(p)]));
+  for (const k of ["try", "splitline", "findall:crop_num", "findall:num", "findall:crop", "writelog", "foreach", "def"]) assert.ok(kinds.has(k), k);
+  t.diagnostic(`검사 통과 ${valid.length}개 / 만든 것 ${tried}개`);
+  const res = runPython(valid.map((p) => codegen(p).code));
+  const bad = res.flatMap((pair, i) => pair.map((r, j) => (r.err ? `${["full", "empty"][j]} ${r.err}\n${codegen(valid[i]).code}` : null))).filter(Boolean);
+  assert.deepEqual(bad.slice(0, 3), []);
+});
+
+// ---- v0.12 검토(C71 C1a): 쪽지 값만큼 반복은 안에서 시간 1짜리 행동을 반드시 해야 ----
+const REPEAT_NO_ACT = "쪽지 값만큼 반복할 때는 안에서 파이가 움직이거나 심거나 거둬야 해요";
+test("쪽지 n 반복: 몸통에 조건 없는 이동·심기·수확·내 노드 부르기가 없으면 오류", () => {
+  const R = (body) => N("repeat", { n: { value: "n" } }, { body });
+  const wrap = (rep) => [RN("농장일지.txt", [FA("num", [rep])])];
+  // 행동 없음(값 기억하기만) → 오류
+  const bad = R([N("setvar", { name: "count", value: 1 })]);
+  assert.deepEqual(errOn(validate(wrap(bad), ALL12), bad.id), [REPEAT_NO_ACT]);
+  // 말하기·일지 쓰기만 → 오류
+  const say = R([N("say", { text: "안녕" })]);
+  assert.deepEqual(errOn(validate(wrap(say), ALL12), say.id), [REPEAT_NO_ACT]);
+  // 만약·시도하기·~하는 동안 안에만 있으면 → 오류
+  const inIf = R([N("if", { cond: "can_harvest" }, { body: [N("harvest")] })]);
+  assert.deepEqual(errOn(validate(wrap(inIf), ALL12), inIf.id), [REPEAT_NO_ACT]);
+  const inTry = R([N("try", {}, { body: [N("harvest")], handler: [N("move")] })]);
+  assert.deepEqual(errOn(validate(wrap(inTry), ALL12), inTry.id), [REPEAT_NO_ACT]);
+  // 바로 안·안쪽 반복·목록 안이면 통과
+  for (const k of ["move", "plant", "harvest"]) {
+    const ok = R([N("setvar", { name: "count", value: 1 }), N(k)]);
+    assert.deepEqual(validate(wrap(ok), ALL12), [], k);
+  }
+  const nested = R([N("repeat", { n: 2 }, { body: [N("move")] })]);
+  assert.deepEqual(validate(wrap(nested), ALL12), []);
+  const inList = R([N("foreach", { list: dirList("위") }, { body: [N("move", { dir: LV })] })]);
+  assert.deepEqual(validate(wrap(inList), ALL12), []);
+  const def = N("def", { name: "go_row" }, { body: [N("move")] });
+  const withCall = [def, RN("농장일지.txt", [FA("num", [R([N("call", { name: "go_row" })])])])];
+  assert.deepEqual(validate(withCall, ALL12), []);
+  // 숫자 반복은 예전 그대로(행동 없어도 됨)
+  const plain = N("repeat", { n: 3 }, { body: [N("say", { text: "안녕" })] });
+  assert.deepEqual(validate([plain], ALL12), []);
 });

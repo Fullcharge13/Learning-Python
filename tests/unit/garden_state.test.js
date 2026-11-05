@@ -3,9 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   newGarden, fillGarden, cleanGarden, runInput, applyRun, currentOrder, deliver, canBuy, buy, settle, settleAll,
-  grantOrderXP, passedChapters, ORDER_XP, MSG, farmConsistent,
+  grantOrderXP, passedChapters, ORDER_XP, MSG, farmConsistent, runFiles, noteCounts, JOURNAL_MAX,
 } from "../../src/garden/state.js";
-import { CROPS, UPGRADES, ORDERS } from "../../data/garden.js";
+import { CROPS, UPGRADES, ORDERS, DAILY_NOTES, farmSetup } from "../../data/garden.js";
 import { NODES, unlockedKinds, validate, defaultProgram, newNode, kindsUsed, codegen, COND_LOCKS } from "../../src/garden/nodes.js";
 import { newSave, migrate } from "../../src/save.js";
 
@@ -38,8 +38,8 @@ function fakeResult(garden, over = {}, extra = {}) {
 
 // ---------------------------------------------------------------- 데이터
 
-test("CROPS: runner와 같은 성장 시간(당근 8/6, 감자 12/9)", () => {
-  assert.deepEqual(CROPS, { 당근: { grow: 8, fert: 6 }, 감자: { grow: 12, fert: 9 } });
+test("CROPS: runner와 같은 성장 시간(당근 8/6, 감자 12/9, 토마토 10/7)", () => {
+  assert.deepEqual(CROPS, { 당근: { grow: 8, fert: 6 }, 감자: { grow: 12, fert: 9 }, 토마토: { grow: 10, fert: 7 } });
 });
 
 test("UPGRADES: 4가지, 값과 선행 조건", () => {
@@ -53,16 +53,16 @@ test("UPGRADES: 4가지, 값과 선행 조건", () => {
   for (const u of UPGRADES) assert.ok(typeof u.label === "string" && u.label.length > 0);
 });
 
-test("ORDERS: 22개, 장 순서(need 1..9), 장마다 4·3·3·2·3·1·2·2·2개, XP 5", () => {
-  assert.equal(ORDERS.length, 22);
+test("ORDERS: 29개, 장 순서(need 1..12), 장마다 4·3·3·2·3·1·2·2·2·2·3·2개, XP 5", () => {
+  assert.equal(ORDERS.length, 29);
   const needs = ORDERS.map((o) => o.need);
   assert.deepEqual(needs, [...needs].sort((a, b) => a - b));
-  const per = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => needs.filter((x) => x === n).length);
-  assert.deepEqual(per, [4, 3, 3, 2, 3, 1, 2, 2, 2]);
-  assert.equal(new Set(ORDERS.map((o) => o.id)).size, 22);
+  const per = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((n) => needs.filter((x) => x === n).length);
+  assert.deepEqual(per, [4, 3, 3, 2, 3, 1, 2, 2, 2, 2, 3, 2]);
+  assert.equal(new Set(ORDERS.map((o) => o.id)).size, 29);
   for (const o of ORDERS) {
     assert.equal(o.xp, 5);
-    assert.ok(["deliver", "run_harvest", "use", "grid"].includes(o.goal.type), o.id);
+    assert.ok(["deliver", "run_harvest", "use", "grid", "plant_as_note"].includes(o.goal.type), o.id);
     assert.ok([...o.text].length <= 80, `${o.id} 글자 수`);
     assert.ok(/요[.!?]?$/.test(o.text.trim()), `${o.id} 해요체로 끝남`);
     assert.ok(!/[{}]/.test(o.text), `${o.id} 자리표시 없음`);
@@ -83,7 +83,7 @@ test("ORDERS v0.11: 6~9장 주문 7개의 장·목표(설계 §2)", () => {
     ["o_where", 9, "줄 끝에서 내려가기", { type: "use", kind: "cond:pos" }],
     ["o_zigzag", 9, "지그재그 수확", { type: "run_harvest", n: 9, kind: "where" }],
   ];
-  assert.deepEqual(ORDERS.slice(15).map((o) => o.id), want.map((w) => w[0]));
+  assert.deepEqual(ORDERS.slice(15, 22).map((o) => o.id), want.map((w) => w[0]));
   for (const [id, need, title, goal] of want) {
     assert.ok(by[id], id);
     assert.equal(by[id].need, need, id);
@@ -99,11 +99,12 @@ test("ORDERS v0.11: 6~9장 주문 7개의 장·목표(설계 §2)", () => {
 });
 
 // 노드가 아닌 표지(kindsUsed가 함께 돌려줌)와 그 표지가 열리는 장
-const MARK_CHAPTER = { "cond:store": 8, "cond:pos": 9, loopvar: 7, "loopvar:act": 7 };
+const MARK_CHAPTER = { "cond:store": 8, "cond:pos": 9, loopvar: 7, "loopvar:act": 7, "crop:토마토": 10,
+  "readnote:농장일지.txt": 11, "readnote:주문서.txt": 11, "readnote:손글씨주문.txt": 11, "findall:num": 12, "findall:crop_num": 12 };
 
-test("ORDERS: 네 가지 목표 종류를 모두 씀, use 주문은 그 장에서 열리는 노드(또는 표지)", () => {
+test("ORDERS: 다섯 가지 목표 종류를 모두 씀, use 주문은 그 장에서 열리는 노드(또는 표지)", () => {
   const kinds = new Set(ORDERS.map((o) => o.goal.type));
-  assert.deepEqual([...kinds].sort(), ["deliver", "grid", "run_harvest", "use"]);
+  assert.deepEqual([...kinds].sort(), ["deliver", "grid", "plant_as_note", "run_harvest", "use"]);
   for (const o of ORDERS.filter((x) => x.goal.type === "use" || x.goal.kind)) {
     const ch = NODES[o.goal.kind]?.chapter ?? MARK_CHAPTER[o.goal.kind];
     assert.ok(ch, `${o.id}: 노드 종류 또는 표지`);
@@ -152,7 +153,9 @@ test("newGarden: 설계서 §4 모양", () => {
   assert.ok(ripe.length >= 1 && ripe.length < 3, "일부만 다 자람");
   assert.deepEqual(g.pie, { x: 0, y: 0 });
   assert.equal(g.clock, 0);
-  assert.deepEqual(g.store, { 당근: 0, 감자: 0 });
+  assert.deepEqual(g.store, { 당근: 0, 감자: 0, 토마토: 0 });
+  assert.equal(g.seeds, 5);
+  assert.deepEqual(g.files, { "농장일지.txt": "" });
   assert.deepEqual(g.upgrades, []);
   assert.deepEqual(g.order, { idx: 0, done: [], paid: [] });
   assert.deepEqual(g.program, defaultProgram());
@@ -214,7 +217,7 @@ test("fillGarden/migrate: 고장 난 칸만 고치고 나머지는 남김", () =
   assert.deepEqual(out.cells.slice(0, 4), [null, null, null, null]);
   assert.deepEqual(out.pie, { x: 0, y: 0 });
   assert.equal(out.clock, 0);
-  assert.deepEqual(out.store, { 당근: 5, 감자: 0 });
+  assert.deepEqual(out.store, { 당근: 5, 감자: 0, 토마토: 0 });
   assert.deepEqual(out.upgrades, ["감자 씨앗"]);
   assert.equal(out.order.idx, ORDERS.length);
   assert.deepEqual(out.order.paid, []);
@@ -308,7 +311,8 @@ test("cleanGarden: 목록에서 하나씩의 목록이 이상하면 그 목록�
 test("runInput: runner에 넘길 상태(사본)", () => {
   const g = newGarden();
   const inp = runInput(g);
-  assert.deepEqual(Object.keys(inp).sort(), ["cells", "clock", "pie", "size", "store", "upgrades"]);
+  assert.deepEqual(Object.keys(inp).sort(), ["cells", "clock", "pie", "seeds", "size", "store", "tomato_ok", "upgrades"]);
+  assert.equal(inp.seeds, 5);
   inp.cells[0] = { crop: "감자", planted_at: 0 };
   inp.store.당근 = 99;
   assert.equal(g.cells[0], null);
@@ -321,7 +325,7 @@ test("applyRun: 끝 상태를 텃밭에 옮기고 runs+1, 거둔 수", () => {
   const out = applyRun(g, r, { program: defaultProgram(), mode: "nodes", passed: ALL });
   assert.equal(out.garden.clock, 5);
   assert.deepEqual(out.garden.pie, { x: 1, y: 0 });
-  assert.deepEqual(out.garden.store, { 당근: 2, 감자: 0 });
+  assert.deepEqual(out.garden.store, { 당근: 2, 감자: 0, 토마토: 0 });
   assert.equal(out.garden.runs, 1);
   assert.deepEqual(out.harvested, { 당근: 2 });
   assert.equal(out.orderDone, null);
@@ -449,7 +453,7 @@ test("applyRun: 사건으로 설명되는 칸 바뀜은 받음(심기·수확·�
   const cells = st.cells.slice();
   cells[1] = { crop: "당근", planted_at: 12 };
   cells[4] = null;
-  const r = { error: null, farm: { events, state: { ...st, cells, pie: { x: 1, y: 1 }, clock: 15, store: { 당근: 1, 감자: 0 } }, stopped: null, actions: 5 } };
+  const r = { error: null, farm: { events, state: { ...st, cells, pie: { x: 1, y: 1 }, clock: 15, store: { 당근: 1, 감자: 0, 토마토: 0 } }, stopped: null, actions: 5 } };
   const out = applyRun(g, r, { program: [], mode: "code", passed: ALL });
   assert.notEqual(out.rejected, true);
   assert.deepEqual(out.harvested, { 당근: 1 });
@@ -666,4 +670,314 @@ test("grantOrderXP: 하루 퀘스트 「텃밭 주문 1개 해내기」(garden_o
   const b = grantOrderXP(a.save, ORDERS[0], NOW(today));
   assert.equal(b.result.questBytes, 0);
   assert.deepEqual(b.result.finished, []);
+});
+
+// ================================================================ v0.12 (설계 docs/specs/2026-11-05-텃밭-10-17장-설계.md §1~§4)
+const J = "농장일지.txt";
+const byId = (id) => ORDERS.findIndex((o) => o.id === id);
+
+test("ORDERS v0.12: 10~12장 주문 7개의 장·목표(설계 §3)", () => {
+  const want = [
+    ["o_tomato", 10, "첫 토마토", { type: "run_harvest", crop: "토마토", n: 1 }],
+    ["o_try", 10, "씨앗이 떨어지면", { type: "use", kind: "try" }],
+    ["o_note", 11, "주문서대로", { type: "plant_as_note", file: "주문서.txt", kind: "readnote" }],
+    ["o_log", 11, "농장일지", { type: "use", kind: "writelog", journal: true }],
+    ["o_readlog", 11, "어제 일지 읽기", { type: "use", kind: "readnote:농장일지.txt" }],
+    ["o_hand", 12, "손글씨 주문", { type: "plant_as_note", file: "손글씨주문.txt", parse: "crop_num", kind: "findall" }],
+    ["o_digits", 12, "숫자만 뽑기", { type: "use", kind: "findall:num" }],
+  ];
+  assert.deepEqual(ORDERS.slice(22).map((o) => o.id), want.map((w) => w[0]));
+  for (const [id, need, title, goal] of want) {
+    const o = ORDERS[byId(id)];
+    assert.equal(o.need, need, id);
+    assert.equal(o.title, title, id);
+    assert.deepEqual(o.goal, goal, id);
+  }
+  // 쪽지: 주문서대로는 줄마다 「작물 개수」, 손글씨는 작물+숫자 패턴으로 읽힘(토마토 바로 뒤에 숫자)
+  const note = ORDERS[byId("o_note")].note;
+  assert.equal(note.file, "주문서.txt");
+  assert.deepEqual(noteCounts(note.text), { 당근: 2, 감자: 1 });
+  const hand = ORDERS[byId("o_hand")].note;
+  assert.equal(hand.file, "손글씨주문.txt");
+  assert.deepEqual(noteCounts(hand.text, "crop_num"), { 당근: 3, 토마토: 2 });
+  assert.equal(ORDERS[byId("o_digits")].note.file, "손글씨주문.txt");
+  // 정답 코드: 쪽지 읽기·줄 나누기·int(n) 반복, 일지 쓰기, 패턴 찾기(import re)
+  const code = (id) => codegen(ORDERS[byId(id)].solution).code;
+  assert.match(code("o_try"), /try:\n[\s\S]*plant\("토마토"\)[\s\S]*except ValueError:/);
+  assert.match(code("o_note"), /with open\("주문서.txt"\) as f:\n\s+for line in f:\n\s+crop, n = line.split\(\)\n\s+for i in range\(int\(n\)\):/);
+  assert.match(code("o_log"), /with open\("농장일지.txt", "a"\) as f:/);
+  assert.match(code("o_readlog"), /with open\("농장일지.txt"\) as f:/);
+  assert.match(code("o_hand"), /^import re\n/);
+  assert.match(code("o_digits"), /re.findall\(r"\\d\+", line\)/);
+});
+
+test("ORDERS v0.12: 쪽지는 받는 쪽지 이름만, plant_as_note는 같은 파일의 쪽지를 가짐", () => {
+  for (const o of ORDERS) {
+    if (o.note) {
+      assert.ok(["주문서.txt", "손글씨주문.txt"].includes(o.note.file), o.id);
+      assert.ok(typeof o.note.text === "string" && o.note.text.length > 0 && o.note.text.length <= 200, o.id);
+    }
+    if (o.goal.type === "plant_as_note") {
+      assert.equal(o.note?.file, o.goal.file, o.id);
+      const want = noteCounts(o.note.text, o.goal.parse);
+      assert.ok(Object.values(want).reduce((a, b) => a + b, 0) > 0, `${o.id} 심을 것이 있음`);
+    }
+  }
+});
+
+test("noteCounts: 줄마다 「작물 개수」(같은 작물은 더함, 모르는 줄은 건너뜀) / crop_num은 작물 바로 뒤 숫자", () => {
+  assert.deepEqual(noteCounts("당근 2\n감자 1\n당근 1\n"), { 당근: 3, 감자: 1 });
+  assert.deepEqual(noteCounts("수박 2\n\n토마토 3"), { 토마토: 3 });
+  assert.deepEqual(noteCounts("리아: 당근3개 부탁! 토마토 2개도~ 감자는 됐어", "crop_num"), { 당근: 3, 토마토: 2 });
+  assert.deepEqual(noteCounts("토마토도 2개", "crop_num"), {}, "작물 뒤에 다른 글자가 있으면 안 읽힘(파이썬 패턴과 같음)");
+  assert.deepEqual(noteCounts(""), {});
+});
+
+test("newGarden/cleanGarden v0.12: 씨앗 5·농장일지 빈 글, 옛 저장(없음)은 기본값, 고장 난 값은 다듬음", () => {
+  const old = { ...newGarden() };
+  delete old.seeds;
+  delete old.files;
+  delete old.store.토마토;
+  const a = cleanGarden(old);
+  assert.equal(a.seeds, 5);
+  assert.deepEqual(a.files, { [J]: "" });
+  assert.equal(a.store.토마토, 0);
+  assert.equal(cleanGarden({ ...newGarden(), seeds: 25 }).seeds, 20);
+  assert.equal(cleanGarden({ ...newGarden(), seeds: -3 }).seeds, 0);
+  assert.equal(cleanGarden({ ...newGarden(), seeds: 3.7 }).seeds, 3);
+  assert.equal(cleanGarden({ ...newGarden(), seeds: "x" }).seeds, 5);
+  assert.deepEqual(cleanGarden({ ...newGarden(), files: { [J]: 7, "주문서.txt": "몰래" } }).files, { [J]: "" });
+  const long = "가".repeat(10) + "나".repeat(JOURNAL_MAX);
+  assert.equal(cleanGarden({ ...newGarden(), files: { [J]: long } }).files[J], "나".repeat(JOURNAL_MAX), "끝 2000자만");
+  assert.equal(JOURNAL_MAX, 2000);
+  const ok = cleanGarden({ ...newGarden(), seeds: 12, files: { [J]: "수확 4개\n" } });
+  assert.equal(ok.seeds, 12);
+  assert.deepEqual(ok.files, { [J]: "수확 4개\n" });
+  assert.equal(migrate({ garden: old }).garden.seeds, 5);
+});
+
+test("cleanGarden v0.12: 시도하기(handler 칸)·쪽지 값 프로그램은 그대로, handler가 이상하면 시작 프로그램", () => {
+  const prog = [
+    { id: 1, kind: "try", args: {}, body: [{ id: 2, kind: "plant", args: { crop: "토마토" } }],
+      handler: [{ id: 3, kind: "plant", args: { crop: "당근" } }] },
+    { id: 4, kind: "readnote", args: { file: "주문서.txt" }, body: [
+      { id: 5, kind: "splitline", args: {} },
+      { id: 6, kind: "repeat", args: { n: { value: "n" } }, body: [{ id: 7, kind: "plant", args: { crop: { noteVar: "crop" } } }] },
+    ] },
+    { id: 8, kind: "writelog", args: { pre: "끝", var: null, post: "" } },
+  ];
+  assert.deepEqual(cleanGarden({ ...newGarden(), program: prog }).program, prog);
+  const bad1 = structuredClone(prog);
+  bad1[0].handler = "x";
+  assert.deepEqual(cleanGarden({ ...newGarden(), program: bad1 }).program, defaultProgram());
+  const bad2 = structuredClone(prog);
+  bad2[2].handler = [];
+  assert.deepEqual(cleanGarden({ ...newGarden(), program: bad2 }).program, defaultProgram(), "handler 없는 노드에 handler");
+  const bad3 = structuredClone(prog);
+  bad3[0].handler = [{ id: 2, kind: "harvest", args: {} }];
+  assert.deepEqual(cleanGarden({ ...newGarden(), program: bad3 }).program, defaultProgram(), "id 겹침(handler 안도 셈)");
+});
+
+test("runFiles: 지금 주문의 쪽지는 그 파일로, 다른 받는 쪽지는 실행 횟수로 정해지는 오늘의 쪽지, 농장일지는 저장에서", () => {
+  assert.equal(DAILY_NOTES["주문서.txt"].length, 4);
+  assert.equal(DAILY_NOTES["손글씨주문.txt"].length, 4);
+  const g0 = { ...at(newGarden(), 0), runs: 6, files: { [J]: "어제 4개\n" } };
+  const f0 = runFiles(g0);
+  assert.deepEqual(Object.keys(f0).sort(), ["농장일지.txt", "손글씨주문.txt", "주문서.txt"]);
+  assert.equal(f0["주문서.txt"], DAILY_NOTES["주문서.txt"][6 % 4]);
+  assert.equal(f0["손글씨주문.txt"], DAILY_NOTES["손글씨주문.txt"][6 % 4]);
+  assert.equal(f0[J], "어제 4개\n");
+  assert.notEqual(runFiles({ ...g0, runs: 7 })["주문서.txt"], f0["주문서.txt"], "실행마다 바뀜");
+  assert.deepEqual(runFiles(g0), f0, "같은 텃밭이면 같은 쪽지");
+  const i = byId("o_note");
+  const f1 = runFiles({ ...at(newGarden(), i), runs: 6 });
+  assert.equal(f1["주문서.txt"], ORDERS[i].note.text);
+  assert.equal(f1["손글씨주문.txt"], DAILY_NOTES["손글씨주문.txt"][2]);
+  const h = byId("o_hand");
+  assert.equal(runFiles(at(newGarden(), h))["손글씨주문.txt"], ORDERS[h].note.text);
+  assert.equal(runFiles(at(newGarden(), ORDERS.length))["주문서.txt"], DAILY_NOTES["주문서.txt"][0], "주문을 다 끝내도 쪽지는 있음");
+  // 오늘의 쪽지도 같은 규칙으로 읽힘(줄마다 작물 개수 / 작물+숫자)
+  for (const t of DAILY_NOTES["주문서.txt"]) assert.ok(Object.keys(noteCounts(t)).length > 0, t);
+  for (const t of DAILY_NOTES["손글씨주문.txt"]) assert.ok(Object.keys(noteCounts(t, "crop_num")).length > 0, t);
+});
+
+// 토마토 사건으로 만드는 결과(씨앗 봉투 규칙을 지킨 결과 / 꾸민 결과)
+function tomatoResult(g, events, seedsOut, extra = {}) {
+  const st = runInput(g);
+  const cells = st.cells.slice();
+  const store = { ...st.store };
+  for (const e of events) {
+    const i = e.y * st.size + e.x;
+    if (e.t === "plant") cells[i] = { crop: e.crop, planted_at: st.clock + events.indexOf(e) };
+    if (e.t === "harvest") { cells[i] = null; store[e.crop] += 1; }
+  }
+  return { error: extra.error ?? null, farm: { events, actions: events.length, stopped: null,
+    state: { ...st, cells, store, clock: st.clock + events.length, seeds: seedsOut }, ...(extra.files ? { files: extra.files } : {}) } };
+}
+
+const T10 = upTo(10); // 토마토가 열린 학습자(C71 I1)
+test("farmConsistent v0.12: 씨앗 = 시작 − 토마토 심기 + 2×다 자란 토마토 거두기(최대 20)", () => {
+  const g = { ...newGarden(), cells: Array(9).fill(null), seeds: 2 };
+  const P = (x) => ({ t: "plant", line: 1, crop: "토마토", x, y: 0 });
+  const ok = tomatoResult(g, [P(0), P(1)], 0);
+  assert.ok(farmConsistent(runInput(g, T10), ok.farm));
+  assert.equal(farmConsistent(runInput(g, T10), tomatoResult(g, [P(0), P(1)], 1).farm), false, "씨앗 꾸밈");
+  assert.equal(farmConsistent(runInput(g, T10), tomatoResult(g, [P(0), P(1), P(2)], 0).farm), false, "봉투가 비었는데 심음");
+  assert.equal(farmConsistent(runInput({ ...g, seeds: 0 }, T10), tomatoResult({ ...g, seeds: 0 },
+    [{ t: "plant_fail", line: 1, crop: "토마토", x: 0, y: 0, reason: "no_tomato_seed" }], 0).farm), true, "빈 봉투 실패");
+  assert.equal(farmConsistent(runInput(g, T10), tomatoResult(g,
+    [{ t: "plant_fail", line: 1, crop: "토마토", x: 0, y: 0, reason: "no_tomato_seed" }], 2).farm), false, "씨앗이 있는데 빈 봉투 실패");
+  const ripe = { ...g, seeds: 19, cells: [{ crop: "토마토", planted_at: -20 }, { crop: "토마토", planted_at: -20 }, ...Array(7).fill(null)] };
+  const H = (x) => ({ t: "harvest", line: 1, crop: "토마토", x, y: 0 });
+  assert.ok(farmConsistent(runInput(ripe, T10), tomatoResult(ripe, [H(0), H(1)], 20).farm), "최대 20");
+  assert.equal(farmConsistent(runInput(ripe, T10), tomatoResult(ripe, [H(0), H(1)], 23).farm), false);
+  assert.ok(farmConsistent(runInput(ripe, T10), tomatoResult(ripe, [H(0), P(0)], 19).farm), "거둔 뒤(20) 심기 −1 = 19");
+  assert.equal(farmConsistent(runInput(g, T10), { ...ok.farm, state: { ...ok.farm.state, seeds: "x" } }), false);
+});
+
+test("farmConsistent v0.12: 돌려준 파일은 농장일지 하나, 글자, 2000자까지", () => {
+  const g = newGarden();
+  const base = fakeResult(g).farm;
+  assert.ok(farmConsistent(runInput(g), { ...base, files: { [J]: "수확 1개\n" } }));
+  assert.ok(farmConsistent(runInput(g), { ...base, files: { [J]: "😀".repeat(JOURNAL_MAX) } }), "글자 수는 코드 포인트로");
+  assert.equal(farmConsistent(runInput(g), { ...base, files: { [J]: "가".repeat(JOURNAL_MAX + 1) } }), false);
+  assert.equal(farmConsistent(runInput(g), { ...base, files: { [J]: "", "주문서.txt": "몰래" } }), false);
+  assert.equal(farmConsistent(runInput(g), { ...base, files: { [J]: 3 } }), false);
+  assert.equal(farmConsistent(runInput(g), { ...base, files: "x" }), false);
+});
+
+test("applyRun v0.12: 씨앗과 농장일지를 저장, 결과에 일지가 없으면 일지는 그대로", () => {
+  const g = { ...newGarden(), cells: Array(9).fill(null), seeds: 3, files: { [J]: "옛 일지\n" } };
+  const r = tomatoResult(g, [{ t: "plant", line: 1, crop: "토마토", x: 0, y: 0 }], 2, { files: { [J]: "옛 일지\n새 줄\n" } });
+  const out = applyRun(g, r, { program: [], mode: "code", passed: T10 });
+  assert.notEqual(out.rejected, true);
+  assert.equal(out.garden.seeds, 2);
+  assert.deepEqual(out.garden.files, { [J]: "옛 일지\n새 줄\n" });
+  assert.deepEqual(g.files, { [J]: "옛 일지\n" }, "받은 텃밭은 그대로");
+  const keep = applyRun(g, fakeResult(g), { program: [], mode: "code", passed: T10 });
+  assert.deepEqual(keep.garden.files, { [J]: "옛 일지\n" });
+  const bad = applyRun(g, { ...r, farm: { ...r.farm, files: { [J]: "x".repeat(3000) } } }, { program: [], mode: "code", passed: T10 });
+  assert.equal(bad.rejected, true);
+  assert.deepEqual(bad.garden.files, g.files);
+});
+
+// 주문서대로·손글씨 주문: 이번 실행의 심기 사건(작물별 개수)이 쪽지와 같을 때만
+test("주문 plant_as_note: 심은 작물·개수가 쪽지와 같고, 노드 모드에서 그 노드를 쓰고, 오류·멈춤 없을 때만", () => {
+  const i = byId("o_note");
+  const o = ORDERS[i];
+  const g = { ...at(newGarden(), i), cells: Array(9).fill(null), upgrades: ["감자 씨앗"] };
+  const P = (crop, x, y = 0) => ({ t: "plant", line: 1, crop, x, y });
+  const base = { program: o.solution, mode: "nodes", passed: upTo(11) };
+  const right = tomatoResult(g, [P("당근", 0), P("당근", 1), P("감자", 2)], 5);
+  assert.equal(applyRun(g, right, base).orderDone?.id, o.id);
+  assert.equal(applyRun(g, tomatoResult(g, [P("당근", 0), P("감자", 2)], 5), base).orderDone, null, "모자람");
+  assert.equal(applyRun(g, tomatoResult(g, [P("당근", 0), P("당근", 1), P("감자", 2), P("당근", 0, 1)], 5), base).orderDone, null, "더 심음");
+  assert.equal(applyRun(g, right, { ...base, mode: "code" }).orderDone, null, "코드 모드");
+  assert.equal(applyRun(g, right, { ...base, program: [newNode("plant", 1)] }).orderDone, null, "쪽지 읽기 없음");
+  assert.equal(applyRun(g, { ...right, error: { type: "ValueError", line: 1, msg: "x" } }, base).orderDone, null, "오류");
+  assert.equal(applyRun(g, right, { ...base, passed: upTo(10) }).orderDone, null, "11장 전에는 기다림");
+  // 손글씨: 작물+숫자 패턴으로 센 개수
+  const h = byId("o_hand");
+  const gh = { ...at(newGarden(), h), cells: Array(9).fill(null) };
+  const rh = tomatoResult(gh, [P("당근", 0), P("당근", 1), P("당근", 2), P("토마토", 0, 1), P("토마토", 1, 1)], 3);
+  assert.equal(applyRun(gh, rh, { program: ORDERS[h].solution, mode: "nodes", passed: upTo(12) }).orderDone?.id, "o_hand");
+});
+
+test("주문 use journal(농장일지): 일지 쓰기를 쓰고 실행 뒤 일지에 글이 있을 때만", () => {
+  const i = byId("o_log");
+  const g = at(newGarden(), i);
+  const base = { program: ORDERS[i].solution, mode: "nodes", passed: upTo(11) };
+  const r = fakeResult(g);
+  assert.equal(applyRun(g, { ...r, farm: { ...r.farm, files: { [J]: "수확 0개\n" } } }, base).orderDone?.id, "o_log");
+  assert.equal(applyRun(g, { ...r, farm: { ...r.farm, files: { [J]: "" } } }, base).orderDone, null, "빈 일지");
+  assert.equal(applyRun(g, r, base).orderDone, null, "일지를 돌려받지 못함");
+});
+
+// ---------------------------------------------------------------- v0.12 검토 반영(C71)
+import { SEED_PACK } from "../../data/garden.js";
+import { SEEDS_MAX } from "../../src/garden/state.js";
+
+test("C71 I1 runInput: tomato_ok는 10장을 통과했을 때만(passed 없으면 false)", () => {
+  const g = newGarden();
+  assert.equal(runInput(g, upTo(10)).tomato_ok, true);
+  assert.equal(runInput(g, upTo(9)).tomato_ok, false);
+  assert.equal(runInput(g).tomato_ok, false);
+});
+
+test("C71 I1 farmConsistent: 10장 전에는 토마토 심기 사건이 없고, tomato_locked 실패는 10장 전에만", () => {
+  const g = { ...newGarden(), cells: Array(9).fill(null), seeds: 3 };
+  const P = { t: "plant", line: 1, crop: "토마토", x: 0, y: 0 };
+  const L = { t: "plant_fail", line: 1, crop: "토마토", x: 0, y: 0, reason: "tomato_locked" };
+  assert.ok(farmConsistent(runInput(g, upTo(10)), tomatoResult(g, [P], 2).farm));
+  assert.equal(farmConsistent(runInput(g, upTo(9)), tomatoResult(g, [P], 2).farm), false, "잠겼는데 심음");
+  assert.ok(farmConsistent(runInput(g, upTo(9)), tomatoResult(g, [L], 3).farm), "잠김 실패(씨앗 그대로)");
+  assert.equal(farmConsistent(runInput(g, upTo(10)), tomatoResult(g, [L], 3).farm), false, "열렸는데 잠김 실패");
+  assert.equal(farmConsistent(runInput(g, upTo(9)), tomatoResult(g, [L], 2).farm), false, "잠김 실패에 씨앗이 줄면 안 됨");
+  // applyRun도 같은 기준(opts.passed)
+  assert.equal(applyRun(g, tomatoResult(g, [P], 2), { program: [], mode: "code", passed: upTo(9) }).rejected, true);
+  assert.notEqual(applyRun(g, tomatoResult(g, [L], 3), { program: [], mode: "code", passed: upTo(9) }).rejected, true);
+});
+
+test("C71 I3 주문 use journal: 실행 뒤 일지가 보낸 일지와 달라야(길어지거나 2000자에서 바뀜)", () => {
+  const i = byId("o_log");
+  const base = { program: ORDERS[i].solution, mode: "nodes", passed: upTo(11) };
+  const g = { ...at(newGarden(), i), files: { [J]: "수확 3개\n" } };
+  const r = fakeResult(g);
+  const withJ = (t) => ({ ...r, farm: { ...r.farm, files: { [J]: t } } });
+  assert.equal(applyRun(g, withJ("수확 3개\n"), base).orderDone, null, "그대로면 안 됨(앞 실행의 일지)");
+  assert.equal(applyRun(g, withJ("수확 3개\n수확 0개\n"), base).orderDone?.id, "o_log");
+  const full = "가".repeat(JOURNAL_MAX);
+  const gf = { ...g, files: { [J]: full } };
+  const rf = fakeResult(gf);
+  assert.equal(applyRun(gf, { ...rf, farm: { ...rf.farm, files: { [J]: full } } }, base).orderDone, null, "꽉 찬 일지 그대로");
+  assert.equal(applyRun(gf, { ...rf, farm: { ...rf.farm, files: { [J]: full.slice(1) + "\n" } } }, base).orderDone?.id, "o_log", "꽉 찬 일지에 덧붙임");
+});
+
+test("C71 C2 씨앗 5개: 당근 5개, 10장 통과 뒤, 봉투 +5(최대 20), 성장 목록에는 들지 않고 여러 번 살 수 있음", () => {
+  assert.equal(SEED_PACK.id, "seedpack");
+  assert.equal(SEED_PACK.label, "토마토 씨앗 5개");
+  assert.deepEqual(SEED_PACK.cost, { 당근: 5 });
+  assert.ok(!UPGRADES.some((u) => u.id === "seedpack"));
+  const g = { ...newGarden(), seeds: 0, store: { 당근: 12, 감자: 0, 토마토: 0 } };
+  assert.equal(canBuy(g, "seedpack", upTo(9)).ok, false, "10장 전");
+  assert.match(canBuy(g, "seedpack", upTo(9)).reason, /10장/);
+  assert.equal(canBuy(g, "seedpack").ok, false, "passed 없음");
+  assert.ok(canBuy(g, "seedpack", upTo(10)).ok);
+  const b1 = buy(g, "seedpack", upTo(10));
+  assert.equal(b1.error, null);
+  assert.equal(b1.garden.seeds, 5);
+  assert.equal(b1.garden.store.당근, 7);
+  assert.deepEqual(b1.garden.upgrades, g.upgrades, "성장 목록에 넣지 않음");
+  const b2 = buy(b1.garden, "seedpack", upTo(10));
+  assert.equal(b2.garden.seeds, 10);
+  assert.equal(b2.garden.store.당근, 2);
+  const short = canBuy(b2.garden, "seedpack", upTo(10));
+  assert.equal(short.ok, false);
+  assert.deepEqual(short.short, { 당근: 3 });
+  // 18개면 20까지만, 20개면 살 수 없음
+  const near = { ...g, seeds: 18 };
+  assert.equal(buy(near, "seedpack", upTo(10)).garden.seeds, SEEDS_MAX);
+  const full = canBuy({ ...g, seeds: SEEDS_MAX }, "seedpack", upTo(10));
+  assert.equal(full.ok, false);
+  assert.match(full.reason, /가득/);
+  // 저장 정리는 seedpack을 성장으로 받지 않음
+  assert.deepEqual(cleanGarden({ ...newGarden(), upgrades: ["seedpack"] }).upgrades, []);
+});
+
+test("C71 C2 막힌 손글씨 주문: 씨앗 0·밭에 토마토 없음 → 씨앗 5개 사기 → o_hand 정답이 다시 됨", () => {
+  const i = byId("o_hand");
+  const o = ORDERS[i];
+  const g0 = cleanGarden({ ...newGarden(), ...structuredClone(o.setup), seeds: 0,
+    order: { idx: i, done: ORDERS.slice(0, i).map((x) => x.id), paid: [] } });
+  assert.ok(g0.cells.every((c) => !c || c.crop !== "토마토"));
+  const passed = upTo(12);
+  const b = buy(g0, "seedpack", passed);
+  assert.equal(b.error, null);
+  assert.equal(b.garden.seeds, 5);
+  // 쪽지(당근 3, 토마토 2)대로 심은 결과(씨앗 5 → 3)를 받으면 주문 완료
+  const P = (crop, x, y = 0) => ({ t: "plant", line: 1, crop, x, y });
+  const r = tomatoResult(b.garden, [P("당근", 0), P("당근", 1), P("당근", 2), P("토마토", 0, 1), P("토마토", 1, 1)], 3);
+  const out = applyRun(b.garden, r, { program: o.solution, mode: "nodes", passed });
+  assert.notEqual(out.rejected, true);
+  assert.equal(out.orderDone?.id, "o_hand");
 });

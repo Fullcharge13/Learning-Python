@@ -713,6 +713,17 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
   background: var(--navy); color: #F4EEDD; font-size: .9rem; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
 .g-now .g-ln { color: var(--sun); font-weight: 700; }
 
+/* 씨앗 봉투·쪽지함 줄(v0.12) */
+.g-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+.g-tools[hidden] { display: none; }
+.g-seeds { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 4px 12px 4px 6px; border-radius: 999px;
+  background: var(--card); border: 2px solid var(--line); font-size: .92rem; font-weight: 700; color: var(--ink-2); }
+.g-seeds b { color: var(--ink); font-size: 1rem; }
+.g-seeds.empty { border-color: var(--coral); color: var(--coral-ink); background: var(--coral-soft); }
+.g-seeds .crop-ic { width: 20px; height: 20px; }
+.g-notes-btn { min-height: 44px; }
+.g-notes-btn .ic { width: 20px; height: 20px; }
+
 /* 실행 결과 */
 .g-result { margin: 0 0 12px; }
 .g-result > :last-child { margin-bottom: 0; }
@@ -771,6 +782,9 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .g-node.ch7, .g-add-sheet .g-pick-btn.ch7 { border-left-color: #3E8E41; }
 .g-node.ch8, .g-add-sheet .g-pick-btn.ch8 { border-left-color: #A86B2D; }
 .g-node.ch9, .g-add-sheet .g-pick-btn.ch9 { border-left-color: #2C7BD6; }
+.g-node.ch10, .g-add-sheet .g-pick-btn.ch10 { border-left-color: #D2453A; }
+.g-node.ch11, .g-add-sheet .g-pick-btn.ch11 { border-left-color: #8A6D3B; }
+.g-node.ch12, .g-add-sheet .g-pick-btn.ch12 { border-left-color: #1F7A8C; }
 .g-var { padding: 2px 8px; border-radius: 8px; background: #E4F1E2; color: #2D6A30; border: 2px dashed #3E8E41; font-size: .88rem; font-weight: 700; }
 .g-hint { font-size: .85rem; color: var(--ink-2); font-weight: 700; }
 .g-node-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0; padding: 2px 0; }
@@ -870,6 +884,32 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .g-seg-btn { min-width: 52px; min-height: 44px; padding: 0 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--card); font-weight: 700; }
 .g-seg-btn.on { border-color: var(--teal); background: var(--teal-soft); color: var(--teal-deep); }
 
+/* 패턴 찾기 고르기(v0.12) */
+.g-pat .g-pick-name { display: grid; gap: 2px; }
+.g-pat .g-pick-name small { text-align: left; color: var(--ink-2); font-size: .8rem; }
+.g-pick-btn code.g-re { font-family: var(--mono); font-size: .85rem; color: var(--teal-deep); background: var(--paper-2); border-radius: 6px; padding: 2px 6px; max-width: 58%; }
+.g-pick-note { margin-bottom: 4px; }
+
+/* 쪽지함(v0.12) */
+.g-file { margin-top: 12px; padding: 10px 12px 12px; border: 2px solid var(--line); border-radius: 14px; background: var(--card); }
+.g-file.log { border-color: var(--teal); }
+.g-file h3 { margin: 0 0 4px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; font-size: 1rem; }
+.g-file h3 .mono { font-family: var(--mono); overflow-wrap: anywhere; }
+.g-file-tag { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 999px; background: var(--paper-2); color: var(--ink-2); font-size: .78rem; font-weight: 800; }
+.g-file-tag .ic { width: 14px; height: 14px; }
+.g-file-tag.log { background: var(--teal-soft); color: var(--teal-deep); }
+.g-file .g-note { margin: 0 0 6px; }
+.g-note-text { margin: 0; padding: 8px 10px; border-radius: 10px; font-size: .92rem; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12.5em; overflow-y: auto; }
+.g-note-empty { color: #6B6559 !important; font-style: italic; }   /* 카드 위 5.7:1, 종이 위 4.8:1 (C71) */
+.g-log-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.g-log-row .btn { min-height: 44px; }
+.g-log-row .btn:disabled { opacity: .5; box-shadow: none; }
+.g-log-ask { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: var(--coral-soft); }
+.g-log-ask[hidden] { display: none; }
+.g-log-ask p { margin: 0 auto 0 0; font-weight: 700; color: var(--coral-ink); }
+.g-log-ask .btn { min-height: 44px; }
+
 /* 성장 창 */
 .g-ups { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 10px; }
 .g-up { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 2px solid var(--line); border-radius: 14px; background: var(--card); }
@@ -883,6 +923,8 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .g-why { color: var(--coral-ink); font-weight: 700; margin-top: 2px !important; }
 .g-up.owned .g-why { color: var(--teal-deep); }
 .g-up .btn { flex: none; min-width: 64px; }
+.g-seed-now { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px !important; font-weight: 800; color: var(--ink-2); }
+.g-seed-now .crop-ic { width: 18px; height: 18px; }
 
 /* 주문 완료 창 */
 .g-done-body .ria-row { margin-bottom: 10px; }

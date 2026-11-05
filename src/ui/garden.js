@@ -2,6 +2,8 @@
 // 설계: docs/specs/2026-11-05-파이의-텃밭-설계.md · 계획서 작업 4
 // v0.11(docs/specs/2026-11-05-텃밭-6-9장-설계.md): 값 넣어 말하기·목록에서 하나씩(목록 편집 창, 목록 값)·창고 보기 조건·
 //   위치 알기(x·y 값 비교), 텃밭 전용 오류 설명(src/garden/errors.js)
+// v0.12(docs/specs/2026-11-05-텃밭-10-17장-설계.md): 토마토·씨앗 봉투 표시(10장부터), 쪽지함(받은 쪽지·농장일지 보기·비우기),
+//   시도하기(안 되면 칸)·쪽지 읽기·줄 나누기·일지 쓰기·패턴 찾기 노드와 고르기 창, 심기·반복의 쪽지 값(crop·int(n))
 //
 // 규칙은 runner.py의 farm 모듈(실행), 노드·코드는 src/garden/nodes.js, 저장·주문·성장은 src/garden/state.js,
 // 그림·재생 단계는 src/garden/view.js에 있다. 이 화면은 그것들을 이어 붙이고 그리기만 한다.
@@ -10,12 +12,14 @@ import {
   NODES, COND, VAR_NAMES, FUNC_NAMES, OPS, VALUE_RANGE, MAX_NODES, MSG as NODE_MSG,
   codegen, validate, unlockedKinds, newNode, insertNode, moveNode, removeNode, updateArgs, setElse, countNodes,
   CROP_NAMES, LIST_TYPES, LIST_ITEMS, LIST_LABELS, LIST_MAX, LIST_DEFAULTS, COND_LOCKS, availableValues, loopVarAvailable, cleanList,
+  NOTE_FILES, LOG_FILE, PATTERNS, MARK_LOCKS, TOMATO, noteVarAvailable,
 } from "../garden/nodes.js";
 import { gardenExplain } from "../garden/errors.js";
 import {
-  fillGarden, runInput, applyRun, currentOrder, canBuy, buy, deliver, grantOrderXP, settleAll, passedChapters,
+  fillGarden, runInput, runFiles, applyRun, currentOrder, canBuy, buy, deliver, grantOrderXP, settleAll, passedChapters,
+  JOURNAL_MAX, SEEDS_MAX, cleanSeeds,
 } from "../garden/state.js";
-import { UPGRADES, ORDERS } from "../../data/garden.js";
+import { UPGRADES, ORDERS, SEED_PACK } from "../../data/garden.js";
 import { BADGES } from "../../data/badges.js";
 import { render as farmSVG, replayFrames, thinFrames } from "../garden/view.js";
 import { riaSVG } from "../ria.js";
@@ -33,26 +37,37 @@ const EVENT_SAY = {
   no_seed: "감자 씨앗이 아직 없어요",
   occupied: "여기는 이미 심겨 있어요",
   harvest_young: "앗, 아직 덜 자랐어요",
+  no_tomato_seed: "토마토 씨앗이 떨어졌어요",
 };
 const frameSay = (f) => f.say || (f.fx && (EVENT_SAY[f.fx.reason] || EVENT_SAY[f.fx.t])) || null;
 const UNDO_MS = 5000;   // 비우기 뒤 「되돌리기」 알림
 const RUN_HINT = "「실행」을 누르면 파이가 노드를 위에서부터 차례로 해요.";
-const KIND_ORDER = ["move", "harvest", "plant", "say", "setvar", "addvar", "if", "def", "call", "repeat", "while", "sayval", "foreach", "where"];
+const KIND_ORDER = ["move", "harvest", "plant", "say", "setvar", "addvar", "if", "def", "call", "repeat", "while", "sayval", "foreach", "where",
+  "try", "readnote", "splitline", "writelog", "findall"];
 // 목록 변수 기본 이름(자리가 틀려 범위를 못 찾을 때 — 오류는 노드에 따로 보임)
 const LV_DEF = { crop: "crop", dir: "way" };
 const isLV = (v) => !!v && typeof v === "object" && v.loopVar === true;
 const isStoreCond = (c) => !!c && typeof c === "object" && "store" in c;
+const isNV = (v) => !!v && typeof v === "object" && typeof v.noteVar === "string";   // 쪽지 값 { noteVar }
+const isNC = (v) => !!v && typeof v === "object" && "value" in v;                   // 반복 횟수 { value: "n" }
+const TOMATO_LOCK = `crop:${TOMATO}`;
+// 받은 쪽지(읽기만) / 남는 일지
+const isLog = (f) => f === LOG_FILE;
 // 표지 목표(kindsUsed) 이름
 const MARK_LABEL = {
   loopvar: "목록 값 쓰기", "loopvar:act": "목록 값으로 심기·이동하기", "cond:store": "창고 보기 조건 쓰기", "cond:pos": "위치 조건 쓰기",
+  [TOMATO_LOCK]: "토마토 심기",
 };
-const VAL_SRC = { var: "기억한 값", pos: "파이 위치", loop: "목록 값" };
+const VAL_SRC = { var: "기억한 값", pos: "파이 위치", loop: "목록 값", note: "쪽지 값" };
 
 // 작물 작은 그림(창고 표시용, 24 격자)
 const CROP_ICON = {
   당근: '<svg class="ic crop-ic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 9c-2-3-5-4-6-3 1 0 3 1 4 3M12 9c0-3 1-5 3-6 0 2-1 4-2 5M12 9c2-2 5-2 6-1-1 1-3 1-5 1" fill="none" stroke="#3E8E41" stroke-width="2" stroke-linecap="round"/><path d="M7.5 10.5Q12 8.5 16.5 10.5L12.8 21Q12 22 11.2 21Z" fill="#F28C28" stroke="#3B2C35" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   감자: '<svg class="ic crop-ic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 13.5C4 9 8 6 12.5 6.5S20.5 10 19.5 14 15 19.5 11 19 5.8 17 5 13.5Z" fill="#D9B77A" stroke="#3B2C35" stroke-width="1.6"/><circle cx="9.5" cy="11.5" r="1" fill="#A88550"/><circle cx="14" cy="10" r="1" fill="#A88550"/><circle cx="13" cy="15" r="1" fill="#A88550"/></svg>',
+  토마토: '<svg class="ic crop-ic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><circle cx="12" cy="14" r="7.5" fill="#E2483A" stroke="#3B2C35" stroke-width="1.6"/><path d="M8.5 12.5q.5-2 2.5-2.5" fill="none" stroke="#FF8A7A" stroke-width="1.6" stroke-linecap="round"/><path d="M7.5 7.5l3 1.2L12 5.5l1.5 3.2 3-1.2-1.8 2.8H9.3z" fill="#3F8F3A" stroke="#3B2C35" stroke-width="1.1" stroke-linejoin="round"/></svg>',
 };
+// 씨앗 봉투 작은 그림(10장부터)
+const SEED_ICON = '<svg class="ic crop-ic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6.5h12l-1 13.5H7z" fill="#F3E3C3" stroke="#3B2C35" stroke-width="1.6" stroke-linejoin="round"/><path d="M5.5 6.5l1.5-2.5h10l1.5 2.5" fill="#D9B77A" stroke="#3B2C35" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.2" fill="#E2483A" stroke="#3B2C35" stroke-width="1.3"/></svg>';
 
 const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const cropNames = (obj) => Object.entries(obj).filter(([, n]) => n > 0);
@@ -68,18 +83,22 @@ function condLabel(c) {
 /** 노드 한 줄에 보일 값 단추들: [{ arg, text, mono }]. lv(type): 그 자리 목록 변수 이름(crop·way·crop2…) */
 function argChips(n, lv = (t) => LV_DEF[t]) {
   const a = n.args || {};
-  const val = (v, t) => (isLV(v) ? { text: lv(v.type || t), mono: true } : { text: v });
+  const val = (v, t) => (isLV(v) ? { text: lv(v.type || t), mono: true } : isNV(v) ? { text: v.noteVar, mono: true } : { text: v });
   switch (n.kind) {
     case "move": return [{ arg: "dir", ...val(a.dir, "dir") }];
     case "plant": return [{ arg: "crop", ...val(a.crop, "crop") }];
     case "sayval": return [{ arg: "pre", text: `“${a.pre ?? ""}”` }, { arg: "var", ...val(a.var), mono: true }, { arg: "post", text: `“${a.post ?? ""}”` }];
+    case "writelog": return [{ arg: "pre", text: `“${a.pre ?? ""}”` },
+      a.var == null ? { arg: "var", text: "값 없음" } : { arg: "var", ...val(a.var), mono: true }, { arg: "post", text: `“${a.post ?? ""}”` }];
+    case "readnote": return [{ arg: "file", text: a.file }];
+    case "findall": return [{ arg: "pattern", text: PATTERNS[a.pattern]?.label ?? String(a.pattern ?? "") }];
     case "foreach": return [{ arg: "list", text: (a.list?.items || []).join("·") }];
     case "say": return [{ arg: "text", text: `“${a.text ?? ""}”` }];
     case "setvar": return [{ arg: "name", text: a.name, mono: true }, { arg: "value", text: `= ${a.value}`, mono: true }];
     case "addvar": return [{ arg: "name", text: a.name, mono: true }, { arg: "value", text: `+ ${a.value}`, mono: true }];
     case "if":
     case "while": return [{ arg: "cond", text: condLabel(a.cond), mono: !!(a.cond && typeof a.cond === "object") }];
-    case "repeat": return [{ arg: "n", text: `${a.n}번` }];
+    case "repeat": return [{ arg: "n", text: isNC(a.n) ? `int(${a.n.value})번` : `${a.n}번`, mono: isNC(a.n) }];
     case "def":
     case "call": return [{ arg: "name", text: a.name, mono: true }];
     default: return [];
@@ -94,8 +113,17 @@ function goalText(o) {
     case "run_harvest":
       return `한 번 실행에 ${g.crop || "작물"} ${g.n}개 거두기${g.max_actions ? ` (행동 ${g.max_actions}번 안에)` : ""}`
         + (g.kind ? ` · 「${NODES[g.kind]?.label ?? g.kind}」 노드로` : "");
-    case "use": return MARK_LABEL[g.kind] ? `「${MARK_LABEL[g.kind]}」 — 노드로 끝까지 실행하기`
-      : `「${NODES[g.kind]?.label ?? g.kind}」 노드를 넣고 끝까지 실행하기`;
+    case "use": {
+      const k = String(g.kind ?? "");
+      const [base, opt] = k.includes(":") && !MARK_LABEL[k] ? k.split(/:(.*)/s) : [k, null];
+      const head = MARK_LABEL[k] ? `「${MARK_LABEL[k]}」 — 노드로 끝까지 실행하기`
+        : base === "readnote" && opt ? `「쪽지 읽기」로 ${opt} 읽고 끝까지 실행하기`
+        : base === "findall" && opt ? `「패턴 찾기: ${PATTERNS[opt]?.label ?? opt}」로 끝까지 실행하기`
+        : `「${NODES[k]?.label ?? k}」 노드를 넣고 끝까지 실행하기`;
+      return g.journal ? `${head} · 「일지에 한 줄 이상 쓰기」` : head;
+    }
+    case "plant_as_note": return `「쪽지에 적힌 대로 심기」 — ${g.file}의 작물을 그 개수만큼`
+      + (g.kind ? ` · 「${NODES[g.kind]?.label ?? g.kind}」 노드로` : "");
     case "deliver": return `창고의 ${g.crop} ${g.n}개 보내기`;
     case "grid": return `「성장」에서 밭을 ${g.size}×${g.size}로 넓히기`;
     default: return "";
@@ -177,6 +205,8 @@ function bindStepper(box, onChange) {
 export function render(root, ctx) {
   const passed = passedChapters(ctx.save, ctx.chapters);
   const unlocked = unlockedKinds(passed);
+  const tomatoOpen = unlocked.has(TOMATO_LOCK);
+  const notesOpen = unlocked.has("readnote");
   const S = {
     garden: fillGarden(ctx.save).garden,
     facing: "오른쪽",
@@ -203,6 +233,10 @@ export function render(root, ctx) {
       <section class="g-board" aria-label="텃밭">
         <div id="board" class="g-board-svg"></div>
         <p class="g-now mono" id="g-now" hidden></p>
+        <div class="g-tools" id="g-tools"${tomatoOpen || notesOpen ? "" : " hidden"}>
+          ${tomatoOpen ? `<p class="g-seeds" id="g-seeds"></p>` : ""}
+          ${notesOpen ? `<button class="btn ghost small g-notes-btn" id="g-notes" aria-haspopup="dialog">${icon("book")}<span>쪽지함</span></button>` : ""}
+        </div>
       </section>
       <div id="g-result" class="g-result" role="status" aria-live="polite"></div>
       <section class="panel g-order" id="g-order" aria-labelledby="g-order-title"></section>
@@ -281,12 +315,24 @@ export function render(root, ctx) {
   }
 
   // ---- 위 줄: 창고 ----
+  // 토마토는 10장을 끝냈거나 창고에 있을 때만 보인다
+  function shownCrops() {
+    return Object.keys(CROP_ICON).filter((c) => c !== TOMATO || tomatoOpen || (S.garden.store[c] ?? 0) > 0);
+  }
   function paintStore() {
     const st = S.garden.store;
-    root.querySelector("#g-store").innerHTML = Object.keys(CROP_ICON).map((c) =>
-      `<span class="g-crop-count">${CROP_ICON[c]}<b>${st[c] ?? 0}</b><span class="sr">${c} ${st[c] ?? 0}개</span></span>`).join("")
+    const crops = shownCrops();
+    root.querySelector("#g-store").innerHTML = crops.map((c) =>
+      `<span class="g-crop-count" data-crop="${esc(c)}">${CROP_ICON[c]}<b>${st[c] ?? 0}</b><span class="sr">${c} ${st[c] ?? 0}개</span></span>`).join("")
       + `<span class="sr">창고</span>`;
-    root.querySelector("#g-store").setAttribute("aria-label", `창고: ${Object.keys(CROP_ICON).map((c) => `${c} ${st[c] ?? 0}개`).join(", ")}`);
+    root.querySelector("#g-store").setAttribute("aria-label", `창고: ${crops.map((c) => `${c} ${st[c] ?? 0}개`).join(", ")}`);
+    const sd = root.querySelector("#g-seeds");
+    if (sd) {
+      const n = cleanSeeds(S.garden.seeds);
+      // 글 그대로 읽힌다(「토마토 씨앗 n」) — <p>에 aria-label을 달지 않음(판정 C71)
+      sd.innerHTML = `${SEED_ICON}<span>토마토 씨앗 <b>${n}</b></span>`;
+      sd.classList.toggle("empty", n === 0);
+    }
   }
 
   // ---- 텃밭 그림 ----
@@ -357,8 +403,10 @@ export function render(root, ctx) {
     const lv = (t) => loopVarAvailable(S.garden.program, n.id, t) || LV_DEF[t];
     const chips = argChips(n, lv).map((c) =>
       `<button class="g-arg${c.mono ? " mono" : ""}" data-arg="${c.arg}" aria-label="${esc(`${label}: ${c.text}, 바꾸기`)}">${esc(c.text)}</button>`).join("");
+    const made = n.kind === "where" ? "x, y" : n.kind === "readnote" ? "line" : n.kind === "splitline" ? "crop, n"
+      : n.kind === "findall" ? (PATTERNS[n.args?.pattern]?.vars ?? []).join(", ") : "";
     const extra = n.kind === "foreach" ? `<span class="g-var mono" aria-label="${esc(`목록 변수 ${feName(n)}`)}">${esc(feName(n))}</span>`
-      : n.kind === "where" ? `<span class="g-hint">x, y가 생겨요</span>` : "";
+      : made ? `<span class="g-hint">${esc(`${made}${n.kind === "where" ? "가" : "이"} 생겨요`)}</span>` : "";
     return `<div class="g-node ${chapterClass(n.kind)}${bad ? " bad" : ""}" data-id="${esc(n.id)}" data-kind="${esc(n.kind)}" data-depth="${depth}">
       <div class="g-node-main"><span class="g-kind">${esc(label)}</span>${chips}${extra}</div>
       <button class="g-menu" aria-label="${esc(`${label} 노드 메뉴`)}">${icon("more")}</button>
@@ -376,6 +424,10 @@ export function render(root, ctx) {
         if (Array.isArray(n.orelse)) {
           inner += `<p class="g-else">아니면</p><ol class="g-body" aria-label="아니면 안">${listHTML(n.orelse, depth + 1, errs, n.id, "orelse")}</ol>`;
         }
+        // 시도하기: 안 되면 칸(늘 있음, except ValueError:)
+        if (NODES[n.kind].handler) {
+          inner += `<p class="g-else">안 되면</p><ol class="g-body" aria-label="안 되면 안">${listHTML(n.handler || [], depth + 1, errs, n.id, "handler")}</ol>`;
+        }
       }
       return `<li class="g-item">${inner}</li>`;
     }).join("");
@@ -388,7 +440,7 @@ export function render(root, ctx) {
       if (!S.ed) {
         progEl.innerHTML = `<div class="g-prog-head"><h2 id="g-prog-title">${icon("code")}<span>파이썬 코드</span></h2>
           <button class="btn ghost small" id="to-nodes">노드로 돌아가기</button></div>
-          <p class="g-mode-note">명령: <code>move("오른쪽")</code> <code>plant("당근")</code> <code>harvest()</code> <code>can_harvest()</code> <code>what_here()</code> <code>store()</code> <code>where()</code> <code>print()</code></p>
+          <p class="g-mode-note">명령: <code>move("오른쪽")</code> <code>plant("당근")</code> <code>harvest()</code> <code>can_harvest()</code> <code>what_here()</code> <code>store()</code> <code>where()</code>${tomatoOpen ? " <code>seeds()</code>" : ""}${notesOpen ? " <code>open()</code>" : ""} <code>print()</code></p>
           <div class="editor-box g-editor" id="g-ed"></div>`;
         S.ed = createEditor(progEl.querySelector("#g-ed"), {
           doc: S.garden.code || "",
@@ -484,6 +536,8 @@ export function render(root, ctx) {
     root.querySelector("#g-replay").hidden = st !== "replay";
     progEl.inert = st !== "idle";
     root.querySelector("#g-grow").disabled = st !== "idle";
+    const nb = root.querySelector("#g-notes");
+    if (nb) nb.disabled = st !== "idle";
     orderEl.inert = st !== "idle";
     paintPy();
   }
@@ -556,7 +610,7 @@ export function render(root, ctx) {
     for (let i = 0; i < (list || []).length; i++) {
       const n = list[i];
       if (String(n.id) === String(id)) return { node: n, list, index: i, parent, slot };
-      for (const s of ["body", "orelse"]) {
+      for (const s of ["body", "orelse", "handler"]) {
         const r = findWithParent(n[s], id, n, s);
         if (r) return r;
       }
@@ -605,8 +659,8 @@ export function render(root, ctx) {
       n.args.list = { type: t, items: LIST_DEFAULTS[t].slice() };
     }
     let next = insertNode(S.garden.program, parent, slot, Infinity, n);
-    if (kind === "sayval") {
-      // 그 자리에서 쓸 수 있는 첫 값(기억한 값 → x·y → 목록 값). 없으면 기본 count 그대로(오류로 알려 줌)
+    if (kind === "sayval" || kind === "writelog") {
+      // 그 자리에서 쓸 수 있는 첫 값(기억한 값 → x·y → 목록 값 → 쪽지 값). 없으면 기본 count 그대로(오류로 알려 줌)
       const first = availableValues(next, n.id)[0];
       if (first) next = updateArgs(next, n.id, { var: first.arg });
     }
@@ -618,8 +672,8 @@ export function render(root, ctx) {
   function sampleCode(kind) {
     const n = newNode(kind, 0);
     if (NODES[kind].body) n.body = [];
-    const line = codegen([n]).code.split("\n")[0];
-    return line;
+    // 패턴 찾기는 맨 위에 import re가 붙으므로 그 다음 줄
+    return codegen([n]).code.split("\n").find((l) => l !== "import re") ?? "";
   }
 
   async function openMenu(id) {
@@ -675,11 +729,36 @@ export function render(root, ctx) {
     const spec = NODES[n.kind];
     const aspec = spec.args[arg];
     const cur = n.args[arg];
-    const title = `${spec.label}: ${{ dir: "방향", crop: "작물", text: "할 말", name: n.kind === "def" || n.kind === "call" ? "내 노드 이름" : "값 이름", value: "숫자", n: "몇 번", cond: "조건", pre: "앞 글자", post: "뒤 글자", var: "값", list: "목록" }[arg] || arg}`;
+    const title = `${spec.label}: ${{ dir: "방향", crop: "작물", text: "할 말", name: n.kind === "def" || n.kind === "call" ? "내 노드 이름" : "값 이름", value: "숫자", n: "몇 번", cond: "조건", pre: "앞 글자", post: "뒤 글자", var: "값", list: "목록", file: "쪽지", pattern: "패턴" }[arg] || arg}`;
     const refocus = () => focusFirst(`${nodeSel(n.id)} .g-arg[data-arg="${arg}"]`, `${nodeSel(n.id)} .g-menu`);
-    const listBtns = (choices, mono) => `<ul class="g-pick">${choices.map((c) =>
-      `<li><button class="g-pick-btn${String(c) === String(cur) ? " on" : ""}" data-v="${esc(c)}"${String(c) === String(cur) ? ' aria-current="true"' : ""}>${mono ? `<code>${esc(c)}</code>` : `<span class="g-pick-name">${esc(c)}</span>`}</button></li>`).join("")}</ul>`;
+    // 잠긴 값(10장 전 토마토)은 흐리게 + 이유
+    const lockOf = (c) => (c === TOMATO && !tomatoOpen ? NODE_MSG.locked(MARK_LOCKS[TOMATO_LOCK]) : "");
+    const listBtns = (choices, mono) => `<ul class="g-pick">${choices.map((c) => {
+      const on = String(c) === String(cur);
+      const why = lockOf(c);
+      return `<li><button class="g-pick-btn${on ? " on" : ""}" data-v="${esc(c)}"${on ? ' aria-current="true"' : ""}${why ? ' disabled aria-disabled="true"' : ""}>${mono ? `<code>${esc(c)}</code>` : `<span class="g-pick-name">${esc(c)}</span>`}${why ? `<small>${esc(why)}</small>` : ""}</button></li>`;
+    }).join("")}</ul>`;
+    const extraBtn = (v, name, code, on) => `<li><button class="g-pick-btn g-lv${on ? " on" : ""}" data-v="${v}"${on ? ' aria-current="true"' : ""}>
+      <span class="g-pick-name">${esc(name)}</span><code>${esc(code)}</code></button></li>`;
+    const addBtns = (html, more) => (more ? html.replace(/<\/ul>$/, `${more}</ul>`) : html);
 
+    if (aspec.type === "choice" && arg === "pattern") {
+      // 패턴 찾기: 이름 + 정규식 미리보기 + 생기는 값
+      const v = await sheet({
+        title, cls: "g-pattern-sheet",
+        html: `<p class="g-note">쪽지 줄(line)에서 패턴에 맞는 글자를 모두 찾아 하나씩 꺼내요.</p><ul class="g-pick">${aspec.choices.map((id) => {
+          const p = PATTERNS[id];
+          const on = id === cur;
+          return `<li><button class="g-pick-btn g-pat${on ? " on" : ""}" data-v="${esc(id)}"${on ? ' aria-current="true"' : ""}>
+            <span class="g-pick-name">${esc(p.label)}<small>${esc(`${p.vars.join(", ")}이 생겨요`)}</small></span>
+            <code class="g-re">r"${esc(p.re)}"</code></button></li>`;
+        }).join("")}</ul>`,
+      });
+      if (v == null || S.destroyed || !PATTERNS[v]) return;
+      setProgram(updateArgs(S.garden.program, n.id, { pattern: v }));
+      refocus();
+      return;
+    }
     if (aspec.type === "choice") {
       const mono = arg === "name";
       let note = "";
@@ -689,30 +768,36 @@ export function render(root, ctx) {
       }
       // 목록에서 하나씩 안이면 그 목록 변수(crop·way)도 고를 수 있다
       const lvName = aspec.loopType ? loopVarAvailable(S.garden.program, n.id, aspec.loopType) : null;
-      let html = note + listBtns(aspec.choices, mono);
-      if (lvName) {
-        html = html.replace(/<\/ul>$/, `<li><button class="g-pick-btn g-lv${isLV(cur) ? " on" : ""}" data-v="__loop"${isLV(cur) ? ' aria-current="true"' : ""}>
-          <span class="g-pick-name">목록 값</span><code>${esc(lvName)}</code></button></li></ul>`);
-      }
+      // 줄 나누기·패턴 찾기 뒤의 심기는 쪽지 값 crop도 고를 수 있다
+      const nvName = aspec.noteVar ? noteVarAvailable(S.garden.program, n.id, aspec.noteVar) : null;
+      if (n.kind === "readnote") note = `<p class="g-note">쪽지함의 쪽지예요. 받은 쪽지는 읽기만 하고, 농장일지.txt는 일지 쓰기로 써요.</p>`;
+      const html = addBtns(note + listBtns(aspec.choices, mono),
+        (lvName ? extraBtn("__loop", "목록 값", lvName, isLV(cur)) : "") + (nvName ? extraBtn("__note", "쪽지 값", nvName, isNV(cur)) : ""));
       const v = await sheet({ title, html });
       if (v == null || S.destroyed) return;
-      setProgram(updateArgs(S.garden.program, n.id, { [arg]: v === "__loop" ? { loopVar: true, type: aspec.loopType } : v }));
+      const nv = v === "__loop" ? { loopVar: true, type: aspec.loopType } : v === "__note" ? { noteVar: aspec.noteVar } : v;
+      setProgram(updateArgs(S.garden.program, n.id, { [arg]: nv }));
       refocus();
       return;
     }
     if (aspec.type === "int") {
-      let get = () => cur;
+      // 반복 횟수: 쪽지 값 n이 있는 자리면 「쪽지 값 n번」(range(int(n)))도 고를 수 있다
+      const num = Number.isInteger(cur) ? cur : aspec.default;
+      let get = () => num;
+      const nvName = aspec.noteValue ? noteVarAvailable(S.garden.program, n.id, aspec.noteValue) : null;
+      const noteHTML = nvName ? `<ul class="g-pick g-pick-note">${extraBtn("__note", `쪽지 값 ${nvName}번`, `range(int(${nvName}))`, isNC(cur))}</ul>
+          <p class="g-note">또는 수로 정하기</p>` : "";
       const v = await sheet({
         title,
-        html: `${stepperHTML("g-step", cur, aspec.min, aspec.max)}<p class="g-note">${aspec.min}부터 ${aspec.max}까지</p>
+        html: `${noteHTML}${stepperHTML("g-step", num, aspec.min, aspec.max)}<p class="g-note">${aspec.min}부터 ${aspec.max}까지</p>
           <button class="btn primary wide" id="g-ok">정하기</button>`,
         bind: (box, done) => {
           get = bindStepper(box.querySelector("#g-step"));
           box.querySelector("#g-ok").addEventListener("click", () => done("ok"));
         },
       });
-      if (v !== "ok" || S.destroyed) return;
-      setProgram(updateArgs(S.garden.program, n.id, { [arg]: get() }));
+      if ((v !== "ok" && v !== "__note") || S.destroyed) return;
+      setProgram(updateArgs(S.garden.program, n.id, { [arg]: v === "__note" ? { value: aspec.noteValue } : get() }));
       refocus();
       return;
     }
@@ -751,13 +836,24 @@ export function render(root, ctx) {
     }
     if (aspec.type === "value") {
       const vals = availableValues(S.garden.program, n.id);
-      const same = (x) => (isLV(cur) ? isLV(x.arg) && x.arg.type === cur.type : x.arg === cur);
+      const same = (x) => (isLV(cur) ? isLV(x.arg) && x.arg.type === cur.type
+        : isNV(cur) ? isNV(x.arg) && x.arg.noteVar === cur.noteVar : x.arg === cur);
+      // 일지 쓰기는 값 없이 글자만 쓸 수도 있다(앞·뒤 글자 중 하나는 있어야)
+      const noneOk = !!aspec.optional && ((n.args.pre ?? "") !== "" || (n.args.post ?? "") !== "");
+      const none = aspec.optional ? `<li><button class="g-pick-btn g-lv${cur == null ? " on" : ""}" data-v="none"${noneOk ? "" : ' disabled aria-disabled="true"'}>
+          <span class="g-pick-name">값 없이 글자만</span>${noneOk ? `<code>${esc(`"${n.args.pre ?? ""}${n.args.post ?? ""}"`)}</code>` : "<small>앞·뒤 글자를 먼저 써요</small>"}</button></li>` : "";
       const v = await sheet({
         title,
-        html: vals.length ? `<ul class="g-pick">${vals.map((x, i) => `<li><button class="g-pick-btn${same(x) ? " on" : ""}" data-v="${i}" data-name="${esc(x.name)}">
-            <code class="g-pick-name">${esc(x.name)}</code><small>${VAL_SRC[x.source]}</small></button></li>`).join("")}</ul>`
+        html: vals.length || none ? `<ul class="g-pick">${vals.map((x, i) => `<li><button class="g-pick-btn${same(x) ? " on" : ""}" data-v="${i}" data-name="${esc(x.name)}">
+            <code class="g-pick-name">${esc(x.name)}</code><small>${VAL_SRC[x.source]}</small></button></li>`).join("")}${none}</ul>`
+            + (vals.length ? "" : `<p class="g-note">여기서 쓸 수 있는 값이 없어요. 위쪽에서 「값 기억하기」·「위치 알기」로 값을 먼저 만들어요.</p>`)
           : `<p class="g-note">여기서 쓸 수 있는 값이 없어요. 위쪽에서 「값 기억하기」·「위치 알기」로 값을 먼저 만들어요.</p>`,
       });
+      if (v === "none" && noneOk && !S.destroyed) {
+        setProgram(updateArgs(S.garden.program, n.id, { [arg]: null }));
+        refocus();
+        return;
+      }
       if (v == null || S.destroyed || !vals[+v]) return;
       setProgram(updateArgs(S.garden.program, n.id, { [arg]: vals[+v].arg }));
       refocus();
@@ -778,7 +874,7 @@ export function render(root, ctx) {
             <button class="btn ghost" id="g-li-del">${icon("trash")}<span>빼기</span></button>
           </div>
           <p class="g-note" id="g-li-n"></p>
-          <div class="g-li-add">${LIST_ITEMS[L.type].map((it) => `<button class="btn ghost" data-add="${esc(it)}">${icon("plus")}<span>${esc(it)}</span></button>`).join("")}</div>
+          <div class="g-li-add">${LIST_ITEMS[L.type].filter((it) => !lockOf(it)).map((it) => `<button class="btn ghost" data-add="${esc(it)}">${icon("plus")}<span>${esc(it)}</span></button>`).join("")}</div>
           <pre class="code g-li-code"></pre>
           <button class="btn primary wide" id="g-ok">정하기</button>`,
         bind: (box, done) => {
@@ -854,7 +950,7 @@ export function render(root, ctx) {
         `<button class="g-seg-btn mono${x === on ? " on" : ""}" role="radio" aria-checked="${x === on}" data-${attr}="${esc(x)}">${esc(x)}</button>`).join("")}</div>`;
       const storeHTML = storeOpen ? `<section class="g-varcond g-storecond">
           <h3>창고 보기 <code>store()</code></h3>
-          ${segHTML("작물", "scrop", CROP_NAMES, sc.crop)}${segHTML("비교", "sop", OPS, sc.op)}
+          ${segHTML("작물", "scrop", CROP_NAMES.filter((c) => !lockOf(c) || c === sc.crop), sc.crop)}${segHTML("비교", "sop", OPS, sc.op)}
           ${stepperHTML("g-step2", sc.num, VALUE_RANGE.min, VALUE_RANGE.max)}
           <button class="btn primary wide" id="g-store-ok">창고 보기로 정하기</button>
         </section>` : `<section class="g-varcond g-storecond locked"><h3>${icon("lock")}<span>창고 보기</span></h3>
@@ -981,6 +1077,8 @@ export function render(root, ctx) {
       const full = ev.filter((e) => e.t === "plant_fail" && e.reason === "occupied").length;
       if (noSeed) notes.push(`감자 씨앗이 없어 ${noSeed}번 못 심었어요(「성장」에서 사요)`);
       if (full) notes.push(`이미 심긴 칸이라 ${full}번 못 심었어요`);
+      const noTomato = ev.filter((e) => e.t === "plant_fail" && e.reason === "no_tomato_seed").length;
+      if (noTomato && !err) notes.push(`토마토 씨앗이 없어 ${noTomato}번 못 심었어요(다 자란 토마토를 거두면 2개 생겨요)`);
       if (notes.length) parts.push(`<p class="g-lost">${notes.map(esc).join("<br>")}</p>`);
       parts.push(`<p class="g-meta">행동 ${r.farm.actions}번</p>`);
     }
@@ -1022,10 +1120,13 @@ export function render(root, ctx) {
     S.overlay = {};
     paintBoard();
     resultEl.innerHTML = `<p class="g-msg">파이가 노드를 읽고 있어요…</p>`;
-    const start = runInput(S.garden);
+    const start = runInput(S.garden, passed);   // tomato_ok: 10장을 끝냈을 때만(판정 C71 I1)
     let r;
     try {
-      r = await ctx.py.run(code, "", [], { farm: start });
+      // 쪽지함(v0.12): 받은 쪽지(읽기만)·농장일지 — 실행이 끝나면 일지가 결과로 돌아와 applyRun이 저장한다.
+      // 쪽지함이 열린 뒤(11장)에만 넘긴다(판정 C71 I1). 그 전에는 실행 폴더에 쪽지가 없고 일지도 그대로.
+      const opts = notesOpen ? { farm: start, files: runFiles(S.garden) } : { farm: start };
+      r = await ctx.py.run(code, "", [], opts);
     } catch (e) {
       r = { error: { type: "WorkerError", msg: String(e && e.message || e) } };
     }
@@ -1040,7 +1141,7 @@ export function render(root, ctx) {
     // 다른 일을 함) 이 결과는 옛 상태에서 나온 것이라 버린다.
     if (S.destroyed) {
       const now = fillGarden(ctx.save).garden;
-      if (JSON.stringify(runInput(now)) !== JSON.stringify(start)) return;
+      if (JSON.stringify(runInput(now, passed)) !== JSON.stringify(start)) return;
       S.garden = now;
     }
     const ap = applyRun(S.garden, r, { program, mode, passed });
@@ -1107,21 +1208,93 @@ export function render(root, ctx) {
     await showOrders(done);
   }
 
+  // ---- 쪽지함(v0.12) ----
+  // 받은 쪽지(지금 주문의 쪽지 또는 오늘의 쪽지, 읽기만)와 농장일지(내용·글자 수·비우기). 실행 때 놓이는 것과 같은 글(runFiles)
+  async function openNotes() {
+    if (S.state !== "idle" || !notesOpen) return;
+    const files = runFiles(S.garden);
+    const order = currentOrder(S.garden, passed).order;
+    // 글 칸은 길면 안에서 스크롤되므로 키보드로도 초점을 받아 스크롤할 수 있게(판정 C71 I4)
+    const textHTML = (t, f) => (t === "" ? `<p class="g-note g-note-empty">(비어 있어요)</p>` : "")
+      + `<pre class="code g-note-text" tabindex="0" role="region" aria-label="${esc(`${f} 내용`)}"${t === "" ? " hidden" : ""}>${esc(t)}</pre>`;
+    const card = (f) => {
+      const t = files[f] ?? "";
+      if (isLog(f)) {
+        return `<section class="g-file log" data-file="${esc(f)}" aria-labelledby="gf-log">
+          <h3 id="gf-log"><span class="mono">${esc(f)}</span><span class="g-file-tag log">일지 · 쓸 수 있어요</span></h3>
+          <div class="g-file-body">${textHTML(t, f)}</div>
+          <div class="g-log-row"><span class="g-num-small" id="g-log-n">${[...t].length}/${JOURNAL_MAX}자</span>
+            <button class="btn ghost small" id="g-log-clear"${t === "" ? " disabled" : ""}>${icon("trash")}<span>일지 비우기</span></button></div>
+          <div class="g-log-ask" id="g-log-ask" hidden><p>농장일지를 모두 지울까요?</p>
+            <button class="btn ghost small" id="g-log-no">그만두기</button><button class="btn coral small" id="g-log-yes">비우기</button></div>
+        </section>`;
+      }
+      const mine = order?.note?.file === f;
+      const hid = `gf-note-${NOTE_FILES.indexOf(f)}`;
+      return `<section class="g-file" data-file="${esc(f)}" aria-labelledby="${hid}">
+        <h3 id="${hid}"><span class="mono">${esc(f)}</span><span class="g-file-tag">${icon("lock")}받은 쪽지</span></h3>
+        <p class="g-note">${mine ? "지금 주문의 쪽지예요. 읽기만 해요." : "오늘의 쪽지예요(실행할 때마다 바뀌어요). 읽기만 해요."}</p>
+        <div class="g-file-body">${textHTML(t, f)}</div>
+      </section>`;
+    };
+    await sheet({
+      title: "쪽지함", cls: "g-notes-sheet",
+      html: `<p class="g-note">「쪽지 읽기」 노드로 여는 쪽지들이에요.</p>${NOTE_FILES.map(card).join("")}`,
+      bind: (box) => {
+        const q = (sel) => box.querySelector(sel);
+        const ask = (on) => {
+          q("#g-log-ask").hidden = !on;
+          q("#g-log-clear").hidden = on;
+          q(on ? "#g-log-no" : "#g-log-clear").focus({ preventScroll: true });
+          // 확인 줄이 창 아래로 숨지 않게
+          if (on) q("#g-log-ask").scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });
+        };
+        q("#g-log-clear").addEventListener("click", () => ask(true));
+        q("#g-log-no").addEventListener("click", () => ask(false));
+        q("#g-log-yes").addEventListener("click", () => {
+          if (S.destroyed || S.state !== "idle") return;
+          save({ ...S.garden, files: { ...S.garden.files, [LOG_FILE]: "" } });
+          q(".g-file.log .g-file-body").innerHTML = textHTML("", LOG_FILE);
+          q("#g-log-n").textContent = `0/${JOURNAL_MAX}자`;
+          q("#g-log-clear").disabled = true;
+          ask(false);
+          q("#g-log-clear").hidden = false;
+          box.closest(".g-sheet").querySelector(".gs-close").focus({ preventScroll: true });
+          toast("농장일지를 비웠어요");
+        });
+      },
+    });
+  }
+
   // ---- 성장 ----
   async function openGrow() {
     if (S.state !== "idle") return;
     const g = S.garden;
+    const costHTML = (cost) => {
+      const icons = Object.entries(cost).map(([crop, n]) => `<span class="g-cost">${CROP_ICON[crop] || ""}${n}</span>`).join("");
+      return `<p class="g-costs" aria-label="${esc(`값: ${Object.entries(cost).map(([cr, n]) => `${cr} ${n}개`).join(", ")}`)}">${icons}</p>`;
+    };
+    // 토마토 씨앗 5개(판정 C71 C2): 10장 뒤에만 보이고, 여러 번 살 수 있음. 지금 씨앗 수를 함께 보여 준다
+    const seedPack = () => {
+      const c = canBuy(g, SEED_PACK.id, passed);
+      const n = cleanSeeds(g.seeds);
+      return `<li class="g-up g-up-seeds">
+        <div class="g-up-main"><h3>${esc(SEED_PACK.label)}</h3><p>${esc(`씨앗 봉투에 ${SEED_PACK.seeds}개를 더해요(최대 ${SEEDS_MAX}개, 여러 번 살 수 있어요)`)}</p>
+          <p class="g-seed-now">${SEED_ICON}<span>${esc(`지금 ${n}/${SEEDS_MAX}개`)}</span></p>${costHTML(SEED_PACK.cost)}
+          ${c.ok ? "" : `<p class="g-why">${esc(c.reason)}</p>`}</div>
+        <button class="btn ${c.ok ? "sun" : "ghost"} small" data-v="${esc(SEED_PACK.id)}" data-up="${esc(SEED_PACK.id)}"${c.ok ? "" : " disabled"}>사기</button>
+      </li>`;
+    };
     const html = `<p class="g-note">창고의 작물로 텃밭을 키워요.</p><ul class="g-ups">${UPGRADES.map((u) => {
-      const c = canBuy(g, u.id);
+      const c = canBuy(g, u.id, passed);
       const owned = g.upgrades.includes(u.id);
-      const cost = Object.entries(u.cost).map(([crop, n]) => `<span class="g-cost">${CROP_ICON[crop] || ""}${n}</span>`).join("");
       const what = u.size ? `밭이 ${u.size}×${u.size}로 넓어져요` : u.id === "감자 씨앗" ? "감자를 심을 수 있어요" : "작물이 더 빨리 자라요(당근 6, 감자 9)";
       return `<li class="g-up${owned ? " owned" : ""}">
-        <div class="g-up-main"><h3>${esc(u.label)}</h3><p>${esc(what)}</p><p class="g-costs" aria-label="${esc(`값: ${Object.entries(u.cost).map(([cr, n]) => `${cr} ${n}개`).join(", ")}`)}">${cost}</p>
+        <div class="g-up-main"><h3>${esc(u.label)}</h3><p>${esc(what)}</p>${costHTML(u.cost)}
           ${c.ok ? "" : `<p class="g-why">${esc(c.reason)}</p>`}</div>
         <button class="btn ${c.ok ? "sun" : "ghost"} small" data-v="${esc(u.id)}" data-up="${esc(u.id)}"${c.ok ? "" : " disabled"}>${owned ? "가짐" : "사기"}</button>
       </li>`;
-    }).join("")}</ul>`;
+    }).join("")}${tomatoOpen ? seedPack() : ""}</ul>`;
     const id = await sheet({ title: "성장", html, cls: "g-grow-sheet" });
     if (!id || S.destroyed) return;
     const b = buy(S.garden, id, passed);
@@ -1130,7 +1303,8 @@ export function render(root, ctx) {
     const done = b.orderDone ? finishOrders(b.orderDone) : [];
     ctx.sound.play("buy");
     const label = UPGRADES.find((u) => u.id === id)?.label ?? id;
-    resultEl.innerHTML = `<p class="g-msg">${esc(`「${label}」 성장을 샀어요`)}</p>`;
+    resultEl.innerHTML = `<p class="g-msg">${esc(id === SEED_PACK.id
+      ? `토마토 씨앗 ${SEED_PACK.seeds}개를 샀어요(지금 ${cleanSeeds(b.garden.seeds)}개)` : `「${label}」 성장을 샀어요`)}</p>`;
     S.overlay = {};
     paintAll();
     await showOrders(done);
@@ -1172,6 +1346,7 @@ export function render(root, ctx) {
   root.querySelector("#g-back").addEventListener("click", () => ctx.show("home"));
   runBtn.addEventListener("click", doRun);
   root.querySelector("#g-grow").addEventListener("click", openGrow);
+  root.querySelector("#g-notes")?.addEventListener("click", openNotes);
   root.querySelector("#g-skip").addEventListener("click", () => { S.skip = true; if (S.wake) S.wake(); });
   const speedBtn = root.querySelector("#g-speed");
   speedBtn.addEventListener("click", () => {

@@ -11,12 +11,13 @@
 //   보냄 { type: "ready", loadMs } | { type: "init-error", name, msg }
 //   받음 { type: "run", id, code, stdin, require, files?, server?, farm? }
 //        files: { 이름: 글자 } (가상 파일, v0.4 E1), server: { 주소: { status, body, type? } } (연습 서버, E2)
-//        farm: { size, cells, pie:{x,y}, clock, store, upgrades } (파이의 텃밭 상태, v0.10)
+//        farm: { size, cells, pie:{x,y}, clock, store, upgrades, seeds? } (파이의 텃밭 상태, v0.10·v0.12)
 //        셋 다 JSON 글자로 바꿔 Python의 json.loads로 dict를 만든다(toPy의 객체 변환 차이를 피함).
 //   보냄 { type: "started", id }  (받자마자)
 //   보냄 { type: "result", id, result: { stdout, stderr, error, missing, charts, farm? } }
 //        charts: chart.show()로 그린 그림 목록(v0.5 E3). 그대로 toJs → 화면 쪽 cleanCharts가 다듬음.
-//        farm(텃밭을 넘겼을 때만): { events:[{t,line,…}], state, stopped: null|"tired"|"waited", actions }.
+//        farm(텃밭을 넘겼을 때만): { events:[{t,line,…}], state, stopped: null|"tired"|"waited", actions, files? }.
+//        files(v0.12): farm과 files를 함께 넘긴 실행에만 { "농장일지.txt": 글자 }.
 //        toJs는 None을 undefined로 바꾸므로(빈 칸 cells[i]·stopped) farm은 json.dumps → JSON.parse로 옮겨 null을 지킨다.
 //   sqlite3(v0.5): Pyodide 314.0.7은 _sqlite3가 핵심(pyodide.asm.wasm)에 들어 있고 sqlite3 모듈은
 //        python_stdlib.zip에 있어 loadPackage가 필요 없다(loadPackage("sqlite3")는 "No known package"로 실패).

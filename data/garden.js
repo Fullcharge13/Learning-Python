@@ -3,7 +3,7 @@
 // CROPS: 자라는 시간(행동 수). 규칙은 src/py/runner.py의 farm 모듈에 있고, 이 표는 화면·시험이 같은 값을 쓰게
 //        옮겨 둔 것이다(tests/garden_orders.py가 runner의 FARM_GROW·FARM_GROW_FERTILIZED와 같은지 확인).
 // UPGRADES: 창고 작물로 사는 성장. id "감자 씨앗"·"비료"는 runner가 upgrades 글자로 직접 확인하므로 바꾸지 않는다.
-// ORDERS: 리아 교수의 주문 22개(v0.10 1~5장 15개 + v0.11 6~9장 7개), 장 순서. 한 번에 하나씩 게시판에 걸린다.
+// ORDERS: 리아 교수의 주문 29개(v0.10 1~5장 15개 + v0.11 6~9장 7개 + v0.12 10~12장 7개), 장 순서. 한 번에 하나씩 게시판에 걸린다.
 //   goal.type:
 //     deliver     { crop, n }               창고에서 n개 보내기(단추)
 //     run_harvest { crop?, n, max_actions?, kind? } 한 번 실행에 n개 이상 거두기(crop 없으면 아무 작물), 행동 수 제한 선택.
@@ -13,6 +13,12 @@
 //                                           "cond:pos" x·y 비교, "loopvar" 목록 변수를 값으로 고름,
 //                                           "loopvar:act" 이동·심기 값으로 목록 변수를 고름)
 //     grid        { size }                  밭 넓히기 성장을 가짐
+//     (v0.12) use에 journal: true            실행 뒤 농장일지(result.farm.files)에 글이 있어야 함(농장일지 주문)
+//     plant_as_note { file, parse?, kind? }  이번 실행의 plant 사건(작물별 개수)이 그 주문 쪽지(note)에서 읽은 작물별 개수와
+//                                           같음. parse 없으면 줄마다 「작물 개수」, "crop_num"이면 작물+숫자 패턴
+//                                           (src/garden/state.js noteCounts). 오류·멈춤 없이, kind가 있으면 노드 모드에서 그 노드
+//   note: { file, text } (v0.12) 그 주문 차례에 쪽지함에 놓이는 받는 쪽지(읽기 전용). 없으면 DAILY_NOTES에서 고름.
+//   setup.files (v0.12) 그 주문 차례의 농장일지(저장 garden.files)
 //   solution: 그 장까지 열린 노드만으로 만든 정답 프로그램(노드 목록).
 //   setup: 정답을 확인할 때 시작하는 텃밭(그 주문 차례에 학습자가 있을 법한 상태). tests/garden_orders.py가
 //          setup에서 solution을 실제 엔진으로 돌리고(deliver·grid는 그 뒤 보내기·사기까지) 주문이 끝나는지 본다.
@@ -20,6 +26,19 @@
 export const CROPS = {
   당근: { grow: 8, fert: 6 },
   감자: { grow: 12, fert: 9 },
+  토마토: { grow: 10, fert: 7 },   // v0.12: 10장부터 고를 수 있음(nodes.MARK_LOCKS), 씨앗 봉투에서 하나씩
+};
+
+// v0.12 쪽지함: 지금 주문에 그 파일의 note가 없을 때 놓이는 「오늘의 쪽지」(실행 횟수 runs % 4로 고름).
+// 주문서.txt는 줄마다 「작물 개수」, 손글씨주문.txt는 작물 바로 뒤에 숫자(패턴 찾기 작물+숫자로 읽힘).
+export const DAILY_NOTES = {
+  "주문서.txt": ["당근 2\n감자 1", "감자 2\n당근 1", "당근 3", "토마토 1\n당근 2"],
+  "손글씨주문.txt": [
+    "리아: 당근2개 부탁해요!",
+    "리아: 감자1개랑 당근2개요~",
+    "리아: 토마토 2개 있으면 좋겠어요",
+    "리아: 당근1개, 감자1개, 토마토1개!",
+  ],
 };
 
 export const UPGRADES = [
@@ -28,6 +47,10 @@ export const UPGRADES = [
   { id: "감자 씨앗", label: "감자 씨앗", cost: { 당근: 10 } },
   { id: "비료", label: "비료", cost: { 감자: 20 } },
 ];
+
+// v0.12 검토(판정 C71 C2): 토마토 씨앗 5개 — 여러 번 살 수 있는 소모품(성장 목록 upgrades에는 넣지 않음).
+// 봉투에 seeds개를 더하고(최대 20), 10장(need)을 통과해야 살 수 있다. 씨앗이 0이고 밭에 토마토가 없어 막혔을 때 다시 시작하는 길.
+export const SEED_PACK = { id: "seedpack", label: "토마토 씨앗 5개", cost: { 당근: 5 }, seeds: 5, need: 10 };
 
 // ---- 정답 프로그램 만들기(노드 id는 prog가 앞에서부터 1, 2, 3… 매김) ----
 const mv = (dir) => ({ kind: "move", args: { dir } });
@@ -45,6 +68,14 @@ const whl = (cond, body) => ({ kind: "while", args: { cond }, body });
 const sv = (pre, v, post) => ({ kind: "sayval", args: { pre, var: v, post } });
 const fe = (type, items, body) => ({ kind: "foreach", args: { list: { type, items } }, body });
 const wh = () => ({ kind: "where", args: {} });
+// v0.12
+const tr = (body, handler) => ({ kind: "try", args: {}, body, handler });
+const rd = (file, body) => ({ kind: "readnote", args: { file }, body });
+const split = () => ({ kind: "splitline", args: {} });
+const wl = (pre, v, post) => ({ kind: "writelog", args: { pre, var: v, post } });
+const fa = (pattern, body) => ({ kind: "findall", args: { pattern }, body });
+const NV = (name) => ({ noteVar: name });                                 // 쪽지 값 line·crop·n
+const NC = { value: "n" };                                                // 반복 횟수 int(n)
 const LV = { loopVar: true };                                            // 가장 안쪽 목록의 변수(crop·way)
 const storeLt = (crop, num) => ({ store: { crop, op: "<", num } });       // store()["감자"] < 10
 const pos = (v, num) => ({ var: v, op: "==", num });                      // x == 3
@@ -55,16 +86,19 @@ function prog(...list) {
     const out = { id: ++id, kind: n.kind, args: structuredClone(n.args) };
     if (n.body) out.body = number(n.body);
     if (n.orelse) out.orelse = number(n.orelse);
+    if (n.handler) out.handler = number(n.handler);
     return out;
   });
   return number(list);
 }
 
 // ---- 시작 텃밭 만들기 ----
-// rows[y]의 글자 x: "." 빈칸, "C" 다 자란 당근, "c" 막 심은 당근, "P" 다 자란 감자, "p" 막 심은 감자.
+// rows[y]의 글자 x: "." 빈칸, "C" 다 자란 당근, "c" 막 심은 당근, "P" 다 자란 감자, "p" 막 심은 감자,
+// "T" 다 자란 토마토, "t" 막 심은 토마토(v0.12).
 // 다 자람 = clock − 자라는 시간(비료 없을 때)에 심음 → 비료가 있어도 다 자람.
-const CELL = { C: ["당근", true], c: ["당근", false], P: ["감자", true], p: ["감자", false] };
-export function farmSetup(rows, { pie = { x: 0, y: 0 }, clock = 0, store = {}, upgrades = [] } = {}) {
+// seeds: 토마토 씨앗 봉투(기본 5). files: 주문 차례의 농장일지 { "농장일지.txt": 글 } (준 때만 붙음 — runner는 쓰지 않음)
+const CELL = { C: ["당근", true], c: ["당근", false], P: ["감자", true], p: ["감자", false], T: ["토마토", true], t: ["토마토", false] };
+export function farmSetup(rows, { pie = { x: 0, y: 0 }, clock = 0, store = {}, upgrades = [], seeds = 5, files } = {}) {
   const size = rows.length;
   const cells = [];
   for (const row of rows) {
@@ -76,7 +110,9 @@ export function farmSetup(rows, { pie = { x: 0, y: 0 }, clock = 0, store = {}, u
       cells.push({ crop, planted_at: ripe ? clock - CROPS[crop].grow : clock });
     }
   }
-  return { size, cells, pie: { ...pie }, clock, store: { 당근: 0, 감자: 0, ...store }, upgrades: [...upgrades] };
+  const out = { size, cells, pie: { ...pie }, clock, store: { 당근: 0, 감자: 0, 토마토: 0, ...store }, upgrades: [...upgrades], seeds };
+  if (files) out.files = { ...files };
+  return out;
 }
 
 // 처음 텃밭(newGarden이 씀): 3×3, 당근 3개 중 오른쪽 두 개는 다 자람
@@ -318,5 +354,73 @@ export const ORDERS = [
         [iff(pos("x", 3), [mv("아래")], [mv("오른쪽")])]),
     ])),
     setup: farmSetup(["CCCC", "CCCC", "C...", "...."], { clock: 340, store: { 당근: 51, 감자: 5 }, upgrades: [...SEED, ...G4] }),
+  },
+  // ---- 10장: 예외 — 토마토와 씨앗 봉투 (v0.12) ----
+  {
+    id: "o_tomato", need: 10, title: "첫 토마토",
+    text: "토마토 씨앗 봉투가 왔어요. 토마토는 행동 10번이면 자라요. 다 자란 토마토를 한 번에 하나 거둬 봐요.",
+    goal: { type: "run_harvest", crop: "토마토", n: 1 },
+    xp: 5,
+    solution: prog(mv("오른쪽"), iff("can_harvest", [hv(), pl("토마토")])),
+    setup: farmSetup([".T..", "....", "....", "...."], { clock: 360, store: { 당근: 67, 감자: 5 }, upgrades: [...SEED, ...G4], seeds: 4 }),
+  },
+  {
+    id: "o_try", need: 10, title: "씨앗이 떨어지면",
+    text: "씨앗 봉투가 비면 토마토 심기가 오류를 내요. 시도하기로 토마토를 심고, 안 되면 당근을 심어 봐요.",
+    goal: { type: "use", kind: "try" },
+    xp: 5,
+    solution: prog(rep(4, [tr([pl("토마토")], [pl("당근")]), mv("오른쪽")])),
+    setup: farmSetup(["....", "....", "....", "...."], { clock: 380, store: { 당근: 67, 감자: 5, 토마토: 1 }, upgrades: [...SEED, ...G4], seeds: 2 }),
+  },
+  // ---- 11장: 파일 — 쪽지함 (v0.12) ----
+  {
+    id: "o_note", need: 11, title: "주문서대로",
+    text: "주문서가 쪽지함에 왔어요. 쪽지 읽기·줄 나누기로 작물과 개수를 알아내 빈 칸에 그만큼 심어요. 밭이 차 있으면 먼저 거둬요.",
+    goal: { type: "plant_as_note", file: "주문서.txt", kind: "readnote" },
+    note: { file: "주문서.txt", text: "당근 2\n감자 1" },
+    xp: 5,
+    solution: prog(rd("주문서.txt", [split(), rep(NC, [pl(NV("crop")), mv("오른쪽")])])),
+    setup: farmSetup(["....", "....", "....", "...."], { clock: 400, store: { 당근: 71, 감자: 5, 토마토: 1 }, upgrades: [...SEED, ...G4], seeds: 2 }),
+  },
+  {
+    id: "o_log", need: 11, title: "농장일지",
+    text: "오늘 거둔 수를 count로 세어 일지 쓰기로 농장일지에 남겨요. 일지는 다음 실행에도 남아 있어요.",
+    goal: { type: "use", kind: "writelog", journal: true },
+    xp: 5,
+    solution: prog(
+      setv("count", 0),
+      rep(4, [iff("can_harvest", [hv(), addv("count", 1)]), mv("오른쪽")]),
+      wl("수확 ", "count", "개"),
+    ),
+    setup: farmSetup(["CCPC", "....", "....", "...."], { clock: 420, store: { 당근: 71, 감자: 5, 토마토: 1 }, upgrades: [...SEED, ...G4], seeds: 2 }),
+  },
+  {
+    id: "o_readlog", need: 11, title: "어제 일지 읽기",
+    text: "쪽지 읽기로 농장일지를 열어, 지난번에 적은 줄을 파이가 하나씩 말하게 해 봐요.",
+    goal: { type: "use", kind: "readnote:농장일지.txt" },
+    xp: 5,
+    solution: prog(rd("농장일지.txt", [sv("일지: ", NV("line"), "")])),
+    setup: farmSetup(["....", "....", "....", "...."], { clock: 440, store: { 당근: 74, 감자: 6, 토마토: 1 }, upgrades: [...SEED, ...G4], seeds: 2,
+      files: { "농장일지.txt": "수확 4개\n" } }),
+  },
+  // ---- 12장: 정규식 — 손글씨 주문서 (v0.12) ----
+  {
+    id: "o_hand", need: 12, title: "손글씨 주문",
+    text: "리아 교수가 손글씨 쪽지를 보냈어요. 패턴 찾기로 작물과 숫자를 뽑아 그만큼 심어 봐요.",
+    goal: { type: "plant_as_note", file: "손글씨주문.txt", parse: "crop_num", kind: "findall" },
+    note: { file: "손글씨주문.txt", text: "리아: 당근3개 부탁! 토마토 2개도~" },
+    xp: 5,
+    solution: prog(rd("손글씨주문.txt", [fa("crop_num", [rep(NC, [pl(NV("crop")), mv("오른쪽")]), mv("아래")])])),
+    setup: farmSetup(["....", "....", "....", "...."], { clock: 460, store: { 당근: 74, 감자: 6, 토마토: 1 }, upgrades: [...SEED, ...G4], seeds: 4,
+      files: { "농장일지.txt": "수확 4개\n" } }),
+  },
+  {
+    id: "o_digits", need: 12, title: "숫자만 뽑기",
+    text: "이번 손글씨 쪽지에서는 숫자만 뽑아 봐요. 패턴을 숫자만으로 바꾸고, 찾은 숫자를 파이가 말하게 해요.",
+    goal: { type: "use", kind: "findall:num" },
+    note: { file: "손글씨주문.txt", text: "리아: 감자4개랑 당근 1개 줄래요?" },
+    xp: 5,
+    solution: prog(rd("손글씨주문.txt", [fa("num", [sv("숫자 ", NV("n"), "")])])),
+    setup: farmSetup(["....", "....", "....", "...."], { clock: 480, store: { 당근: 74, 감자: 6, 토마토: 1 }, upgrades: [...SEED, ...G4], seeds: 2 }),
   },
 ];

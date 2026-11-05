@@ -11,6 +11,8 @@
 //   const g = await py.run(code, "", [], { farm: { size, cells, pie, clock, store, upgrades } });
 //   // g.farm = { events: [{ t, line, … }], state: { size, cells, pie, clock, store, upgrades },
 //   //            stopped: null | "tired"(행동 500번) | "waited"(확인 2000번), actions }   (파이의 텃밭, 규칙은 py/runner.py의 farm 모듈)
+//   // v0.12: state에 seeds(토마토 씨앗), store에 "토마토". farm과 files를 함께 넘기면 농장일지.txt 말고는 읽기 전용이고
+//   //        g.farm.files = { "농장일지.txt": 끝 2000자 }가 붙는다(files를 안 넘기면 없음).
 //   // farm을 넘기지 않았거나 실행이 시간 초과·작업자 오류로 끝나면 결과에 farm이 없다.
 //
 // - 실행은 한 번에 하나씩 차례로 돈다(대기열).
@@ -66,13 +68,31 @@ function cleanResult(r) {
 }
 
 // 텃밭 결과(v0.10): 모양만 지킨다(값 검사는 runner가 함). 화면은 events를 재생하고 state를 저장한다.
-function cleanFarm(f) {
-  return {
+// state는 그대로 넘긴다(v0.12의 seeds·store["토마토"] 포함). files(v0.12 쪽지함)는 runner가 준 때만
+// { "농장일지.txt": 글자(끝 2000자, 코드 포인트로 셈) } 모양으로 지킨다.
+export const FARM_JOURNAL = "농장일지.txt";
+export const FARM_JOURNAL_MAX = 2000;
+
+// 끝 n글자(코드 포인트 — 파이썬 글자 수와 같음, 판정 C71). UTF-16 칸으로 자르면 이모지 반쪽이 남는다
+function lastCodePoints(s, n) {
+  if (s.length <= n) return s;
+  const a = [...s];
+  return a.length > n ? a.slice(-n).join("") : s;
+}
+
+export function cleanFarm(f) {
+  const out = {
     events: Array.isArray(f.events) ? f.events.filter(plainObj) : [],
     state: plainObj(f.state),
     stopped: f.stopped === "tired" || f.stopped === "waited" ? f.stopped : null,
     actions: Number.isInteger(f.actions) ? f.actions : 0,
   };
+  const files = plainObj(f.files);
+  if (files) {
+    const t = files[FARM_JOURNAL];
+    out.files = { [FARM_JOURNAL]: typeof t === "string" ? lastCodePoints(t, FARM_JOURNAL_MAX) : "" };
+  }
+  return out;
 }
 
 export class PyRun {

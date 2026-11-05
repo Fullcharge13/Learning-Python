@@ -308,14 +308,15 @@ def test_farm_in_pyodide():
         {"t": "plant", "line": 4, "crop": "당근", "x": 2, "y": 0},
         {"t": "say", "line": 5, "text": "다 했어"}], f
     assert f["state"] == {"size": 3, "cells": [None, None, {"crop": "당근", "planted_at": 11}] + [None] * 6,
-                          "pie": {"x": 2, "y": 0}, "clock": 12, "store": {"당근": 1, "감자": 0},
-                          "upgrades": []}, f
+                          "pie": {"x": 2, "y": 0}, "clock": 12, "store": {"당근": 1, "감자": 0, "토마토": 0},
+                          "upgrades": [], "seeds": 5}, f
+    assert "files" not in f, f
     assert f["stopped"] is None and f["actions"] == 4, f
     # v0.11: store()는 창고 사본(바꿔도 진짜 창고 그대로), where()는 (x, y) 튜플 — 시간·사건 없음
     q = _run_env('from farm import *\nharvest()\nmove("오른쪽")\ns = store()\ns["당근"] = 99\n'
                  'print(where(), store(), type(where()).__name__)\n', {"farm": state})
-    assert q["error"] is None and q["stdout"] == "(1, 0) {'당근': 1, '감자': 0} tuple\n", q
-    assert q["farm"]["state"]["store"] == {"당근": 1, "감자": 0} and q["farm"]["actions"] == 2, q
+    assert q["error"] is None and q["stdout"] == "(1, 0) {'당근': 1, '감자': 0, '토마토': 0} tuple\n", q
+    assert q["farm"]["state"]["store"] == {"당근": 1, "감자": 0, "토마토": 0} and q["farm"]["actions"] == 2, q
     assert [e["t"] for e in q["farm"]["events"]] == ["harvest", "move", "say"], q
     t = _run_env('while True:\n    try:\n        move("아래")\n    except BaseException:\n        pass\n',
                  {"farm": state})
@@ -332,6 +333,30 @@ def test_farm_in_pyodide():
     assert bad["farm"]["state"]["clock"] == 8, bad
     plain = _run("import farm")
     assert "farm" not in plain and plain["error"]["type"] == "ModuleNotFoundError", plain
+    # v0.12: 토마토·씨앗 봉투, 받는 쪽지 읽기(읽기 전용 → PermissionError), 농장일지 쓰기·돌려받기(MEMFS)
+    notes = {"주문서.txt": "토마토 2\n당근 1\n", "농장일지.txt": "어제\n"}
+    code = ('with open("주문서.txt") as f:\n    for line in f:\n        crop, n = line.split()\n'
+            '        for i in range(int(n)):\n            try:\n                plant(crop)\n'
+            '            except ValueError as e:\n                print(e)\n            move("오른쪽")\n'
+            'with open("농장일지.txt", "a") as f:\n    f.write("씨앗 " + str(seeds()) + "\\n")\n'
+            'try:\n    open("주문서.txt", "a")\nexcept PermissionError as e:\n    print(e)\n'
+            'import io\nio.open("주문서.txt", "w")\n')
+    n = _run_env(code, {"farm": dict(state, cells=[None] * 9, seeds=1), "files": notes})
+    assert n["error"] == {"type": "PermissionError", "line": 17, "msg": "받은 쪽지는 읽기만 해요"}, n
+    assert n["stdout"] == "토마토 씨앗이 떨어졌어요\n받은 쪽지는 읽기만 해요\n", n
+    nf = n["farm"]
+    assert [(e["t"], e.get("crop"), e.get("reason")) for e in nf["events"] if e["t"].startswith("plant")] == [
+        ("plant", "토마토", None), ("plant_fail", "토마토", "no_tomato_seed"), ("plant", "당근", None)], nf
+    assert nf["state"]["seeds"] == 0 and nf["files"] == {"농장일지.txt": "어제\n씨앗 0\n"}, nf
+    ripe = dict(state, cells=[{"crop": "토마토", "planted_at": 0}] + [None] * 8, clock=10, seeds=19)
+    h = _run_env("harvest()\nprint(seeds(), store())\n", {"farm": ripe, "files": {"농장일지.txt": "x" * 2100}})
+    assert h["stdout"] == "20 {'당근': 0, '감자': 0, '토마토': 1}\n", h
+    assert h["farm"]["files"] == {"농장일지.txt": "x" * 2000}, h["farm"]["files"]
+    gone = _run_env('import os\nos.remove("농장일지.txt")\nopen("메모.txt", "w").write("a")\n',
+                    {"farm": state, "files": notes})
+    assert gone["error"] is None and gone["farm"]["files"] == {"농장일지.txt": ""}, gone
+    after = _run_env('import os\nprint(sorted(os.listdir(".")))\nopen("x.txt", "w").write("ok")\n', {"files": {}})
+    assert after["error"] is None and after["stdout"] == "[]\n", after   # 텃밭 없는 실행은 open 그대로
 
 
 SQL = ("import sqlite3\n"

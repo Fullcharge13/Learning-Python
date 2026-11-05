@@ -89,16 +89,20 @@ export function dialog({ title, body = "", buttons }) {
   });
 }
 
-/** 잠깐 뜨는 알림 */
-export function toast(msg, kind = "") {
+/** 잠깐 뜨는 알림. action: { label, onClick } → 알림 안 단추(누르면 onClick 후 닫힘), ms: 떠 있는 시간.
+ *  돌려줌: 닫는 함수(이미 닫혔으면 아무 일 없음) */
+export function toast(msg, kind = "", { action = null, ms = 4200 } = {}) {
   let box = document.getElementById("toasts");
   if (!box) {
     box = el('<div id="toasts" class="toasts" role="status" aria-live="polite"></div>');
     document.body.appendChild(box);
   }
-  const t = el(`<div class="toast ${kind}">${esc(msg)}</div>`);
+  const t = el(`<div class="toast ${kind}${action ? " has-act" : ""}"><span>${esc(msg)}</span>${action ? `<button class="toast-act">${esc(action.label)}</button>` : ""}</div>`);
+  const timer = setTimeout(() => t.remove(), ms);
+  const close = () => { clearTimeout(timer); t.remove(); };
+  if (action) t.querySelector(".toast-act").addEventListener("click", () => { close(); action.onClick(); });
   box.appendChild(t);
-  setTimeout(() => t.remove(), 4200);
+  return close;
 }
 
 /** 진행 막대 */

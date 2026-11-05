@@ -35,6 +35,9 @@
                  고친 뒤 「노드로 돌아가기」 확인 창) / 검사 오류 빨간 노드는 실행을 막음 / while 500번 지침 말풍선 /
                  성장 창(모자람 이유, 밭 4×4 사기 → 주문 완료). 텃밭 화면 넘침·터치 44px(노드·코드 모드).
                  캡처: garden-*.png (iPhone 17)
+- test_garden_clear_nodes: 「비우기」 확인 창(그만두기 → 그대로 / 지우기 → 빈 프로그램 저장, 다른 텃밭 상태 그대로) →
+                 알림 「되돌리기」(5초)로 그대로 복원 · 비면 흐리게 · 코드 모드 숨김 · 재생 중 막힘 · 402px 머리 줄 한 줄.
+                 캡처: garden-clear-*.png (iPhone 17)
 - test_garden11_*: 텃밭 6~9장(v0.11 작업 4). 목록에서 하나씩(종류 고르기·목록 편집 창: 더하기·6개 한도·←/→·빼기,
                  안쪽 심기에서 「목록 값(crop)」) → 섞어 심기 완료 / 창고 보기 조건(8장 잠금은 흐리게) → 모자란 것만 완료 /
                  위치 알기 뒤 x 비교(앞에서는 x 없음) → 줄 끝에서 내려가기 완료 / 값 넣어 말하기(앞·뒤 글자 10자, 값 고르기)
@@ -1660,6 +1663,127 @@ def test_garden_waited_message():
         a.page.click("#to-code")
         a.page.wait_for_selector(".g-editor .cm-content")
         assert not a.page.query_selector("#board .g-bubble"), "모드를 바꾸면 말풍선 지움"
+        assert not a.errors, a.errors
+
+
+def _clear_btn(a):
+    return a.js("""() => { const b = document.querySelector('#g-clear'); if (!b) return null;
+        const r = b.getBoundingClientRect();
+        return { text: b.innerText.trim(), aria: b.getAttribute('aria-label'), dis: b.disabled,
+                 ariaDis: b.getAttribute('aria-disabled'), visible: !!b.offsetParent, inert: !!b.closest('[inert]'),
+                 w: r.width, h: r.height }; }""")
+
+
+def _toast_undo(a):
+    return a.page.query_selector("#toasts .toast-act")
+
+
+def test_garden_clear_nodes():
+    # 「비우기」: 확인 창(그만두기 → 그대로 / 지우기 → 빈 프로그램 저장) → 알림 「되돌리기」(5초) → 그대로 돌아옴.
+    # 비었으면 흐리게(aria-disabled), 코드 모드에서는 숨김, 재생 중에는 다른 단추처럼 막힘. 머리 줄은 402px에 넘침 없음.
+    prog = [
+        _nd(1, "repeat", n=2, body=[_nd(2, "move", dir="오른쪽")]),
+        _nd(3, "if", cond="can_harvest", body=[_nd(4, "harvest")], orelse=[_nd(5, "say", text="아직")]),
+        _nd(6, "move", dir="아래"),
+    ]
+    with App("iPhone 17", save=_garden_seed(5, _garden(order_idx=12, program=prog, store={"당근": 3}))) as a:
+        _open_garden(a)
+        b = _clear_btn(a)
+        assert b and b["text"] == "비우기" and b["aria"] == "노드 모두 지우기" and not b["dis"], b
+        assert b["w"] >= 44 and b["h"] >= 44, b
+        # 머리 줄 순서: 제목 → 비우기 → 코드로 쓰기, 같은 줄
+        head = a.js("""() => [...document.querySelectorAll('.g-prog-head > *')].map(e => {
+            const r = e.getBoundingClientRect(); return [e.tagName === "H2" ? "H2" : e.id, Math.round(r.top), Math.round(r.bottom), Math.round(r.right), Math.round(r.width)]; })""")
+        assert [h[0] for h in head] == ["H2", "g-clear", "to-code"], head
+        mids = [(h[1] + h[2]) / 2 for h in head]
+        assert max(mids) - min(mids) <= 4, ("one row", head)
+        assert a.js("() => window.innerWidth") == 402
+        a.page.eval_on_selector(".g-prog-head", "e => e.scrollIntoView({block: 'center'})")
+        a.page.wait_for_timeout(150)
+        a.shot("garden-clear-head.png")
+        m = measure(a, "garden-clear-head")
+        assert not m["problems"], m["problems"]
+        assert not m["small"], m["small"]
+        before = a.save()["garden"]
+
+        # 재생 중에는 막힘(노드 흐름 전체가 inert)
+        a.wait_py()
+        a.page.click("#g-run")
+        a.page.wait_for_selector(".screen.garden[data-state=replay]", timeout=30_000)
+        assert _clear_btn(a)["inert"], "inert during replay"
+        a.page.click("#g-skip")
+        a.page.wait_for_selector(".screen.garden[data-state=idle]", timeout=30_000)
+        a.page.wait_for_timeout(300)
+        while a.page.query_selector(".modal .g-done-body"):  # 주문 완료 창이 뜨면 닫기
+            _close_done(a)
+            a.page.wait_for_timeout(300)
+        assert not _clear_btn(a)["inert"]
+        before = a.save()["garden"]
+        assert before["program"] == prog, before["program"]
+
+        # 그만두기 → 그대로
+        _clear_toasts(a)  # 배지 알림이 캡처를 가리지 않게
+        a.page.click("#g-clear")
+        a.page.wait_for_selector(".modal")
+        assert a.page.inner_text(".modal h2") == "노드 6개를 모두 지울까요?", a.page.inner_text(".modal h2")
+        labels = a.js("() => [...document.querySelectorAll('.modal .modal-actions button')].map(b => b.innerText.trim())")
+        assert labels == ["그만두기", "지우기"], labels
+        a.shot("garden-clear-confirm.png")
+        m = measure(a, "garden-clear-confirm")
+        assert not m["problems"], m["problems"]
+        assert not m["small"], m["small"]
+        a.page.click(".modal button:has-text('그만두기')")
+        a.page.wait_for_selector(".modal", state="detached")
+        assert a.save()["garden"]["program"] == prog
+        assert len(a.page.query_selector_all(".g-node")) == 6
+
+        # 지우기 → 빈 프로그램, 다른 텃밭 상태는 그대로, 결과 칸·말풍선 지움, 알림 + 되돌리기
+        a.page.click("#g-clear")
+        a.page.click(".modal button:has-text('지우기')")
+        a.page.wait_for_selector(".modal", state="detached")
+        g = a.save()["garden"]
+        assert g["program"] == [], g["program"]
+        for k in ("store", "order", "cells", "pie", "clock", "upgrades", "size", "runs", "mode"):
+            assert g[k] == before[k], (k, g[k], before[k])
+        assert len(a.page.query_selector_all(".g-node")) == 0
+        assert "노드 0/" in a.page.inner_text(".g-count")
+        assert "「실행」을 누르면" in a.page.inner_text("#g-result"), a.page.inner_text("#g-result")
+        assert not a.page.query_selector("#board .g-bubble")
+        b = _clear_btn(a)
+        assert b["dis"] and b["ariaDis"] == "true" and b["visible"], b
+        t = a.page.inner_text("#toasts")
+        assert "노드를 모두 지웠어요" in t and "되돌리기" in t, t
+        a.shot("garden-clear-toast.png")
+        m = measure(a, "garden-clear-toast")
+        assert not m["problems"], m["problems"]
+        assert not m["small"], m["small"]
+        a.shot("garden-clear-empty.png")
+
+        # 되돌리기 → 그대로(저장도), 알림 닫힘
+        _toast_undo(a).click()
+        a.page.wait_for_timeout(150)
+        assert a.save()["garden"]["program"] == prog, a.save()["garden"]["program"]
+        assert len(a.page.query_selector_all(".g-node")) == 6
+        assert not _toast_undo(a), "toast closes after undo"
+        assert not _clear_btn(a)["dis"]
+
+        # 다시 지우고 5초 기다리면 알림이 사라지고 빈 채로 남음. 빈 단추는 눌러도 창이 없음
+        a.page.click("#g-clear")
+        a.page.click(".modal button:has-text('지우기')")
+        a.page.wait_for_selector(".modal", state="detached")
+        assert _toast_undo(a)
+        a.page.wait_for_timeout(5300)
+        assert not _toast_undo(a), "undo toast gone after 5 s"
+        assert a.save()["garden"]["program"] == []
+        a.page.click("#g-clear", force=True)
+        a.page.wait_for_timeout(200)
+        assert not a.page.query_selector(".modal"), "disabled when empty"
+
+        # 코드 모드에서는 숨김
+        a.page.click("#to-code")
+        a.page.wait_for_selector(".g-editor .cm-content")
+        b = _clear_btn(a)
+        assert b is None or not b["visible"], b
         assert not a.errors, a.errors
 
 

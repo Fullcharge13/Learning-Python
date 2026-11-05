@@ -35,6 +35,7 @@ const EVENT_SAY = {
   harvest_young: "앗, 아직 덜 자랐어요",
 };
 const frameSay = (f) => f.say || (f.fx && (EVENT_SAY[f.fx.reason] || EVENT_SAY[f.fx.t])) || null;
+const UNDO_MS = 5000;   // 비우기 뒤 「되돌리기」 알림
 const RUN_HINT = "「실행」을 누르면 파이가 노드를 위에서부터 차례로 해요.";
 const KIND_ORDER = ["move", "harvest", "plant", "say", "setvar", "addvar", "if", "def", "call", "repeat", "while", "sayval", "foreach", "where"];
 // 목록 변수 기본 이름(자리가 틀려 범위를 못 찾을 때 — 오류는 노드에 따로 보임)
@@ -411,11 +412,14 @@ export function render(root, ctx) {
     const prog = S.garden.program;
     const errs = validate(prog, unlocked);
     feNames = foreachNames(prog);
+    const empty = !prog.length;
     progEl.innerHTML = `<div class="g-prog-head"><h2 id="g-prog-title">${icon("sprout")}<span>파이에게 시킬 일</span></h2>
+        <button class="btn ghost small" id="g-clear" aria-label="노드 모두 지우기"${empty ? ` disabled aria-disabled="true"` : ""}>${icon("trash")}<span>비우기</span></button>
         <button class="btn ghost small" id="to-code">${icon("code")}<span>코드로 쓰기</span></button></div>
       <ol class="g-flow" aria-label="노드 흐름(위에서부터 차례로 실행)">${listHTML(prog, 0, errs, null, "body")}</ol>
       <p class="g-count">노드 ${countNodes(prog)}/${MAX_NODES}</p>`;
     progEl.querySelector("#to-code").addEventListener("click", toCode);
+    progEl.querySelector("#g-clear").addEventListener("click", clearAll);
     paintPreview();
   }
 
@@ -503,9 +507,41 @@ export function render(root, ctx) {
     return max + 1;
   }
   function setProgram(p) {
+    dropUndo();
     S.runErr = null;
     save({ ...S.garden, program: p });
     paintProg();
+  }
+  // 비우기: 확인 → 빈 프로그램 저장 → 5초 동안 「되돌리기」(그 사이 다른 편집·모드 바꾸기·떠나기면 되돌리기 없앰)
+  let undoClose = null;
+  function dropUndo() { if (undoClose) { undoClose(); undoClose = null; } }
+  async function clearAll() {
+    const prev = S.garden.program;
+    const n = countNodes(prev);
+    if (S.state !== "idle" || S.garden.mode !== "nodes" || !n) return;
+    const ok = await dialog({
+      title: `노드 ${n}개를 모두 지울까요?`,
+      buttons: [{ label: "그만두기", value: false }, { label: "지우기", value: true, kind: "coral" }],
+    });
+    if (!ok || S.destroyed || S.state !== "idle" || S.garden.program !== prev) return;
+    setProgram([]);
+    S.overlay = {};
+    paintBoard();
+    resultEl.innerHTML = `<p class="g-msg idle">${esc(RUN_HINT)}</p>`;
+    focusFirst(addSel(null, "body"));
+    const close = toast("노드를 모두 지웠어요", "", {
+      ms: UNDO_MS,
+      action: {
+        label: "되돌리기",
+        onClick: () => {
+          undoClose = null;
+          if (S.destroyed || S.state !== "idle" || S.garden.mode !== "nodes") return;
+          setProgram(prev);
+          focusFirst("#g-clear");
+        },
+      },
+    });
+    undoClose = close;
   }
   // 편집 창이 닫힌 뒤 노드 흐름을 다시 그리면 누른 단추가 사라지므로, 그 노드(없으면 가까운 단추)로 초점을 옮긴다
   const nodeSel = (id) => `.g-node[data-id="${CSS.escape(String(id))}"]`;
@@ -873,6 +909,7 @@ export function render(root, ctx) {
   }
   function toCode() {
     if (S.state !== "idle") return;
+    dropUndo();
     const { code } = codegen(S.garden.program);
     S.runErr = null;
     S.overlay = {};
@@ -1154,6 +1191,7 @@ export function render(root, ctx) {
 
   return () => {
     S.destroyed = true;
+    dropUndo();
     if (S.wake) S.wake();
     flushCode();
     offPy();

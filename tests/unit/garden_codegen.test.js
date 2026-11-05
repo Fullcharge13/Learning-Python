@@ -6,6 +6,7 @@ import {
   NODES, VAR_NAMES, FUNC_NAMES, COND, condCode, unlockedKinds, codegen, validate,
   newNode, insertNode, moveNode, removeNode, updateArgs, setElse, findNode, countNodes, kindsUsed,
   defaultProgram, MAX_NODES, MAX_DEPTH,
+  LIST_TYPES, LIST_ITEMS, LIST_MAX, POS_NAMES, availableValues, loopVarAvailable,
 } from "../../src/garden/nodes.js";
 
 // ---- 작은 도우미 ----
@@ -26,12 +27,13 @@ const msgs = (errs) => errs.map((e) => e.msg);
 const errOn = (errs, id) => errs.filter((e) => e.nodeId === id).map((e) => e.msg);
 
 // ---- 표 ----
-test("노드 표: 11종, 장·이름·body·orelse가 설계 표와 같다", () => {
+test("노드 표: 14종(v0.11 6·7·9장 추가), 장·이름·body·orelse가 설계 표와 같다", () => {
   const want = {
     move: [1, "이동"], harvest: [1, "수확"], plant: [1, "심기"], say: [1, "말하기"],
     setvar: [2, "값 기억하기"], addvar: [2, "값 더하기"],
     if: [3, "만약"], def: [4, "내 노드 만들기"], call: [4, "내 노드 부르기"],
     repeat: [5, "반복"], while: [5, "~하는 동안"],
+    sayval: [6, "값 넣어 말하기"], foreach: [7, "목록에서 하나씩"], where: [9, "위치 알기"],
   };
   assert.deepEqual(Object.keys(NODES).sort(), Object.keys(want).sort());
   for (const [k, [ch, label]] of Object.entries(want)) {
@@ -40,7 +42,9 @@ test("노드 표: 11종, 장·이름·body·orelse가 설계 표와 같다", () 
     assert.equal(typeof NODES[k].args, "object", k);
   }
   for (const k of ["if", "def", "repeat", "while"]) assert.equal(NODES[k].body, true, k);
-  for (const k of ["move", "harvest", "plant", "say", "setvar", "addvar", "call"]) assert.equal(NODES[k].body, false, k);
+  for (const k of ["move", "harvest", "plant", "say", "setvar", "addvar", "call", "sayval", "where"]) assert.equal(NODES[k].body, false, k);
+  assert.equal(NODES.foreach.body, true);
+  assert.equal(NODES.foreach.orelse, false);
   assert.equal(NODES.if.orelse, true);
   assert.equal(NODES.repeat.orelse, false);
   assert.deepEqual(NODES.move.args.dir.choices, ["위", "아래", "왼쪽", "오른쪽"]);
@@ -75,7 +79,13 @@ test("열린 노드: 통과한 장의 노드만", () => {
   assert.deepEqual([...unlockedKinds(new Set([1]))].sort(), ["harvest", "move", "plant", "say"]);
   assert.deepEqual([...unlockedKinds(new Set([1, 3]))].sort(), ["harvest", "if", "move", "plant", "say"]);
   assert.equal(unlockedKinds(new Set([1, 2, 3, 4, 5])).size, 11);
-  assert.equal(unlockedKinds(new Set([1, 2, 3, 4, 5, 6, 7])).size, 11);
+  assert.equal(unlockedKinds(new Set([1, 2, 3, 4, 5, 6, 7])).size, 13);
+  // 8장은 노드가 아니라 창고 조건 표지(cond:store)를 연다
+  const u8 = unlockedKinds(new Set([1, 2, 3, 4, 5, 6, 7, 8]));
+  assert.ok(u8.has("cond:store"));
+  assert.equal(u8.size, 14);
+  assert.equal(unlockedKinds(new Set([1, 2, 3, 4, 5, 6, 7, 8, 9])).size, 15);
+  assert.ok(!unlockedKinds(new Set([1, 2, 3, 4, 5, 6, 7, 9])).has("cond:store"));
 });
 
 // ---- 기본 노드·시작 프로그램 ----
@@ -362,13 +372,20 @@ test("값 비교 ~하는 동안은 안에서 그 값을 바꿔야 한다", () =>
   const t = N("setvar", { name: "total", value: 0 });
   const wn = N("while", { cond: { var: "total", op: "<", num: 4 } }, { body: [N("addvar", { name: "count", value: 1 })] });
   assert.deepEqual(errOn(validate([s, t, wn], ALL), wn.id), ["반복 안에서 total 값을 바꿔요"]);
-  // 바로 안·안쪽 만약·반복 속 값 더하기/기억하기는 바꾼 것으로 센다
+  // 바로 안·안쪽 반복·목록(1번 이상 돎) 속 값 더하기/기억하기는 바꾼 것으로 센다
   const ok1 = N("while", { cond: { var: "count", op: "<", num: 4 } }, { body: [N("move"), N("addvar", { name: "count", value: 1 })] });
-  const ok2 = N("while", { cond: { var: "count", op: "<", num: 4 } }, {
-    body: [N("if", { cond: "can_harvest" }, { body: [N("harvest"), N("addvar", { name: "count", value: 1 })] }), N("move")] });
   const ok3 = N("while", { cond: { var: "count", op: "<", num: 4 } }, {
     body: [N("repeat", { n: 2 }, { body: [N("move"), N("setvar", { name: "count", value: 9 })] })] });
-  for (const w2 of [ok1, ok2, ok3]) assert.deepEqual(validate([s, w2], ALL), [], JSON.stringify(w2));
+  for (const w2 of [ok1, ok3]) assert.deepEqual(validate([s, w2], ALL), [], JSON.stringify(w2));
+  // 만약·아니면·안쪽 ~하는 동안 속에서만 바꾸면 조건에 따라 안 바뀌어 끝나지 않을 수 있다(v0.11 검토)
+  const c4 = { var: "count", op: "<", num: 4 };
+  const bad = [
+    N("while", { cond: c4 }, { body: [N("if", { cond: "can_harvest" }, { body: [N("harvest"), N("addvar", { name: "count", value: 1 })] }), N("move")] }),
+    N("while", { cond: c4 }, { body: [N("if", { cond: "can_harvest" }, { body: [N("harvest")], orelse: [N("addvar", { name: "count", value: 1 })] }), N("move")] }),
+    N("while", { cond: c4 }, { body: [N("move"), N("while", { cond: "can_harvest" }, { body: [N("harvest"), N("addvar", { name: "count", value: 1 })] })] }),
+    N("while", { cond: c4 }, { body: [N("repeat", { n: 2 }, { body: [N("if", {}, { body: [N("addvar", { name: "count", value: 1 })] })] })] }),
+  ];
+  for (const w2 of bad) assert.deepEqual(errOn(validate([s, w2], ALL), w2.id), ["반복 안에서 count 값을 바꿔요"], JSON.stringify(w2));
   // 내 노드 부르기는 값을 바꿀 수 없으므로(내 노드 안 값 바꾸기 금지) 세지 않는다
   const d = N("def", { name: "tend" }, { body: [N("move")] });
   const wc = N("while", { cond: { var: "count", op: "<", num: 4 } }, { body: [N("call", { name: "tend" })] });
@@ -560,5 +577,392 @@ test("codegen·validate는 입력을 바꾸지 않는다", () => {
   codegen(p);
   validate(p, ALL);
   kindsUsed(p);
+  assert.equal(JSON.stringify(p), before);
+});
+
+// ======================================================================
+// v0.11 작업 2: 6~9장 노드(설계 docs/specs/2026-11-05-텃밭-6-9장-설계.md 1절)
+// ======================================================================
+const ALL9 = unlockedKinds(new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]));
+const NO_LOOP = "목록에서 하나씩 노드 안에서만 고를 수 있어요";
+const NO_POS = "위치 알기를 먼저 해요";
+const NO_MOVE = "반복 안에서 파이가 움직여야 해요";
+const LV = { loopVar: true };
+const cropList = (...items) => ({ type: "crop", items });
+const dirList = (...items) => ({ type: "dir", items });
+
+// ---- 6장 값 넣어 말하기 ----
+test("6장 sayval: 앞 글자 + str(값) + 뒤 글자, 빈 조각은 뺀다", () => {
+  assert.deepEqual(Object.keys(NODES.sayval.args).sort(), ["post", "pre", "var"]);
+  assert.equal(NODES.sayval.args.pre.max, 10);
+  assert.equal(NODES.sayval.args.post.max, 10);
+  const s = N("setvar", { name: "count", value: 3 });
+  const v = N("sayval", { pre: "당근 ", var: "count", post: "개" });
+  const g = codegen([s, v]);
+  assert.equal(g.code, 'count = 3\nprint("당근 " + str(count) + "개")\n');
+  assert.equal(g.lineMap[2], v.id);
+  assert.deepEqual(g.errors, []);
+  assert.equal(codegen([s, N("sayval", { pre: "", var: "count", post: "개" })]).code.split("\n")[1], 'print(str(count) + "개")');
+  assert.equal(codegen([s, N("sayval", { pre: "수: ", var: "count", post: "" })]).code.split("\n")[1], 'print("수: " + str(count))');
+  assert.equal(codegen([s, N("sayval", { pre: "", var: "count", post: "" })]).code.split("\n")[1], "print(str(count))");
+  // 따옴표 안전
+  assert.equal(codegen([s, N("sayval", { pre: '"a\\', var: "count", post: "\n" })]).code.split("\n")[1],
+    'print("\\"a\\\\" + str(count) + "\\n")');
+  assert.deepEqual(validate([s, v], ALL9), []);
+  // 기본값
+  const d = newNode("sayval", 1).args;
+  assert.equal(typeof d.pre, "string");
+  assert.equal(typeof d.post, "string");
+  assert.equal(d.var, "count");
+});
+
+test("6장 sayval: 글자 수·값 이름 검사, 먼저 기억한 값만", () => {
+  const s = N("setvar", { name: "count", value: 0 });
+  for (const args of [{ pre: "가".repeat(11) }, { post: "가".repeat(11) }, { pre: 3 }, { var: "zzz" }, { var: 5 },
+    { var: { loopVar: true, type: "fruit" } }, { var: { loopVar: false, type: "crop" } }]) {
+    const n = N("sayval", args);
+    assert.ok(errOn(validate([s, n], ALL9), n.id).includes("고를 수 없는 값이에요"), JSON.stringify(args));
+  }
+  assert.deepEqual(validate([s, N("sayval", { pre: "가".repeat(10), post: "🥕".repeat(10) })], ALL9), []);
+  // 기억하지 않은 값
+  const n1 = N("sayval", { var: "total" });
+  assert.deepEqual(errOn(validate([s, n1], ALL9), n1.id), ["total 값을 먼저 기억해요"]);
+  // 만약 안에서만 기억한 값(C64)
+  const n2 = N("sayval", { var: "count" });
+  assert.deepEqual(errOn(validate([N("if", {}, { body: [N("setvar", { name: "count", value: 1 })] }), n2], ALL9), n2.id),
+    ["count 값을 먼저 기억해요"]);
+  // 반복 안에서 기억한 값은 뒤에서 씀
+  assert.deepEqual(validate([N("repeat", { n: 1 }, { body: [N("setvar", { name: "count", value: 1 })] }), N("sayval", { var: "count" })], ALL9), []);
+  // 내 노드 안에서 읽기는 괜찮다(앞에서 기억했으면)
+  assert.deepEqual(validate([s, N("def", { name: "tend" }, { body: [N("sayval", { var: "count" })] })], ALL9), []);
+  // 잠김
+  const ch5 = unlockedKinds(new Set([1, 2, 3, 4, 5]));
+  const n3 = N("sayval");
+  assert.deepEqual(errOn(validate([s, n3], ch5), n3.id), ["6장을 끝내면 열려요"]);
+});
+
+// ---- 7장 목록에서 하나씩 ----
+test("7장 foreach: 작물 목록 crop, 방향 목록 way, 겹치면 crop2·way2", () => {
+  assert.deepEqual(LIST_TYPES, ["crop", "dir"]);
+  assert.deepEqual(LIST_ITEMS, { crop: ["당근", "감자"], dir: ["위", "아래", "왼쪽", "오른쪽"] });
+  assert.equal(LIST_MAX, 6);
+  const p1 = N("plant", { crop: LV });
+  const f1 = N("foreach", { list: cropList("당근", "감자", "당근") }, { body: [p1, N("move", { dir: "오른쪽" })] });
+  const g = codegen([f1]);
+  assert.equal(g.code, 'for crop in ["당근", "감자", "당근"]:\n    plant(crop)\n    move("오른쪽")\n');
+  assert.deepEqual(g.lineMap, { 1: f1.id, 2: p1.id, 3: f1.body[1].id });
+  assert.deepEqual(validate([f1], ALL9), []);
+  // 방향
+  const m = N("move", { dir: LV });
+  const f2 = N("foreach", { list: dirList("오른쪽", "아래") }, { body: [m, N("harvest")] });
+  assert.equal(codegen([f2]).code, 'for way in ["오른쪽", "아래"]:\n    move(way)\n    harvest()\n');
+  assert.deepEqual(validate([f2], ALL9), []);
+  // 같은 종류가 겹치면 안쪽은 crop2, 목록 변수는 가장 안쪽 것
+  const pin = N("plant", { crop: LV });
+  const inner = N("foreach", { list: cropList("감자") }, { body: [pin] });
+  const mid = N("foreach", { list: dirList("위") }, { body: [inner, N("move", { dir: LV })] });
+  const outer = N("foreach", { list: cropList("당근") }, { body: [mid, N("plant", { crop: LV })] });
+  assert.equal(codegen([outer]).code, [
+    'for crop in ["당근"]:',
+    '    for way in ["위"]:',
+    '        for crop2 in ["감자"]:',
+    "            plant(crop2)",
+    "        move(way)",
+    "    plant(crop)",
+    "",
+  ].join("\n"));
+  assert.deepEqual(validate([outer], ALL9), []);
+  // 나란한 목록은 같은 이름을 다시
+  const a = N("foreach", { list: dirList("위") }, { body: [N("move", { dir: LV })] });
+  const b = N("foreach", { list: dirList("아래") }, { body: [N("move", { dir: LV })] });
+  assert.equal(codegen([a, b]).code, 'for way in ["위"]:\n    move(way)\nfor way in ["아래"]:\n    move(way)\n');
+  // 반복(range)과 섞여도 i 이름은 그대로
+  const r = N("repeat", { n: 2 }, { body: [N("foreach", { list: cropList("당근") }, { body: [N("plant", { crop: LV })] })] });
+  assert.equal(codegen([r]).code, 'for i in range(2):\n    for crop in ["당근"]:\n        plant(crop)\n');
+  // 기본값은 노드마다 따로(공유 객체가 아님)
+  const n1 = newNode("foreach", 1), n2 = newNode("foreach", 2);
+  assert.deepEqual(n1.body, []);
+  assert.deepEqual(n1.args.list.type, "crop");
+  assert.ok(n1.args.list.items.length >= 1);
+  assert.notEqual(n1.args.list, n2.args.list);
+  assert.notEqual(n1.args.list.items, n2.args.list.items);
+});
+
+test("7장 foreach: 목록 검사(종류·개수 1~6·값), 빈 body, 잠김", () => {
+  const bad = [
+    { type: "fruit", items: ["당근"] },
+    cropList(),
+    cropList("당근", "당근", "당근", "당근", "당근", "당근", "당근"),
+    cropList("수박"),
+    cropList("위"),
+    dirList("당근"),
+    dirList("앞"),
+    { type: "dir" },
+    "당근",
+    null,
+  ];
+  for (const list of bad) {
+    const f = N("foreach", { list }, { body: [N("harvest")] });
+    assert.ok(errOn(validate([f], ALL9), f.id).includes("고를 수 없는 값이에요"), JSON.stringify(list));
+  }
+  assert.deepEqual(validate([N("foreach", { list: cropList("당근", "감자", "당근", "감자", "당근", "감자") }, { body: [N("harvest")] })], ALL9), []);
+  assert.deepEqual(validate([N("foreach", { list: dirList("위", "아래", "왼쪽", "오른쪽", "위", "위") }, { body: [N("harvest")] })], ALL9), []);
+  const empty = N("foreach", { list: cropList("당근") });
+  assert.deepEqual(errOn(validate([empty], ALL9), empty.id), ["안에 노드를 하나 넣어요"]);
+  assert.equal(codegen([empty]).code, 'for crop in ["당근"]:\n    pass\n');
+  const ch6 = unlockedKinds(new Set([1, 2, 3, 4, 5, 6]));
+  const f = N("foreach", { list: cropList("당근") }, { body: [N("harvest")] });
+  assert.deepEqual(errOn(validate([f], ch6), f.id), ["7장을 끝내면 열려요"]);
+  // 깊이: 목록도 한 단으로 센다
+  const h = N("harvest");
+  let node = h;
+  for (let d = 0; d < 5; d++) node = N("foreach", { list: dirList("위") }, { body: [node] });
+  assert.deepEqual(errOn(validate([node], ALL9), h.id), ["안쪽으로는 4단까지 넣어요"]);
+});
+
+test("7장 목록 변수: 맞는 종류의 목록 안에서만", () => {
+  // 바깥
+  const p = N("plant", { crop: LV });
+  assert.deepEqual(errOn(validate([p], ALL9), p.id), [NO_LOOP]);
+  const m = N("move", { dir: LV });
+  assert.deepEqual(errOn(validate([N("repeat", { n: 2 }, { body: [m] })], ALL9), m.id), [NO_LOOP]);
+  // 다른 종류의 목록 안
+  const p2 = N("plant", { crop: LV });
+  assert.deepEqual(errOn(validate([N("foreach", { list: dirList("위") }, { body: [p2] })], ALL9), p2.id), [NO_LOOP]);
+  // 목록 뒤(밖)
+  const p3 = N("plant", { crop: LV });
+  assert.deepEqual(errOn(validate([N("foreach", { list: cropList("당근") }, { body: [N("harvest")] }), p3], ALL9), p3.id), [NO_LOOP]);
+  // 안쪽 만약·반복 속은 괜찮다
+  assert.deepEqual(validate([N("foreach", { list: cropList("당근") }, {
+    body: [N("if", { cond: "here_empty" }, { body: [N("repeat", { n: 1 }, { body: [N("plant", { crop: LV })] })] })] })], ALL9), []);
+  // 내 노드 안의 목록 안은 괜찮고, 부르는 쪽이 목록 안이어도 내 노드 안에서는 못 씀
+  const pd = N("plant", { crop: LV });
+  const d = N("def", { name: "tend" }, { body: [pd] });
+  assert.deepEqual(errOn(validate([d, N("foreach", { list: cropList("당근") }, { body: [N("call", { name: "tend" })] })], ALL9), pd.id), [NO_LOOP]);
+  assert.deepEqual(validate([N("def", { name: "tend" }, { body: [N("foreach", { list: cropList("감자") }, { body: [N("plant", { crop: LV })] })] })], ALL9), []);
+  // 종류를 적어도 되지만 노드와 맞아야 함
+  assert.deepEqual(validate([N("foreach", { list: cropList("당근") }, { body: [N("plant", { crop: { loopVar: true, type: "crop" } })] })], ALL9), []);
+  const pw = N("plant", { crop: { loopVar: true, type: "dir" } });
+  assert.ok(errOn(validate([N("foreach", { list: dirList("위") }, { body: [pw] })], ALL9), pw.id).includes("고를 수 없는 값이에요"));
+  // 말하기·harvest 등 다른 노드에는 목록 변수가 없음
+  const sy = N("say", { text: LV });
+  assert.ok(errOn(validate([N("foreach", { list: cropList("당근") }, { body: [sy] })], ALL9), sy.id).includes("고를 수 없는 값이에요"));
+});
+
+test("7장 값 넣어 말하기에 목록 변수", () => {
+  const sv = N("sayval", { pre: "", var: { loopVar: true, type: "crop" }, post: " 심기" });
+  const f = N("foreach", { list: cropList("당근", "감자") }, { body: [sv] });
+  assert.equal(codegen([f]).code, 'for crop in ["당근", "감자"]:\n    print(str(crop) + " 심기")\n');
+  assert.deepEqual(validate([f], ALL9), []);
+  const out = N("sayval", { var: { loopVar: true, type: "dir" } });
+  assert.deepEqual(errOn(validate([f, out], ALL9), out.id), [NO_LOOP]);
+});
+
+test("목록 안에서 기억한 값은 목록 뒤에서도 쓴다(목록은 1개 이상이라 한 번은 돎)", () => {
+  const f = N("foreach", { list: cropList("당근") }, { body: [N("setvar", { name: "total", value: 0 }), N("where")] });
+  assert.deepEqual(validate([f, N("addvar", { name: "total", value: 1 }), N("sayval", { var: "x" })], ALL9), []);
+});
+
+// ---- 8장 창고 조건 ----
+test("8장 창고 조건: store()[작물] 비교, 8장을 끝내야", () => {
+  const c = { store: { crop: "당근", op: "<", num: 10 } };
+  assert.equal(condCode(c), 'store()["당근"] < 10');
+  assert.equal(condCode({ store: { crop: "감자", op: "==", num: 0 } }), 'store()["감자"] == 0');
+  const w = N("while", { cond: c }, { body: [N("harvest")] });
+  assert.equal(codegen([w]).code, 'while store()["당근"] < 10:\n    harvest()\n');
+  // 창고 조건 ~하는 동안은 값 바꾸기 검사가 없다(거두면 창고가 바뀜), 내 노드 안에서도 괜찮다
+  assert.deepEqual(validate([w], ALL9), []);
+  assert.deepEqual(validate([N("def", { name: "tend" }, { body: [N("while", { cond: c }, { body: [N("move")] })] })], ALL9), []);
+  const i = N("if", { cond: { store: { crop: "감자", op: ">", num: 99 } } }, { body: [N("harvest")] });
+  assert.deepEqual(validate([i], ALL9), []);
+  // 잠김: 1~7장만 끝냈으면
+  const u7 = unlockedKinds(new Set([1, 2, 3, 4, 5, 6, 7]));
+  assert.deepEqual(errOn(validate([w], u7), w.id), ["8장을 끝내면 열려요"]);
+  assert.deepEqual(validate([w], unlockedKinds(new Set([1, 3, 5, 8]))), []);
+  // 잘못된 값
+  for (const st of [{ crop: "수박", op: "<", num: 1 }, { crop: "당근", op: "<=", num: 1 }, { crop: "당근", op: "<", num: 100 },
+    { crop: "당근", op: "<", num: -1 }, { crop: "당근", op: "<", num: 1.5 }, null, "당근"]) {
+    const n = N("if", { cond: { store: st } }, { body: [N("harvest")] });
+    assert.ok(errOn(validate([n], ALL9), n.id).includes("고를 수 없는 값이에요"), JSON.stringify(st));
+  }
+});
+
+// ---- 9장 위치 알기 ----
+test("9장 where: x, y = where(), 뒤에서 x·y를 조건과 값 넣어 말하기에", () => {
+  assert.deepEqual(POS_NAMES, ["x", "y"]);
+  assert.deepEqual(NODES.where.args, {});
+  const wh = N("where");
+  const i = N("if", { cond: { var: "x", op: "<", num: 3 } }, { body: [N("move", { dir: "오른쪽" })] });
+  const sv = N("sayval", { pre: "y는 ", var: "y", post: "" });
+  const g = codegen([wh, i, sv]);
+  assert.equal(g.code, 'x, y = where()\nif x < 3:\n    move("오른쪽")\nprint("y는 " + str(y))\n');
+  assert.equal(g.lineMap[1], wh.id);
+  assert.deepEqual(validate([wh, i, sv], ALL9), []);
+  // 위치 알기 전에는 못 씀
+  const i2 = N("if", { cond: { var: "y", op: "==", num: 0 } }, { body: [N("harvest")] });
+  assert.deepEqual(errOn(validate([i2, N("where")], ALL9), i2.id), [NO_POS]);
+  const sv2 = N("sayval", { var: "x" });
+  assert.deepEqual(errOn(validate([sv2], ALL9), sv2.id), [NO_POS]);
+  // 만약 안의 위치 알기는 바깥 뒤에서 못 씀(C64), 반복 안은 씀
+  const sv3 = N("sayval", { var: "x" });
+  assert.deepEqual(errOn(validate([N("if", {}, { body: [N("where")] }), sv3], ALL9), sv3.id), [NO_POS]);
+  assert.deepEqual(validate([N("repeat", { n: 1 }, { body: [N("where")] }), N("sayval", { var: "x" })], ALL9), []);
+  // x·y는 기억하기·더하기로 바꿀 수 없다
+  for (const k of ["setvar", "addvar"]) {
+    const n = N(k, { name: "x", value: 1 });
+    assert.ok(errOn(validate([N("where"), n], ALL9), n.id).includes("고를 수 없는 값이에요"), k);
+  }
+  // 잠김: x·y 조건은 9장
+  const u8 = unlockedKinds(new Set([1, 2, 3, 4, 5, 6, 7, 8]));
+  const w0 = N("where");
+  const iz = N("if", { cond: { var: "x", op: "<", num: 3 } }, { body: [N("harvest")] });
+  const errs = validate([w0, iz], u8);
+  assert.deepEqual(errOn(errs, w0.id), ["9장을 끝내면 열려요"]);
+  assert.deepEqual(errOn(errs, iz.id), ["9장을 끝내면 열려요"]);
+});
+
+test("9장 x·y 비교 ~하는 동안: 안에서 움직이고 위치를 다시 알아야 끝난다", () => {
+  const cx = { var: "x", op: "<", num: 4 };
+  const ok = N("while", { cond: cx }, { body: [N("move", { dir: "오른쪽" }), N("where")] });
+  assert.deepEqual(validate([N("where"), ok], ALL9), []);
+  assert.equal(codegen([N("where"), ok]).code, 'x, y = where()\nwhile x < 4:\n    move("오른쪽")\n    x, y = where()\n');
+  // 움직이지 않음
+  const still = N("while", { cond: cx }, { body: [N("harvest"), N("where")] });
+  assert.deepEqual(errOn(validate([N("where"), still], ALL9), still.id), [NO_MOVE]);
+  // 위치를 다시 알지 않음(x가 그대로)
+  const stale = N("while", { cond: cx }, { body: [N("move")] });
+  assert.deepEqual(errOn(validate([N("where"), stale], ALL9), stale.id), ["반복 안에서 x 값을 바꿔요"]);
+  // 둘 다 없으면 둘 다
+  const both = N("while", { cond: { var: "y", op: "<", num: 4 } }, { body: [N("harvest")] });
+  assert.deepEqual(errOn(validate([N("where"), both], ALL9), both.id), ["반복 안에서 y 값을 바꿔요", NO_MOVE]);
+  // 내 노드 부르기는 움직임으로 센다(움직임은 안쪽 만약 속이어도 됨), 위치 알기는 반복·목록 속도 센다
+  const d = N("def", { name: "go_row" }, { body: [N("move")] });
+  const wc = N("while", { cond: cx }, { body: [N("call", { name: "go_row" }), N("repeat", { n: 1 }, { body: [N("where")] })] });
+  assert.deepEqual(validate([d, N("where"), wc], ALL9), []);
+  const wm = N("while", { cond: cx }, { body: [N("if", {}, { body: [N("move")] }), N("foreach", { list: dirList("위") }, { body: [N("where")] })] });
+  assert.deepEqual(validate([N("where"), wm], ALL9), []);
+  // 위치 알기가 만약·아니면·안쪽 ~하는 동안 속에만 있으면 x가 안 바뀔 수 있다(v0.11 검토)
+  for (const inner of [
+    N("if", {}, { body: [N("where")] }),
+    N("if", {}, { body: [N("harvest")], orelse: [N("where")] }),
+    N("while", { cond: "can_harvest" }, { body: [N("harvest"), N("where")] }),
+  ]) {
+    const wi = N("while", { cond: cx }, { body: [N("call", { name: "go_row" }), inner] });
+    assert.deepEqual(errOn(validate([d, N("where"), wi], ALL9), wi.id), ["반복 안에서 x 값을 바꿔요"], JSON.stringify(inner));
+  }
+});
+
+test("v0.11 검토: 위치 조건 만약 속에서만 count를 더하는 ~하는 동안은 끝나지 않을 수 있어 막는다", () => {
+  // x, y = where(); count = 0; while count < 5: if x > 50: count = count + 1
+  const w = N("while", { cond: { var: "count", op: "<", num: 5 } }, {
+    body: [N("if", { cond: { var: "x", op: ">", num: 50 } }, { body: [N("addvar", { name: "count", value: 1 })] })] });
+  const p = [N("where"), N("setvar", { name: "count", value: 0 }), w];
+  assert.deepEqual(errOn(validate(p, ALL9), w.id), ["반복 안에서 count 값을 바꿔요"]);
+  assert.deepEqual(errOn(codegen(p).errors, w.id), ["반복 안에서 count 값을 바꿔요"]);
+});
+
+test("9장 내 노드 안의 x·y: 그 내 노드 안에서 위치 알기를 한 뒤에만", () => {
+  // 바깥 위치 알기만으로는 내 노드 안에서 못 씀(문서화한 단순 규칙)
+  const i = N("if", { cond: { var: "x", op: "<", num: 3 } }, { body: [N("harvest")] });
+  const d = N("def", { name: "tend" }, { body: [i] });
+  // 바깥에서 위치 알기를 했으면 「먼저 해요」가 아니라 내 노드 안에서 하라고 알린다(v0.11 검토)
+  const DEF_POS = "내 노드 안에서는 그 안에서 위치 알기를 해요";
+  assert.deepEqual(errOn(validate([N("where"), d, N("call", { name: "tend" })], ALL9), i.id), [DEF_POS]);
+  const svd = N("sayval", { var: "y" });
+  const wd = N("while", { cond: { var: "x", op: "<", num: 3 } }, { body: [N("move"), N("where")] });
+  const errs4 = validate([N("repeat", { n: 1 }, { body: [N("where")] }), N("def", { name: "tend" }, { body: [svd, wd] })], ALL9);
+  assert.deepEqual(errOn(errs4, svd.id), [DEF_POS]);
+  assert.deepEqual(errOn(errs4, wd.id), [DEF_POS]);
+  // 바깥 어디에도 (앞에서) 위치 알기가 없으면 그대로 「먼저 해요」
+  const i0 = N("if", { cond: { var: "x", op: "<", num: 3 } }, { body: [N("harvest")] });
+  assert.deepEqual(errOn(validate([N("def", { name: "tend" }, { body: [i0] }), N("call", { name: "tend" })], ALL9), i0.id), [NO_POS]);
+  // 내 노드 안에서 먼저 위치 알기
+  const d2 = N("def", { name: "tend" }, { body: [N("where"), N("sayval", { var: "x" }),
+    N("while", { cond: { var: "x", op: "<", num: 5 } }, { body: [N("move"), N("where")] })] });
+  assert.deepEqual(validate([d2, N("call", { name: "tend" })], ALL9), []);
+  assert.doesNotMatch(codegen([d2]).code, /global/);
+  // 내 노드 안의 위치 알기는 바깥(부른 뒤)에서 x를 정하지 않는다(지역 값)
+  const sv = N("sayval", { var: "x" });
+  assert.deepEqual(errOn(validate([d2, N("call", { name: "tend" }), sv], ALL9), sv.id), [NO_POS]);
+  // 내 노드 안 위치 알기 뒤에도 일반 값 바꾸기는 여전히 막힘
+  const a = N("setvar", { name: "count", value: 1 });
+  assert.deepEqual(errOn(validate([N("def", { name: "tend" }, { body: [N("where"), a] })], ALL9), a.id),
+    ["내 노드 안에서는 값을 바꿀 수 없어요 — 바깥에서 바꿔요"]);
+});
+
+// ---- UI 도우미 ----
+test("availableValues: 그 노드 자리에서 고를 수 있는 값 이름", () => {
+  const sv = N("sayval");
+  const pin = N("plant", { crop: LV });
+  const inner = N("foreach", { list: cropList("감자") }, { body: [pin] });
+  const outer = N("foreach", { list: cropList("당근") }, { body: [N("move", { dir: "오른쪽" }), inner] });
+  const fd = N("foreach", { list: dirList("위") }, { body: [outer] });
+  const s = N("setvar", { name: "total", value: 0 });
+  const first = N("harvest");
+  const p = [first, s, N("where"), fd, sv];
+  const names = (id) => availableValues(p, id).map((v) => v.name);
+  assert.deepEqual(names(first.id), []);
+  assert.deepEqual(names(s.id), []);
+  assert.deepEqual(names(sv.id), ["total", "x", "y"]);
+  assert.deepEqual(availableValues(p, sv.id), [
+    { name: "total", arg: "total", source: "var" },
+    { name: "x", arg: "x", source: "pos" },
+    { name: "y", arg: "y", source: "pos" },
+  ]);
+  // 안쪽: 목록 변수는 종류마다 가장 안쪽 것
+  assert.deepEqual(availableValues(p, pin.id), [
+    { name: "total", arg: "total", source: "var" },
+    { name: "x", arg: "x", source: "pos" },
+    { name: "y", arg: "y", source: "pos" },
+    { name: "crop2", arg: { loopVar: true, type: "crop" }, source: "loop" },
+    { name: "way", arg: { loopVar: true, type: "dir" }, source: "loop" },
+  ]);
+  assert.deepEqual(names(outer.body[0].id), ["total", "x", "y", "crop", "way"]);
+  assert.deepEqual(availableValues(p, "없음"), []);
+  // 내 노드 안은 x·y가 빠진다
+  const inDef = N("harvest");
+  const p2 = [N("setvar", { name: "count", value: 0 }), N("where"), N("def", { name: "tend" }, { body: [inDef] })];
+  assert.deepEqual(availableValues(p2, inDef.id).map((v) => v.name), ["count"]);
+  // loopVarAvailable
+  assert.equal(loopVarAvailable(p, pin.id, "crop"), "crop2");
+  assert.equal(loopVarAvailable(p, pin.id, "dir"), "way");
+  assert.equal(loopVarAvailable(p, outer.body[0].id, "crop"), "crop");
+  assert.equal(loopVarAvailable(p, sv.id, "crop"), null);
+  assert.equal(loopVarAvailable(p, first.id, "dir"), null);
+  assert.equal(loopVarAvailable(p, "없음", "dir"), null);
+});
+
+test("kindsUsed: cond:store·cond:pos·loopvar 표지", () => {
+  const p = [
+    N("where"),
+    N("if", { cond: { var: "x", op: "<", num: 3 } }, { body: [N("harvest")] }),
+    N("while", { cond: { store: { crop: "당근", op: "<", num: 5 } } }, { body: [N("harvest")] }),
+    N("foreach", { list: cropList("당근") }, { body: [N("plant", { crop: LV })] }),
+  ];
+  const k = kindsUsed(p);
+  for (const m of ["where", "if", "while", "foreach", "plant", "harvest", "cond:store", "cond:pos", "loopvar"]) assert.ok(k.has(m), m);
+  // 표지는 쓴 때만
+  const k2 = kindsUsed([N("setvar"), N("if", { cond: { var: "count", op: "<", num: 3 } }, { body: [N("plant")] }),
+    N("foreach", { list: cropList("당근") }, { body: [N("plant", { crop: "감자" })] })]);
+  assert.ok(!k2.has("cond:store") && !k2.has("cond:pos") && !k2.has("loopvar"));
+  // 말하기 값의 목록 변수와 y 비교 ~하는 동안도
+  const k3 = kindsUsed([N("where"), N("while", { cond: { var: "y", op: "<", num: 3 } }, { body: [N("move"), N("where")] }),
+    N("foreach", { list: dirList("위") }, { body: [N("sayval", { var: { loopVar: true, type: "dir" } })] })]);
+  assert.ok(k3.has("cond:pos") && k3.has("loopvar") && k3.has("sayval"));
+  // loopvar:act는 이동·심기 값으로 목록 변수를 쓸 때만(말하기만으로는 아님 — 섞어 심기 주문)
+  assert.ok(k.has("loopvar:act"));
+  assert.ok(!k3.has("loopvar:act"));
+  assert.ok(kindsUsed([N("foreach", { list: dirList("위") }, { body: [N("move", { dir: LV })] })]).has("loopvar:act"));
+  assert.ok(!k2.has("loopvar:act"));
+});
+
+test("v0.11 노드도 codegen·validate가 입력을 바꾸지 않는다", () => {
+  const p = deepFreeze([
+    N("where"),
+    N("foreach", { list: cropList("당근", "감자") }, { body: [N("plant", { crop: LV }), N("sayval", { var: "x" })] }),
+    N("while", { cond: { store: { crop: "당근", op: "<", num: 3 } } }, { body: [N("harvest")] }),
+  ]);
+  const before = JSON.stringify(p);
+  codegen(p); validate(p, ALL9); kindsUsed(p); availableValues(p, p[1].body[0].id); loopVarAvailable(p, p[1].body[0].id, "crop");
   assert.equal(JSON.stringify(p), before);
 });

@@ -35,6 +35,11 @@
                  고친 뒤 「노드로 돌아가기」 확인 창) / 검사 오류 빨간 노드는 실행을 막음 / while 500번 지침 말풍선 /
                  성장 창(모자람 이유, 밭 4×4 사기 → 주문 완료). 텃밭 화면 넘침·터치 44px(노드·코드 모드).
                  캡처: garden-*.png (iPhone 17)
+- test_garden11_*: 텃밭 6~9장(v0.11 작업 4). 목록에서 하나씩(종류 고르기·목록 편집 창: 더하기·6개 한도·←/→·빼기,
+                 안쪽 심기에서 「목록 값(crop)」) → 섞어 심기 완료 / 창고 보기 조건(8장 잠금은 흐리게) → 모자란 것만 완료 /
+                 위치 알기 뒤 x 비교(앞에서는 x 없음) → 줄 끝에서 내려가기 완료 / 값 넣어 말하기(앞·뒤 글자 10자, 값 고르기)
+                 → 수확 보고 완료 / 코드 모드 NameError 오타 → 「혹시 move?」. 새 창 넘침·터치 44px.
+                 캡처: garden11-*.png (iPhone 17)
 """
 
 import atexit
@@ -338,15 +343,16 @@ MEASURE_JS = r"""() => {
     if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity === 0) continue;
     const r = e.getBoundingClientRect();
     if (r.width < 2 || r.height < 2) continue;          // .sr로 숨긴 파일 입력 등
-    let fixed = false, scroller = false;
+    let fixed = false, scroller = false, vscroller = false;
     for (let p = e; p && p !== document.body; p = p.parentElement) {
       const ps = getComputedStyle(p);
       if (ps.position === 'fixed' || ps.position === 'sticky') fixed = true;
       if (p !== e && /(auto|scroll)/.test(ps.overflowX) && p.scrollWidth > p.clientWidth + 1) scroller = true;
+      if (p !== e && /(auto|scroll)/.test(ps.overflowY) && p.scrollHeight > p.clientHeight + 1) vscroller = true;
     }
     const text = (e.getAttribute('aria-label') || e.innerText || e.value || '').trim().replace(/\s+/g, ' ').slice(0, 24);
     const name = e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (e.classList.length ? '.' + [...e.classList].join('.') : '') + ' "' + text + '"';
-    items.push({ name, l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height, fixed, scroller });
+    items.push({ name, l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height, fixed, scroller, vscroller });
   }
   return { vw, vh, sw: document.documentElement.scrollWidth, bsw: document.body.scrollWidth, items };
 }"""
@@ -366,7 +372,9 @@ def measure(app, screen):
         out_h = it["l"] < -1 or it["r"] > m["vw"] + 1
         out_v = it["fixed"] and (it["t"] < -1 or it["b"] > m["vh"] + 1)
         if out_h or out_v:
-            (scrolled if it["scroller"] and not out_v else offscreen).append(
+            # 가로 스크롤 줄 안(가로만 넘침) 또는 세로로 스크롤되는 창(고르기 창) 안에서 위아래로 밀려난 것은 스크롤로 닿음
+            in_scroll = (it["scroller"] and not out_v) or (it.get("vscroller") and out_v and not out_h)
+            (scrolled if in_scroll else offscreen).append(
                 "%s [%d,%d..%d,%d]" % (it["name"], it["l"], it["t"], it["r"], it["b"]))
         if (it["w"] < 43.5 or it["h"] < 43.5) and it["name"] not in TOUCH_EXCEPTIONS:
             small.append("%s %dx%d" % (it["name"], round(it["w"]), round(it["h"])))
@@ -1249,7 +1257,8 @@ def _nd(i, kind, body=None, orelse=None, **args):
 
 def _garden(order_idx=0, program=None, store=None, cells=None, size=3, upgrades=None, mode="nodes", code=""):
     order_ids = ["o_first", "o_hello", "o_plant", "o_lunch", "o_count", "o_row", "o_soup", "o_if", "o_potato",
-                 "o_grid4", "o_def", "o_def_row", "o_repeat", "o_while", "o_all"]
+                 "o_grid4", "o_def", "o_def_row", "o_repeat", "o_while", "o_all",
+                 "o_sayval", "o_mix", "o_patrol", "o_lowstock", "o_potato_book", "o_where", "o_zigzag"]
     return {"v": 1, "size": size, "cells": cells if cells is not None else [None] * (size * size),
             "pie": {"x": 0, "y": 0}, "clock": 20, "store": {"당근": 0, "감자": 0, **(store or {})},
             "upgrades": upgrades or [], "order": {"idx": order_idx, "done": order_ids[:order_idx], "paid": order_ids[:order_idx]},
@@ -1645,6 +1654,344 @@ def test_garden_waited_message():
         a.page.click("#to-code")
         a.page.wait_for_selector(".g-editor .cm-content")
         assert not a.page.query_selector("#board .g-bubble"), "모드를 바꾸면 말풍선 지움"
+        assert not a.errors, a.errors
+
+
+# ---------------------------------------------------------------- 텃밭 6~9장 (v0.11 작업 4)
+
+G11_UP = ["grid4", "감자 씨앗"]
+
+
+def _sheet_ok(a, name, shot=None):
+    """지금 열린 고르기 창을 재고(넘침·44px) 캡처"""
+    a.page.wait_for_selector(".modal.g-sheet")
+    a.page.wait_for_timeout(250)  # 올라오는 움직임
+    if shot:
+        a.shot(shot)
+    m = measure(a, name)
+    assert not m["problems"], (name, m["problems"])
+    assert not m["small"], (name, m["small"])
+
+
+def _row_chips(a, nid):
+    return a.js("(id) => [...document.querySelectorAll(`.g-node[data-id=\"${id}\"] > .g-node-main .g-arg`)].map(b => b.innerText.trim())", str(nid))
+
+
+def _list_items(a):
+    return a.js("() => [...document.querySelectorAll('.g-list-sheet .g-li-item')].map(b => b.dataset.item)")
+
+
+def test_garden11_foreach_mix():
+    seed = _garden_seed(9, _garden(order_idx=16, program=[], size=4, upgrades=G11_UP, store={"당근": 44, "감자": 6}))
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        assert "목록 값으로 심기·이동하기" in a.page.inner_text(".g-goal"), a.page.inner_text(".g-goal")
+        # 노드 더하기 → 목록에서 하나씩 → 목록 종류 고르기
+        a.page.click('.g-add[data-parent=""]')
+        a.page.wait_for_selector(".modal.g-sheet [data-kind=foreach]")
+        a.shot("garden11-add-sheet.png", full=False)
+        a.page.click(".modal.g-sheet [data-kind=foreach]")   # 바로 다음 창(목록 종류)이 열림
+        a.page.wait_for_selector(".modal.g-ltype-sheet")
+        opts = a.js("() => [...document.querySelectorAll('.g-ltype-sheet [data-v]')].map(b => b.dataset.v)")
+        assert opts == ["crop", "dir"], opts
+        _sheet_ok(a, "garden11-ltype", "garden11-ltype.png")
+        _sheet_pick(a, '[data-v="crop"]')
+        g = a.save()["garden"]
+        fe = g["program"][0]
+        assert fe["kind"] == "foreach" and fe["args"]["list"] == {"type": "crop", "items": ["당근", "감자"]}, fe
+        fid = fe["id"]
+        badge = a.page.inner_text('.g-node[data-kind=foreach] .g-var')
+        assert badge.strip() == "crop", badge
+
+        # 목록 편집: 더하기 → 6개 한도 → ←/→ → 빼기
+        a.page.click('.g-node[data-kind=foreach] .g-arg[data-arg=list]')
+        a.page.wait_for_selector(".modal.g-list-sheet")
+        assert _list_items(a) == ["당근", "감자"], _list_items(a)
+        a.page.click('.g-list-sheet [data-add="당근"]')
+        a.page.click('.g-list-sheet [data-add="감자"]')
+        assert _list_items(a) == ["당근", "감자", "당근", "감자"], _list_items(a)
+        a.page.click('.g-list-sheet [data-add="당근"]')
+        a.page.click('.g-list-sheet [data-add="당근"]')
+        assert len(_list_items(a)) == 6
+        # 6개가 되어 누른 더하기 단추가 막히면 초점은 「정하기」로(v0.11 검토)
+        assert a.js("() => document.activeElement && document.activeElement.id") == "g-ok", a.js("() => document.activeElement.outerHTML")
+        assert a.js("() => [...document.querySelectorAll('.g-list-sheet [data-add]')].every(b => b.disabled)"), "6개면 더하기 막힘"
+        assert "6/6" in a.page.inner_text("#g-li-n"), a.page.inner_text("#g-li-n")
+        _sheet_ok(a, "garden11-list-full", "garden11-list.png")
+        # 첫 칸 고르고 → (뒤로), ← (앞으로)
+        a.page.click('.g-list-sheet .g-li-item[data-i="0"]')
+        a.page.click("#g-li-right")
+        assert _list_items(a)[:2] == ["감자", "당근"], _list_items(a)
+        assert a.js("() => document.querySelector('.g-list-sheet .g-li-item.on').dataset.i") == "1", "고른 칸이 따라감"
+        a.page.click("#g-li-left")
+        assert _list_items(a)[:2] == ["당근", "감자"], _list_items(a)
+        # 마지막 두 칸 빼기 — 빼기 단추가 막혀도 초점은 남은 칸(뺀 자리, 끝이면 바로 앞 칸)으로(v0.11 검토)
+        for i in ("5", "4"):
+            a.page.click('.g-list-sheet .g-li-item[data-i="%s"]' % i)
+            a.page.click("#g-li-del")
+            foc = a.js("() => document.activeElement && document.activeElement.matches('.g-list-sheet .g-li-item') ? document.activeElement.dataset.i : null")
+            assert foc == str(int(i) - 1), (i, a.js("() => document.activeElement.outerHTML"))
+        assert _list_items(a) == ["당근", "감자", "당근", "감자"], _list_items(a)
+        assert "for crop in" in a.page.inner_text(".g-list-sheet .g-li-code"), a.page.inner_text(".g-list-sheet")
+        _sheet_pick(a, "#g-ok")
+        g = a.save()["garden"]
+        assert g["program"][0]["args"]["list"]["items"] == ["당근", "감자", "당근", "감자"], g["program"][0]
+        assert "당근" in _row_chips(a, fid)[0], _row_chips(a, fid)
+
+        # 맨 바깥 심기는 목록 값이 없음
+        a.page.click('.g-add[data-parent=""]')
+        _sheet_pick(a, "[data-kind=plant]")
+        top_plant = a.save()["garden"]["program"][1]["id"]
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=crop]' % top_plant)
+        a.page.wait_for_selector(".modal.g-sheet")
+        assert not a.page.query_selector('.g-sheet [data-v="__loop"]'), "목록 밖에서는 목록 값 없음"
+        a.page.click(".gs-close")
+        a.page.wait_for_selector(".modal.g-sheet", state="detached")
+        a.page.click('.g-node[data-id="%s"] .g-menu' % top_plant)
+        _sheet_pick(a, "[data-act=del]")
+
+        # 목록 안: 빈칸이면 → 심기(crop), 이동
+        a.page.click('.g-add[data-parent="%s"][data-slot=body]' % fid)
+        _sheet_pick(a, "[data-kind=if]")
+        if_id = a.save()["garden"]["program"][0]["body"][0]["id"]
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=cond]' % if_id)
+        _sheet_pick(a, '[data-v="here_empty"]')
+        a.page.click('.g-add[data-parent="%s"][data-slot=body]' % if_id)
+        _sheet_pick(a, "[data-kind=plant]")
+        pid = a.save()["garden"]["program"][0]["body"][0]["body"][0]["id"]
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=crop]' % pid)
+        a.page.wait_for_selector('.g-sheet [data-v="__loop"]')
+        assert "crop" in a.page.inner_text('.g-sheet [data-v="__loop"]')
+        _sheet_ok(a, "garden11-loopvar", "garden11-loopvar.png")
+        _sheet_pick(a, '[data-v="__loop"]')
+        g = a.save()["garden"]
+        assert g["program"][0]["body"][0]["body"][0]["args"]["crop"] == {"loopVar": True, "type": "crop"}, g["program"]
+        assert _row_chips(a, pid) == ["crop"], _row_chips(a, pid)
+        a.page.click('.g-add[data-parent="%s"][data-slot=body]' % fid)
+        _sheet_pick(a, "[data-kind=move]")
+        code = _code_preview(a)
+        assert code == ('for crop in ["당근", "감자", "당근", "감자"]:\n    if what_here() == "빈칸":\n'
+                        '        plant(crop)\n    move("오른쪽")'), code
+        assert not a.page.query_selector(".g-node.bad"), a.page.inner_text(".g-flow")
+        a.shot("garden11-foreach.png", full=True)
+        m = measure(a, "garden11-foreach")
+        assert not m["problems"] and not m["small"], (m["problems"], m["small"])
+        g = _garden_run(a)
+        _close_done(a)
+        g = a.save()["garden"]
+        assert g["order"]["idx"] == 17 and g["order"]["paid"][-1] == "o_mix", g["order"]
+        crops = [c and c["crop"] for c in g["cells"][:4]]
+        assert crops == ["당근", "감자", "당근", "감자"], g["cells"][:4]
+        assert not a.errors, a.errors
+
+
+def test_garden11_sayval_default_and_bad_list():
+    """새 값 넣어 말하기는 그 자리에서 쓸 수 있는 첫 값으로(없으면 count), 망가진 목록은 저장 정리가 기본 목록으로(v0.11 검토)"""
+    prog = [_nd(1, "foreach", list={"type": "crop", "items": []}, body=[_nd(2, "harvest")]),
+            _nd(3, "foreach", list={"type": "dir", "items": ["오른쪽"]}, body=[_nd(4, "harvest")])]
+    seed = _garden_seed(9, _garden(order_idx=16, program=prog, size=4, upgrades=G11_UP, store={"당근": 44, "감자": 6}))
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        g = a.save()["garden"]
+        assert g["program"][0]["args"]["list"] == {"type": "crop", "items": ["당근", "감자"]}, g["program"][0]
+        # 목록 편집 창이 열리고 기본 목록을 보임
+        a.page.click('.g-node[data-id="1"] .g-arg[data-arg=list]')
+        a.page.wait_for_selector(".modal.g-list-sheet")
+        assert _list_items(a) == ["당근", "감자"], _list_items(a)
+        a.page.click(".gs-close")
+        a.page.wait_for_selector(".modal.g-sheet", state="detached")
+        # 맨 바깥(쓸 수 있는 값 없음) → count
+        a.page.click('.g-add[data-parent=""]')
+        _sheet_pick(a, "[data-kind=sayval]")
+        assert a.save()["garden"]["program"][2]["args"]["var"] == "count", a.save()["garden"]["program"][2]
+        # 방향 목록 안 → 목록 값 way
+        a.page.click('.g-add[data-parent="3"][data-slot=body]')
+        _sheet_pick(a, "[data-kind=sayval]")
+        sv = a.save()["garden"]["program"][1]["body"][1]
+        assert sv["args"]["var"] == {"loopVar": True, "type": "dir"}, sv
+        assert _row_chips(a, sv["id"])[1] == "way", _row_chips(a, sv["id"])
+        # 위치 알기 뒤 → x
+        a.page.click('.g-add[data-parent=""]')
+        _sheet_pick(a, "[data-kind=where]")
+        a.page.click('.g-add[data-parent=""]')
+        _sheet_pick(a, "[data-kind=sayval]")
+        assert a.save()["garden"]["program"][4]["args"]["var"] == "x", a.save()["garden"]["program"][4]
+        bad = a.js("() => [...document.querySelectorAll('.g-node.bad')].map(e => e.dataset.id)")
+        assert bad == [str(a.save()["garden"]["program"][2]["id"])], bad   # count를 기억하지 않은 맨 바깥 것만
+        assert not a.errors, a.errors
+
+
+def test_garden11_store_cond():
+    prog = [_nd(1, "if", cond="can_harvest", body=[_nd(2, "say", text="감자가 모자라")])]
+    seed = _garden_seed(9, _garden(order_idx=18, program=prog, size=4, upgrades=G11_UP, store={"당근": 47, "감자": 6}))
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        assert "창고 보기 조건 쓰기" in a.page.inner_text(".g-goal"), a.page.inner_text(".g-goal")
+        a.page.click('.g-node[data-id="1"] .g-arg[data-arg=cond]')
+        a.page.wait_for_selector(".g-sheet .g-storecond")
+        assert not a.page.query_selector(".g-storecond.locked")
+        assert a.js("() => document.querySelectorAll('.g-varcond [data-var].on').length") == 1
+        a.page.click('.g-storecond [data-scrop="감자"]')
+        _sheet_ok(a, "garden11-store", "garden11-store.png")
+        _sheet_pick(a, "#g-store-ok")
+        g = a.save()["garden"]
+        assert g["program"][0]["args"]["cond"] == {"store": {"crop": "감자", "op": "<", "num": 10}}, g["program"][0]
+        assert _row_chips(a, 1) == ["창고 감자 < 10"], _row_chips(a, 1)
+        assert _code_preview(a).startswith('if store()["감자"] < 10:'), _code_preview(a)
+        # 다시 열면: 창고 보기에 지금 값, 값 비교는 기본값 하나만(창고 조건을 값 비교로 읽지 않음)
+        a.page.click('.g-node[data-id="1"] .g-arg[data-arg=cond]')
+        a.page.wait_for_selector(".g-sheet .g-storecond")
+        st = a.js("""() => ({ crop: document.querySelector('.g-storecond [data-scrop].on')?.dataset.scrop,
+                    num: document.querySelector('#g-step2 .g-num').textContent,
+                    varOn: [...document.querySelectorAll('.g-varcond [data-var].on')].map(b => b.dataset.var),
+                    basicOn: document.querySelectorAll('.g-pick .g-pick-btn.on').length })""")
+        assert st == {"crop": "감자", "num": "10", "varOn": ["count"], "basicOn": 0}, st
+        a.page.click(".gs-close")
+        a.page.wait_for_selector(".modal.g-sheet", state="detached")
+        g = _garden_run(a)
+        _close_done(a)
+        assert a.save()["garden"]["order"]["paid"][-1] == "o_lowstock", a.save()["garden"]["order"]
+        assert not a.errors, a.errors
+
+
+def test_garden11_store_locked():
+    prog = [_nd(1, "if", cond="can_harvest", body=[_nd(2, "harvest")])]
+    with App("iPhone 17", save=_garden_seed(7, _garden(order_idx=16, program=prog, size=4, upgrades=G11_UP)), reduced=True) as a:
+        _open_garden(a)
+        a.page.click('.g-node[data-id="1"] .g-arg[data-arg=cond]')
+        a.page.wait_for_selector(".g-sheet .g-storecond.locked")
+        txt = a.page.inner_text(".g-storecond")
+        assert "창고 보기" in txt and "8장을 끝내면 열려요" in txt, txt
+        assert not a.page.query_selector("#g-store-ok"), "잠긴 창고 보기는 고를 수 없음"
+        # 위치 알기 전이라 x·y도 없음
+        assert not a.page.query_selector('.g-varcond [data-var="x"]')
+        a.page.eval_on_selector(".g-storecond", "e => e.scrollIntoView({block: 'end'})")
+        _sheet_ok(a, "garden11-store-locked", "garden11-store-locked.png")
+        a.page.click(".gs-close")
+        a.page.wait_for_selector(".modal.g-sheet", state="detached")
+        # 노드 더하기 창: 위치 알기는 9장 잠금
+        a.page.click('.g-add[data-parent=""]')
+        a.page.wait_for_selector(".modal.g-sheet")
+        lk = a.js("() => { const b = document.querySelector('.g-sheet [data-kind=where]'); return [b.disabled, b.innerText]; }")
+        assert lk[0] and "9장을 끝내면 열려요" in lk[1], lk
+        assert not a.js("() => document.querySelector('.g-sheet [data-kind=foreach]').disabled")
+        assert not a.errors, a.errors
+
+
+def test_garden11_where_pos():
+    prog = [_nd(1, "repeat", n=4, body=[_nd(2, "if", cond="can_harvest", body=[_nd(3, "harvest")])])]
+    cells = [{"crop": "당근", "planted_at": 0}] * 4 + [None] * 12
+    seed = _garden_seed(9, _garden(order_idx=20, program=prog, size=4, upgrades=G11_UP, cells=cells, store={"당근": 47, "감자": 5}))
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        # 위치 알기 전의 조건에는 x·y가 없음
+        a.page.click('.g-node[data-id="2"] .g-arg[data-arg=cond]')
+        a.page.wait_for_selector(".g-sheet .g-varcond")
+        assert not a.page.query_selector('.g-varcond [data-var="x"]')
+        a.page.click(".gs-close")
+        a.page.wait_for_selector(".modal.g-sheet", state="detached")
+        a.page.click('.g-add[data-parent="1"][data-slot=body]')
+        _sheet_pick(a, "[data-kind=where]")
+        assert "x, y가 생겨요" in a.page.inner_text(".g-node[data-kind=where]"), a.page.inner_text(".g-node[data-kind=where]")
+        a.page.click('.g-add[data-parent="1"][data-slot=body]')
+        _sheet_pick(a, "[data-kind=if]")
+        if_id = a.save()["garden"]["program"][0]["body"][2]["id"]
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=cond]' % if_id)
+        a.page.wait_for_selector('.g-varcond [data-var="x"]')
+        vs = a.js("() => [...document.querySelectorAll('.g-varcond [data-var]')].map(b => b.dataset.var)")
+        assert "x" in vs and "y" in vs and "crop" not in vs, vs
+        a.page.click('.g-varcond [data-var="x"]')
+        a.page.click('.g-varcond [data-op="=="]')
+        a.page.click('#g-step [data-step="-1"]')
+        a.page.click('#g-step [data-step="-1"]')
+        _sheet_ok(a, "garden11-poscond", "garden11-poscond.png")
+        _sheet_pick(a, "#g-ok")
+        assert _row_chips(a, if_id) == ["x == 3"], _row_chips(a, if_id)
+        a.page.click('.g-add[data-parent="%s"][data-slot=body]' % if_id)
+        _sheet_pick(a, "[data-kind=move]")
+        mid = a.save()["garden"]["program"][0]["body"][2]["body"][0]["id"]
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=dir]' % mid)
+        _sheet_pick(a, '[data-v="아래"]')
+        a.page.click('.g-node[data-id="%s"] .g-menu' % if_id)
+        _sheet_pick(a, "[data-act=else-on]")
+        a.page.click('.g-add[data-parent="%s"][data-slot=orelse]' % if_id)
+        _sheet_pick(a, "[data-kind=move]")
+        code = _code_preview(a)
+        assert ("for i in range(4):\n    if can_harvest():\n        harvest()\n    x, y = where()\n"
+                "    if x == 3:\n        move(\"아래\")\n    else:\n        move(\"오른쪽\")") == code, code
+        assert not a.page.query_selector(".g-node.bad"), a.page.inner_text(".g-flow")
+        a.shot("garden11-where.png", full=True)
+        g = _garden_run(a)
+        _close_done(a)
+        assert a.save()["garden"]["order"]["paid"][-1] == "o_where", a.save()["garden"]["order"]
+        assert not a.errors, a.errors
+
+
+def test_garden11_sayval():
+    prog = [_nd(1, "setvar", name="count", value=0),
+            _nd(2, "repeat", n=4, body=[_nd(3, "if", cond="can_harvest", body=[_nd(4, "harvest"), _nd(5, "addvar", name="count", value=1)]),
+                                        _nd(6, "move", dir="오른쪽")])]
+    cells = [{"crop": "당근", "planted_at": 0}] * 4 + [None] * 12
+    seed = _garden_seed(9, _garden(order_idx=15, program=prog, size=4, upgrades=G11_UP, cells=cells, store={"당근": 40, "감자": 6}))
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        a.page.click('.g-add[data-parent=""]')
+        _sheet_pick(a, "[data-kind=sayval]")
+        sid = a.save()["garden"]["program"][2]["id"]
+        assert _row_chips(a, sid) == ["“당근 ”", "count", "“개”"], _row_chips(a, sid)
+        # 앞 글자: 10자 넘으면 막힘, 빈 글자는 됨
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=pre]' % sid)
+        a.page.wait_for_selector(".modal.g-sheet input")
+        a.page.fill(".modal.g-sheet input", "열한글자가넘는긴글자예요")
+        assert a.js("() => document.querySelector('#g-ok').disabled")
+        assert "너무 길어요" in a.page.inner_text("#g-text-n")
+        a.page.fill(".modal.g-sheet input", "")
+        assert not a.js("() => document.querySelector('#g-ok').disabled"), "앞 글자는 비워도 됨"
+        a.page.fill(".modal.g-sheet input", "거둔 당근 ")
+        assert "6/10" in a.page.inner_text("#g-text-n"), a.page.inner_text("#g-text-n")
+        _sheet_ok(a, "garden11-sayval-text", "garden11-sayval-text.png")
+        _sheet_pick(a, "#g-ok")
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=post]' % sid)
+        a.page.wait_for_selector(".modal.g-sheet input")
+        a.page.fill(".modal.g-sheet input", "개!")
+        _sheet_pick(a, "#g-ok")
+        # 값 고르기: 여기서 쓸 수 있는 값만(count)
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=var]' % sid)
+        a.page.wait_for_selector(".g-sheet [data-name]")
+        names = a.js("() => [...document.querySelectorAll('.g-sheet [data-name]')].map(b => b.dataset.name)")
+        assert names == ["count"], names
+        _sheet_ok(a, "garden11-sayval-val", "garden11-sayval-val.png")
+        _sheet_pick(a, '[data-name="count"]')
+        code = _code_preview(a)
+        assert code.endswith('print("거둔 당근 " + str(count) + "개!")'), code
+        g = _garden_run(a)
+        _close_done(a)
+        assert a.save()["garden"]["order"]["paid"][-1] == "o_sayval", a.save()["garden"]["order"]
+        assert "거둔 당근 4개!" in a.js("() => document.querySelector('#board svg').textContent")
+        a.shot("garden11-sayval.png")
+        assert not a.errors, a.errors
+
+
+def test_garden11_code_error_explain():
+    seed = _garden_seed(9, _garden(order_idx=17, size=4, upgrades=G11_UP, mode="code", code='mvoe("오른쪽")\n'))
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        note = a.page.inner_text(".g-mode-note")
+        assert "store()" in note and "where()" in note, note
+        _garden_run(a)
+        err = a.page.inner_text(".err-panel")
+        assert "NameError" in err and "1번째 줄" in err, err
+        assert "모르는 명령" in err and "혹시 move?" in err, err
+        a.page.eval_on_selector(".err-panel", "e => e.scrollIntoView({block: 'center'})")
+        a.shot("garden11-code-error.png")
+        m = measure(a, "garden11-code-error")
+        assert not m["problems"] and not m["small"], (m["problems"], m["small"])
+        # 텃밭과 상관없는 오류는 기존 설명
+        a.set_code('print(1 / 0)\n')
+        a.page.wait_for_timeout(700)
+        _garden_run(a)
+        err = a.page.inner_text(".err-panel")
+        assert "ZeroDivisionError" in err and "혹시" not in err, err
         assert not a.errors, a.errors
 
 

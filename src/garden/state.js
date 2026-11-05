@@ -10,7 +10,7 @@
 // 주문 판정은 지금 주문(order.idx) 하나만 본다. 그 주문의 장(need)을 통과하지 않았으면 기다림(판정·넘김 없음).
 // passed(통과한 장 번호 Set)를 넘기지 않으면 아무 장도 통과하지 않은 것으로 본다.
 import { CROPS, UPGRADES, ORDERS, farmSetup, START_ROWS } from "../../data/garden.js";
-import { NODES, defaultProgram, kindsUsed } from "./nodes.js";
+import { NODES, defaultProgram, kindsUsed, cleanList } from "./nodes.js";
 import { earnXp } from "../rules.js";
 import { ensureQuests, tick } from "../quests.js";
 import { checkBadges } from "../badges.js";
@@ -136,6 +136,18 @@ function programOk(program) {
   return ok(program, 0);
 }
 
+// 모양이 맞는 프로그램의 사본. 목록에서 하나씩의 목록이 이상하면(종류·칸 수·값) 그 목록만 기본 목록으로 바꾼다
+// (목록 편집 창과 코드 생성이 목록 모양을 믿으므로).
+function cleanProgram(program) {
+  const fix = (list) => list.map((n) => {
+    const out = { ...n, args: n.kind === "foreach" ? { ...n.args, list: cleanList(n.args.list) } : structuredClone(n.args) };
+    if (Array.isArray(n.body)) out.body = fix(n.body);
+    if (Array.isArray(n.orelse)) out.orelse = fix(n.orelse);
+    return out;
+  });
+  return fix(program);
+}
+
 /** 저장의 garden 칸 하나를 모양·범위에 맞춘 새 객체로. 객체가 아니면 새 텃밭 */
 export function cleanGarden(raw) {
   if (!isObj(raw)) return newGarden();
@@ -151,7 +163,7 @@ export function cleanGarden(raw) {
     store: cleanStore(raw.store),
     upgrades,
     order: cleanOrder(raw.order),
-    program: programOk(raw.program) ? structuredClone(raw.program) : defaultProgram(),
+    program: programOk(raw.program) ? cleanProgram(structuredClone(raw.program)) : defaultProgram(),
     code: typeof raw.code === "string" ? raw.code.slice(0, CODE_MAX) : "",
     mode: raw.mode === "code" ? "code" : "nodes",
     runs: nonNeg(raw.runs),
@@ -392,6 +404,7 @@ export function buy(garden, id, passed) {
 // ---- 보상 ----
 /**
  * 주문 XP(5): 레슨·매일 도전과 같은 길(earnXp → 하루 목표·연속 기록·이정표, XP 퀘스트, 배지). 바이트는 주지 않음.
+ * 하루 퀘스트 사건 "garden_order"(q_garden)도 1 센다(v0.11).
  * 같은 주문 id에는 한 번만(garden.order.paid). 데이터에 없는 주문이면 아무 일 없음.
  * @returns { save, result: { xp, streakUp, streak, milestone, milestoneBytes, questBytes, finished, chest, newBadges } }
  */
@@ -417,7 +430,9 @@ export function grantOrderXP(save, order, now = new Date()) {
   s = ensureQuests(s, today);
   const qBefore = s.bytes;
   const q = tick(s, "xp", today, xp);
-  s = q.save;
+  // 하루 퀘스트 「텃밭 주문 1개 해내기」(v0.11 설계 §3): 주문을 처음 해낼 때만(위에서 같은 주문은 걸러짐)
+  const qg = tick(q.save, "garden_order", today, 1);
+  s = qg.save;
   const questBytes = s.bytes - qBefore;
   s.last_active_at = now.toISOString();
 
@@ -427,7 +442,7 @@ export function grantOrderXP(save, order, now = new Date()) {
   return {
     save: s,
     result: { xp, streakUp, streak: s.streak.days, milestone: earned.milestone, milestoneBytes, questBytes,
-      finished: q.finished, chest: q.chest, newBadges: s.badges.filter((b) => !had.has(b)) },
+      finished: [...q.finished, ...qg.finished], chest: q.chest || qg.chest, newBadges: s.badges.filter((b) => !had.has(b)) },
   };
 }
 

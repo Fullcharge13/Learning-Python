@@ -1,5 +1,6 @@
 // 일일 퀘스트: 날짜로 3개 뽑기, 사건 집계, 보물상자
 import { QUESTS } from "../data/quests.js";
+import { ORDERS } from "../data/garden.js";
 
 export const CHEST_BYTES = 10;
 
@@ -22,17 +23,51 @@ function mulberry32(a) {
   };
 }
 
-/** 같은 날짜 → 같은 3개. 6개 전체를 날짜 씨앗으로 섞은 뒤, 복습 목록이 비면 q_review3을 빼고 앞의 3개.
- *  (섞는 대상이 늘 6개라서 복습 목록 유무와 관계없이 나머지 순서가 같음) */
+// ---- 텃밭 퀘스트(v0.11 설계 §3) ----
+// 장 평가 레슨 id. 모든 장의 평가가 「N-5」임은 tests/unit/quests.test.js가 실제 장 파일로 확인한다
+// (장 목록 없이 저장만으로 판단해야 해서: ensureQuests는 장 목록을 받지 않고, src/garden/state.js는 이 파일을 부르므로
+//  state.js의 passedChapters를 여기서 부르면 순환이 된다).
+const examId = (chapter) => `${chapter}-5`;
+const GARDEN_CHAPTER = 1;   // 텃밭은 1장 평가를 통과하면 열림(src/ui/home.js·garden.js와 같음)
+
+/** 오늘 텃밭 주문을 해낼 수 있나: 텃밭이 열렸고(1장 평가), 텃밭을 한 번 이상 실행했고(garden.runs > 0, 판정 C65 —
+ *  텃밭을 하지 않는 학습자는 v0.10 퀘스트 그대로), 남은 주문이 있고, 지금 주문의 장 평가를 끝냄(기다림 아님) */
+export function gardenOrderOpen(save) {
+  const done = save && Array.isArray(save.completed_lessons) ? save.completed_lessons : [];
+  if (!done.includes(examId(GARDEN_CHAPTER))) return false;
+  const runs = save.garden?.runs;
+  if (!(typeof runs === "number" && Number.isFinite(runs) && runs > 0)) return false;
+  const raw = save.garden?.order?.idx;
+  const idx = Number.isInteger(raw) && raw >= 0 ? raw : 0;   // 없거나 이상하면 state.js cleanGarden처럼 첫 주문
+  const order = ORDERS[idx];
+  return !!order && done.includes(examId(order.need));
+}
+
+const NEEDS = { garden: gardenOrderOpen };
+const BASE = QUESTS.filter((q) => !q.needs).map((q) => q.id);
+const EXTRA = QUESTS.filter((q) => q.needs);
+
+/** 같은 날짜 → 같은 3개. 조건 없는 6개를 날짜 씨앗으로 섞은 뒤, 복습 목록이 비면 q_review3을 빼고 앞의 3개.
+ *  (섞는 대상이 늘 6개라서 복습 목록 유무와 관계없이 나머지 순서가 같음)
+ *  조건 퀘스트(q_garden, 조건 gardenOrderOpen)는 조건이 맞을 때만, 같은 씨앗을 이어 써서 후보 n개 + 1개 중 3개를 고르는 것과 같은 확률(3/(n+1))로
+ *  앞의 3개 중 한 자리를 바꾼다. 조건이 안 맞으면 씨앗을 더 쓰지 않으므로 v0.10과 똑같은 3개. */
 export function pickQuests(today, save) {
   const rng = mulberry32(hashStr(String(today)));
-  const order = QUESTS.map((q) => q.id);
+  const order = [...BASE];
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [order[i], order[j]] = [order[j], order[i]];
   }
   const reviewEmpty = !save || !Array.isArray(save.review_queue) || save.review_queue.length === 0;
-  return order.filter((id) => !(reviewEmpty && id === "q_review3")).slice(0, 3);
+  const pool = order.filter((id) => !(reviewEmpty && id === "q_review3"));
+  const picks = pool.slice(0, 3);
+  let n = pool.length;
+  for (const q of EXTRA) {
+    if (!NEEDS[q.needs] || !NEEDS[q.needs](save)) continue;
+    n += 1;
+    if (rng() < 3 / n) picks[Math.floor(rng() * 3)] = q.id;
+  }
+  return picks;
 }
 
 const KNOWN = new Set(QUESTS.map((q) => q.id));

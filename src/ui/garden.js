@@ -1,5 +1,7 @@
 // v0.10 「파이의 텃밭」 화면: 텃밭 그림 + 주문 게시판 + 노드 흐름 편집기(또는 코드 모드) + 실행·재생 + 성장
 // 설계: docs/specs/2026-11-05-파이의-텃밭-설계.md · 계획서 작업 4
+// v0.11(docs/specs/2026-11-05-텃밭-6-9장-설계.md): 값 넣어 말하기·목록에서 하나씩(목록 편집 창, 목록 값)·창고 보기 조건·
+//   위치 알기(x·y 값 비교), 텃밭 전용 오류 설명(src/garden/errors.js)
 //
 // 규칙은 runner.py의 farm 모듈(실행), 노드·코드는 src/garden/nodes.js, 저장·주문·성장은 src/garden/state.js,
 // 그림·재생 단계는 src/garden/view.js에 있다. 이 화면은 그것들을 이어 붙이고 그리기만 한다.
@@ -7,7 +9,9 @@
 import {
   NODES, COND, VAR_NAMES, FUNC_NAMES, OPS, VALUE_RANGE, MAX_NODES, MSG as NODE_MSG,
   codegen, validate, unlockedKinds, newNode, insertNode, moveNode, removeNode, updateArgs, setElse, countNodes,
+  CROP_NAMES, LIST_TYPES, LIST_ITEMS, LIST_LABELS, LIST_MAX, LIST_DEFAULTS, COND_LOCKS, availableValues, loopVarAvailable, cleanList,
 } from "../garden/nodes.js";
+import { gardenExplain } from "../garden/errors.js";
 import {
   fillGarden, runInput, applyRun, currentOrder, canBuy, buy, deliver, grantOrderXP, settleAll, passedChapters,
 } from "../garden/state.js";
@@ -32,7 +36,16 @@ const EVENT_SAY = {
 };
 const frameSay = (f) => f.say || (f.fx && (EVENT_SAY[f.fx.reason] || EVENT_SAY[f.fx.t])) || null;
 const RUN_HINT = "「실행」을 누르면 파이가 노드를 위에서부터 차례로 해요.";
-const KIND_ORDER = ["move", "harvest", "plant", "say", "setvar", "addvar", "if", "def", "call", "repeat", "while"];
+const KIND_ORDER = ["move", "harvest", "plant", "say", "setvar", "addvar", "if", "def", "call", "repeat", "while", "sayval", "foreach", "where"];
+// 목록 변수 기본 이름(자리가 틀려 범위를 못 찾을 때 — 오류는 노드에 따로 보임)
+const LV_DEF = { crop: "crop", dir: "way" };
+const isLV = (v) => !!v && typeof v === "object" && v.loopVar === true;
+const isStoreCond = (c) => !!c && typeof c === "object" && "store" in c;
+// 표지 목표(kindsUsed) 이름
+const MARK_LABEL = {
+  loopvar: "목록 값 쓰기", "loopvar:act": "목록 값으로 심기·이동하기", "cond:store": "창고 보기 조건 쓰기", "cond:pos": "위치 조건 쓰기",
+};
+const VAL_SRC = { var: "기억한 값", pos: "파이 위치", loop: "목록 값" };
 
 // 작물 작은 그림(창고 표시용, 24 격자)
 const CROP_ICON = {
@@ -45,17 +58,21 @@ const cropNames = (obj) => Object.entries(obj).filter(([, n]) => n > 0);
 
 // ---- 노드 글 ----
 function condLabel(c) {
+  if (isStoreCond(c)) return `창고 ${c.store?.crop} ${c.store?.op} ${c.store?.num}`;
   if (c && typeof c === "object") return `${c.var} ${c.op} ${c.num}`;
   const f = COND.find((x) => x.id === c);
   return f ? f.label : String(c ?? "");
 }
 
-/** 노드 한 줄에 보일 값 단추들: [{ arg, text, mono }] */
-function argChips(n) {
+/** 노드 한 줄에 보일 값 단추들: [{ arg, text, mono }]. lv(type): 그 자리 목록 변수 이름(crop·way·crop2…) */
+function argChips(n, lv = (t) => LV_DEF[t]) {
   const a = n.args || {};
+  const val = (v, t) => (isLV(v) ? { text: lv(v.type || t), mono: true } : { text: v });
   switch (n.kind) {
-    case "move": return [{ arg: "dir", text: a.dir }];
-    case "plant": return [{ arg: "crop", text: a.crop }];
+    case "move": return [{ arg: "dir", ...val(a.dir, "dir") }];
+    case "plant": return [{ arg: "crop", ...val(a.crop, "crop") }];
+    case "sayval": return [{ arg: "pre", text: `“${a.pre ?? ""}”` }, { arg: "var", ...val(a.var), mono: true }, { arg: "post", text: `“${a.post ?? ""}”` }];
+    case "foreach": return [{ arg: "list", text: (a.list?.items || []).join("·") }];
     case "say": return [{ arg: "text", text: `“${a.text ?? ""}”` }];
     case "setvar": return [{ arg: "name", text: a.name, mono: true }, { arg: "value", text: `= ${a.value}`, mono: true }];
     case "addvar": return [{ arg: "name", text: a.name, mono: true }, { arg: "value", text: `+ ${a.value}`, mono: true }];
@@ -76,7 +93,8 @@ function goalText(o) {
     case "run_harvest":
       return `한 번 실행에 ${g.crop || "작물"} ${g.n}개 거두기${g.max_actions ? ` (행동 ${g.max_actions}번 안에)` : ""}`
         + (g.kind ? ` · 「${NODES[g.kind]?.label ?? g.kind}」 노드로` : "");
-    case "use": return `「${NODES[g.kind]?.label ?? g.kind}」 노드를 넣고 끝까지 실행하기`;
+    case "use": return MARK_LABEL[g.kind] ? `「${MARK_LABEL[g.kind]}」 — 노드로 끝까지 실행하기`
+      : `「${NODES[g.kind]?.label ?? g.kind}」 노드를 넣고 끝까지 실행하기`;
     case "deliver": return `창고의 ${g.crop} ${g.n}개 보내기`;
     case "grid": return `「성장」에서 밭을 ${g.size}×${g.size}로 넓히기`;
     default: return "";
@@ -316,16 +334,32 @@ export function render(root, ctx) {
   }
 
   // ---- 노드 흐름 ----
+  // 목록에서 하나씩 노드 id → 코드의 변수 이름(codegen이 정한 그대로: for crop in [...])
+  let feNames = new Map();
+  function foreachNames(prog) {
+    const { code, lineMap } = codegen(prog);
+    const m = new Map();
+    code.split("\n").forEach((l, i) => {
+      const r = /^\s*for (\w+) in \[/.exec(l);
+      const id = lineMap[i + 1];
+      if (r && id != null && !m.has(id)) m.set(id, r[1]);
+    });
+    return m;
+  }
+  const feName = (n) => feNames.get(n.id) || LV_DEF[n.args?.list?.type] || "crop";
   function nodeRow(n, depth, errs) {
     const spec = NODES[n.kind];
     const label = spec ? spec.label : n.kind;
     const mine = errs.filter((e) => e.nodeId === n.id).map((e) => e.msg);
     if (S.runErr === n.id) mine.push("여기서 오류가 났어요");
     const bad = mine.length > 0;
-    const chips = argChips(n).map((c) =>
+    const lv = (t) => loopVarAvailable(S.garden.program, n.id, t) || LV_DEF[t];
+    const chips = argChips(n, lv).map((c) =>
       `<button class="g-arg${c.mono ? " mono" : ""}" data-arg="${c.arg}" aria-label="${esc(`${label}: ${c.text}, 바꾸기`)}">${esc(c.text)}</button>`).join("");
+    const extra = n.kind === "foreach" ? `<span class="g-var mono" aria-label="${esc(`목록 변수 ${feName(n)}`)}">${esc(feName(n))}</span>`
+      : n.kind === "where" ? `<span class="g-hint">x, y가 생겨요</span>` : "";
     return `<div class="g-node ${chapterClass(n.kind)}${bad ? " bad" : ""}" data-id="${esc(n.id)}" data-kind="${esc(n.kind)}" data-depth="${depth}">
-      <div class="g-node-main"><span class="g-kind">${esc(label)}</span>${chips}</div>
+      <div class="g-node-main"><span class="g-kind">${esc(label)}</span>${chips}${extra}</div>
       <button class="g-menu" aria-label="${esc(`${label} 노드 메뉴`)}">${icon("more")}</button>
       ${bad ? `<p class="g-err">${mine.map((m) => `<span>${esc(m)}</span>`).join("")}</p>` : ""}
     </div>`;
@@ -353,7 +387,7 @@ export function render(root, ctx) {
       if (!S.ed) {
         progEl.innerHTML = `<div class="g-prog-head"><h2 id="g-prog-title">${icon("code")}<span>파이썬 코드</span></h2>
           <button class="btn ghost small" id="to-nodes">노드로 돌아가기</button></div>
-          <p class="g-mode-note">명령: <code>move("오른쪽")</code> <code>plant("당근")</code> <code>harvest()</code> <code>can_harvest()</code> <code>what_here()</code> <code>print()</code></p>
+          <p class="g-mode-note">명령: <code>move("오른쪽")</code> <code>plant("당근")</code> <code>harvest()</code> <code>can_harvest()</code> <code>what_here()</code> <code>store()</code> <code>where()</code> <code>print()</code></p>
           <div class="editor-box g-editor" id="g-ed"></div>`;
         S.ed = createEditor(progEl.querySelector("#g-ed"), {
           doc: S.garden.code || "",
@@ -376,6 +410,7 @@ export function render(root, ctx) {
     codeEl.hidden = false;
     const prog = S.garden.program;
     const errs = validate(prog, unlocked);
+    feNames = foreachNames(prog);
     progEl.innerHTML = `<div class="g-prog-head"><h2 id="g-prog-title">${icon("sprout")}<span>파이에게 시킬 일</span></h2>
         <button class="btn ghost small" id="to-code">${icon("code")}<span>코드로 쓰기</span></button></div>
       <ol class="g-flow" aria-label="노드 흐름(위에서부터 차례로 실행)">${listHTML(prog, 0, errs, null, "body")}</ol>
@@ -523,7 +558,23 @@ export function render(root, ctx) {
       const used = new Set(S.garden.program.filter((x) => x.kind === "def").map((x) => x.args.name));
       n.args.name = FUNC_NAMES.find((f) => !used.has(f)) || FUNC_NAMES[0];
     }
-    setProgram(insertNode(S.garden.program, parent, slot, Infinity, n));
+    if (kind === "foreach") {
+      // 목록 종류는 만들 때 정한다(작물 목록 → crop, 방향 목록 → way)
+      const t = await sheet({
+        title: "어떤 목록인가요?", cls: "g-ltype-sheet",
+        html: `<ul class="g-pick">${LIST_TYPES.map((t) => `<li><button class="g-pick-btn" data-v="${t}">
+          <span class="g-pick-name">${esc(LIST_LABELS[t])}</span><code>${esc(LIST_ITEMS[t].join("·"))}</code></button></li>`).join("")}</ul>`,
+      });
+      if (!LIST_TYPES.includes(t) || S.destroyed) return;
+      n.args.list = { type: t, items: LIST_DEFAULTS[t].slice() };
+    }
+    let next = insertNode(S.garden.program, parent, slot, Infinity, n);
+    if (kind === "sayval") {
+      // 그 자리에서 쓸 수 있는 첫 값(기억한 값 → x·y → 목록 값). 없으면 기본 count 그대로(오류로 알려 줌)
+      const first = availableValues(next, n.id)[0];
+      if (first) next = updateArgs(next, n.id, { var: first.arg });
+    }
+    setProgram(next);
     focusFirst(`${nodeSel(n.id)} .g-arg`, `${nodeSel(n.id)} .g-menu`);
     ctx.sound.play("correct");
   }
@@ -588,7 +639,7 @@ export function render(root, ctx) {
     const spec = NODES[n.kind];
     const aspec = spec.args[arg];
     const cur = n.args[arg];
-    const title = `${spec.label}: ${{ dir: "방향", crop: "작물", text: "할 말", name: n.kind === "def" || n.kind === "call" ? "내 노드 이름" : "값 이름", value: "숫자", n: "몇 번", cond: "조건" }[arg] || arg}`;
+    const title = `${spec.label}: ${{ dir: "방향", crop: "작물", text: "할 말", name: n.kind === "def" || n.kind === "call" ? "내 노드 이름" : "값 이름", value: "숫자", n: "몇 번", cond: "조건", pre: "앞 글자", post: "뒤 글자", var: "값", list: "목록" }[arg] || arg}`;
     const refocus = () => focusFirst(`${nodeSel(n.id)} .g-arg[data-arg="${arg}"]`, `${nodeSel(n.id)} .g-menu`);
     const listBtns = (choices, mono) => `<ul class="g-pick">${choices.map((c) =>
       `<li><button class="g-pick-btn${String(c) === String(cur) ? " on" : ""}" data-v="${esc(c)}"${String(c) === String(cur) ? ' aria-current="true"' : ""}>${mono ? `<code>${esc(c)}</code>` : `<span class="g-pick-name">${esc(c)}</span>`}</button></li>`).join("")}</ul>`;
@@ -600,9 +651,16 @@ export function render(root, ctx) {
         const defs = S.garden.program.filter((x) => x.kind === "def").map((x) => x.args.name);
         note = `<p class="g-note">${defs.length ? `만든 내 노드: ${defs.map((d) => `<code>${esc(d)}</code>`).join(" ")}` : "먼저 「내 노드 만들기」로 만들어요"}</p>`;
       }
-      const v = await sheet({ title, html: note + listBtns(aspec.choices, mono) });
+      // 목록에서 하나씩 안이면 그 목록 변수(crop·way)도 고를 수 있다
+      const lvName = aspec.loopType ? loopVarAvailable(S.garden.program, n.id, aspec.loopType) : null;
+      let html = note + listBtns(aspec.choices, mono);
+      if (lvName) {
+        html = html.replace(/<\/ul>$/, `<li><button class="g-pick-btn g-lv${isLV(cur) ? " on" : ""}" data-v="__loop"${isLV(cur) ? ' aria-current="true"' : ""}>
+          <span class="g-pick-name">목록 값</span><code>${esc(lvName)}</code></button></li></ul>`);
+      }
+      const v = await sheet({ title, html });
       if (v == null || S.destroyed) return;
-      setProgram(updateArgs(S.garden.program, n.id, { [arg]: v }));
+      setProgram(updateArgs(S.garden.program, n.id, { [arg]: v === "__loop" ? { loopVar: true, type: aspec.loopType } : v }));
       refocus();
       return;
     }
@@ -623,10 +681,11 @@ export function render(root, ctx) {
       return;
     }
     if (aspec.type === "text") {
+      const min = aspec.min ?? 1;
       let val = cur;
       const v = await sheet({
         title,
-        html: `<label class="g-label" for="g-text">파이가 말풍선으로 말해요 (${aspec.max}자까지)</label>
+        html: `<label class="g-label" for="g-text">${{ pre: "값 앞에 붙일 글자", post: "값 뒤에 붙일 글자" }[arg] || "파이가 말풍선으로 말해요"} (${aspec.max}자까지${min ? "" : ", 비워도 돼요"})</label>
           <input class="g-input" id="g-text" type="text" value="${esc(cur)}" autocomplete="off" enterkeyhint="done" data-autofocus>
           <p class="g-note" id="g-text-n"></p>
           <button class="btn primary wide" id="g-ok">정하기</button>`,
@@ -636,8 +695,9 @@ export function render(root, ctx) {
           const ok = box.querySelector("#g-ok");
           const paint = () => {
             const len = [...inp.value].length;
-            const good = inp.value.trim().length > 0 && len <= aspec.max;
-            cnt.textContent = `${len}/${aspec.max}자${len > aspec.max ? " · 너무 길어요" : inp.value.trim() ? "" : " · 한 글자 이상 써요"}`;
+            const empty = min > 0 && !inp.value.trim();
+            const good = !empty && len <= aspec.max;
+            cnt.textContent = `${len}/${aspec.max}자${len > aspec.max ? " · 너무 길어요" : empty ? " · 한 글자 이상 써요" : ""}`;
             cnt.classList.toggle("bad", !good);
             ok.disabled = !good;
             val = inp.value;
@@ -653,40 +713,152 @@ export function render(root, ctx) {
       refocus();
       return;
     }
+    if (aspec.type === "value") {
+      const vals = availableValues(S.garden.program, n.id);
+      const same = (x) => (isLV(cur) ? isLV(x.arg) && x.arg.type === cur.type : x.arg === cur);
+      const v = await sheet({
+        title,
+        html: vals.length ? `<ul class="g-pick">${vals.map((x, i) => `<li><button class="g-pick-btn${same(x) ? " on" : ""}" data-v="${i}" data-name="${esc(x.name)}">
+            <code class="g-pick-name">${esc(x.name)}</code><small>${VAL_SRC[x.source]}</small></button></li>`).join("")}</ul>`
+          : `<p class="g-note">여기서 쓸 수 있는 값이 없어요. 위쪽에서 「값 기억하기」·「위치 알기」로 값을 먼저 만들어요.</p>`,
+      });
+      if (v == null || S.destroyed || !vals[+v]) return;
+      setProgram(updateArgs(S.garden.program, n.id, { [arg]: vals[+v].arg }));
+      refocus();
+      return;
+    }
+    if (aspec.type === "list") {
+      // 저장 정리가 목록 모양을 맞추지만, 혹시 이상한 값이 와도 창이 깨지지 않게 기본 목록으로 연다
+      const L = cleanList(cur);
+      const name = feName(n);
+      let sel = -1;
+      const v = await sheet({
+        title, cls: "g-list-sheet",
+        html: `<p class="g-note">${esc(LIST_LABELS[L.type])} · 하나씩 꺼낸 값의 이름 <code>${esc(name)}</code></p>
+          <ol class="g-li" id="g-li" aria-label="목록 칸(눌러서 고르기)"></ol>
+          <div class="g-li-tools">
+            <button class="btn ghost" id="g-li-left" aria-label="고른 칸 앞으로">←</button>
+            <button class="btn ghost" id="g-li-right" aria-label="고른 칸 뒤로">→</button>
+            <button class="btn ghost" id="g-li-del">${icon("trash")}<span>빼기</span></button>
+          </div>
+          <p class="g-note" id="g-li-n"></p>
+          <div class="g-li-add">${LIST_ITEMS[L.type].map((it) => `<button class="btn ghost" data-add="${esc(it)}">${icon("plus")}<span>${esc(it)}</span></button>`).join("")}</div>
+          <pre class="code g-li-code"></pre>
+          <button class="btn primary wide" id="g-ok">정하기</button>`,
+        bind: (box, done) => {
+          const ol = box.querySelector("#g-li");
+          const q = (s) => box.querySelector(s);
+          const paint = (focusSel) => {
+            ol.innerHTML = L.items.map((it, i) => `<li><button class="g-li-item${i === sel ? " on" : ""}" data-i="${i}" data-item="${esc(it)}" aria-pressed="${i === sel}">
+              <small>${i + 1}</small>${esc(it)}</button></li>`).join("");
+            q("#g-li-left").disabled = sel <= 0;
+            q("#g-li-right").disabled = sel < 0 || sel >= L.items.length - 1;
+            q("#g-li-del").disabled = sel < 0 || L.items.length <= 1;
+            box.querySelectorAll("[data-add]").forEach((b) => { b.disabled = L.items.length >= LIST_MAX; });
+            q("#g-li-n").textContent = `${L.items.length}/${LIST_MAX}개${sel < 0 ? " · 칸을 눌러 고르면 옮기거나 뺄 수 있어요" : ""}`;
+            q(".g-li-code").textContent = `for ${name} in [${L.items.map((x) => JSON.stringify(x)).join(", ")}]:`;
+            if (focusSel && sel >= 0) ol.querySelector(`[data-i="${sel}"]`)?.focus({ preventScroll: true });
+          };
+          // 누른 단추가 막히면(빼기 뒤·6개가 참) 초점이 몸통으로 빠지지 않게 옮긴다
+          const keepFocus = (sel2) => (typeof sel2 === "string" ? box.querySelector(sel2) : ol.querySelector(`[data-i="${sel2}"]`))
+            ?.focus({ preventScroll: true });
+          const swap = (d) => {
+            const j = sel + d;
+            if (sel < 0 || j < 0 || j >= L.items.length) return;
+            [L.items[sel], L.items[j]] = [L.items[j], L.items[sel]];
+            sel = j;
+            paint();
+          };
+          ol.addEventListener("click", (e) => {
+            const b = e.target.closest("[data-i]");
+            if (!b) return;
+            sel = sel === +b.dataset.i ? -1 : +b.dataset.i;
+            paint(true);
+          });
+          q("#g-li-left").addEventListener("click", () => swap(-1));
+          q("#g-li-right").addEventListener("click", () => swap(1));
+          q("#g-li-del").addEventListener("click", () => {
+            if (sel < 0 || L.items.length <= 1) return;
+            const at = Math.min(sel, L.items.length - 2);
+            L.items.splice(sel, 1);
+            sel = -1;
+            paint();
+            keepFocus(at);
+          });
+          box.querySelectorAll("[data-add]").forEach((b) => b.addEventListener("click", () => {
+            if (L.items.length >= LIST_MAX) return;
+            L.items.push(b.dataset.add);
+            paint();
+            if (L.items.length >= LIST_MAX) keepFocus("#g-ok");
+          }));
+          q("#g-ok").addEventListener("click", () => done("ok"));
+          paint();
+        },
+      });
+      if (v !== "ok" || S.destroyed) return;
+      setProgram(updateArgs(S.garden.program, n.id, { list: L }));
+      refocus();
+      return;
+    }
     if (aspec.type === "cond") {
-      const isVar = cur && typeof cur === "object";
+      // 창고 비교 { store } 와 값 비교 { var } 는 둘 다 객체라 따로 가른다
+      const isStore = isStoreCond(cur);
+      const isVar = !!cur && typeof cur === "object" && !isStore;
       const varOpen = unlocked.has("setvar");
+      const storeOpen = unlocked.has("cond:store");
       const vc = isVar ? { ...cur } : { var: VAR_NAMES[0], op: "<", num: 5 };
+      const sc = isStore ? { ...cur.store } : { crop: CROP_NAMES[0], op: "<", num: 10 };
+      // 값 비교에 쓸 이름: 기억하기 이름 + 이 자리에서 쓸 수 있는 x·y(목록 변수는 빼고)
+      const pos = availableValues(S.garden.program, n.id).filter((x) => x.source === "pos").map((x) => x.name);
+      const names = [...VAR_NAMES, ...pos];
+      if (isVar && !names.includes(vc.var)) names.push(vc.var);
       let getNum = () => vc.num;
+      let getNum2 = () => sc.num;
+      const segHTML = (label, attr, list, on) => `<div class="g-seg" role="radiogroup" aria-label="${label}">${list.map((x) =>
+        `<button class="g-seg-btn mono${x === on ? " on" : ""}" role="radio" aria-checked="${x === on}" data-${attr}="${esc(x)}">${esc(x)}</button>`).join("")}</div>`;
+      const storeHTML = storeOpen ? `<section class="g-varcond g-storecond">
+          <h3>창고 보기 <code>store()</code></h3>
+          ${segHTML("작물", "scrop", CROP_NAMES, sc.crop)}${segHTML("비교", "sop", OPS, sc.op)}
+          ${stepperHTML("g-step2", sc.num, VALUE_RANGE.min, VALUE_RANGE.max)}
+          <button class="btn primary wide" id="g-store-ok">창고 보기로 정하기</button>
+        </section>` : `<section class="g-varcond g-storecond locked"><h3>${icon("lock")}<span>창고 보기</span></h3>
+          <p class="g-note">${esc(NODE_MSG.locked(COND_LOCKS["cond:store"]))}</p></section>`;
       const varHTML = varOpen ? `<section class="g-varcond">
           <h3>값과 비교하기</h3>
-          <div class="g-seg" role="radiogroup" aria-label="값 이름">${VAR_NAMES.map((x) => `<button class="g-seg-btn mono${x === vc.var ? " on" : ""}" role="radio" aria-checked="${x === vc.var}" data-var="${x}">${x}</button>`).join("")}</div>
-          <div class="g-seg" role="radiogroup" aria-label="비교">${OPS.map((x) => `<button class="g-seg-btn mono${x === vc.op ? " on" : ""}" role="radio" aria-checked="${x === vc.op}" data-op="${esc(x)}">${esc(x)}</button>`).join("")}</div>
+          ${segHTML("값 이름", "var", names, vc.var)}${segHTML("비교", "op", OPS, vc.op)}
           ${stepperHTML("g-step", vc.num, VALUE_RANGE.min, VALUE_RANGE.max)}
           <button class="btn primary wide" id="g-ok">값 비교로 정하기</button>
         </section>` : `<p class="g-note">${esc(NODE_MSG.locked(NODES.setvar.chapter))}: 값과 비교하기</p>`;
       const v = await sheet({
         title,
         html: `<ul class="g-pick">${COND.map((c) => `<li><button class="g-pick-btn${!isVar && c.id === cur ? " on" : ""}" data-v="${c.id}">
-          <span class="g-pick-name">${esc(c.label)}</span><code>${esc(c.code)}</code></button></li>`).join("")}</ul>${varHTML}`,
+          <span class="g-pick-name">${esc(c.label)}</span><code>${esc(c.code)}</code></button></li>`).join("")}</ul>${varHTML}${storeHTML}`,
         bind: (box, done) => {
-          if (!varOpen) return;
-          const seg = (attr, key) => box.querySelectorAll(`[data-${attr}]`).forEach((b) => b.addEventListener("click", () => {
-            vc[key] = b.dataset[attr];
+          const seg = (attr, obj, key) => box.querySelectorAll(`[data-${attr}]`).forEach((b) => b.addEventListener("click", () => {
+            obj[key] = b.dataset[attr];
             box.querySelectorAll(`[data-${attr}]`).forEach((x) => {
               const on = x === b;
               x.classList.toggle("on", on);
               x.setAttribute("aria-checked", String(on));
             });
           }));
-          seg("var", "var");
-          seg("op", "op");
-          getNum = bindStepper(box.querySelector("#g-step"));
-          box.querySelector("#g-ok").addEventListener("click", () => done("var"));
+          if (varOpen) {
+            seg("var", vc, "var");
+            seg("op", vc, "op");
+            getNum = bindStepper(box.querySelector("#g-step"));
+            box.querySelector("#g-ok").addEventListener("click", () => done("var"));
+          }
+          if (storeOpen) {
+            seg("scrop", sc, "crop");
+            seg("sop", sc, "op");
+            getNum2 = bindStepper(box.querySelector("#g-step2"));
+            box.querySelector("#g-store-ok").addEventListener("click", () => done("store"));
+          }
         },
       });
       if (v == null || S.destroyed) return;
-      const cond = v === "var" ? { var: vc.var, op: vc.op, num: getNum() } : v;
+      const cond = v === "var" ? { var: vc.var, op: vc.op, num: getNum() }
+        : v === "store" ? { store: { crop: sc.crop, op: sc.op, num: getNum2() } } : v;
       setProgram(updateArgs(S.garden.program, n.id, { cond }));
       refocus();
     }
@@ -754,7 +926,7 @@ export function render(root, ctx) {
     }
   }
 
-  function resultHTML({ ap, r, err }) {
+  function resultHTML({ ap, r, err, code }) {
     const parts = [];
     const got = cropNames(ap ? ap.harvested : {});
     if (got.length) {
@@ -775,7 +947,12 @@ export function render(root, ctx) {
       if (notes.length) parts.push(`<p class="g-lost">${notes.map(esc).join("<br>")}</p>`);
       parts.push(`<p class="g-meta">행동 ${r.farm.actions}번</p>`);
     }
-    if (err) parts.push(errorPanel(err, ctx.save.outfit));
+    // 텃밭 전용 설명이 있으면 먼저(오류 줄의 코드 글로 store()["수박"] 같은 KeyError를 가림)
+    if (err) {
+      const ex = gardenExplain(err, err.line ? (code || "").split("\n")[err.line - 1] ?? null : null);
+      // 「move·plant·…」 긴 명령 줄이 글자 중간에서 꺾이지 않게 「·」 뒤에 보이지 않는 줄바꿈 자리
+      parts.push(errorPanel(err, ctx.save.outfit, ex && { title: ex.title, text: ex.text.replaceAll("·", "·\u200b") }));
+    }
     return parts.join("");
   }
 
@@ -851,7 +1028,7 @@ export function render(root, ctx) {
     if (err && mode === "nodes" && err.line && lineMap) S.runErr = lineMap[err.line] ?? null;
     if (mode === "nodes") paintProg();
     else if (err && S.ed && err.line) S.ed.markLine(err.line, false);
-    resultEl.innerHTML = resultHTML({ ap, r, err });
+    resultEl.innerHTML = resultHTML({ ap, r, err, code });
     if (err || ap.rejected) ctx.sound.play("error");
     else if (cropNames(ap.harvested).length) ctx.sound.play("correct");
     setState("idle");

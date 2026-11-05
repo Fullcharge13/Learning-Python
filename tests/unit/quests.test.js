@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pickQuests, tick, ensureQuests } from "../../src/quests.js";
+import { pickQuests, tick, ensureQuests, gardenOrderOpen } from "../../src/quests.js";
+import { ORDERS } from "../../data/garden.js";
 import { QUESTS } from "../../data/quests.js";
 
 // Save fixture per ledger (C3): built locally, no import of src/save.js
@@ -31,14 +32,17 @@ function dates(n, start = "2026-01-01") {
   return out;
 }
 
-test("QUESTS table: 6 ledger ids, rewards 5/5/8/8/5/8", () => {
+test("QUESTS table: 6 ledger ids + q_garden(v0.11), rewards 5/5/8/8/5/8/5", () => {
   assert.deepEqual(QUESTS.map((q) => q.id),
-    ["q_lessons2", "q_xp20", "q_hintfree", "q_fixerr", "q_review3", "q_perfect"]);
-  assert.deepEqual(QUESTS.map((q) => q.reward), [5, 5, 8, 8, 5, 8]);
+    ["q_lessons2", "q_xp20", "q_hintfree", "q_fixerr", "q_review3", "q_perfect", "q_garden"]);
+  assert.deepEqual(QUESTS.map((q) => q.reward), [5, 5, 8, 8, 5, 8, 5]);
   assert.deepEqual(QUESTS.map((q) => q.key),
-    ["lesson_done", "xp", "hintfree_pass", "fixed_error_pass", "review_item", "perfect_lesson"]);
-  assert.deepEqual(QUESTS.map((q) => q.goal), [2, 20, 1, 1, 3, 1]);
+    ["lesson_done", "xp", "hintfree_pass", "fixed_error_pass", "review_item", "perfect_lesson", "garden_order"]);
+  assert.deepEqual(QUESTS.map((q) => q.goal), [2, 20, 1, 1, 3, 1, 1]);
   for (const q of QUESTS) assert.ok(typeof q.name === "string" && q.name.length > 0);
+  const g = QUESTS.find((q) => q.id === "q_garden");
+  assert.equal(g.name, "텃밭 주문 1개 해내기");
+  assert.equal(g.needs, "garden");
 });
 
 test("same_day: same date twice -> same result, 3 items, distinct", () => {
@@ -248,4 +252,96 @@ test("non-finite stored progress counts as 0 when incrementing", () => {
     const r = tick(s0, "xp", today, 5);
     assert.equal(r.save.quests.progress.q_xp20, 5, String(bad));
   }
+});
+
+// ---------------------------------------------------------------- v0.11 q_garden (설계 §3)
+
+// v0.10까지의 뽑기(6개를 날짜 씨앗으로 섞고 복습 규칙 적용) — 텃밭이 잠긴 학습자는 이것과 똑같아야 한다
+function oldPick(today, save) {
+  const hashStr = (str) => { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; };
+  const mul = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const rng = mul(hashStr(String(today)));
+  const order = ["q_lessons2", "q_xp20", "q_hintfree", "q_fixerr", "q_review3", "q_perfect"];
+  for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+  const reviewEmpty = !save || !Array.isArray(save.review_queue) || save.review_queue.length === 0;
+  return order.filter((id) => !(reviewEmpty && id === "q_review3")).slice(0, 3);
+}
+
+const garden = (idx, runs = 3) => ({ order: { idx, done: [], paid: [] }, runs });
+const OPEN = (over = {}) => mkSave({ completed_lessons: ["1-1", "1-2", "1-3", "1-4", "1-5"], garden: garden(0), ...over });
+
+test("q_garden: 텃밭이 잠겼거나(1장 평가 전) 텃밭을 한 번도 실행하지 않은 학습자는 365일 동안 한 번도 뽑히지 않고, 뽑기는 v0.10과 똑같음", () => {
+  for (const s of [mkSave(), mkSave({ review_queue: ["assign"] }), mkSave({ completed_lessons: ["1-1", "1-2", "1-3", "1-4"] }),
+    mkSave({ completed_lessons: ["2-5"], garden: garden(5) }),
+    // 텃밭은 열렸지만 한 번도 실행하지 않은 학습자(C65): v0.10 숫자 그대로
+    OPEN({ garden: garden(0, 0) }), OPEN({ garden: undefined }), OPEN({ garden: { order: { idx: 0 } } }),
+    OPEN({ garden: garden(0, 0), review_queue: ["assign"] })]) {
+    for (const d of dates(365)) {
+      const p = pickQuests(d, s);
+      assert.ok(!p.includes("q_garden"), d);
+      assert.deepEqual(p, oldPick(d, s), d);
+    }
+  }
+});
+
+test("q_garden: 텃밭이 열리면 뽑힐 수 있음(대략 3/6~3/7의 날), 언제나 서로 다른 3개", () => {
+  for (const s of [OPEN(), OPEN({ review_queue: ["assign"] })]) {
+    let n = 0;
+    for (const d of dates(700)) {
+      const p = pickQuests(d, s);
+      assert.equal(p.length, 3);
+      assert.equal(new Set(p).size, 3);
+      if (!s.review_queue.length) assert.ok(!p.includes("q_review3"));
+      if (p.includes("q_garden")) n++;
+    }
+    assert.ok(n > 700 * 0.3 && n < 700 * 0.6, `뽑힌 날 ${n}/700`);
+  }
+});
+
+test("q_garden: 열렸어도 지금 해낼 주문이 없으면 빠짐(주문을 다 끝냄 / 지금 주문의 장을 아직 안 끝냄)", () => {
+  const all = OPEN({ garden: garden(ORDERS.length) });
+  const waiting = OPEN({ garden: garden(ORDERS.findIndex((o) => o.need === 2)) });
+  assert.equal(gardenOrderOpen(all), false);
+  assert.equal(gardenOrderOpen(waiting), false);
+  assert.equal(gardenOrderOpen(OPEN()), true);
+  assert.equal(gardenOrderOpen(OPEN({ garden: undefined })), false, "garden 없는 옛 저장 = 실행 0번");
+  assert.equal(gardenOrderOpen(OPEN({ garden: garden(0, 0) })), false, "실행 0번(C65)");
+  assert.equal(gardenOrderOpen(OPEN({ garden: { order: { idx: 0 }, runs: "x" } })), false, "이상한 runs = 0번");
+  assert.equal(gardenOrderOpen(OPEN({ garden: { order: { idx: "x" }, runs: 1 } })), true, "이상한 idx = 첫 주문");
+  assert.equal(gardenOrderOpen(null), false);
+  for (const d of dates(365)) {
+    assert.ok(!pickQuests(d, all).includes("q_garden"));
+    assert.ok(!pickQuests(d, waiting).includes("q_garden"));
+  }
+});
+
+test("q_garden: 텃밭 열림 기준이 텃밭 화면(passedChapters, 장 평가 레슨)과 같음 + 실행 1번 이상 — 모든 장 평가 id가 「N-5」", async () => {
+  const { passedChapters } = await import("../../src/garden/state.js");
+  const { readdirSync } = await import("node:fs");
+  const dir = new URL("../../data/lessons/", import.meta.url);
+  const chapters = [];
+  for (const f of readdirSync(dir).filter((x) => /^ch\d+\.js$/.test(x))) {
+    const m = await import(new URL(f, dir).href);
+    chapters.push({ id: m.CHAPTER.id, lessons: m.LESSONS });
+  }
+  for (const c of chapters) {
+    const exam = c.lessons.find((l) => l.isExam) || c.lessons[c.lessons.length - 1];
+    assert.equal(exam.id, `${c.id}-5`, `${c.id}장 평가 id`);
+  }
+  // 저장 몇 가지로 직접 대조: 열림 = 1장 통과 && 지금 주문의 장 통과
+  const cases = [mkSave(), OPEN(), OPEN({ garden: garden(0, 0) }), OPEN({ garden: garden(4) }), OPEN({ completed_lessons: ["1-5", "2-5"], garden: garden(4) }),
+    OPEN({ completed_lessons: ["1-5", "2-5", "3-5", "4-5", "5-5", "6-5", "7-5", "8-5"], garden: garden(20) })];
+  for (const s of cases) {
+    const passed = passedChapters(s, chapters);
+    const o = ORDERS[s.garden?.order?.idx ?? 0];
+    assert.equal(gardenOrderOpen(s), passed.has(1) && !!o && passed.has(o.need) && s.garden.runs > 0, JSON.stringify(s.completed_lessons));
+  }
+});
+
+test("q_garden: tick(\"garden_order\")로 끝남, 보상 5바이트", () => {
+  const today = "2026-11-05";
+  const s = OPEN({ quests: { date: today, ids: ["q_garden", "q_xp20", "q_perfect"], progress: {}, done: [], chest: false } });
+  const r = tick(s, "garden_order", today);
+  assert.deepEqual(r.finished, ["q_garden"]);
+  assert.equal(r.save.bytes, 5);
 });

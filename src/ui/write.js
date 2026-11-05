@@ -18,12 +18,13 @@ export function runEnv(item, t) {
 export const DRAFT_DEBOUNCE_MS = 500;
 
 /** 실행 오류 설명 칸(원래 오류 + 줄 + 한국어 설명). 텃밭 화면(v0.10)도 같이 쓴다 */
-export function errorPanel(err, outfit) {
-  const ex = explain(err, outfit);
+// over({ title, text }, 선택): 화면 전용 설명(예: 텃밭 gardenExplain)이 있으면 일반 설명 대신 쓴다
+export function errorPanel(err, outfit, over = null) {
+  const ex = over ? { title: over.title, body: over.text } : explain(err, outfit);
   const orig = err.type === "Timeout" ? "Timeout: 3초 안에 끝나지 않음"
     : `${err.type}${err.msg ? ": " + err.msg : ""}`;
   // 앱이 만든 한국어 오류 문구(차트 등)는 일반 설명보다 먼저 그대로 보여 준다
-  const own = /[가-힣]/.test(err.msg || "") ? `<p class="err-own">${esc(err.msg)}</p>` : "";
+  const own = !over && /[가-힣]/.test(err.msg || "") ? `<p class="err-own">${esc(err.msg)}</p>` : "";
   return `<div class="err-panel">
       <p class="err-orig mono" lang="en">${esc(orig)}${err.line ? ` <span lang="ko">(${err.line}번째 줄)</span>` : ""}</p>
       <h3>${icon("cross")}${esc(ex.title)}</h3>

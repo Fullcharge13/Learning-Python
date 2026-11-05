@@ -272,6 +272,20 @@ HEAD_LINKS = """<meta name="mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
 """
 
+def strip_runner(source):
+    """판정 C66: runner.py에서 주석과 설명 글(docstring)만 빼서 첫 파일을 줄인다(동작은 같음 — tests/py/test_runner_strip.py).
+    ast로 다시 써서 줄 번호가 바뀌지만, 학습자에게 보이는 오류 줄은 학습자 코드 기준이라 상관없다."""
+    import ast
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = node.body
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                    and isinstance(body[0].value.value, str):
+                node.body = body[1:] or [ast.Pass()]
+    return ast.unparse(tree) + "\n"
+
+
 CONFIG = """<script>
 window.RIA_VERSION = {version};
 window.RIA_PYODIDE_URL = {pyodide};
@@ -303,7 +317,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     if not all(h in b["app"] for h in HOOKS):
         raise SystemExit("build: bundled app lost %s" % "/".join(HOOKS))
     with open(os.path.join(SRC, "py", "runner.py"), encoding="utf-8") as f:
-        runner = f.read()
+        runner = strip_runner(f.read())
     with open(os.path.join(SRC, "index.html"), encoding="utf-8") as f:
         html = f.read()
 

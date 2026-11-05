@@ -6,7 +6,7 @@ import {
   grantOrderXP, passedChapters, ORDER_XP, MSG, farmConsistent,
 } from "../../src/garden/state.js";
 import { CROPS, UPGRADES, ORDERS } from "../../data/garden.js";
-import { NODES, unlockedKinds, validate, defaultProgram, newNode } from "../../src/garden/nodes.js";
+import { NODES, unlockedKinds, validate, defaultProgram, newNode, kindsUsed, codegen, COND_LOCKS } from "../../src/garden/nodes.js";
 import { newSave, migrate } from "../../src/save.js";
 
 const ALL = new Set([1, 2, 3, 4, 5]);
@@ -53,13 +53,13 @@ test("UPGRADES: 4가지, 값과 선행 조건", () => {
   for (const u of UPGRADES) assert.ok(typeof u.label === "string" && u.label.length > 0);
 });
 
-test("ORDERS: 15개, 장 순서(need 1..5), 장마다 4·3·3·2·3개, XP 5", () => {
-  assert.equal(ORDERS.length, 15);
+test("ORDERS: 22개, 장 순서(need 1..9), 장마다 4·3·3·2·3·1·2·2·2개, XP 5", () => {
+  assert.equal(ORDERS.length, 22);
   const needs = ORDERS.map((o) => o.need);
   assert.deepEqual(needs, [...needs].sort((a, b) => a - b));
-  const per = [1, 2, 3, 4, 5].map((n) => needs.filter((x) => x === n).length);
-  assert.deepEqual(per, [4, 3, 3, 2, 3]);
-  assert.equal(new Set(ORDERS.map((o) => o.id)).size, 15);
+  const per = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => needs.filter((x) => x === n).length);
+  assert.deepEqual(per, [4, 3, 3, 2, 3, 1, 2, 2, 2]);
+  assert.equal(new Set(ORDERS.map((o) => o.id)).size, 22);
   for (const o of ORDERS) {
     assert.equal(o.xp, 5);
     assert.ok(["deliver", "run_harvest", "use", "grid"].includes(o.goal.type), o.id);
@@ -71,24 +71,71 @@ test("ORDERS: 15개, 장 순서(need 1..5), 장마다 4·3·3·2·3개, XP 5", (
   }
 });
 
-test("ORDERS: 네 가지 목표 종류를 모두 씀, use 주문은 그 장에서 열리는 노드", () => {
-  const kinds = new Set(ORDERS.map((o) => o.goal.type));
-  assert.deepEqual([...kinds].sort(), ["deliver", "grid", "run_harvest", "use"]);
-  for (const o of ORDERS.filter((x) => x.goal.type === "use")) {
-    assert.ok(NODES[o.goal.kind], `${o.id}: 노드 종류`);
-    assert.ok(NODES[o.goal.kind].chapter <= o.need, `${o.id}: need 안에서 열림`);
+// v0.11 설계 §2 표: 6~9장 주문 7개
+test("ORDERS v0.11: 6~9장 주문 7개의 장·목표(설계 §2)", () => {
+  const by = Object.fromEntries(ORDERS.map((o) => [o.id, o]));
+  const want = [
+    ["o_sayval", 6, "수확 보고", { type: "use", kind: "sayval" }],
+    ["o_mix", 7, "섞어 심기", { type: "use", kind: "loopvar:act" }],
+    ["o_patrol", 7, "한 바퀴 순찰", { type: "run_harvest", n: 3, kind: "foreach" }],
+    ["o_lowstock", 8, "모자란 것만", { type: "use", kind: "cond:store" }],
+    ["o_potato_book", 8, "감자 장부", { type: "deliver", crop: "감자", n: 5 }],
+    ["o_where", 9, "줄 끝에서 내려가기", { type: "use", kind: "cond:pos" }],
+    ["o_zigzag", 9, "지그재그 수확", { type: "run_harvest", n: 9, kind: "where" }],
+  ];
+  assert.deepEqual(ORDERS.slice(15).map((o) => o.id), want.map((w) => w[0]));
+  for (const [id, need, title, goal] of want) {
+    assert.ok(by[id], id);
+    assert.equal(by[id].need, need, id);
+    assert.equal(by[id].title, title, id);
+    assert.deepEqual(by[id].goal, goal, id);
   }
+  // 섞어 심기: 목록 안의 심기가 목록 변수(crop)를 씀, 순찰: 방향 목록으로 움직임
+  const json = (o) => JSON.stringify(o.solution);
+  assert.match(codegen(by.o_mix.solution).code, /for crop in \[.*\]:\n\s+(.*\n\s+)*plant\(crop\)/);
+  assert.match(codegen(by.o_patrol.solution).code, /for way in \[.*\]:\n(\s+.*\n)*\s+move\(way\)/);
+  assert.ok(json(by.o_lowstock).includes('"store"'));
+  assert.match(codegen(by.o_zigzag.solution).code, /x, y = where\(\)/);
 });
 
-test("ORDERS: 정답 프로그램은 그 장까지 열린 노드만으로 검사 통과, use 주문은 그 노드를 씀", () => {
+// 노드가 아닌 표지(kindsUsed가 함께 돌려줌)와 그 표지가 열리는 장
+const MARK_CHAPTER = { "cond:store": 8, "cond:pos": 9, loopvar: 7, "loopvar:act": 7 };
+
+test("ORDERS: 네 가지 목표 종류를 모두 씀, use 주문은 그 장에서 열리는 노드(또는 표지)", () => {
+  const kinds = new Set(ORDERS.map((o) => o.goal.type));
+  assert.deepEqual([...kinds].sort(), ["deliver", "grid", "run_harvest", "use"]);
+  for (const o of ORDERS.filter((x) => x.goal.type === "use" || x.goal.kind)) {
+    const ch = NODES[o.goal.kind]?.chapter ?? MARK_CHAPTER[o.goal.kind];
+    assert.ok(ch, `${o.id}: 노드 종류 또는 표지`);
+    assert.ok(ch <= o.need, `${o.id}: need 안에서 열림`);
+  }
+  assert.equal(COND_LOCKS["cond:store"], MARK_CHAPTER["cond:store"]);
+});
+
+test("ORDERS: 정답 프로그램은 그 장까지 열린 노드만으로 검사 통과, use·kind 주문은 그 노드(표지)를 씀", () => {
   for (const o of ORDERS) {
     const errs = validate(o.solution, unlockedKinds(upTo(o.need)));
     assert.deepEqual(errs, [], o.id);
-    if (o.goal.type === "use") {
-      const json = JSON.stringify(o.solution);
-      assert.ok(json.includes(`"kind":"${o.goal.kind}"`), o.id);
-    }
+    if (o.goal.type === "use" || o.goal.kind) assert.ok(kindsUsed(o.solution).has(o.goal.kind), o.id);
   }
+});
+
+test("ORDERS: 정답 프로그램은 한 장 앞까지 열린 노드로는 검사에 걸림(그 장에서 배운 것을 씀, 6장부터)", () => {
+  for (const o of ORDERS.filter((x) => x.need >= 6 && x.goal.type !== "deliver")) {
+    assert.ok(validate(o.solution, unlockedKinds(upTo(o.need - 1))).length > 0, o.id);
+  }
+});
+
+test("주문 use 표지: 창고 조건(cond:store)은 그 조건을 쓴 노드 모드 실행만", () => {
+  const i = ORDERS.findIndex((o) => o.id === "o_lowstock");
+  const o = ORDERS[i];
+  const g = at(newGarden(), i);
+  const base = { program: o.solution, mode: "nodes", passed: upTo(9) };
+  assert.equal(applyRun(g, fakeResult(g), base).orderDone.id, o.id);
+  const plainIf = [{ id: 1, kind: "if", args: { cond: "here_empty" }, body: [newNode("plant", 2)] }];
+  assert.equal(applyRun(g, fakeResult(g), { ...base, program: plainIf }).orderDone, null, "창고 조건 없음");
+  assert.equal(applyRun(g, fakeResult(g), { ...base, mode: "code" }).orderDone, null, "코드 모드");
+  assert.equal(applyRun(g, fakeResult(g), { ...base, passed: upTo(7) }).orderDone, null, "8장 전에는 기다림");
 });
 
 // ---------------------------------------------------------------- 새 텃밭·저장
@@ -227,6 +274,33 @@ test("cleanGarden: 노드 모양이 이상하면 시작 프로그램으로", () 
     [{ id: 1, kind: "move", args: { dir: "위" } }, { id: 1, kind: "harvest", args: {} }]]) {
     assert.deepEqual(cleanGarden({ ...g, program: bad }).program, defaultProgram(), JSON.stringify(bad));
   }
+});
+
+test("cleanGarden: 목록에서 하나씩의 목록이 이상하면 그 목록만 기본 목록으로(v0.11 검토)", () => {
+  const g = newGarden();
+  const fe = (list) => [{ id: 1, kind: "foreach", args: { list }, body: [{ id: 2, kind: "harvest", args: {} }] }];
+  const CROP_DEF = { type: "crop", items: ["당근", "감자"] };
+  const DIR_DEF = { type: "dir", items: ["오른쪽", "아래"] };
+  // 종류부터 이상하면 작물 기본 목록, 종류가 맞으면 그 종류의 기본 목록
+  for (const [bad, want] of [
+    [undefined, CROP_DEF], [null, CROP_DEF], ["당근", CROP_DEF], [{ type: "수박", items: ["당근"] }, CROP_DEF],
+    [{ type: "crop" }, CROP_DEF], [{ type: "crop", items: [] }, CROP_DEF], [{ type: "crop", items: "당근" }, CROP_DEF],
+    [{ type: "crop", items: ["당근", "위"] }, CROP_DEF], [{ type: "crop", items: Array(7).fill("당근") }, CROP_DEF],
+    [{ type: "dir", items: ["당근"] }, DIR_DEF], [{ type: "dir", items: [] }, DIR_DEF],
+  ]) {
+    const out = cleanGarden({ ...g, program: fe(bad) }).program;
+    assert.equal(out.length, 1, JSON.stringify(bad));
+    assert.deepEqual(out[0].args.list, want, JSON.stringify(bad));
+    assert.deepEqual(out[0].body, [{ id: 2, kind: "harvest", args: {} }]);
+  }
+  // 안쪽 목록도, 맞는 목록은 그대로(여분 칸은 버림), 원본은 그대로
+  const inner = { id: 3, kind: "foreach", args: { list: { type: "dir", items: ["위", "왼쪽", "위", "위", "위", "위"], extra: 1 } }, body: [{ id: 4, kind: "move", args: { dir: { loopVar: true } } }] };
+  const raw = { ...g, program: [{ id: 1, kind: "repeat", args: { n: 2 }, body: [inner, { id: 5, kind: "foreach", args: { list: { type: "dir", items: [9] } }, body: [{ id: 6, kind: "harvest", args: {} }] }] }] };
+  const before = JSON.stringify(raw);
+  const out = cleanGarden(raw).program;
+  assert.deepEqual(out[0].body[0].args.list, { type: "dir", items: ["위", "왼쪽", "위", "위", "위", "위"] });
+  assert.deepEqual(out[0].body[1].args.list, DIR_DEF);
+  assert.equal(JSON.stringify(raw), before);
 });
 
 // ---------------------------------------------------------------- 실행 입력·반영
@@ -578,4 +652,18 @@ test("모든 노드가 어떤 주문에서 가르쳐짐(use 또는 정답 프로
   const walk = (list) => (list || []).forEach((n) => { seen.add(n.kind); walk(n.body); walk(n.orelse); });
   for (const o of ORDERS) walk(o.solution);
   for (const k of Object.keys(NODES)) assert.ok(seen.has(k), k);
+});
+
+test("grantOrderXP: 하루 퀘스트 「텃밭 주문 1개 해내기」(garden_order)를 셈, 같은 주문은 다시 세지 않음", () => {
+  const today = "2026-11-05";
+  const s = { ...newSave(), completed_lessons: ["1-5"],
+    quests: { date: today, ids: ["q_garden", "q_lessons2", "q_perfect"], progress: {}, done: [], chest: false } };
+  const a = grantOrderXP(s, ORDERS[0], NOW(today));
+  assert.deepEqual(a.save.quests.done, ["q_garden"]);
+  assert.equal(a.save.quests.progress.q_garden, 1);
+  assert.deepEqual(a.result.finished, ["q_garden"]);
+  assert.equal(a.result.questBytes, 5);
+  const b = grantOrderXP(a.save, ORDERS[0], NOW(today));
+  assert.equal(b.result.questBytes, 0);
+  assert.deepEqual(b.result.finished, []);
 });

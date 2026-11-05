@@ -19,6 +19,11 @@
 //   보상은 rules.js lessonReward({ isAdvanced: true }) 그대로. 배지 「깊이 파는 사람」은 이 심화 목록 전부가 기준.
 // - 매일 도전(v0.9, --daily / { daily: true }): 1장(1-5)을 끝낸 뒤 학습한 날마다 DAILY_P 확률로 그날 레슨 뒤에 도전 3문제를 끝냄.
 //   보상은 src/daily.js finishDaily 그대로(XP 15·바이트 10·도전 7일마다 +20, XP 퀘스트·하루 목표·연속 기록에 반영).
+// - 텃밭(v0.11, { garden: true }, --daily 표의 셋째 줄): 학습한 날마다 GARDEN_P 확률로, 오늘 해낼 주문이 있으면
+//   (src/quests.js gardenOrderOpen: 1장 평가 + 지금 주문의 장 평가) 그날 레슨 뒤에 주문 1개를 해냄.
+//   보상은 src/garden/state.js grantOrderXP 그대로(XP 5 → 하루 목표·연속 기록·XP 퀘스트, 퀘스트 「텃밭 주문 1개 해내기」).
+//   주문 판정(실행)은 흉내 내지 않고 주문 번호만 하나 넘긴다(1장 평가 뒤 garden.runs를 1로). q_garden은 텃밭을 한 번
+//   이상 실행한 학습자에게만 뽑히므로(판정 C65) 텃밭을 하지 않는 기준·매일 도전 줄은 v0.10과 같다.
 import { readdirSync } from "node:fs";
 import { newSave } from "../../src/save.js";
 import { lessonReward, reviewReward, earnXp, rollDay, buyFreeze, markConcept, FREEZE_PRICE } from "../../src/rules.js";
@@ -27,6 +32,9 @@ import { checkBadges } from "../../src/badges.js";
 import { buy } from "../../src/shop.js";
 import { OUTFITS } from "../../data/outfits.js";
 import { finishDaily, newDaily } from "../../src/daily.js";
+import { gardenOrderOpen } from "../../src/quests.js";
+import { grantOrderXP } from "../../src/garden/state.js";
+import { ORDERS } from "../../data/garden.js";
 
 const ADV_PLACEHOLDER_CHAPTERS = [1, 2, 3, 4, 5, 6];   // v0.7 계획: 1~6장 심화
 
@@ -37,6 +45,7 @@ const TOUCH_ITEMS = 6;
 const HINTFREE_P = 0.5;
 const WRITE_ERROR_P = 0.3;
 const DAILY_P = 0.85;
+const GARDEN_P = 0.6;
 
 // 실제 레슨 표(data/lessons/ch*.js)를 장 번호순으로 읽는다. 경제에는 id·장 평가 여부·쓰기 문제의 개념만 쓰인다.
 const ADVANCED_LIST = [];
@@ -104,7 +113,7 @@ function cheapestOutfit(save) {
   return forSale[0] || null;
 }
 
-export function runSim(seed, { policy = "plan", lessons = null, advanced = false, daily: withDaily = false } = {}) {
+export function runSim(seed, { policy = "plan", lessons = null, advanced = false, daily: withDaily = false, garden: withGarden = false } = {}) {
   const COURSE = lessons ? FULL_COURSE.slice(0, lessons) : FULL_COURSE;
   const inCourse = new Set(COURSE.map((l) => l.id));
   const ADV = advanced ? ADVANCED_LIST.filter((l) => inCourse.has(`${l.chapter}-5`)) : [];
@@ -120,8 +129,10 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
   let streakBroken = 0;
   let freezesBought = 0;
   const milestones = [];
-  const src = { lesson: 0, quest: 0, milestone: 0, daily: 0 };
+  const src = { lesson: 0, quest: 0, milestone: 0, daily: 0, garden: 0 };
   let dailyDone = 0;
+  let gardenOrders = 0;
+  let gardenQuestDays = 0, gardenQuestDone = 0;
   let replayIdx = 0;
   let newPhaseEarned = 0, newPhaseDays = 0, lastNewDay = null;
   const daily = [];
@@ -250,6 +261,23 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
       gain(prev, s, "daily");
       dailyDone++;
     }
+    // 텃밭 학습자는 1장 평가 뒤 텃밭을 연다(실행 1번 — q_garden 조건 garden.runs > 0, 판정 C65)
+    if (withGarden && s.completed_lessons.includes("1-5") && !(s.garden.runs > 0)) s = { ...s, garden: { ...s.garden, runs: 1 } };
+    if (withGarden && gardenOrderOpen(s) && rng() < GARDEN_P) {
+      const prev = s;
+      const idx = s.garden.order.idx;
+      const order = ORDERS[idx];
+      const r = grantOrderXP(s, order, new Date(today + "T20:00:00"));
+      s = r.save;
+      s = { ...s, garden: { ...s.garden, order: { ...s.garden.order, idx: idx + 1, done: [...s.garden.order.done, order.id] } } };
+      if (r.result.milestone) milestones.push(r.result.milestone);
+      gain(prev, s, "garden");
+      gardenOrders++;
+    }
+    if (s.quests.ids.includes("q_garden")) {
+      gardenQuestDays++;
+      if (s.quests.done.includes("q_garden")) gardenQuestDone++;
+    }
     shop(d + 1);
     const de = earned - earnedBefore;
     daily.push({ day: d + 1, bytes: de, xp: s.streak.todayXp, streak: s.streak.days });
@@ -271,8 +299,11 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
     finalStreak: s.streak.days,
     outfitsOwned: s.outfits.filter((o) => o !== "basic").length,
     milestones,
-    sources: { lesson: src.lesson, quest: src.quest, milestone: src.milestone, daily: src.daily },
+    sources: { lesson: src.lesson, quest: src.quest, milestone: src.milestone, daily: src.daily, garden: src.garden },
     dailyDone,
+    gardenOrders,
+    gardenQuestDays,
+    gardenQuestDone,
     dailyBest: s.daily ? s.daily.best : 0,
     skipDays: [...skips].sort((a, b) => a - b).map((x) => x + 1),
     badges: s.badges.length,
@@ -351,18 +382,22 @@ function compareDaily(lessons) {
   const seeds = Array.from({ length: 12 }, (_, i) => i + 1);
   const base = seeds.map((sd) => runSim(sd, { lessons }));
   const dly = seeds.map((sd) => runSim(sd, { lessons, daily: true }));
+  const gdn = seeds.map((sd) => runSim(sd, { lessons, daily: true, garden: true }));
   const r1 = (x) => (x === null ? "-" : Math.round(x * 10) / 10);
   const med = (rs, f) => r1(median(rs.map(f)));
-  console.log(`매일 도전: 1장 뒤 학습한 날의 ${DAILY_P * 100}%에 도전 3문제, 30일 × 12판\n`);
-  console.log("| 학습자 | B/active day | 1st outfit day | outfits | 도전한 날 | 도전 최고 연속 | 바이트 도전/레슨/퀘스트/연속 | 하루 목표 미달 |");
-  console.log("|---|---|---|---|---|---|---|---|");
-  for (const [name, rs] of [["도전 없음(기준)", base], ["매일 도전", dly]]) {
+  console.log(`매일 도전: 1장 뒤 학습한 날의 ${DAILY_P * 100}%에 도전 3문제 · 텃밭: 해낼 주문이 있는 날의 ${GARDEN_P * 100}%에 주문 1개, 30일 × 12판\n`);
+  console.log("| 학습자 | B/active day | 1st outfit day | outfits | 도전한 날 | 도전 최고 연속 | 바이트 도전/레슨/퀘스트/연속 | 하루 목표 미달 | 텃밭 주문 | q_garden 뽑힌 날/끝낸 날 |");
+  console.log("|---|---|---|---|---|---|---|---|---|---|");
+  for (const [name, rs] of [["도전 없음(기준)", base], ["매일 도전", dly], ["매일 도전 + 텃밭", gdn]]) {
     console.log(`| ${name} | ${med(rs, (r) => r.bytesPerActiveDay)} | ${med(rs, (r) => r.firstOutfitDay)} | ${med(rs, (r) => r.outfitsOwned)} | `
       + `${med(rs, (r) => r.dailyDone)} | ${med(rs, (r) => r.dailyBest)} | ${med(rs, (r) => r.sources.daily)}/${med(rs, (r) => r.sources.lesson)}/`
-      + `${med(rs, (r) => r.sources.quest)}/${med(rs, (r) => r.sources.milestone)} | ${med(rs, (r) => r.goalMissDays)} |`);
+      + `${med(rs, (r) => r.sources.quest)}/${med(rs, (r) => r.sources.milestone)} | ${med(rs, (r) => r.goalMissDays)} | `
+      + `${med(rs, (r) => r.gardenOrders)} | ${med(rs, (r) => r.gardenQuestDays)}/${med(rs, (r) => r.gardenQuestDone)} |`);
   }
-  const fod = median(dly.map((r) => r.firstOutfitDay));
-  console.log(`\n판정: 매일 도전 학습자 첫 의상 중앙값 ${fod}일째 (목표 3~4) ${fod >= 3 && fod <= 4 ? "OK" : "밖"}`);
+  for (const [name, rs] of [["매일 도전", dly], ["매일 도전 + 텃밭", gdn]]) {
+    const fod = median(rs.map((r) => r.firstOutfitDay));
+    console.log(`\n판정: ${name} 학습자 첫 의상 중앙값 ${fod}일째 (목표 3~4) ${fod >= 3 && fod <= 4 ? "OK" : "밖"}`);
+  }
   console.log("12판뿐이라 중앙값은 판마다 흔들릴 수 있음.");
 }
 

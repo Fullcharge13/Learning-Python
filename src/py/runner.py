@@ -33,15 +33,17 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
              꺾은선이 둘 이상이거나 legend가 있으면 values 대신 series: [{"name"?: 글, "values": [수]}, …].
 
 텃밭(v0.10, 설계서 2026-11-05 §2): farm(dict)이 있으면 실행마다 새 `farm` 모듈을 sys.modules에 넣고(끝나면 지움)
-  명령 move(방향)·plant(작물)·harvest()·can_harvest()·what_here()를 실행 전역에도 미리 넣는다(import 없이 씀,
+  명령 move(방향)·plant(작물)·harvest()·can_harvest()·what_here()·store()·where()를 실행 전역에도 미리 넣는다(import 없이 씀,
   `from farm import *`·`import farm`도 됨). print는 그대로 출력하면서 say 사건도 남긴다(표준 출력에 쓸 때만).
   받은 상태는 고치지 않고 다듬은 사본(_farm_state) 위에서 돈다. 시간 1짜리 행동(move·plant·harvest, 실패한
   심기·빈 칸 수확 포함)은 지금 clock에 일어나고 clock += 1. 다 자람: clock − planted_at ≥ 자라는 시간(당근 8,
   감자 12, upgrades에 "비료"면 6·9). 감자는 upgrades에 "감자 씨앗"이 있어야 심어짐.
   한 실행에 행동 FARM_ACTIONS_MAX(500)번까지 — 501번째에 FarmTired(BaseException)로 멈추고, 학습자가 except로
   삼켜도 추적 함수가 학습자 코드 다음 줄에서 다시 던진다. 결과는 오류가 아니라 stopped "tired".
-  확인(can_harvest·what_here, 시간 0)은 한 실행에 FARM_CHECKS_MAX(2000)번까지 — 2001번째에 같은 방식으로 멈추고
+  확인(can_harvest·what_here·store·where, 시간 0)은 한 실행에 FARM_CHECKS_MAX(2000)번까지 — 2001번째에 같은 방식으로 멈추고
   stopped "waited"(`while not can_harvest(): pass`처럼 시간이 흐르지 않는 기다리기, 판정 C60). 확인은 사건을 남기지 않는다.
+  v0.11(설계서 2026-11-05 6~9장 §1): store()는 창고 사본 {"당근": n, "감자": n}(새 dict — 바꿔도 진짜 창고·결과는
+  그대로, 없는 작물 이름은 KeyError), where()는 파이의 자리 튜플 (x, y). 둘 다 확인 하나로 세고 사건은 없다(사건 모양 그대로).
   둘 중 먼저 걸린 이유가 stopped에 남고, 멈춘 뒤로는 행동·확인 모두 다시 던진다.
   result["farm"] = {
       "events": [ {"t": "move", "line", "dir", "x", "y"}            # x, y = 움직인 뒤 자리
@@ -552,7 +554,7 @@ def _make_chart(charts):
 
 
 FARM_ACTIONS_MAX = 500   # 한 실행에 시간 1짜리 행동(move·plant·harvest) 수. 넘으면 파이가 지침
-FARM_CHECKS_MAX = 2000   # 한 실행에 시간이 들지 않는 확인(can_harvest·what_here) 수. 넘으면 기다리다 멈춤(판정 C60)
+FARM_CHECKS_MAX = 2000   # 한 실행에 시간이 들지 않는 확인(can_harvest·what_here·store·where) 수. 넘으면 기다리다 멈춤(판정 C60)
 FARM_SAYS_MAX = 100      # 한 실행에 남기는 말풍선(say) 사건 수. 넘는 print는 출력만 되고 사건은 없음(검토 C62 I2)
 FARM_EVENTS_MAX = FARM_ACTIONS_MAX + FARM_SAYS_MAX  # 사건 수 안전 상한 → 시간 1짜리 사건(≤500)은 절대 버리지 않는다
 FARM_SAY_MAX = 40        # 말풍선(say) 글자 수
@@ -561,7 +563,7 @@ FARM_FERTILIZER = "비료"
 FARM_POTATO_SEED = "감자 씨앗"
 FARM_DIR_MSG = "방향은 위·아래·왼쪽·오른쪽 중 하나예요"
 FARM_CROP_MSG = "작물은 당근·감자 중 하나예요"
-FARM_NAMES = ("move", "plant", "harvest", "can_harvest", "what_here")
+FARM_NAMES = ("move", "plant", "harvest", "can_harvest", "what_here", "store", "where")
 # 규칙 표의 원본(검토 C62 I1): 바꿀 수 없는 튜플. 실행마다 _make_farm이 여기서 새 표를 만들어 닫힘(closure)에만 둔다.
 # 아래 FARM_CROPS·FARM_GROW·FARM_GROW_FERTILIZED·FARM_DIRS는 시험·문서가 읽는 읽기 전용 사본이고 엔진은 쓰지 않는다.
 _FARM_CROP_RULES = (("당근", 8, 6), ("감자", 12, 9))   # (작물, 자라는 시간, 비료 뒤 자라는 시간)
@@ -845,6 +847,17 @@ def _make_farm(fs, out):
         cell = st["cells"][_here()]
         return "빈칸" if cell is None else cell["crop"]
 
+    def store():
+        """창고 사본 {"당근": n, "감자": n}(시간이 들지 않음). 사본을 바꿔도 진짜 창고는 그대로"""
+        _check()
+        have = st["store"]
+        return {c: have.get(c, 0) for c in crops}
+
+    def where():
+        """파이의 지금 자리 (x, y)(시간이 들지 않음)"""
+        _check()
+        return (st["pie"]["x"], st["pie"]["y"])
+
     class _SayTee:
         """print가 쓰는 글을 진짜 출력 통(한도 포함)에 넘기면서 말풍선용으로도 모은다(실행마다 새 클래스)."""
 
@@ -877,10 +890,10 @@ def _make_farm(fs, out):
 
     mod = types.ModuleType("farm")
     mod.__doc__ = ("리아와 파이썬! 파이의 텃밭: move(방향), plant(작물), harvest(), "
-                   "can_harvest(), what_here()")
+                   "can_harvest(), what_here(), store(), where()")
     mod.__all__ = list(FARM_NAMES)
     cmds = {}
-    for f in (move, plant, harvest, can_harvest, what_here):
+    for f in (move, plant, harvest, can_harvest, what_here, store, where):
         f.__module__ = "farm"
         setattr(mod, f.__name__, f)
         cmds[f.__name__] = f

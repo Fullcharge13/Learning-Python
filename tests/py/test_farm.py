@@ -571,3 +571,85 @@ def test_tampered_values_cleaned_for_json():
     assert all(type(u) is str for u in st["upgrades"])
     assert f["stopped"] in (None, "tired", "waited") and type(f["actions"]) is int
     assert all(type(e) is dict and type(e["t"]) is str for e in f["events"])
+
+
+# ------------------------------------------------------------ v0.11: store()·where() (설계서 2026-11-05 6~9장 §1)
+
+
+def test_store_and_where_values_after_actions():
+    s = farm(cells=[{"crop": "당근", "planted_at": 0}] + [None] * 8, clock=20,
+             store={"당근": 3, "감자": 2})
+    r = frun('print(where(), store())\nharvest()\nmove("오른쪽")\nmove("아래")\n'
+             'print(where(), store())\nx, y = where()\nprint(x + y, store()["당근"])\n', s)
+    assert r["error"] is None, r
+    assert r["stdout"] == ("(0, 0) {'당근': 3, '감자': 2}\n"
+                           "(1, 1) {'당근': 4, '감자': 2}\n"
+                           "2 4\n")
+
+
+def test_where_is_tuple_and_store_is_plain_dict():
+    r = frun('w = where()\ns = store()\nprint(type(w) is tuple, len(w), type(s) is dict, list(s))\n')
+    assert r["stdout"] == "True 2 True ['당근', '감자']\n", r
+
+
+def test_store_and_where_take_no_time_no_events():
+    r = frun('where()\nstore()\nprint(1)\n')
+    f = r["farm"]
+    assert f["actions"] == 0 and f["state"]["clock"] == 0
+    assert [e["t"] for e in f["events"]] == ["say"]
+
+
+def test_store_copy_isolated():
+    s = farm(cells=[{"crop": "당근", "planted_at": 0}] + [None] * 8, clock=20)
+    r = frun('a = store()\na["당근"] = 99\na["수박"] = 1\ndel a["감자"]\n'
+             'print(store())\nharvest()\nprint(a, store())\n', s)
+    assert r["error"] is None, r
+    assert r["stdout"] == ("{'당근': 0, '감자': 0}\n"
+                           "{'당근': 99, '수박': 1} {'당근': 1, '감자': 0}\n")
+    assert r["farm"]["state"]["store"] == {"당근": 1, "감자": 0}
+
+
+def test_store_key_error_for_unknown_crop():
+    r = frun('print(store()["수박"])\n')
+    assert r["error"]["type"] == "KeyError" and r["error"]["line"] == 1
+
+
+def test_store_counts_as_check():
+    r = frun('while store()["당근"] < 10:\n    pass\n')
+    assert r["error"] is None and r["farm"]["stopped"] == "waited"
+
+
+def test_where_counts_as_check():
+    r = frun('while where() == (0, 0):\n    pass\n')
+    assert r["error"] is None and r["farm"]["stopped"] == "waited"
+
+
+def test_store_where_share_2000_check_cap():
+    r = frun("for i in range(500):\n    store()\n    where()\n    can_harvest()\n    what_here()\nprint('끝')\n")
+    assert r["farm"]["stopped"] is None and r["stdout"] == "끝\n"
+    r2 = frun("for i in range(1000):\n    store()\n    where()\nwhere()\nprint('끝')\n")
+    assert r2["farm"]["stopped"] == "waited" and r2["stdout"] == ""
+
+
+def test_store_where_import_styles():
+    r = frun('from farm import *\nprint(where(), store()["감자"])\n'
+             'import farm\nfarm.move("왼쪽")\nprint(farm.where(), farm.store())\n'
+             'from farm import where as w\nprint(w())\n')
+    assert r["error"] is None, r
+    assert r["stdout"] == "(0, 0) 0\n(2, 0) {'당근': 0, '감자': 0}\n(2, 0)\n"
+
+
+def test_store_where_in_module_all():
+    r = frun('import farm\nprint("store" in farm.__all__, "where" in farm.__all__)\n')
+    assert r["stdout"] == "True True\n"
+
+
+def test_store_where_deterministic():
+    code = ('for i in range(12):\n    x, y = where()\n    if store()["당근"] < 3 and can_harvest():\n'
+            '        harvest()\n    elif what_here() == "빈칸":\n        plant("당근")\n'
+            '    if x < 2:\n        move("오른쪽")\n    else:\n        move("아래")\n'
+            'print(where(), store())\n')
+    s = farm(cells=[{"crop": "당근", "planted_at": 0}] * 9, clock=10)
+    a = frun(code, s)
+    b = frun(code, s)
+    assert a == b and a["error"] is None, a

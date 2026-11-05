@@ -311,6 +311,12 @@ def test_farm_in_pyodide():
                           "pie": {"x": 2, "y": 0}, "clock": 12, "store": {"당근": 1, "감자": 0},
                           "upgrades": []}, f
     assert f["stopped"] is None and f["actions"] == 4, f
+    # v0.11: store()는 창고 사본(바꿔도 진짜 창고 그대로), where()는 (x, y) 튜플 — 시간·사건 없음
+    q = _run_env('from farm import *\nharvest()\nmove("오른쪽")\ns = store()\ns["당근"] = 99\n'
+                 'print(where(), store(), type(where()).__name__)\n', {"farm": state})
+    assert q["error"] is None and q["stdout"] == "(1, 0) {'당근': 1, '감자': 0} tuple\n", q
+    assert q["farm"]["state"]["store"] == {"당근": 1, "감자": 0} and q["farm"]["actions"] == 2, q
+    assert [e["t"] for e in q["farm"]["events"]] == ["harvest", "move", "say"], q
     t = _run_env('while True:\n    try:\n        move("아래")\n    except BaseException:\n        pass\n',
                  {"farm": state})
     assert t["error"] is None and t["timeout"] is False, t

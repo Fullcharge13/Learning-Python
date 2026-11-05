@@ -3,12 +3,15 @@
 // CROPS: 자라는 시간(행동 수). 규칙은 src/py/runner.py의 farm 모듈에 있고, 이 표는 화면·시험이 같은 값을 쓰게
 //        옮겨 둔 것이다(tests/garden_orders.py가 runner의 FARM_GROW·FARM_GROW_FERTILIZED와 같은지 확인).
 // UPGRADES: 창고 작물로 사는 성장. id "감자 씨앗"·"비료"는 runner가 upgrades 글자로 직접 확인하므로 바꾸지 않는다.
-// ORDERS: 리아 교수의 주문 15개, 장 순서. 한 번에 하나씩 게시판에 걸린다.
+// ORDERS: 리아 교수의 주문 22개(v0.10 1~5장 15개 + v0.11 6~9장 7개), 장 순서. 한 번에 하나씩 게시판에 걸린다.
 //   goal.type:
 //     deliver     { crop, n }               창고에서 n개 보내기(단추)
 //     run_harvest { crop?, n, max_actions?, kind? } 한 번 실행에 n개 이상 거두기(crop 없으면 아무 작물), 행동 수 제한 선택.
 //                 kind가 있으면 노드 모드에서 그 노드를 쓴 실행만 셈(그 장에서 배운 것을 써 보게, 검토 C62)
-//     use         { kind }                  그 노드를 쓴 노드 모드 실행이 오류·멈춤 없이 끝남
+//     use         { kind }                  그 노드를 쓴 노드 모드 실행이 오류·멈춤 없이 끝남.
+//                                           kind는 노드 종류 또는 nodes.kindsUsed의 표지("cond:store" 창고 조건,
+//                                           "cond:pos" x·y 비교, "loopvar" 목록 변수를 값으로 고름,
+//                                           "loopvar:act" 이동·심기 값으로 목록 변수를 고름)
 //     grid        { size }                  밭 넓히기 성장을 가짐
 //   solution: 그 장까지 열린 노드만으로 만든 정답 프로그램(노드 목록).
 //   setup: 정답을 확인할 때 시작하는 텃밭(그 주문 차례에 학습자가 있을 법한 상태). tests/garden_orders.py가
@@ -38,11 +41,18 @@ const defn = (name, body) => ({ kind: "def", args: { name }, body });
 const call = (name) => ({ kind: "call", args: { name } });
 const rep = (n, body) => ({ kind: "repeat", args: { n }, body });
 const whl = (cond, body) => ({ kind: "while", args: { cond }, body });
+// v0.11
+const sv = (pre, v, post) => ({ kind: "sayval", args: { pre, var: v, post } });
+const fe = (type, items, body) => ({ kind: "foreach", args: { list: { type, items } }, body });
+const wh = () => ({ kind: "where", args: {} });
+const LV = { loopVar: true };                                            // 가장 안쪽 목록의 변수(crop·way)
+const storeLt = (crop, num) => ({ store: { crop, op: "<", num } });       // store()["감자"] < 10
+const pos = (v, num) => ({ var: v, op: "==", num });                      // x == 3
 
 function prog(...list) {
   let id = 0;
   const number = (nodes) => nodes.map((n) => {
-    const out = { id: ++id, kind: n.kind, args: { ...n.args } };
+    const out = { id: ++id, kind: n.kind, args: structuredClone(n.args) };
     if (n.body) out.body = number(n.body);
     if (n.orelse) out.orelse = number(n.orelse);
     return out;
@@ -231,5 +241,82 @@ export const ORDERS = [
     xp: 5,
     solution: prog(rep(4, [rep(4, [hv(), mv("오른쪽")]), mv("아래")])),
     setup: farmSetup(["CCCC", "CCCC", "CCCC", "CCCC"], { clock: 200, upgrades: [...SEED, ...G4] }),
+  },
+  // ---- 6장: 값 넣어 말하기 (v0.11) ----
+  {
+    id: "o_sayval", need: 6, title: "수확 보고",
+    text: "count로 거둔 당근 수를 세고, 값 넣어 말하기로 「당근 4개 거뒀어」처럼 알려 줘요.",
+    goal: { type: "use", kind: "sayval" },
+    xp: 5,
+    solution: prog(
+      setv("count", 0),
+      rep(4, [iff("can_harvest", [hv(), addv("count", 1)]), mv("오른쪽")]),
+      sv("당근 ", "count", "개 거뒀어"),
+    ),
+    setup: farmSetup(["CCCC", "....", "....", "...."], { clock: 220, store: { 당근: 40, 감자: 6 }, upgrades: [...SEED, ...G4] }),
+  },
+  // ---- 7장: 목록에서 하나씩 ----
+  {
+    id: "o_mix", need: 7, title: "섞어 심기",
+    text: "작물 목록에 당근·감자를 번갈아 넣고, 목록 안의 심기 노드에서 crop을 골라 심어 봐요.",
+    goal: { type: "use", kind: "loopvar:act" },
+    xp: 5,
+    solution: prog(fe("crop", ["당근", "감자", "당근", "감자"], [iff("here_empty", [pl(LV)]), mv("오른쪽")])),
+    setup: farmSetup(["....", "....", "....", "...."], { clock: 240, store: { 당근: 44, 감자: 6 }, upgrades: [...SEED, ...G4] }),
+  },
+  {
+    id: "o_patrol", need: 7, title: "한 바퀴 순찰",
+    text: "방향 목록을 하나씩 따라 움직이며, 다 자란 작물 3개를 한 번 실행에 거둬 봐요.",
+    goal: { type: "run_harvest", n: 3, kind: "foreach" },
+    xp: 5,
+    solution: prog(fe("dir", ["오른쪽", "아래", "왼쪽"], [mv(LV), iff("can_harvest", [hv()])])),
+    setup: farmSetup([".C..", "CC..", "....", "...."], { clock: 260, store: { 당근: 44, 감자: 6 }, upgrades: [...SEED, ...G4] }),
+  },
+  // ---- 8장: 창고 보기(조건) ----
+  {
+    id: "o_lowstock", need: 8, title: "모자란 것만",
+    text: "창고 보기 조건으로 감자가 10개보다 적으면 감자를, 아니면 당근을 심어 봐요.",
+    goal: { type: "use", kind: "cond:store" },
+    xp: 5,
+    solution: prog(rep(4, [
+      iff(storeLt("감자", 10), [iff("here_empty", [pl("감자")])], [iff("here_empty", [pl("당근")])]),
+      mv("오른쪽"),
+    ])),
+    setup: farmSetup(["....", "....", "....", "...."], { clock: 280, store: { 당근: 47, 감자: 6 }, upgrades: [...SEED, ...G4] }),
+  },
+  {
+    id: "o_potato_book", need: 8, title: "감자 장부",
+    text: "감자 장부를 채우려면 감자 5개가 필요해요. 창고에 모이면 보내기 단추를 눌러 주세요.",
+    goal: { type: "deliver", crop: "감자", n: 5 },
+    xp: 5,
+    solution: prog(whl(storeLt("감자", 5), [iff("can_harvest", [hv(), pl("감자")]), mv("오른쪽")])),
+    setup: farmSetup(["PP..", "....", "....", "...."], { clock: 300, store: { 당근: 47, 감자: 3 }, upgrades: [...SEED, ...G4] }),
+  },
+  // ---- 9장: 위치 알기 ----
+  {
+    id: "o_where", need: 9, title: "줄 끝에서 내려가기",
+    text: "위치 알기로 x를 알아내, 줄 끝 칸에 닿으면 아래로, 아니면 오른쪽으로 가 봐요.",
+    goal: { type: "use", kind: "cond:pos" },
+    xp: 5,
+    solution: prog(rep(4, [
+      iff("can_harvest", [hv()]),
+      wh(),
+      iff(pos("x", 3), [mv("아래")], [mv("오른쪽")]),
+    ])),
+    setup: farmSetup(["CCCC", "....", "....", "...."], { clock: 320, store: { 당근: 47, 감자: 5 }, upgrades: [...SEED, ...G4] }),
+  },
+  {
+    id: "o_zigzag", need: 9, title: "지그재그 수확",
+    text: "위치 알기로 줄 끝을 알아채며 지그재그로 움직여, 다 자란 작물 9개를 한 번에 거둬요.",
+    goal: { type: "run_harvest", n: 9, kind: "where" },
+    xp: 5,
+    solution: prog(rep(9, [
+      iff("can_harvest", [hv()]),
+      wh(),
+      iff(pos("y", 1),
+        [iff(pos("x", 0), [mv("아래")], [mv("왼쪽")])],
+        [iff(pos("x", 3), [mv("아래")], [mv("오른쪽")])]),
+    ])),
+    setup: farmSetup(["CCCC", "CCCC", "C...", "...."], { clock: 340, store: { 당근: 51, 감자: 5 }, upgrades: [...SEED, ...G4] }),
   },
 ];

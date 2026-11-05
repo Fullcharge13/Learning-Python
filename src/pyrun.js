@@ -7,7 +7,11 @@
 //   // r = { stdout, stderr, error: null | {type, line, msg}, missing: [], charts: [], timeout, ms }
 //   // charts: chart.show()로 그린 그림(v0.5 E3, src/chart.js가 모양을 다듬음)
 //   py.run(code, "", [], { files: { "memo.txt": "…" }, server: { "https://ria.example/a": { status: 200, body: "…" } } });
-//   // 넷째 인자는 제한 시간(ms) 숫자 또는 { timeoutMs?, files?, server? } (v0.4 E1·E2)
+//   // 넷째 인자는 제한 시간(ms) 숫자 또는 { timeoutMs?, files?, server?, farm? } (v0.4 E1·E2, v0.10)
+//   const g = await py.run(code, "", [], { farm: { size, cells, pie, clock, store, upgrades } });
+//   // g.farm = { events: [{ t, line, … }], state: { size, cells, pie, clock, store, upgrades },
+//   //            stopped: null | "tired"(행동 500번) | "waited"(확인 2000번), actions }   (파이의 텃밭, 규칙은 py/runner.py의 farm 모듈)
+//   // farm을 넘기지 않았거나 실행이 시간 초과·작업자 오류로 끝나면 결과에 farm이 없다.
 //
 // - 실행은 한 번에 하나씩 차례로 돈다(대기열).
 // - 제한 시간(기본 3초)을 넘으면 작업자를 끝내고(terminate) 새로 띄운다. 그 실행은
@@ -57,6 +61,17 @@ function cleanResult(r) {
     missing: Array.isArray(r?.missing) ? r.missing.map(String) : [],
     charts: cleanCharts(r?.charts),
     timeout: false,
+    ...(plainObj(r?.farm) ? { farm: cleanFarm(r.farm) } : {}),
+  };
+}
+
+// 텃밭 결과(v0.10): 모양만 지킨다(값 검사는 runner가 함). 화면은 events를 재생하고 state를 저장한다.
+function cleanFarm(f) {
+  return {
+    events: Array.isArray(f.events) ? f.events.filter(plainObj) : [],
+    state: plainObj(f.state),
+    stopped: f.stopped === "tired" || f.stopped === "waited" ? f.stopped : null,
+    actions: Number.isInteger(f.actions) ? f.actions : 0,
   };
 }
 
@@ -92,7 +107,7 @@ export class PyRun {
   run(code, stdin = "", require = [], opts = DEFAULT_TIMEOUT_MS) {
     const o = typeof opts === "number" ? { timeoutMs: opts } : (opts || {});
     const timeoutMs = typeof o.timeoutMs === "number" ? o.timeoutMs : DEFAULT_TIMEOUT_MS;
-    const env = { files: plainObj(o.files), server: plainObj(o.server) };
+    const env = { files: plainObj(o.files), server: plainObj(o.server), farm: plainObj(o.farm) };
     const job = this._queue.then(() => this._runOne(code, stdin, require, timeoutMs, env));
     this._queue = job.then(() => {}, () => {});
     return job;
@@ -256,7 +271,7 @@ export class PyRun {
           code: code == null ? "" : String(code),
           stdin: Array.isArray(stdin) ? stdin.map(String) : (stdin == null ? "" : String(stdin)),
           require: Array.from(require || [], String),
-          files: env.files, server: env.server,
+          files: env.files, server: env.server, farm: env.farm,
         });
       } catch (e) {
         finish(failResult("WorkerError", errMsg(e)));

@@ -1,0 +1,989 @@
+// v0.10 「파이의 텃밭」 화면: 텃밭 그림 + 주문 게시판 + 노드 흐름 편집기(또는 코드 모드) + 실행·재생 + 성장
+// 설계: docs/specs/2026-11-05-파이의-텃밭-설계.md · 계획서 작업 4
+//
+// 규칙은 runner.py의 farm 모듈(실행), 노드·코드는 src/garden/nodes.js, 저장·주문·성장은 src/garden/state.js,
+// 그림·재생 단계는 src/garden/view.js에 있다. 이 화면은 그것들을 이어 붙이고 그리기만 한다.
+// 저장: save.garden 하나(바뀔 때마다 ctx.commit). 실행 결과는 재생 전에 먼저 저장한다(재생 중 앱을 닫아도 남음).
+import {
+  NODES, COND, VAR_NAMES, FUNC_NAMES, OPS, VALUE_RANGE, MAX_NODES, MSG as NODE_MSG,
+  codegen, validate, unlockedKinds, newNode, insertNode, moveNode, removeNode, updateArgs, setElse, countNodes,
+} from "../garden/nodes.js";
+import {
+  fillGarden, runInput, applyRun, currentOrder, canBuy, buy, deliver, grantOrderXP, settleAll, passedChapters,
+} from "../garden/state.js";
+import { UPGRADES, ORDERS } from "../../data/garden.js";
+import { BADGES } from "../../data/badges.js";
+import { render as farmSVG, replayFrames, thinFrames } from "../garden/view.js";
+import { riaSVG } from "../ria.js";
+import { esc, icon, el, dialog, toast, bar, riaSays, celebrate } from "./dom.js";
+import { createEditor } from "./editor.js";
+import { errorPanel } from "./write.js";
+import { SYMBOL_ORDER } from "../kbd.js";
+
+const SYSTEM_ERRORS = new Set(["LoadError", "WorkerError", "NotReady"]);
+const CODE_SAVE_MS = 500;
+// 멈춘 뒤 파이의 말풍선(3×3 밭에서도 두 줄 안에 들어가게 짧게, 자세한 글은 결과 칸의 MSG)
+const TIRED_SAY = { tired: "오늘은 여기까지! 지쳤어요", waited: "기다리다 지쳤어요. 내가 움직여야 시간이 흘러요" };
+// 사건 말풍선(파이가 스스로 하는 말): 실패한 심기·덜 자란 수확
+const EVENT_SAY = {
+  no_seed: "감자 씨앗이 아직 없어요",
+  occupied: "여기는 이미 심겨 있어요",
+  harvest_young: "앗, 아직 덜 자랐어요",
+};
+const frameSay = (f) => f.say || (f.fx && (EVENT_SAY[f.fx.reason] || EVENT_SAY[f.fx.t])) || null;
+const RUN_HINT = "「실행」을 누르면 파이가 노드를 위에서부터 차례로 해요.";
+const KIND_ORDER = ["move", "harvest", "plant", "say", "setvar", "addvar", "if", "def", "call", "repeat", "while"];
+
+// 작물 작은 그림(창고 표시용, 24 격자)
+const CROP_ICON = {
+  당근: '<svg class="ic crop-ic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 9c-2-3-5-4-6-3 1 0 3 1 4 3M12 9c0-3 1-5 3-6 0 2-1 4-2 5M12 9c2-2 5-2 6-1-1 1-3 1-5 1" fill="none" stroke="#3E8E41" stroke-width="2" stroke-linecap="round"/><path d="M7.5 10.5Q12 8.5 16.5 10.5L12.8 21Q12 22 11.2 21Z" fill="#F28C28" stroke="#3B2C35" stroke-width="1.6" stroke-linejoin="round"/></svg>',
+  감자: '<svg class="ic crop-ic" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M5 13.5C4 9 8 6 12.5 6.5S20.5 10 19.5 14 15 19.5 11 19 5.8 17 5 13.5Z" fill="#D9B77A" stroke="#3B2C35" stroke-width="1.6"/><circle cx="9.5" cy="11.5" r="1" fill="#A88550"/><circle cx="14" cy="10" r="1" fill="#A88550"/><circle cx="13" cy="15" r="1" fill="#A88550"/></svg>',
+};
+
+const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const cropNames = (obj) => Object.entries(obj).filter(([, n]) => n > 0);
+
+// ---- 노드 글 ----
+function condLabel(c) {
+  if (c && typeof c === "object") return `${c.var} ${c.op} ${c.num}`;
+  const f = COND.find((x) => x.id === c);
+  return f ? f.label : String(c ?? "");
+}
+
+/** 노드 한 줄에 보일 값 단추들: [{ arg, text, mono }] */
+function argChips(n) {
+  const a = n.args || {};
+  switch (n.kind) {
+    case "move": return [{ arg: "dir", text: a.dir }];
+    case "plant": return [{ arg: "crop", text: a.crop }];
+    case "say": return [{ arg: "text", text: `“${a.text ?? ""}”` }];
+    case "setvar": return [{ arg: "name", text: a.name, mono: true }, { arg: "value", text: `= ${a.value}`, mono: true }];
+    case "addvar": return [{ arg: "name", text: a.name, mono: true }, { arg: "value", text: `+ ${a.value}`, mono: true }];
+    case "if":
+    case "while": return [{ arg: "cond", text: condLabel(a.cond), mono: !!(a.cond && typeof a.cond === "object") }];
+    case "repeat": return [{ arg: "n", text: `${a.n}번` }];
+    case "def":
+    case "call": return [{ arg: "name", text: a.name, mono: true }];
+    default: return [];
+  }
+}
+
+const chapterClass = (kind) => `ch${NODES[kind]?.chapter ?? 0}`;
+
+function goalText(o) {
+  const g = o.goal;
+  switch (g.type) {
+    case "run_harvest":
+      return `한 번 실행에 ${g.crop || "작물"} ${g.n}개 거두기${g.max_actions ? ` (행동 ${g.max_actions}번 안에)` : ""}`
+        + (g.kind ? ` · 「${NODES[g.kind]?.label ?? g.kind}」 노드로` : "");
+    case "use": return `「${NODES[g.kind]?.label ?? g.kind}」 노드를 넣고 끝까지 실행하기`;
+    case "deliver": return `창고의 ${g.crop} ${g.n}개 보내기`;
+    case "grid": return `「성장」에서 밭을 ${g.size}×${g.size}로 넓히기`;
+    default: return "";
+  }
+}
+
+// ---- 고르기 창 ----
+/** 아래에서 올라오는 고르기 창. [data-v] 단추는 그 값으로 닫힌다. bind(box, done)로 더 묶을 수 있다 → 고른 값 | null */
+function sheet({ title, html, bind, cls = "" }) {
+  return new Promise((resolve) => {
+    const prev = document.activeElement;
+    const wrap = el(`<div class="modal-back" role="presentation">
+      <div class="modal g-sheet ${cls}" role="dialog" aria-modal="true" aria-labelledby="gs-title">
+        <div class="gs-head"><h2 id="gs-title">${esc(title)}</h2>
+          <button class="icon-btn gs-close" aria-label="닫기">${icon("close")}</button></div>
+        <div class="gs-body">${html}</div>
+      </div></div>`);
+    let closed = false;
+    // 입력 보호: 창을 연 손짓의 나머지(click)가 그대로 고르기가 되지 않게, 창 안에서 누르기 시작한 것만 받는다
+    let armed = false;
+    wrap.addEventListener("pointerdown", () => { armed = true; });
+    const done = (v) => {
+      if (closed) return;
+      closed = true;
+      wrap.remove();
+      document.removeEventListener("keydown", onKey);
+      if (prev && prev.focus && document.contains(prev)) prev.focus({ preventScroll: true });
+      resolve(v);
+    };
+    const onKey = (e) => { if (e.key === "Escape") done(null); };
+    wrap.addEventListener("click", (e) => {
+      if (!armed && e.detail !== 0) return; // e.detail 0 = 키보드(Enter·Space)로 누름
+      if (e.target === wrap || e.target.closest(".gs-close")) { done(null); return; }
+      const b = e.target.closest("[data-v]");
+      if (b && !b.disabled && wrap.contains(b)) done(b.dataset.v);
+    });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(wrap);
+    if (bind) bind(wrap.querySelector(".gs-body"), done);
+    const first = wrap.querySelector(".gs-body [data-autofocus]") || wrap.querySelector(".gs-body button:not(:disabled)");
+    if (first) first.focus({ preventScroll: true });
+  });
+}
+
+/** −/+ 숫자 고르기 */
+function stepperHTML(id, v, min, max) {
+  const big = max - min > 30 ? 10 : 5;
+  return `<div class="g-stepper" data-min="${min}" data-max="${max}" id="${id}">
+    <button class="btn ghost" data-step="${-big}" aria-label="${big} 빼기">−${big}</button>
+    <button class="btn ghost" data-step="-1" aria-label="1 빼기">−1</button>
+    <output class="g-num" aria-live="polite">${v}</output>
+    <button class="btn ghost" data-step="1" aria-label="1 더하기">+1</button>
+    <button class="btn ghost" data-step="${big}" aria-label="${big} 더하기">+${big}</button>
+  </div>`;
+}
+function bindStepper(box, onChange) {
+  const min = +box.dataset.min;
+  const max = +box.dataset.max;
+  const out = box.querySelector(".g-num");
+  const paint = (v) => {
+    out.textContent = String(v);
+    box.querySelectorAll("[data-step]").forEach((b) => {
+      const s = +b.dataset.step;
+      b.disabled = s < 0 ? v <= min : v >= max;
+    });
+  };
+  paint(+out.textContent);
+  box.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-step]");
+    if (!b) return;
+    const v = Math.min(max, Math.max(min, +out.textContent + +b.dataset.step));
+    paint(v);
+    if (onChange) onChange(v);
+  });
+  return () => +out.textContent;
+}
+
+// ---- 화면 ----
+export function render(root, ctx) {
+  const passed = passedChapters(ctx.save, ctx.chapters);
+  const unlocked = unlockedKinds(passed);
+  const S = {
+    garden: fillGarden(ctx.save).garden,
+    facing: "오른쪽",
+    overlay: {},
+    state: "idle",       // idle | running | replay
+    speed: 1,
+    skip: false,
+    wake: null,
+    runErr: null,        // 실행 오류가 난 노드 id(노드 모드)
+    previewOpen: true,
+    ed: null,
+    codeTimer: null,
+    destroyed: false,
+    lastHtml: "",        // 실행 결과 칸
+  };
+
+  root.innerHTML = `<div class="screen garden" data-state="idle">
+    <header class="g-top">
+      <button class="icon-btn" id="g-back" aria-label="홈으로">${icon("back")}</button>
+      <h1>파이의 텃밭</h1>
+      <p class="g-store" id="g-store"></p>
+    </header>
+    <main class="g-main">
+      <section class="g-board" aria-label="텃밭">
+        <div id="board" class="g-board-svg"></div>
+        <p class="g-now mono" id="g-now" hidden></p>
+      </section>
+      <div id="g-result" class="g-result" role="status" aria-live="polite"></div>
+      <section class="panel g-order" id="g-order" aria-labelledby="g-order-title"></section>
+      <section class="g-prog" id="g-prog" aria-labelledby="g-prog-title"></section>
+      <details class="g-code" id="g-code" open>
+        <summary><span>파이썬 코드 보기</span></summary>
+        <pre class="code g-lines" id="g-lines"></pre>
+      </details>
+    </main>
+    <footer class="g-foot" id="g-foot">
+      <div class="symwrap" id="g-syms" hidden>
+        <div class="symbols" role="toolbar" aria-label="기호 넣기">
+          ${SYMBOL_ORDER.map((sy, i) => sy.act
+            ? `<button class="sym word" data-s="${i}">${esc(sy.label)}</button>`
+            : `<button class="sym mono" data-s="${i}" aria-label="${esc(sy.aria || sy.label)} 넣기">${esc(sy.label)}</button>`).join("")}
+        </div>
+      </div>
+      <p class="py-chip" id="g-py" hidden></p>
+      <div class="g-actions" id="g-idle">
+        <button class="btn ghost" id="g-grow">${icon("sprout")}<span>성장</span></button>
+        <button class="btn primary" id="g-run">${icon("play")}<span>실행</span></button>
+      </div>
+      <div class="g-actions" id="g-replay" hidden>
+        <button class="btn ghost" id="g-speed" aria-label="재생 속도 1배, 누르면 2배">1배</button>
+        <button class="btn sun" id="g-skip">${icon("skip")}<span>건너뛰기</span></button>
+      </div>
+    </footer>
+  </div>`;
+
+  const scr = root.querySelector(".screen.garden");
+  const boardEl = root.querySelector("#board");
+  const nowEl = root.querySelector("#g-now");
+  const resultEl = root.querySelector("#g-result");
+  const orderEl = root.querySelector("#g-order");
+  const progEl = root.querySelector("#g-prog");
+  const codeEl = root.querySelector("#g-code");
+  const linesEl = root.querySelector("#g-lines");
+  const foot = root.querySelector("#g-foot");
+  const runBtn = root.querySelector("#g-run");
+  const symWrap = root.querySelector("#g-syms");
+  const pyChip = root.querySelector("#g-py");
+
+  // ---- 저장 ----
+  function save(g) {
+    S.garden = g;
+    ctx.commit({ ...ctx.save, garden: g });
+  }
+  /** 주문을 해냈을 때: XP(한 번만)를 저장에 넣고 결과를 돌려줌 */
+  function grant(order) {
+    const r = grantOrderXP({ ...ctx.save, garden: S.garden }, order, new Date());
+    ctx.commit(r.save);
+    S.garden = r.save.garden;
+    return r.result;
+  }
+  /**
+   * 해낸 주문(first, 이미 S.garden에 반영됨)의 XP를 주고, 이어서 지금 상태로 끝나는 주문(미리 산 밭 넓히기 등)도
+   * 모두 끝내 XP를 준다(검토 C62 I3). 저장은 여기서 다 하고, 창은 showOrders가 차례로 띄운다.
+   * @returns [{ order, res }]
+   */
+  function finishOrders(first) {
+    const list = [];
+    if (first) list.push({ order: first, res: grant(first) });
+    const st = settleAll(S.garden, passed);
+    if (st.orders.length) {
+      save(st.garden);
+      for (const o of st.orders) list.push({ order: o, res: grant(o) });
+    }
+    return list;
+  }
+  async function showOrders(list) {
+    for (let i = 0; i < list.length; i++) {
+      if (S.destroyed) return;
+      const next = list[i + 1] ? { order: list[i + 1].order, waiting: false } : currentOrder(S.garden, passed);
+      await orderDone(list[i].order, list[i].res, next);
+    }
+  }
+
+  // ---- 위 줄: 창고 ----
+  function paintStore() {
+    const st = S.garden.store;
+    root.querySelector("#g-store").innerHTML = Object.keys(CROP_ICON).map((c) =>
+      `<span class="g-crop-count">${CROP_ICON[c]}<b>${st[c] ?? 0}</b><span class="sr">${c} ${st[c] ?? 0}개</span></span>`).join("")
+      + `<span class="sr">창고</span>`;
+    root.querySelector("#g-store").setAttribute("aria-label", `창고: ${Object.keys(CROP_ICON).map((c) => `${c} ${st[c] ?? 0}개`).join(", ")}`);
+  }
+
+  // ---- 텃밭 그림 ----
+  function paintBoard(state = runInput(S.garden), overlay = S.overlay) {
+    boardEl.innerHTML = farmSVG(state, { facing: S.facing, ...overlay });
+  }
+
+  // ---- 주문 게시판 ----
+  function paintOrder() {
+    const { order, waiting } = currentOrder(S.garden, passed);
+    const idx = S.garden.order.idx;
+    const face = !order ? "sparkle" : waiting ? "think" : "smile";
+    let main;
+    if (!order) {
+      main = `<p class="g-order-tag">주문 ${ORDERS.length}/${ORDERS.length}</p>
+        <h2 id="g-order-title">주문을 모두 해냈어요!</h2>
+        <p class="g-order-text">고마워요. 텃밭은 계속 가꿀 수 있어요. 코드로 쓰기에도 도전해 봐요.</p>`;
+    } else {
+      const g = order.goal;
+      let extra = "";
+      if (waiting) {
+        extra = `<p class="g-wait">${icon("lock")}<span>${esc(`${order.need}장을 끝내면 이어져요`)}</span></p>`;
+      } else if (g.type === "deliver") {
+        const have = S.garden.store[g.crop] ?? 0;
+        const ok = have >= g.n;
+        extra = `<div class="g-deliver">
+          <div class="g-prog-row">${bar(have, g.n, "g-bar", `${g.crop} 모으기`)}<span class="g-num-small">${Math.min(have, g.n)}/${g.n}</span></div>
+          <button class="btn sun" id="deliver"${ok ? "" : " disabled"}>${icon("send")}<span>보내기</span></button>
+          ${ok ? "" : `<p class="g-note">${esc(`${g.crop} ${g.n - have}개를 더 모아요`)}</p>`}
+        </div>`;
+      } else if (g.type === "grid") {
+        extra = `<p class="g-note">밭 ${S.garden.size}×${S.garden.size} → ${g.size}×${g.size}</p>`;
+      } else if (g.type === "use" && S.garden.mode === "code") {
+        extra = `<p class="g-note warn">이 주문은 노드로 실행해야 해요. 「노드로 돌아가기」를 눌러요.</p>`;
+      }
+      main = `<p class="g-order-tag">주문 ${idx + 1}/${ORDERS.length}</p>
+        <h2 id="g-order-title">${esc(order.title)}</h2>
+        <p class="g-order-text">${esc(order.text)}</p>
+        <p class="g-goal">${icon("check")}<span>${esc(goalText(order))}</span></p>
+        ${extra}`;
+    }
+    orderEl.innerHTML = `<div class="g-order-ria">${riaSVG({ outfit: ctx.save.outfit, face, size: 52 })}</div>
+      <div class="g-order-main">${main}</div>`;
+    const d = orderEl.querySelector("#deliver");
+    if (d) d.addEventListener("click", doDeliver);
+  }
+
+  // ---- 노드 흐름 ----
+  function nodeRow(n, depth, errs) {
+    const spec = NODES[n.kind];
+    const label = spec ? spec.label : n.kind;
+    const mine = errs.filter((e) => e.nodeId === n.id).map((e) => e.msg);
+    if (S.runErr === n.id) mine.push("여기서 오류가 났어요");
+    const bad = mine.length > 0;
+    const chips = argChips(n).map((c) =>
+      `<button class="g-arg${c.mono ? " mono" : ""}" data-arg="${c.arg}" aria-label="${esc(`${label}: ${c.text}, 바꾸기`)}">${esc(c.text)}</button>`).join("");
+    return `<div class="g-node ${chapterClass(n.kind)}${bad ? " bad" : ""}" data-id="${esc(n.id)}" data-kind="${esc(n.kind)}" data-depth="${depth}">
+      <div class="g-node-main"><span class="g-kind">${esc(label)}</span>${chips}</div>
+      <button class="g-menu" aria-label="${esc(`${label} 노드 메뉴`)}">${icon("more")}</button>
+      ${bad ? `<p class="g-err">${mine.map((m) => `<span>${esc(m)}</span>`).join("")}</p>` : ""}
+    </div>`;
+  }
+  function addBtn(parent, slot) {
+    return `<li class="g-add-li"><button class="g-add" data-parent="${parent ?? ""}" data-slot="${slot}">${icon("plus")}<span>노드</span></button></li>`;
+  }
+  function listHTML(list, depth, errs, parent, slot) {
+    const items = (list || []).map((n) => {
+      let inner = nodeRow(n, depth, errs);
+      if (NODES[n.kind]?.body) {
+        inner += `<ol class="g-body" aria-label="${esc(`${NODES[n.kind].label} 안`)}">${listHTML(n.body, depth + 1, errs, n.id, "body")}</ol>`;
+        if (Array.isArray(n.orelse)) {
+          inner += `<p class="g-else">아니면</p><ol class="g-body" aria-label="아니면 안">${listHTML(n.orelse, depth + 1, errs, n.id, "orelse")}</ol>`;
+        }
+      }
+      return `<li class="g-item">${inner}</li>`;
+    }).join("");
+    return items + addBtn(parent, slot);
+  }
+
+  function paintProg() {
+    const code = S.garden.mode === "code";
+    if (code) {
+      if (!S.ed) {
+        progEl.innerHTML = `<div class="g-prog-head"><h2 id="g-prog-title">${icon("code")}<span>파이썬 코드</span></h2>
+          <button class="btn ghost small" id="to-nodes">노드로 돌아가기</button></div>
+          <p class="g-mode-note">명령: <code>move("오른쪽")</code> <code>plant("당근")</code> <code>harvest()</code> <code>can_harvest()</code> <code>what_here()</code> <code>print()</code></p>
+          <div class="editor-box g-editor" id="g-ed"></div>`;
+        S.ed = createEditor(progEl.querySelector("#g-ed"), {
+          doc: S.garden.code || "",
+          label: "텃밭 코드 입력창. 여기에 Python 코드를 써요",
+          margins: () => ({ top: root.querySelector(".g-top").getBoundingClientRect().bottom + 8, bottom: window.innerHeight - foot.getBoundingClientRect().top + 8 }),
+          onChange: () => {
+            S.ed.markLine(null);
+            if (S.codeTimer) clearTimeout(S.codeTimer);
+            S.codeTimer = setTimeout(flushCode, CODE_SAVE_MS);
+          },
+        });
+        progEl.querySelector("#to-nodes").addEventListener("click", toNodes);
+      }
+      codeEl.hidden = true;
+      symWrap.hidden = false;
+      return;
+    }
+    if (S.ed) { flushCode(); S.ed.destroy(); S.ed = null; }
+    symWrap.hidden = true;
+    codeEl.hidden = false;
+    const prog = S.garden.program;
+    const errs = validate(prog, unlocked);
+    progEl.innerHTML = `<div class="g-prog-head"><h2 id="g-prog-title">${icon("sprout")}<span>파이에게 시킬 일</span></h2>
+        <button class="btn ghost small" id="to-code">${icon("code")}<span>코드로 쓰기</span></button></div>
+      <ol class="g-flow" aria-label="노드 흐름(위에서부터 차례로 실행)">${listHTML(prog, 0, errs, null, "body")}</ol>
+      <p class="g-count">노드 ${countNodes(prog)}/${MAX_NODES}</p>`;
+    progEl.querySelector("#to-code").addEventListener("click", toCode);
+    paintPreview();
+  }
+
+  function paintPreview() {
+    if (S.garden.mode === "code") return;
+    const { code } = codegen(S.garden.program);
+    const lines = code ? code.replace(/\n$/, "").split("\n") : [];
+    linesEl.innerHTML = lines.length
+      ? lines.map((l, i) => `<span class="g-line" data-line="${i + 1}" data-text="${esc(l)}"><span class="g-ln" aria-hidden="true">${i + 1}</span>${esc(l)}</span>`).join("")
+      : `<span class="g-line empty" data-line="0" data-text="">(노드가 없어요)</span>`;
+  }
+
+  // ---- 지금 줄 표시(재생 중) ----
+  let lastNow = null;
+  function markNow(line, lineMap, code) {
+    if (lastNow === line) return;
+    lastNow = line;
+    root.querySelectorAll(".g-node.now, .g-line.now").forEach((e) => e.classList.remove("now"));
+    if (line == null) {
+      nowEl.hidden = true;
+      if (S.ed) S.ed.markNow(null);
+      return;
+    }
+    const lines = code.split("\n");
+    nowEl.hidden = false;
+    nowEl.innerHTML = `<span class="g-ln">${line}</span>${esc((lines[line - 1] || "").trim())}`;
+    if (S.garden.mode === "code") {
+      if (S.ed) S.ed.markNow(line);
+      return;
+    }
+    const id = lineMap ? lineMap[line] : null;
+    if (id != null) {
+      const row = root.querySelector(`.g-node[data-id="${CSS.escape(String(id))}"]`);
+      if (row) row.classList.add("now");
+    }
+    const l = linesEl.querySelector(`.g-line[data-line="${line}"]`);
+    if (l) l.classList.add("now");
+  }
+
+  // ---- Python 준비 상태 ----
+  function paintPy() {
+    const { status, phase } = ctx.pyState();
+    const busy = S.state !== "idle";
+    runBtn.disabled = busy || status !== "ready";
+    if (status === "ready") { pyChip.hidden = true; return; }
+    pyChip.hidden = false;
+    if (status === "error") {
+      pyChip.className = "py-chip err";
+      pyChip.innerHTML = `파이썬을 받지 못했어요. 인터넷 연결을 확인해 주세요. <button class="link" id="g-pyretry">다시 시도</button>`;
+      pyChip.querySelector("#g-pyretry").addEventListener("click", () => { ctx.py.preload().catch(() => {}); });
+    } else {
+      pyChip.className = "py-chip";
+      pyChip.innerHTML = `<span class="dot" aria-hidden="true"></span>${phase === "restart" ? "다시 준비 중" : "파이썬 준비 중"}`;
+    }
+  }
+  const offPy = ctx.onPy(paintPy);
+
+  function setState(st) {
+    S.state = st;
+    scr.dataset.state = st;
+    root.querySelector("#g-idle").hidden = st === "replay";
+    root.querySelector("#g-replay").hidden = st !== "replay";
+    progEl.inert = st !== "idle";
+    root.querySelector("#g-grow").disabled = st !== "idle";
+    orderEl.inert = st !== "idle";
+    paintPy();
+  }
+
+  function paintAll() {
+    paintStore();
+    paintBoard();
+    paintOrder();
+    paintProg();
+    paintPy();
+  }
+
+  // ---- 편집 ----
+  function nextId() {
+    let max = 0;
+    const walk = (list) => (list || []).forEach((n) => {
+      if (Number.isInteger(n.id) && n.id > max) max = n.id;
+      walk(n.body); walk(n.orelse);
+    });
+    walk(S.garden.program);
+    return max + 1;
+  }
+  function setProgram(p) {
+    S.runErr = null;
+    save({ ...S.garden, program: p });
+    paintProg();
+  }
+  // 편집 창이 닫힌 뒤 노드 흐름을 다시 그리면 누른 단추가 사라지므로, 그 노드(없으면 가까운 단추)로 초점을 옮긴다
+  const nodeSel = (id) => `.g-node[data-id="${CSS.escape(String(id))}"]`;
+  const addSel = (parentId, slot) => `.g-add[data-parent="${CSS.escape(parentId == null ? "" : String(parentId))}"][data-slot="${slot}"]`;
+  function focusFirst(...sels) {
+    for (const sel of sels) {
+      const e = sel ? root.querySelector(sel) : null;
+      if (e) { e.focus({ preventScroll: true }); return; }
+    }
+  }
+  function findWithParent(list, id, parent = null, slot = "body") {
+    for (let i = 0; i < (list || []).length; i++) {
+      const n = list[i];
+      if (String(n.id) === String(id)) return { node: n, list, index: i, parent, slot };
+      for (const s of ["body", "orelse"]) {
+        const r = findWithParent(n[s], id, n, s);
+        if (r) return r;
+      }
+    }
+    return null;
+  }
+
+  async function openAdd(parentId, slot) {
+    const prog = S.garden.program;
+    if (countNodes(prog) >= MAX_NODES) { toast(NODE_MSG.tooMany); return; }
+    const top = parentId == null;
+    const html = `<ul class="g-pick">${KIND_ORDER.map((k) => {
+      const spec = NODES[k];
+      const open = unlocked.has(k);
+      const nested = k === "def" && !top;
+      const why = !open ? NODE_MSG.locked(spec.chapter) : nested ? NODE_MSG.defTop : "";
+      return `<li><button class="g-pick-btn ${chapterClass(k)}" data-v="${k}" data-kind="${k}"${why ? ` disabled aria-disabled="true"` : ""}>
+        <span class="g-pick-name">${esc(spec.label)}</span>${why ? `<small>${esc(why)}</small>` : `<code>${esc(sampleCode(k))}</code>`}</button></li>`;
+    }).join("")}</ul>`;
+    const kind = await sheet({ title: "노드 더하기", html, cls: "g-add-sheet" });
+    if (!kind || S.destroyed) return;
+    // 부모 id는 화면 글자(data-parent)로 오므로 프로그램에서 찾아 원래 값(숫자·글자 그대로)을 쓴다
+    let parent = null;
+    if (!top) {
+      const f = findWithParent(S.garden.program, parentId);
+      if (!f) return;
+      parent = f.node.id;
+    }
+    const n = newNode(kind, nextId());
+    if (kind === "call") {
+      const defs = S.garden.program.filter((x) => x.kind === "def").map((x) => x.args.name);
+      if (defs.length) n.args.name = defs[0];
+    }
+    if (kind === "def") {
+      const used = new Set(S.garden.program.filter((x) => x.kind === "def").map((x) => x.args.name));
+      n.args.name = FUNC_NAMES.find((f) => !used.has(f)) || FUNC_NAMES[0];
+    }
+    setProgram(insertNode(S.garden.program, parent, slot, Infinity, n));
+    focusFirst(`${nodeSel(n.id)} .g-arg`, `${nodeSel(n.id)} .g-menu`);
+    ctx.sound.play("correct");
+  }
+
+  function sampleCode(kind) {
+    const n = newNode(kind, 0);
+    if (NODES[kind].body) n.body = [];
+    const line = codegen([n]).code.split("\n")[0];
+    return line;
+  }
+
+  async function openMenu(id) {
+    const f = findWithParent(S.garden.program, id);
+    if (!f) return;
+    const n = f.node;
+    const spec = NODES[n.kind];
+    const first = f.index === 0;
+    const last = f.index === f.list.length - 1;
+    const elseBtn = spec?.orelse
+      ? (Array.isArray(n.orelse)
+        ? `<li><button class="g-menu-btn" data-v="else-off" data-act="else-off">아니면 떼기</button></li>`
+        : `<li><button class="g-menu-btn" data-v="else-on" data-act="else-on">아니면 붙이기</button></li>`)
+      : "";
+    const html = `<ul class="g-pick">
+      <li><button class="g-menu-btn" data-v="up" data-act="up"${first ? " disabled" : ""}>${icon("up")}<span>위로</span></button></li>
+      <li><button class="g-menu-btn" data-v="down" data-act="down"${last ? " disabled" : ""}>${icon("down")}<span>아래로</span></button></li>
+      ${elseBtn}
+      <li><button class="g-menu-btn danger" data-v="del" data-act="del">${icon("trash")}<span>지우기${spec?.body && n.body?.length ? " (안의 노드도 함께)" : ""}</span></button></li>
+    </ul>`;
+    const act = await sheet({ title: `${spec ? spec.label : n.kind} 노드`, html, cls: "g-menu-sheet" });
+    if (!act || S.destroyed) return;
+    const menuOf = (id) => `${nodeSel(id)} .g-menu`;
+    if (act === "up" || act === "down") {
+      setProgram(moveNode(S.garden.program, n.id, act === "up" ? -1 : 1));
+      focusFirst(menuOf(n.id));
+    } else if (act === "else-on") {
+      setProgram(setElse(S.garden.program, n.id, true));
+      focusFirst(addSel(n.id, "orelse"), menuOf(n.id));
+    } else if (act === "else-off") {
+      const inside = countNodes(n.orelse || []);
+      if (inside > 0) {
+        const ok = await dialog({
+          title: "아니면을 뗄까요?",
+          body: `<p>아니면 안의 노드 ${inside}개도 함께 지워져요.</p>`,
+          buttons: [{ label: "그만두기", value: false }, { label: "떼기", value: true, kind: "primary" }],
+        });
+        if (!ok || S.destroyed) { focusFirst(menuOf(n.id)); return; }
+      }
+      setProgram(setElse(S.garden.program, n.id, false));
+      focusFirst(menuOf(n.id));
+    } else if (act === "del") {
+      const after = f.list[f.index + 1] ?? f.list[f.index - 1] ?? null;
+      setProgram(removeNode(S.garden.program, n.id));
+      focusFirst(after ? menuOf(after.id) : null, addSel(f.parent ? f.parent.id : null, f.slot), menuOf(f.parent?.id ?? ""));
+    }
+  }
+
+  async function openArg(id, arg) {
+    const f = findWithParent(S.garden.program, id);
+    if (!f) return;
+    const n = f.node;
+    const spec = NODES[n.kind];
+    const aspec = spec.args[arg];
+    const cur = n.args[arg];
+    const title = `${spec.label}: ${{ dir: "방향", crop: "작물", text: "할 말", name: n.kind === "def" || n.kind === "call" ? "내 노드 이름" : "값 이름", value: "숫자", n: "몇 번", cond: "조건" }[arg] || arg}`;
+    const refocus = () => focusFirst(`${nodeSel(n.id)} .g-arg[data-arg="${arg}"]`, `${nodeSel(n.id)} .g-menu`);
+    const listBtns = (choices, mono) => `<ul class="g-pick">${choices.map((c) =>
+      `<li><button class="g-pick-btn${String(c) === String(cur) ? " on" : ""}" data-v="${esc(c)}"${String(c) === String(cur) ? ' aria-current="true"' : ""}>${mono ? `<code>${esc(c)}</code>` : `<span class="g-pick-name">${esc(c)}</span>`}</button></li>`).join("")}</ul>`;
+
+    if (aspec.type === "choice") {
+      const mono = arg === "name";
+      let note = "";
+      if (n.kind === "call") {
+        const defs = S.garden.program.filter((x) => x.kind === "def").map((x) => x.args.name);
+        note = `<p class="g-note">${defs.length ? `만든 내 노드: ${defs.map((d) => `<code>${esc(d)}</code>`).join(" ")}` : "먼저 「내 노드 만들기」로 만들어요"}</p>`;
+      }
+      const v = await sheet({ title, html: note + listBtns(aspec.choices, mono) });
+      if (v == null || S.destroyed) return;
+      setProgram(updateArgs(S.garden.program, n.id, { [arg]: v }));
+      refocus();
+      return;
+    }
+    if (aspec.type === "int") {
+      let get = () => cur;
+      const v = await sheet({
+        title,
+        html: `${stepperHTML("g-step", cur, aspec.min, aspec.max)}<p class="g-note">${aspec.min}부터 ${aspec.max}까지</p>
+          <button class="btn primary wide" id="g-ok">정하기</button>`,
+        bind: (box, done) => {
+          get = bindStepper(box.querySelector("#g-step"));
+          box.querySelector("#g-ok").addEventListener("click", () => done("ok"));
+        },
+      });
+      if (v !== "ok" || S.destroyed) return;
+      setProgram(updateArgs(S.garden.program, n.id, { [arg]: get() }));
+      refocus();
+      return;
+    }
+    if (aspec.type === "text") {
+      let val = cur;
+      const v = await sheet({
+        title,
+        html: `<label class="g-label" for="g-text">파이가 말풍선으로 말해요 (${aspec.max}자까지)</label>
+          <input class="g-input" id="g-text" type="text" value="${esc(cur)}" autocomplete="off" enterkeyhint="done" data-autofocus>
+          <p class="g-note" id="g-text-n"></p>
+          <button class="btn primary wide" id="g-ok">정하기</button>`,
+        bind: (box, done) => {
+          const inp = box.querySelector("#g-text");
+          const cnt = box.querySelector("#g-text-n");
+          const ok = box.querySelector("#g-ok");
+          const paint = () => {
+            const len = [...inp.value].length;
+            const good = inp.value.trim().length > 0 && len <= aspec.max;
+            cnt.textContent = `${len}/${aspec.max}자${len > aspec.max ? " · 너무 길어요" : inp.value.trim() ? "" : " · 한 글자 이상 써요"}`;
+            cnt.classList.toggle("bad", !good);
+            ok.disabled = !good;
+            val = inp.value;
+          };
+          inp.addEventListener("input", paint);
+          inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && !ok.disabled) { e.preventDefault(); done("ok"); } });
+          ok.addEventListener("click", () => done("ok"));
+          paint();
+        },
+      });
+      if (v !== "ok" || S.destroyed) return;
+      setProgram(updateArgs(S.garden.program, n.id, { [arg]: val }));
+      refocus();
+      return;
+    }
+    if (aspec.type === "cond") {
+      const isVar = cur && typeof cur === "object";
+      const varOpen = unlocked.has("setvar");
+      const vc = isVar ? { ...cur } : { var: VAR_NAMES[0], op: "<", num: 5 };
+      let getNum = () => vc.num;
+      const varHTML = varOpen ? `<section class="g-varcond">
+          <h3>값과 비교하기</h3>
+          <div class="g-seg" role="radiogroup" aria-label="값 이름">${VAR_NAMES.map((x) => `<button class="g-seg-btn mono${x === vc.var ? " on" : ""}" role="radio" aria-checked="${x === vc.var}" data-var="${x}">${x}</button>`).join("")}</div>
+          <div class="g-seg" role="radiogroup" aria-label="비교">${OPS.map((x) => `<button class="g-seg-btn mono${x === vc.op ? " on" : ""}" role="radio" aria-checked="${x === vc.op}" data-op="${esc(x)}">${esc(x)}</button>`).join("")}</div>
+          ${stepperHTML("g-step", vc.num, VALUE_RANGE.min, VALUE_RANGE.max)}
+          <button class="btn primary wide" id="g-ok">값 비교로 정하기</button>
+        </section>` : `<p class="g-note">${esc(NODE_MSG.locked(NODES.setvar.chapter))}: 값과 비교하기</p>`;
+      const v = await sheet({
+        title,
+        html: `<ul class="g-pick">${COND.map((c) => `<li><button class="g-pick-btn${!isVar && c.id === cur ? " on" : ""}" data-v="${c.id}">
+          <span class="g-pick-name">${esc(c.label)}</span><code>${esc(c.code)}</code></button></li>`).join("")}</ul>${varHTML}`,
+        bind: (box, done) => {
+          if (!varOpen) return;
+          const seg = (attr, key) => box.querySelectorAll(`[data-${attr}]`).forEach((b) => b.addEventListener("click", () => {
+            vc[key] = b.dataset[attr];
+            box.querySelectorAll(`[data-${attr}]`).forEach((x) => {
+              const on = x === b;
+              x.classList.toggle("on", on);
+              x.setAttribute("aria-checked", String(on));
+            });
+          }));
+          seg("var", "var");
+          seg("op", "op");
+          getNum = bindStepper(box.querySelector("#g-step"));
+          box.querySelector("#g-ok").addEventListener("click", () => done("var"));
+        },
+      });
+      if (v == null || S.destroyed) return;
+      const cond = v === "var" ? { var: vc.var, op: vc.op, num: getNum() } : v;
+      setProgram(updateArgs(S.garden.program, n.id, { cond }));
+      refocus();
+    }
+  }
+
+  // ---- 모드 ----
+  function flushCode() {
+    if (S.codeTimer) { clearTimeout(S.codeTimer); S.codeTimer = null; }
+    if (!S.ed) return;
+    const code = S.ed.getCode();
+    if (code !== S.garden.code) save({ ...S.garden, code });
+  }
+  function toCode() {
+    if (S.state !== "idle") return;
+    const { code } = codegen(S.garden.program);
+    S.runErr = null;
+    S.overlay = {};
+    save({ ...S.garden, mode: "code", code });
+    paintBoard();
+    paintProg();
+    paintOrder();
+    markNow(null);
+  }
+  async function toNodes() {
+    if (S.state !== "idle") return;
+    flushCode();
+    const made = codegen(S.garden.program).code;
+    const edited = (S.garden.code || "").trimEnd() !== made.trimEnd();
+    if (edited) {
+      const ok = await dialog({
+        title: "노드로 돌아갈까요?",
+        body: `<p>코드에서 고친 것은 사라져요. 노드는 코드로 쓰기 전 그대로예요.</p>`,
+        buttons: [{ label: "그만두기", value: false }, { label: "노드로 돌아가기", value: true, kind: "primary" }],
+      });
+      if (!ok || S.destroyed) return;
+    }
+    S.overlay = {};
+    save({ ...S.garden, mode: "nodes", code: "" });
+    paintBoard();
+    paintProg();
+    paintOrder();
+  }
+
+  // ---- 실행 ----
+  function sleep(ms) {
+    return new Promise((res) => {
+      const t = setTimeout(() => { S.wake = null; res(); }, ms);
+      S.wake = () => { clearTimeout(t); S.wake = null; res(); };
+    });
+  }
+  async function replay(frames, lineMap, code) {
+    setState("replay");
+    S.skip = false;
+    const top = root.querySelector(".g-board");
+    const r = top.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight * 0.75) window.scrollTo({ top: 0, behavior: "smooth" });
+    for (const f of frames) {
+      if (S.skip || S.destroyed) break;
+      paintBoard(f.state, { facing: f.facing, say: frameSay(f), fx: f.fx });
+      markNow(f.line, lineMap, code);
+      const n = frames.length;
+      const base = S.speed === 2 ? 150 : 340;
+      const per = Math.max(S.speed === 2 ? 20 : 40, Math.min(base, (S.speed === 2 ? 6000 : 12000) / n));
+      await sleep(f.event.t === "say" ? Math.min(900, per * 2.5) : per);
+    }
+  }
+
+  function resultHTML({ ap, r, err }) {
+    const parts = [];
+    const got = cropNames(ap ? ap.harvested : {});
+    if (got.length) {
+      parts.push(`<p class="g-harvest">${got.map(([c, n]) => `<span class="g-got">${CROP_ICON[c] || ""}${esc(c)} +${n}</span>`).join("")}</p>`);
+    }
+    const stopped = r && r.farm && r.farm.stopped;
+    const rejected = !!(ap && ap.rejected);
+    if (ap) parts.push(`<p class="g-msg${stopped || err || rejected ? " warn" : ""}">${esc(ap.message)}</p>`);
+    if (r && r.farm && !rejected) {
+      const ev = r.farm.events || [];
+      const lost = {};
+      for (const e of ev) if (e.t === "harvest_young") lost[e.crop] = (lost[e.crop] || 0) + 1;
+      const notes = Object.entries(lost).map(([c, n]) => `덜 자란 ${c} ${n}개가 사라졌어요`);
+      const noSeed = ev.filter((e) => e.t === "plant_fail" && e.reason === "no_seed").length;
+      const full = ev.filter((e) => e.t === "plant_fail" && e.reason === "occupied").length;
+      if (noSeed) notes.push(`감자 씨앗이 없어 ${noSeed}번 못 심었어요(「성장」에서 사요)`);
+      if (full) notes.push(`이미 심긴 칸이라 ${full}번 못 심었어요`);
+      if (notes.length) parts.push(`<p class="g-lost">${notes.map(esc).join("<br>")}</p>`);
+      parts.push(`<p class="g-meta">행동 ${r.farm.actions}번</p>`);
+    }
+    if (err) parts.push(errorPanel(err, ctx.save.outfit));
+    return parts.join("");
+  }
+
+  async function doRun() {
+    if (S.state !== "idle") return;
+    if (ctx.pyState().status !== "ready") { paintPy(); return; }
+    const mode = S.garden.mode;
+    const program = S.garden.program;
+    let code, lineMap = null;
+    S.runErr = null;
+    if (mode === "nodes") {
+      const errs = validate(program, unlocked);
+      paintProg();
+      if (errs.length) {
+        ctx.sound.play("error");
+        resultEl.innerHTML = `<p class="g-msg warn">${icon("cross")}<span>빨간 노드를 먼저 고쳐요. ${esc(errs[0].msg)}</span></p>`;
+        const bad = root.querySelector(".g-node.bad");
+        if (bad) bad.scrollIntoView({ block: "center", behavior: reduced() ? "auto" : "smooth" });
+        return;
+      }
+      const gen = codegen(program);
+      code = gen.code;
+      lineMap = gen.lineMap;
+    } else {
+      flushCode();
+      code = S.ed ? S.ed.getCode() : S.garden.code;
+      if (S.ed) { S.ed.markLine(null); S.ed.markNow(null); }
+    }
+    setState("running");
+    S.overlay = {};
+    paintBoard();
+    resultEl.innerHTML = `<p class="g-msg">파이가 노드를 읽고 있어요…</p>`;
+    const start = runInput(S.garden);
+    let r;
+    try {
+      r = await ctx.py.run(code, "", [], { farm: start });
+    } catch (e) {
+      r = { error: { type: "WorkerError", msg: String(e && e.message || e) } };
+    }
+    if (r.error && SYSTEM_ERRORS.has(r.error.type)) {
+      if (S.destroyed) return;
+      setState("idle");
+      resultEl.innerHTML = `<div class="err-panel soft"><h3>파이썬이 아직 준비되지 않았어요</h3>
+        <p>인터넷 연결을 확인하고 잠시 뒤 다시 눌러 주세요. 텃밭은 그대로예요.</p></div>`;
+      return;
+    }
+    // 실행 중 화면을 떠났어도 결과는 저장한다(그리기만 건너뜀). 그 사이 저장의 텃밭이 바뀌었으면(다시 들어와
+    // 다른 일을 함) 이 결과는 옛 상태에서 나온 것이라 버린다.
+    if (S.destroyed) {
+      const now = fillGarden(ctx.save).garden;
+      if (JSON.stringify(runInput(now)) !== JSON.stringify(start)) return;
+      S.garden = now;
+    }
+    const ap = applyRun(S.garden, r, { program, mode, passed });
+    save(ap.garden);
+    const done = ap.orderDone ? finishOrders(ap.orderDone) : [];
+    if (S.destroyed) return;
+    const frames = r.farm && !ap.rejected ? replayFrames(start, r.farm.events, S.facing) : [];
+
+    if (frames.length && !reduced()) await replay(thinFrames(frames), lineMap, code);
+    if (S.destroyed) return;
+
+    // 끝 장면
+    const lastF = frames[frames.length - 1];
+    if (lastF) S.facing = lastF.facing;
+    const stopped = !ap.rejected && r.farm && r.farm.stopped;
+    S.overlay = { say: stopped ? TIRED_SAY[stopped] || TIRED_SAY.tired : (lastF && frameSay(lastF)) || null };
+    markNow(null);
+    paintBoard();
+    paintStore();
+    paintOrder();
+    const err = r.error || null;
+    if (err && mode === "nodes" && err.line && lineMap) S.runErr = lineMap[err.line] ?? null;
+    if (mode === "nodes") paintProg();
+    else if (err && S.ed && err.line) S.ed.markLine(err.line, false);
+    resultEl.innerHTML = resultHTML({ ap, r, err });
+    if (err || ap.rejected) ctx.sound.play("error");
+    else if (cropNames(ap.harvested).length) ctx.sound.play("correct");
+    setState("idle");
+    if (done.length) await showOrders(done);
+    else if (err || ap.rejected) resultEl.scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });
+  }
+
+  // ---- 주문 완료 ----
+  /** 주문 완료 창 하나. after: 이 주문 다음에 걸리는 { order, waiting } (이어서 끝난 주문이 있으면 그것) */
+  async function orderDone(order, res, after = currentOrder(S.garden, passed)) {
+    ctx.sound.play("done");
+    const { order: next, waiting } = after;
+    const nextLine = !next ? "주문을 모두 해냈어요! 텃밭은 계속 가꿀 수 있어요."
+      : waiting ? `다음 주문은 ${next.need}장을 끝내면 이어져요.` : `다음 주문은 「${next.title}」이에요.`;
+    const text = `「${order.title}」 주문 완료! 파이 덕분에 텃밭이 북적여요. ${nextLine}`;
+    await dialog({
+      title: "주문 완료!",
+      body: `<div class="g-done-body">${riaSays({ outfit: ctx.save.outfit, face: "joy", text, size: 84, sfx: "딩동!" })}
+        <p class="g-done-xp">${icon("xp")}<span>XP +${res ? res.xp : order.xp}</span></p></div>`,
+      buttons: [{ label: "좋아요", value: true, kind: "primary" }],
+    });
+    if (S.destroyed) return;
+    if (res && res.milestone) await celebrate({ outfit: ctx.save.outfit, milestone: res.milestone });
+    const names = (res && res.newBadges ? res.newBadges : []).map((id) => BADGES.find((b) => b.id === id)?.name).filter(Boolean);
+    if (names.length) toast(`새 배지를 받았어요: ${names.join(", ")}`);
+  }
+
+  async function doDeliver() {
+    if (S.state !== "idle") return;
+    const d = deliver(S.garden, passed);
+    if (d.error) { toast(d.error); return; }
+    save(d.garden);
+    const done = finishOrders(d.orderDone);
+    S.overlay = {};
+    paintBoard();
+    paintStore();
+    paintOrder();
+    resultEl.innerHTML = `<p class="g-msg">${esc(`${d.orderDone.goal.crop} ${d.orderDone.goal.n}개를 보냈어요`)}</p>`;
+    await showOrders(done);
+  }
+
+  // ---- 성장 ----
+  async function openGrow() {
+    if (S.state !== "idle") return;
+    const g = S.garden;
+    const html = `<p class="g-note">창고의 작물로 텃밭을 키워요.</p><ul class="g-ups">${UPGRADES.map((u) => {
+      const c = canBuy(g, u.id);
+      const owned = g.upgrades.includes(u.id);
+      const cost = Object.entries(u.cost).map(([crop, n]) => `<span class="g-cost">${CROP_ICON[crop] || ""}${n}</span>`).join("");
+      const what = u.size ? `밭이 ${u.size}×${u.size}로 넓어져요` : u.id === "감자 씨앗" ? "감자를 심을 수 있어요" : "작물이 더 빨리 자라요(당근 6, 감자 9)";
+      return `<li class="g-up${owned ? " owned" : ""}">
+        <div class="g-up-main"><h3>${esc(u.label)}</h3><p>${esc(what)}</p><p class="g-costs" aria-label="${esc(`값: ${Object.entries(u.cost).map(([cr, n]) => `${cr} ${n}개`).join(", ")}`)}">${cost}</p>
+          ${c.ok ? "" : `<p class="g-why">${esc(c.reason)}</p>`}</div>
+        <button class="btn ${c.ok ? "sun" : "ghost"} small" data-v="${esc(u.id)}" data-up="${esc(u.id)}"${c.ok ? "" : " disabled"}>${owned ? "가짐" : "사기"}</button>
+      </li>`;
+    }).join("")}</ul>`;
+    const id = await sheet({ title: "성장", html, cls: "g-grow-sheet" });
+    if (!id || S.destroyed) return;
+    const b = buy(S.garden, id, passed);
+    if (b.error) { toast(b.error); return; }
+    save(b.garden);
+    const done = b.orderDone ? finishOrders(b.orderDone) : [];
+    ctx.sound.play("buy");
+    const label = UPGRADES.find((u) => u.id === id)?.label ?? id;
+    resultEl.innerHTML = `<p class="g-msg">${esc(`「${label}」 성장을 샀어요`)}</p>`;
+    S.overlay = {};
+    paintAll();
+    await showOrders(done);
+  }
+
+  // ---- 기호 줄(코드 모드) ----
+  const keep = (e) => e.preventDefault();
+  symWrap.querySelectorAll(".sym").forEach((b) => {
+    b.addEventListener("mousedown", keep);
+    b.addEventListener("pointerdown", keep);
+    b.addEventListener("click", () => {
+      if (!S.ed || S.state !== "idle") return; // 실행·재생 중에는 코드를 고치지 않음
+      const sy = SYMBOL_ORDER[+b.dataset.s];
+      if (sy.act === "indent") S.ed.indent();
+      else if (sy.act === "dedent") S.ed.dedent();
+      else S.ed.insert(sy.ins, sy.back || 0);
+    });
+  });
+
+  // ---- 화면 키보드 위로 아래 줄 올리기 ----
+  const vv = window.visualViewport;
+  function place() {
+    const gap = vv ? Math.max(0, window.innerHeight - (vv.height + vv.offsetTop)) : 0;
+    foot.style.transform = gap > 0 ? `translateY(${-gap}px)` : "";
+  }
+  if (vv) { vv.addEventListener("resize", place); vv.addEventListener("scroll", place); }
+
+  // ---- 누르기(한 곳에서) ----
+  root.addEventListener("click", (e) => {
+    const t = e.target;
+    if (S.state !== "idle") return; // 실행·재생 중에는 편집하지 않음(나가기·재생 단추는 따로 묶음)
+    const arg = t.closest(".g-arg");
+    if (arg) { openArg(arg.closest(".g-node").dataset.id, arg.dataset.arg); return; }
+    const menu = t.closest(".g-menu");
+    if (menu) { openMenu(menu.closest(".g-node").dataset.id); return; }
+    const add = t.closest(".g-add");
+    if (add) { openAdd(add.dataset.parent === "" ? null : add.dataset.parent, add.dataset.slot); return; }
+  });
+  root.querySelector("#g-back").addEventListener("click", () => ctx.show("home"));
+  runBtn.addEventListener("click", doRun);
+  root.querySelector("#g-grow").addEventListener("click", openGrow);
+  root.querySelector("#g-skip").addEventListener("click", () => { S.skip = true; if (S.wake) S.wake(); });
+  const speedBtn = root.querySelector("#g-speed");
+  speedBtn.addEventListener("click", () => {
+    S.speed = S.speed === 1 ? 2 : 1;
+    speedBtn.textContent = `${S.speed}배`;
+    speedBtn.setAttribute("aria-label", `재생 속도 ${S.speed}배, 누르면 ${S.speed === 1 ? 2 : 1}배`);
+  });
+  codeEl.addEventListener("toggle", () => { S.previewOpen = codeEl.open; });
+
+  // ---- 열기 ----
+  // 처음 열 때 저장에 텃밭이 없으면(옛 저장) 채워 둔다
+  if (!ctx.save.garden) save(S.garden);
+  const settled = finishOrders(null);
+  paintAll();
+  resultEl.innerHTML = `<p class="g-msg idle">${esc(RUN_HINT)}</p>`;
+  if (settled.length) setTimeout(() => { if (!S.destroyed) showOrders(settled); }, 0);
+
+  return () => {
+    S.destroyed = true;
+    if (S.wake) S.wake();
+    flushCode();
+    offPy();
+    if (vv) { vv.removeEventListener("resize", place); vv.removeEventListener("scroll", place); }
+    if (S.ed) { S.ed.destroy(); S.ed = null; }
+    document.querySelectorAll(".modal-back").forEach((m) => m.remove());
+  };
+}
+
+export { argChips, goalText, condLabel };

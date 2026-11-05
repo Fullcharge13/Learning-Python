@@ -32,7 +32,35 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
   그림 모양: 꺾은선 하나이고 legend가 없으면 예전 그대로 {kind, labels, values, …}.
              꺾은선이 둘 이상이거나 legend가 있으면 values 대신 series: [{"name"?: 글, "values": [수]}, …].
 
-run(code, stdin, require, files=None, server=None) -> {
+텃밭(v0.10, 설계서 2026-11-05 §2): farm(dict)이 있으면 실행마다 새 `farm` 모듈을 sys.modules에 넣고(끝나면 지움)
+  명령 move(방향)·plant(작물)·harvest()·can_harvest()·what_here()를 실행 전역에도 미리 넣는다(import 없이 씀,
+  `from farm import *`·`import farm`도 됨). print는 그대로 출력하면서 say 사건도 남긴다(표준 출력에 쓸 때만).
+  받은 상태는 고치지 않고 다듬은 사본(_farm_state) 위에서 돈다. 시간 1짜리 행동(move·plant·harvest, 실패한
+  심기·빈 칸 수확 포함)은 지금 clock에 일어나고 clock += 1. 다 자람: clock − planted_at ≥ 자라는 시간(당근 8,
+  감자 12, upgrades에 "비료"면 6·9). 감자는 upgrades에 "감자 씨앗"이 있어야 심어짐.
+  한 실행에 행동 FARM_ACTIONS_MAX(500)번까지 — 501번째에 FarmTired(BaseException)로 멈추고, 학습자가 except로
+  삼켜도 추적 함수가 학습자 코드 다음 줄에서 다시 던진다. 결과는 오류가 아니라 stopped "tired".
+  확인(can_harvest·what_here, 시간 0)은 한 실행에 FARM_CHECKS_MAX(2000)번까지 — 2001번째에 같은 방식으로 멈추고
+  stopped "waited"(`while not can_harvest(): pass`처럼 시간이 흐르지 않는 기다리기, 판정 C60). 확인은 사건을 남기지 않는다.
+  둘 중 먼저 걸린 이유가 stopped에 남고, 멈춘 뒤로는 행동·확인 모두 다시 던진다.
+  result["farm"] = {
+      "events": [ {"t": "move", "line", "dir", "x", "y"}            # x, y = 움직인 뒤 자리
+                | {"t": "plant", "line", "crop", "x", "y"}
+                | {"t": "plant_fail", "line", "reason": "occupied" | "no_seed", "crop", "x", "y"}
+                | {"t": "harvest", "line", "crop", "x", "y"}          # 다 자람 → store[crop] += 1
+                | {"t": "harvest_young", "line", "crop", "x", "y"}    # 덜 자람 → 작물만 사라짐
+                | {"t": "harvest_empty", "line", "x", "y"}            # 빈 칸(시간은 1 듦)
+                | {"t": "say", "line", "text"} ],                     # print 한 번(끝 줄바꿈 뺌, 40자까지)
+                # line: 그 명령을 부른 학습자 코드 줄(가장 안쪽). say는 FARM_SAYS_MAX(100)개까지만 남긴다(넘는 print는
+                # 출력만). 시간 1짜리 사건은 행동 상한(500) 안이라 하나도 버리지 않는다 → 사건만으로 끝 상태를 다시 만들 수 있다.
+      "state": {"size", "cells": [None | {"crop", "planted_at"}] (y*size+x), "pie": {"x", "y"},
+                "clock", "store": {"당근", "감자"}, "upgrades": [str]},   # 끝 상태(오류가 나도 그 직전까지)
+      "stopped": None | "tired" | "waited", "actions": int }   # actions: 이번 실행의 시간 1짜리 행동 수
+  결과 farm은 학습자 코드가 닫힘으로 상태·사건을 건드렸어도 다시 다듬은 사본이다(JSON 모양, nan 없음).
+  규칙 표는 실행마다 바꿀 수 없는 원본에서 새로 만들고, 이 모듈의 전역 이름은 실행이 끝나면 되돌린다(검토 C62 I1).
+  farm=None이면 result에 "farm"이 없다(예전 그대로).
+
+run(code, stdin, require, files=None, server=None, farm=None) -> {
     "stdout": str, "stderr": str,
     "error": None | {"type": str, "line": int | None, "msg": str},
     "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:/Def:/SQL:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr, NamedGroup·Reraise)
@@ -523,7 +551,349 @@ def _make_chart(charts):
     return mod
 
 
-def run(code, stdin=None, require=None, files=None, server=None):
+FARM_ACTIONS_MAX = 500   # 한 실행에 시간 1짜리 행동(move·plant·harvest) 수. 넘으면 파이가 지침
+FARM_CHECKS_MAX = 2000   # 한 실행에 시간이 들지 않는 확인(can_harvest·what_here) 수. 넘으면 기다리다 멈춤(판정 C60)
+FARM_SAYS_MAX = 100      # 한 실행에 남기는 말풍선(say) 사건 수. 넘는 print는 출력만 되고 사건은 없음(검토 C62 I2)
+FARM_EVENTS_MAX = FARM_ACTIONS_MAX + FARM_SAYS_MAX  # 사건 수 안전 상한 → 시간 1짜리 사건(≤500)은 절대 버리지 않는다
+FARM_SAY_MAX = 40        # 말풍선(say) 글자 수
+FARM_SIZE_MAX = 12       # 밭 한 변의 칸 수 상한(받은 상태를 다듬을 때)
+FARM_FERTILIZER = "비료"
+FARM_POTATO_SEED = "감자 씨앗"
+FARM_DIR_MSG = "방향은 위·아래·왼쪽·오른쪽 중 하나예요"
+FARM_CROP_MSG = "작물은 당근·감자 중 하나예요"
+FARM_NAMES = ("move", "plant", "harvest", "can_harvest", "what_here")
+# 규칙 표의 원본(검토 C62 I1): 바꿀 수 없는 튜플. 실행마다 _make_farm이 여기서 새 표를 만들어 닫힘(closure)에만 둔다.
+# 아래 FARM_CROPS·FARM_GROW·FARM_GROW_FERTILIZED·FARM_DIRS는 시험·문서가 읽는 읽기 전용 사본이고 엔진은 쓰지 않는다.
+_FARM_CROP_RULES = (("당근", 8, 6), ("감자", 12, 9))   # (작물, 자라는 시간, 비료 뒤 자라는 시간)
+_FARM_DIR_RULES = (("위", 0, -1), ("아래", 0, 1), ("왼쪽", -1, 0), ("오른쪽", 1, 0))
+
+
+def _farm_tables():
+    """규칙 원본에서 새 표를 만든다(실행마다·모듈 이름을 되돌릴 때마다)."""
+    import types
+    crops = tuple(c for c, _g, _f in _FARM_CROP_RULES)
+    grow = types.MappingProxyType({c: g for c, g, _f in _FARM_CROP_RULES})
+    fert = types.MappingProxyType({c: f for c, _g, f in _FARM_CROP_RULES})
+    dirs = types.MappingProxyType({d: (dx, dy) for d, dx, dy in _FARM_DIR_RULES})
+    return crops, grow, fert, dirs
+
+
+FARM_CROPS, FARM_GROW, FARM_GROW_FERTILIZED, FARM_DIRS = _farm_tables()
+_dict = dict
+_print = print
+_settrace = sys.settrace
+
+
+class FarmTired(BaseException):
+    """파이가 멈춤: 한 실행의 행동이 FARM_ACTIONS_MAX번(stopped "tired")이나
+    확인이 FARM_CHECKS_MAX번(stopped "waited")을 넘었을 때.
+
+    BaseException이라 `except Exception:`에 걸리지 않는다. 학습자가 `except:`·`except BaseException:`으로
+    삼키면, 그 뒤로는 학습자 코드 한 줄이 돌 때마다 다시 던져(추적 함수) 실행이 끝나게 한다.
+    run()은 이것을 오류가 아니라 result["farm"]["stopped"] = "tired" | "waited"로 알린다.
+    """
+
+
+_FARM_INT_MAX = 2 ** 53   # JSON·JS에서 정확한 정수 범위
+
+
+def _farm_int(v, default):
+    """정수로 다듬음. 정수가 아니거나(bool·nan·inf·글자·객체) 너무 크면 default."""
+    t = _type(v)
+    if t is _float and v == v and -_FARM_INT_MAX <= v <= _FARM_INT_MAX:
+        return _int(v)
+    if t is not _int or not (-_FARM_INT_MAX <= v <= _FARM_INT_MAX):
+        return default
+    return v
+
+
+def _farm_state(farm):
+    """받은 텃밭 상태를 새 dict로 다듬는다(받은 것은 고치지 않음). 모르는 값은 기본값으로.
+
+    결과를 만들 때(_farm_copy)도 같은 정리를 한 번 더 한다: 학습자 코드가 닫힘으로 상태를 바꿔 nan·객체 같은
+    값을 넣어도 결과는 언제나 JSON에 넣을 수 있는 모양이다(검토 C62). 형(type)은 isinstance가 아니라 type()으로
+    정확히 본다(dict·str을 이은 클래스의 이상한 __eq__·items를 타지 않게).
+    """
+    if _type(farm) is not _dict:
+        farm = {}
+    get = _dict.get
+    size = max(1, min(FARM_SIZE_MAX, _farm_int(get(farm, "size"), 3)))
+    raw = get(farm, "cells")
+    raw = _list(raw) if _type(raw) in (_list, _tuple) else []
+    cells = []
+    for i in range(size * size):
+        c = raw[i] if i < _len(raw) else None
+        crop = get(c, "crop") if _type(c) is _dict else None
+        if _type(crop) is _str and crop in FARM_CROPS:
+            cells.append({"crop": crop, "planted_at": _farm_int(get(c, "planted_at"), 0)})
+        else:
+            cells.append(None)
+    pie = get(farm, "pie")
+    pie = pie if _type(pie) is _dict else {}
+    store = {c: 0 for c in FARM_CROPS}
+    given = get(farm, "store")
+    if _type(given) is _dict:
+        for k, v in _list(_dict.items(given)):
+            if _type(k) is _str and k in FARM_CROPS:
+                store[k] = max(0, _farm_int(v, 0))
+    ups = get(farm, "upgrades")
+    ups = [u for u in ups if _type(u) is _str] if _type(ups) in (_list, _tuple) else []
+    return {
+        "size": size,
+        "cells": cells,
+        "pie": {"x": _farm_int(get(pie, "x"), 0) % size, "y": _farm_int(get(pie, "y"), 0) % size},
+        "clock": max(0, _farm_int(get(farm, "clock"), 0)),
+        "store": store,
+        "upgrades": ups,
+    }
+
+
+def _farm_copy(st):
+    """결과에 넣을 상태 사본: _farm_state와 같은 정리(JSON에 그대로 넣을 수 있는 모양)."""
+    return _farm_state(st)
+
+
+_FARM_EVENT_TYPES = ("move", "plant", "plant_fail", "harvest", "harvest_young", "harvest_empty", "say")
+_FARM_EVENT_KEYS = (("line", "int"), ("x", "int"), ("y", "int"), ("dir", "str"), ("crop", "str"),
+                    ("reason", "str"), ("text", "str"))
+
+
+def _farm_events_copy(events):
+    """결과에 넣을 사건 목록 사본. 모양이 이상한 사건·값은 버린다(JSON에 넣을 수 있는 것만)."""
+    out = []
+    if _type(events) is not _list:
+        return out
+    for e in _list(events)[:FARM_EVENTS_MAX]:
+        if _type(e) is not _dict:
+            continue
+        t = _dict.get(e, "t")
+        if _type(t) is not _str or t not in _FARM_EVENT_TYPES:
+            continue
+        c = {"t": t}
+        for k, kind in _FARM_EVENT_KEYS:
+            if not _dict.__contains__(e, k):
+                continue
+            v = _dict.get(e, k)
+            if kind == "int":
+                v = None if v is None else _farm_int(v, None)
+                if v is None and k != "line":   # line만 None일 수 있음(학습자 코드 밖에서 부름)
+                    continue
+            elif _type(v) is not _str:
+                continue
+            c[k] = v
+        out.append(c)
+    return out
+
+
+def _farm_result(fs):
+    """result["farm"]: 사건·끝 상태·멈춤·행동 수를 다듬은 사본(학습자가 닫힘으로 fs를 바꿨어도 JSON 모양)."""
+    stopped = _dict.get(fs, "stopped")
+    return {"events": _farm_events_copy(_dict.get(fs, "events")),
+            "state": _farm_copy(_dict.get(fs, "state")),
+            "stopped": stopped if _type(stopped) is _str and stopped in ("tired", "waited") else None,
+            "actions": max(0, _farm_int(_dict.get(fs, "actions"), 0))}
+
+
+def _make_farm(fs, out):
+    """실행 하나에 쓰는 새 farm 모듈과 print 대신 쓸 함수.
+
+    fs: {"state": _farm_state(...), "events": [], "actions": 0, "checks": 0, "says": 0, "stopped": None,
+         "trace_on": False}
+    규칙(설계서 §2-1)은 여기 한 곳에만 있다. 시간 1짜리 행동은 지금 시계(clock)에 일어나고 그 뒤 clock += 1.
+    규칙 표·상한·도구는 여기서 원본(_FARM_CROP_RULES 등)으로 새로 만들어 닫힘에만 둔다(검토 C62 I1): 학습자가
+    move.__globals__로 모듈 이름을 바꿔도 이 실행의 규칙은 그대로이고(이름은 run()이 끝에 되돌림), 닫힘을 파고들어
+    바꾼 것은 이 실행에만 남는다(그렇게 만든 결과는 화면 쪽 applyRun의 일관성 검사가 거른다).
+    """
+    import types
+
+    st = fs["state"]
+    events = fs["events"]
+    crops, grow_normal, grow_fert, dirs = _farm_tables()
+    actions_max = FARM_ACTIONS_MAX
+    checks_max = FARM_CHECKS_MAX
+    says_max = FARM_SAYS_MAX
+    events_max = FARM_EVENTS_MAX
+    say_len = FARM_SAY_MAX
+    seed = FARM_POTATO_SEED
+    fertilizer = FARM_FERTILIZER
+    dir_msg = FARM_DIR_MSG
+    crop_msg = FARM_CROP_MSG
+    stop_exc = FarmTired
+    user_file = USER_FILE
+    caller_line = _caller_user_line
+    settrace = _settrace
+    getframe = sys._getframe
+    py_print = _print
+    isinst = _isinstance
+    str_t = _str
+    value_error = _ValueError
+    nlen = _len
+    sys_mod = sys
+
+    def _ev(t, extra):
+        # 말풍선은 says_max개까지만(검토 C62 I2) → 시간 1짜리 사건(≤ actions_max)은 events_max 안에 언제나 들어간다
+        if t == "say":
+            if fs["says"] >= says_max:
+                return
+            fs["says"] += 1
+        if nlen(events) < events_max:
+            e = {"t": t, "line": caller_line()}
+            e.update(extra)
+            events.append(e)
+
+    def _tired_tracer(frame, event, arg):
+        # 지친 뒤에는 학습자 코드가 새 줄·새 함수에 들어설 때마다 다시 던진다(except로 삼켜도 끝나게).
+        # 알려진 한계(검토 C62, 고치지 않음): 학습자가 exec("…")로 만든 코드는 파일 이름이 <user>가 아니어서
+        # 여기서 다시 던지지 않는다. 그 안에서 except로 삼키며 끝없이 돌면 바깥 시간 제한(작업자 종료)으로 끝난다.
+        # 자기 코드를 일부러 그렇게 쓸 때만 생기고, 결과는 「시간 초과」라 텃밭은 그대로다.
+        if frame.f_code.co_filename != user_file:
+            return None
+        if event == "line" or event == "call":
+            raise stop_exc("파이가 멈췄어요")
+        return _tired_tracer
+
+    def _stop(why):
+        """실행을 멈춘다(첫 이유를 남김). 그 뒤로는 학습자 코드 한 줄마다 다시 던진다."""
+        if fs["stopped"] is None:
+            fs["stopped"] = why
+        if not fs["trace_on"]:
+            fs["trace_on"] = True
+            settrace(_tired_tracer)
+            f = getframe(1)
+            while f is not None:
+                if f.f_code.co_filename == user_file:
+                    f.f_trace = _tired_tracer
+                f = f.f_back
+        raise stop_exc("파이가 멈췄어요")
+
+    def _act():
+        """시간 1짜리 행동 하나를 센다. 넘치면 지침."""
+        if fs["stopped"] is not None or fs["actions"] >= actions_max:
+            _stop("tired")
+        fs["actions"] += 1
+        now = st["clock"]
+        st["clock"] = now + 1
+        return now
+
+    def _here():
+        return st["pie"]["y"] * st["size"] + st["pie"]["x"]
+
+    def _ripe(cell, now):
+        grow = grow_fert if fertilizer in st["upgrades"] else grow_normal
+        return now - cell["planted_at"] >= grow[cell["crop"]]
+
+    def move(direction):
+        """파이를 한 칸 움직인다: move("위"), "아래", "왼쪽", "오른쪽". 끝에 닿으면 반대편으로"""
+        if not isinst(direction, str_t) or direction not in dirs:
+            raise value_error(dir_msg)
+        _act()
+        dx, dy = dirs[direction]
+        n = st["size"]
+        st["pie"]["x"] = (st["pie"]["x"] + dx) % n
+        st["pie"]["y"] = (st["pie"]["y"] + dy) % n
+        _ev("move", {"dir": direction, "x": st["pie"]["x"], "y": st["pie"]["y"]})
+
+    def plant(crop):
+        """지금 칸에 심는다: plant("당근") 또는 plant("감자")"""
+        if not isinst(crop, str_t) or crop not in crops:
+            raise value_error(crop_msg)
+        now = _act()
+        i = _here()
+        pos = {"crop": crop, "x": st["pie"]["x"], "y": st["pie"]["y"]}
+        if st["cells"][i] is not None:
+            pos["reason"] = "occupied"
+            _ev("plant_fail", pos)
+        elif crop == "감자" and seed not in st["upgrades"]:
+            pos["reason"] = "no_seed"
+            _ev("plant_fail", pos)
+        else:
+            st["cells"][i] = {"crop": crop, "planted_at": now}
+            _ev("plant", pos)
+
+    def harvest():
+        """지금 칸의 작물을 거둔다. 덜 자랐으면 작물이 사라진다"""
+        now = _act()
+        i = _here()
+        cell = st["cells"][i]
+        pos = {"x": st["pie"]["x"], "y": st["pie"]["y"]}
+        if cell is None:
+            _ev("harvest_empty", pos)
+            return
+        st["cells"][i] = None
+        pos["crop"] = cell["crop"]
+        if _ripe(cell, now):
+            st["store"][cell["crop"]] = st["store"].get(cell["crop"], 0) + 1
+            _ev("harvest", pos)
+        else:
+            _ev("harvest_young", pos)
+
+    def _check():
+        """시간이 들지 않는 확인 하나를 센다. 넘치면(끝없이 기다리기) 멈춤."""
+        if fs["stopped"] is not None or fs["checks"] >= checks_max:
+            _stop("waited")
+        fs["checks"] += 1
+
+    def can_harvest():
+        """지금 칸이 다 자란 작물이면 True(시간이 들지 않음)"""
+        _check()
+        cell = st["cells"][_here()]
+        return cell is not None and _ripe(cell, st["clock"])
+
+    def what_here():
+        """지금 칸: "당근", "감자", "빈칸"(시간이 들지 않음)"""
+        _check()
+        cell = st["cells"][_here()]
+        return "빈칸" if cell is None else cell["crop"]
+
+    class _SayTee:
+        """print가 쓰는 글을 진짜 출력 통(한도 포함)에 넘기면서 말풍선용으로도 모은다(실행마다 새 클래스)."""
+
+        def __init__(self, target):
+            self.out = target
+            self.parts = []
+
+        def write(self, s):
+            n = self.out.write(s)
+            self.parts.append(s)
+            return n
+
+        def flush(self):
+            pass
+
+    def say_print(*args, **kw):
+        """print와 같고, 표준 출력에 쓴 줄은 말풍선(say 사건)으로도 남긴다"""
+        target = kw.get("file")
+        if target is None:
+            target = sys_mod.stdout
+        if target is not out:
+            return py_print(*args, **kw)
+        tee = _SayTee(out)
+        kw["file"] = tee
+        py_print(*args, **kw)
+        text = "".join(tee.parts)
+        if text.endswith("\n"):
+            text = text[:-1]
+        _ev("say", {"text": text[:say_len]})
+
+    mod = types.ModuleType("farm")
+    mod.__doc__ = ("리아와 파이썬! 파이의 텃밭: move(방향), plant(작물), harvest(), "
+                   "can_harvest(), what_here()")
+    mod.__all__ = list(FARM_NAMES)
+    cmds = {}
+    for f in (move, plant, harvest, can_harvest, what_here):
+        f.__module__ = "farm"
+        setattr(mod, f.__name__, f)
+        cmds[f.__name__] = f
+    return mod, cmds, say_print
+
+
+def _restore_farm_tables():
+    """보여 주기용 표(FARM_GROW 등)를 원본에서 다시 만든다(학습자가 이름을 바꾸거나 안을 건드렸어도)."""
+    global FARM_CROPS, FARM_GROW, FARM_GROW_FERTILIZED, FARM_DIRS
+    FARM_CROPS, FARM_GROW, FARM_GROW_FERTILIZED, FARM_DIRS = _farm_tables()
+
+
+def run(code, stdin=None, require=None, files=None, server=None, farm=None):
     code = "" if code is None else str(code)
     stdin = _split_stdin(stdin)
     require = list(require or [])
@@ -534,6 +904,12 @@ def run(code, stdin=None, require=None, files=None, server=None):
     err = _CappedIO(state)
     charts = []
     result = {"stdout": "", "stderr": "", "error": None, "missing": [], "charts": charts}
+    # 텃밭(v0.10): farm이 있으면 그 사본 위에서 명령을 실행하고 result["farm"]에 사건·끝 상태를 담는다.
+    fs = None
+    if farm is not None:
+        fs = {"state": _farm_state(farm), "events": [], "actions": 0, "checks": 0, "says": 0, "stopped": None,
+              "trace_on": False}
+        result["farm"] = {"events": fs["events"], "state": None, "stopped": None, "actions": 0}
 
     # 오류 원문(Traceback)에 학습자 코드 줄이 보이도록 등록한다.
     linecache.cache[USER_FILE] = (len(code), None, code.splitlines(True), USER_FILE)
@@ -552,6 +928,8 @@ def run(code, stdin=None, require=None, files=None, server=None):
             text = "%s: %s\n" % (type(e).__name__, _safe_str(e))
         result["stderr"] = text[:2000]
         linecache.cache.pop(USER_FILE, None)
+        if fs is not None:
+            result["farm"] = _farm_result(fs)
         return result
 
     try:
@@ -575,10 +953,22 @@ def run(code, stdin=None, require=None, files=None, server=None):
     old_limit = sys.getrecursionlimit()
     old_modules = set(sys.modules)
     old_modules.discard("chart")
+    old_modules.discard("farm")
+    old_trace = sys.gettrace()
+    # 이 모듈의 전역 이름(규칙 상수·도구 함수)을 저장해 두었다가 끝나면 통째로 되돌린다(검토 C62 I1):
+    # 학습자 코드는 move.__globals__나 import ria_runner로 이 dict에 닿을 수 있다.
+    # 알려진 한계: 함수 객체의 __code__·클래스 속성처럼 이름이 아닌 객체 안을 바꾼 것은 되돌리지 않는다.
+    mod_globals = globals()
+    saved_globals = dict(mod_globals)
     sys.modules["chart"] = _make_chart(charts)  # 목록 뒤에 넣어 실행이 끝나면 지워지게
+    user_globals = {"__name__": "__main__", "__builtins__": builtins}
+    if fs is not None:
+        farm_mod, farm_cmds, say_print = _make_farm(fs, out)
+        sys.modules["farm"] = farm_mod
+        user_globals.update(farm_cmds)  # import 없이 move(…) 등을 바로 쓰게(레슨 코드처럼 짧게)
+        builtins.print = say_print      # builtins는 끝나면 통째로 되돌린다
     sys.stdout, sys.stderr = out, err
     builtins.input = _make_input(stdin, out, state)
-    user_globals = {"__name__": "__main__", "__builtins__": builtins}
     caught = None
     try:
         _chdir(run_dir)
@@ -588,6 +978,11 @@ def run(code, stdin=None, require=None, files=None, server=None):
     except _BaseException as e:  # noqa: BLE001 — 어떤 오류든 결과로 돌려준다. 분류는 builtins를 되돌린 뒤에.
         caught = e
     finally:
+        mod_globals.clear()
+        mod_globals.update(saved_globals)
+        _restore_farm_tables()
+        if fs is not None and fs["trace_on"]:
+            _settrace(old_trace)
         builtins.__dict__.clear()
         builtins.__dict__.update(old_builtins)
         sys.stdout, sys.stderr = old_out, old_err
@@ -602,6 +997,11 @@ def run(code, stdin=None, require=None, files=None, server=None):
             pass
         _rmtree(run_dir, ignore_errors=True)
 
+    tired = fs is not None and fs["stopped"] is not None
+    if tired:
+        # 파이가 지침(행동 500번)·기다리다 멈춤(확인 2000번): 오류가 아니라 멈춤.
+        # 학습자가 except로 삼켰다가 다른 오류가 났어도 같다.
+        caught = None
     if isinstance(caught, SystemExit):
         # exit()·sys.exit()는 종료 코드와 상관없이 정상 종료로 친다(판정 C10).
         # 글자 값이면 진짜 Python처럼 stderr에 남긴다.
@@ -621,8 +1021,10 @@ def run(code, stdin=None, require=None, files=None, server=None):
             err.raw_write(_format_tb(caught, _user_tb(tb))[:2000])
     linecache.cache.pop(USER_FILE, None)
 
-    # 입력 부족·출력 초과는 학습자 코드가 except로 삼켰더라도 그것을 결과로 알린다.
-    if state["input_missing"] is not None or (result["error"] or {}).get("type") == "InputMissing":
+    # 입력 부족·출력 초과는 학습자 코드가 except로 삼켰더라도 그것을 결과로 알린다(멈춘 경우는 빼고).
+    if tired:
+        pass
+    elif state["input_missing"] is not None or (result["error"] or {}).get("type") == "InputMissing":
         line = state["input_missing"] or result["error"]["line"]
         result["error"] = {"type": "InputMissing", "line": line,
                            "msg": "input() needed more values than were given"}
@@ -632,6 +1034,9 @@ def run(code, stdin=None, require=None, files=None, server=None):
         result["error"] = {"type": "OutputLimit", "line": line,
                            "msg": "output is longer than %d characters" % OUTPUT_LIMIT}
         err.raw_write("OutputLimit (line %s): output is longer than %d characters\n" % (line, OUTPUT_LIMIT))
+
+    if fs is not None:
+        result["farm"] = _farm_result(fs)
 
     result["stdout"] = out.getvalue()
     result["stderr"] = err.getvalue()

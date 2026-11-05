@@ -6,6 +6,7 @@ import { esc, icon, bar, riaSays, dialog, toast } from "./dom.js";
 import { tabBar, bindTabs, statusBar } from "./nav.js";
 import { pathEndText } from "../curriculum.js";
 import { hasNewContent } from "../newcontent.js";
+import { currentOrder, passedChapters, newGarden } from "../garden/state.js";
 
 // 「새 내용」 점(v0.7.1): 노드 옆 작은 꼬리표. 누르기는 노드가 받는다(pointer-events: none, 노드 크기 그대로)
 const NEW_LABEL = "새 내용 있음";
@@ -108,6 +109,24 @@ function dailyCard(st) {
   </section>`;
 }
 
+// 파이의 텃밭 입구(v0.10): 1장 평가를 통과하면 열림. 열리면 지금 주문 이름
+function gardenCard(ctx) {
+  const passed = passedChapters(ctx.save, ctx.chapters);
+  if (!passed.has(1)) {
+    return `<section class="panel garden-card locked" aria-labelledby="gc-title">
+      <span class="gc-ic" aria-hidden="true">${icon("lock")}</span>
+      <div class="gc-text"><h2 id="gc-title">파이의 텃밭</h2><p>1장을 끝내면 열려요</p></div>
+    </section>`;
+  }
+  const { order, waiting } = currentOrder(ctx.save.garden || newGarden(), passed);
+  const sub = !order ? "주문을 모두 해냈어요" : waiting ? `다음 주문은 ${order.need}장을 끝내면 이어져요` : `주문: ${order.title}`;
+  return `<section class="panel garden-card" aria-labelledby="gc-title">
+    <span class="gc-ic" aria-hidden="true">${icon("sprout")}</span>
+    <div class="gc-text"><h2 id="gc-title">파이의 텃밭</h2><p class="gc-order">${esc(sub)}</p></div>
+    <button class="btn primary gc-go" id="garden">텃밭 가기</button>
+  </section>`;
+}
+
 function reviewCard(save) {
   const queue = save.review_queue || [];
   if (!queue.length) return "";
@@ -191,6 +210,7 @@ export function render(root, ctx) {
         ${allDone ? `<p class="all-done">준비된 레슨을 모두 끝냈어요. 다시 풀거나 복습하며 XP를 모아 봐요.</p>` : ""}
       </section>
       ${dst && dst.state === "locked" ? dailyCard(dst) : ""}
+      ${gardenCard(ctx)}
       ${reviewCard(save)}
       ${questCard(save)}
       ${sections || '<p class="panel">레슨을 불러오지 못했어요. 새로고침해 주세요.</p>'}
@@ -203,6 +223,8 @@ export function render(root, ctx) {
   if (go) go.addEventListener("click", () => ctx.show("lesson", { id: currentId }));
   const dg = root.querySelector("#daily");
   if (dg) dg.addEventListener("click", () => ctx.show("lesson", { daily: true }));
+  const gd = root.querySelector("#garden");
+  if (gd) gd.addEventListener("click", () => ctx.show("garden"));
   const rv = root.querySelector("#review");
   if (rv) rv.addEventListener("click", () => ctx.show("lesson", { review: true }));
   root.querySelectorAll("[data-lesson]").forEach((b) => b.addEventListener("click", async () => {

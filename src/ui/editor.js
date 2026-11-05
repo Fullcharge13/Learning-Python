@@ -22,6 +22,24 @@ const errField = StateField.define({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+// v0.10 텃밭 재생: 지금 실행 중인 줄(오류 줄과 따로, 글을 고치면 지움)
+const setNow = StateEffect.define();
+const nowLine = Decoration.line({ class: "cm-nowline" });
+const nowField = StateField.define({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    for (const e of tr.effects) {
+      if (e.is(setNow)) {
+        if (e.value == null) return Decoration.none;
+        const n = Math.min(Math.max(1, e.value), tr.state.doc.lines);
+        return Decoration.set([nowLine.range(tr.state.doc.line(n).from)]);
+      }
+    }
+    return tr.docChanged ? Decoration.none : deco.map(tr.changes);
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 const theme = EditorView.theme({
   "&": { fontSize: "16px", backgroundColor: "var(--card)", borderRadius: "14px" },
   ".cm-content": { fontFamily: "var(--mono)", padding: "10px 0", minHeight: "8.5em", caretColor: "var(--ink)" },
@@ -30,6 +48,7 @@ const theme = EditorView.theme({
   ".cm-activeLine": { backgroundColor: "rgba(31,158,147,0.07)" },
   ".cm-activeLineGutter": { backgroundColor: "rgba(31,158,147,0.15)" },
   ".cm-errline": { backgroundColor: "var(--coral-soft)", boxShadow: "inset 4px 0 0 var(--coral)" },
+  ".cm-nowline": { backgroundColor: "var(--sun-soft)", boxShadow: "inset 4px 0 0 var(--sun-deep)" },
   "&.cm-focused": { outline: "3px solid var(--focus)", outlineOffset: "2px" },
 });
 
@@ -44,7 +63,7 @@ export function createEditor(parent, { doc = "", label = "코드 입력창", onC
         lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(), drawSelection(),
         history(), indentOnInput(), bracketMatching(), indentUnit.of("    "),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-        python(), errField, theme,
+        python(), errField, nowField, theme,
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         EditorView.lineWrapping,
         ...(margins ? [EditorView.scrollMargins.of(() => { const m = margins() || {}; return { top: m.top || 0, bottom: m.bottom || 0 }; })] : []),
@@ -74,6 +93,10 @@ export function createEditor(parent, { doc = "", label = "코드 입력창", onC
       if (scroll && Number.isInteger(n) && n > 0 && n <= view.state.doc.lines) {
         view.dispatch({ effects: EditorView.scrollIntoView(view.state.doc.line(n).from, { y: "center" }) });
       }
+    },
+    /** 지금 실행 중인 줄 표시(텃밭 재생, v0.10). 페이지는 옮기지 않음. null이면 지움 */
+    markNow(n) {
+      view.dispatch({ effects: setNow.of(Number.isInteger(n) && n > 0 ? n : null) });
     },
     /** 커서 자리에 글자 넣기. pair면 커서를 가운데로 */
     insert(text, caretBack = 0) {

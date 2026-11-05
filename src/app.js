@@ -25,9 +25,10 @@ import * as done from "./ui/done.js";
 import * as badges from "./ui/badges.js";
 import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
+import * as garden from "./ui/garden.js";
 
-export const VERSION = "v0.9";
-const SCREENS = { splash, home, lesson, done, badges, closet, settings };
+export const VERSION = "v0.10";
+const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
 function pickStorage() {

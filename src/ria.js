@@ -124,7 +124,8 @@ const lapels = (col, bot = 182) =>
 const sideShade = (len, col, op = 0.6) => S(`M122,152 Q133,154 134,167 L135,${len - 1} Q129,${len + 2} 123,${len + 2} Z`, col, op);
 
 // ---- 뱀 친구 ----
-function snake(x, y, s = 1, hat = false) {
+// v0.10: 파이의 텃밭(src/garden/view.js)도 같은 그림을 작게 다시 쓴다(새 캐릭터 없음)
+export function snake(x, y, s = 1, hat = false) {
   // (x, y) = 똬리 가운데 바닥
   const body = `M${x - 18},${y - 4} Q${x - 22},${y - 14} ${x - 4},${y - 15} Q${x + 18},${y - 15} ${x + 16},${y - 27} Q${x + 14},${y - 38} ${x},${y - 40} Q${x - 10},${y - 42} ${x - 8},${y - 52}`;
   let d = ell(x + 2, y - 5, 22, 7, C.green);

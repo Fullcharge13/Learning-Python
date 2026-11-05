@@ -46,6 +46,15 @@ const P = {
   review: '<path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/>',
   book: '<path d="M4 5.5A2 2 0 0 1 6 4h13v14H6a2 2 0 0 0-2 2zM4 20V5.5M8 8h7"/>',
   star: '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/>',
+  sprout: '<path d="M12 21v-8.5"/><path d="M12 12.5C12 8 9 5.5 4 5.5c0 4.5 3 7 8 7z"/><path d="M12 10c0-3.8 2.8-6 7.5-6 0 3.8-2.8 6-7.5 6z"/><path d="M6 21h12"/>',
+  back: '<path d="M15 5l-7 7 7 7"/>',
+  up: '<path d="M6 15l6-6 6 6"/>',
+  down: '<path d="M6 9l6 6 6-6"/>',
+  trash: '<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  more: '<circle cx="5.5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18.5" cy="12" r="1.4"/>',
+  code: '<path d="M8.5 7.5L4 12l4.5 4.5M15.5 7.5L20 12l-4.5 4.5"/>',
+  skip: '<path d="M5 5.5v13l9-6.5zM18 5.5v13"/>',
 };
 export function icon(name, cls = "") {
   return `<svg class="ic ${cls}" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${P[name] || ""}</svg>`;

@@ -9,18 +9,22 @@
 // 주고받는 말:
 //   받음 { type: "init", indexURL, runnerSource }
 //   보냄 { type: "ready", loadMs } | { type: "init-error", name, msg }
-//   받음 { type: "run", id, code, stdin, require, files?, server? }
+//   받음 { type: "run", id, code, stdin, require, files?, server?, farm? }
 //        files: { 이름: 글자 } (가상 파일, v0.4 E1), server: { 주소: { status, body, type? } } (연습 서버, E2)
-//        둘 다 JSON 글자로 바꿔 Python의 json.loads로 dict를 만든다(toPy의 객체 변환 차이를 피함).
+//        farm: { size, cells, pie:{x,y}, clock, store, upgrades } (파이의 텃밭 상태, v0.10)
+//        셋 다 JSON 글자로 바꿔 Python의 json.loads로 dict를 만든다(toPy의 객체 변환 차이를 피함).
 //   보냄 { type: "started", id }  (받자마자)
-//   보냄 { type: "result", id, result: { stdout, stderr, error, missing, charts } }
+//   보냄 { type: "result", id, result: { stdout, stderr, error, missing, charts, farm? } }
 //        charts: chart.show()로 그린 그림 목록(v0.5 E3). 그대로 toJs → 화면 쪽 cleanCharts가 다듬음.
+//        farm(텃밭을 넘겼을 때만): { events:[{t,line,…}], state, stopped: null|"tired"|"waited", actions }.
+//        toJs는 None을 undefined로 바꾸므로(빈 칸 cells[i]·stopped) farm은 json.dumps → JSON.parse로 옮겨 null을 지킨다.
 //   sqlite3(v0.5): Pyodide 314.0.7은 _sqlite3가 핵심(pyodide.asm.wasm)에 들어 있고 sqlite3 모듈은
 //        python_stdlib.zip에 있어 loadPackage가 필요 없다(loadPackage("sqlite3")는 "No known package"로 실패).
 
 let pyodide = null;
 let runFn = null;
 let loadsFn = null;
+let dumpsFn = null;
 
 function errInfo(e) {
   // PythonError는 e.type에 Python 예외 이름이 들어 있다.
@@ -48,6 +52,7 @@ async function init(msg) {
     runFn = mod.run.copy();
     mod.destroy();
     loadsFn = pyodide.runPython("import json\njson.loads");
+    dumpsFn = pyodide.runPython("import json\njson.dumps");
     // 한 번 돌려 두면 첫 실행이 빠르다(ast·traceback 등 첫 사용 비용).
     const warm = runFn("pass", "", pyodide.toPy([]));
     warm.destroy();
@@ -71,18 +76,26 @@ function run(msg) {
     // 없는 칸은 undefined로 넘긴다(Python None). JS null은 Pyodide에서 None이 아닌 jsnull이 된다.
     let filesPy;
     let serverPy;
+    let farmPy;
+    let farmOut = null;
     try {
       stdinPy = Array.isArray(msg.stdin) ? pyodide.toPy(msg.stdin) : String(msg.stdin == null ? "" : msg.stdin);
       reqPy = pyodide.toPy(Array.isArray(msg.require) ? msg.require : []);
       if (msg.files && typeof msg.files === "object") filesPy = loadsFn(JSON.stringify(msg.files));
       if (msg.server && typeof msg.server === "object") serverPy = loadsFn(JSON.stringify(msg.server));
-      out = runFn(String(msg.code == null ? "" : msg.code), stdinPy, reqPy, filesPy, serverPy);
+      if (msg.farm && typeof msg.farm === "object") farmPy = loadsFn(JSON.stringify(msg.farm));
+      out = runFn(String(msg.code == null ? "" : msg.code), stdinPy, reqPy, filesPy, serverPy, farmPy);
       result = out.toJs({ dict_converter: Object.fromEntries });
+      delete result.farm;
+      if (out.has("farm")) {
+        farmOut = out.get("farm");
+        result.farm = JSON.parse(dumpsFn(farmOut));
+      }
     } catch (e) {
       // runner.py 자체가 예외를 낸 경우(정상이라면 없음). 매달리지 않고 오류로 돌려준다.
       result = { stdout: "", stderr: "", error: errInfo(e), missing: [], charts: [] };
     } finally {
-      for (const p of [out, reqPy, stdinPy, filesPy, serverPy]) {
+      for (const p of [out, reqPy, stdinPy, filesPy, serverPy, farmPy, farmOut]) {
         if (p && typeof p.destroy === "function") {
           try { p.destroy(); } catch (_) { /* 이미 해제됨 */ }
         }

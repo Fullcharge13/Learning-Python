@@ -292,6 +292,42 @@ def test_chart_in_pyodide():
     assert r3["charts"] == [], r3
 
 
+def test_farm_in_pyodide():
+    # v0.10 파이의 텃밭: 명령·사건·끝 상태가 Pyodide에서도 같고, 빈 칸(None)은 null로 온다.
+    # 500번 지침은 except로 삼켜도 멈추고(추적 함수), 오류 없이 stopped "tired".
+    state = {"size": 3, "cells": [{"crop": "당근", "planted_at": 0}] + [None] * 8,
+             "pie": {"x": 0, "y": 0}, "clock": 8, "store": {"당근": 0, "감자": 0}, "upgrades": []}
+    code = ('harvest()\nmove("왼쪽")\nplant("감자")\nplant("당근")\nprint("다 했어")\n')
+    r = _run_env(code, {"farm": state})
+    assert r["error"] is None and r["stdout"] == "다 했어\n", r
+    f = r["farm"]
+    assert f["events"] == [
+        {"t": "harvest", "line": 1, "crop": "당근", "x": 0, "y": 0},
+        {"t": "move", "line": 2, "dir": "왼쪽", "x": 2, "y": 0},
+        {"t": "plant_fail", "line": 3, "reason": "no_seed", "crop": "감자", "x": 2, "y": 0},
+        {"t": "plant", "line": 4, "crop": "당근", "x": 2, "y": 0},
+        {"t": "say", "line": 5, "text": "다 했어"}], f
+    assert f["state"] == {"size": 3, "cells": [None, None, {"crop": "당근", "planted_at": 11}] + [None] * 6,
+                          "pie": {"x": 2, "y": 0}, "clock": 12, "store": {"당근": 1, "감자": 0},
+                          "upgrades": []}, f
+    assert f["stopped"] is None and f["actions"] == 4, f
+    t = _run_env('while True:\n    try:\n        move("아래")\n    except BaseException:\n        pass\n',
+                 {"farm": state})
+    assert t["error"] is None and t["timeout"] is False, t
+    assert t["farm"]["stopped"] == "tired" and t["farm"]["actions"] == 500, t["farm"]["stopped"]
+    # 판정 C60: 시간이 흐르지 않는 기다리기는 확인 2000번에서 멈춤(시간 초과 아님)
+    w = _run_env('move("아래")\nwhile not can_harvest():\n    pass\n', {"farm": state})
+    assert w["error"] is None and w["timeout"] is False, w
+    assert w["farm"]["stopped"] == "waited" and w["farm"]["actions"] == 1, w["farm"]["stopped"]
+    assert w["ms"] < 1000, w["ms"]
+    bad = _run_env('move("앞")\n', {"farm": state})
+    assert bad["error"]["type"] == "ValueError" and bad["error"]["line"] == 1, bad
+    assert bad["error"]["msg"] == "방향은 위·아래·왼쪽·오른쪽 중 하나예요", bad
+    assert bad["farm"]["state"]["clock"] == 8, bad
+    plain = _run("import farm")
+    assert "farm" not in plain and plain["error"]["type"] == "ModuleNotFoundError", plain
+
+
 SQL = ("import sqlite3\n"
        "con = sqlite3.connect(':memory:')\n"
        "con.execute('CREATE TABLE t (name TEXT, n INTEGER)')\n"
@@ -524,7 +560,8 @@ TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, te
          test_require_namedgroup_listcomp_lambda_in_pyodide, test_require_reraise_in_pyodide,
          test_require_def_sql_in_pyodide, test_multiline_chart_in_pyodide,
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
-         test_practice_server_in_pyodide, test_chart_in_pyodide, test_sqlite3_in_pyodide, test_queue, test_timeout_then_ok,
+         test_practice_server_in_pyodide, test_chart_in_pyodide, test_farm_in_pyodide,
+         test_sqlite3_in_pyodide, test_queue, test_timeout_then_ok,
          test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,
          test_load_error_resolves, test_cdn_constant, test_fetch_retry, test_worker_ctor_throws,
          test_load_timeout_retry, test_idle_worker_killed_silently, test_idle_worker_error_event]

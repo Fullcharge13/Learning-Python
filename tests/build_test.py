@@ -46,8 +46,9 @@ DIST = os.path.join(ROOT, "dist")
 OUT = os.path.join(ROOT, "tests", "out")
 DEV_OUT = os.path.join(OUT, "dist-dev")
 CDN = "https://cdn.jsdelivr.net/npm/pyodide@314.0.7/"
-MAX_RAW = 700 * 1024
-V02_RAW = 667397  # v0.2 dist/index.html (651.8 KB). v0.3부터 이보다 작아야 함
+MAX_RAW = 760 * 1024  # 판정 C28 → C61(v0.10, build.py와 같음)
+V02_RAW = 667397  # v0.2 dist/index.html (651.8 KB). v0.3~v0.9는 이보다 작아야 했음
+FIRST_FILE_MAX = 760 * 1024  # 판정 C61: v0.10부터 텃밭 화면을 한 장 안에 넣어 첫 파일 상한을 build.py와 같게
 CHAPTER_FILE = re.compile(r"^ch(\d+)-([0-9a-f]{8})\.json$")
 ICON_SIZES = {"icons/icon-180.png": 180, "icons/icon-192.png": 192, "icons/icon-512.png": 512,
               "icons/icon-maskable-512.png": 512, "icons/apple-touch-icon.png": 180}
@@ -524,7 +525,7 @@ def test_split_static():
     print("    index.html %.1f KB (v0.2 %.1f KB); chapter files: %s" % (
         raw / 1024, V02_RAW / 1024,
         ", ".join("%s %.1f KB" % (f, os.path.getsize(os.path.join(DIST, "lessons", f)) / 1024) for f in files)))
-    assert raw < V02_RAW, "index.html must be smaller than v0.2: %d >= %d" % (raw, V02_RAW)
+    assert raw < FIRST_FILE_MAX, "index.html must stay under the C61 cap: %d >= %d" % (raw, FIRST_FILE_MAX)
     assert len(files) >= 6, files
     src = _source_lessons(_snapshot())
     table = _chapter_table(html)

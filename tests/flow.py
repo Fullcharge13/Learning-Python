@@ -29,6 +29,12 @@
                         → 1문제 풀고 새로고침 → 같은 3문제·「이어서」·점 1 → 남은 2문제(틀 1 + 직접 작성) → 「오늘의 도전 완료!」
                         XP 15·바이트 10·도전 1일째 → 홈 「완료됨」 → 새로고침해도 같은 문제·완료됨 (v0.9 작업 2).
                         캡처: daily-home.png, daily-item.png, daily-write.png, daily-done.png, daily-home-done.png (iPhone 17)
+- test_garden_*: 파이의 텃밭(v0.10 작업 4, 설계서 2026-11-05). 새 저장은 홈 입구 잠김 「1장을 끝내면 열려요」 /
+                 1장 통과 → 입구에 지금 주문 → 시작 프로그램 실행(재생·건너뛰기) → 주문 1 완료 창·XP 5 한 번 →
+                 노드 고르기 창으로 말하기 추가·값 바꾸기 → 주문 2 / 코드 모드(만든 코드 복사, 실행, 오류 줄·한국어 설명,
+                 고친 뒤 「노드로 돌아가기」 확인 창) / 검사 오류 빨간 노드는 실행을 막음 / while 500번 지침 말풍선 /
+                 성장 창(모자람 이유, 밭 4×4 사기 → 주문 완료). 텃밭 화면 넘침·터치 44px(노드·코드 모드).
+                 캡처: garden-*.png (iPhone 17)
 """
 
 import atexit
@@ -1214,6 +1220,431 @@ def test_daily_challenge():
         c = _daily_card(a)
         assert c["btn"] == "완료됨" and c["disabled"], c
         assert a.save()["daily"]["picks"] == picks
+        assert not a.errors, a.errors
+
+
+# ---------------------------------------------------------------- 파이의 텃밭 (v0.10 작업 4)
+
+def _chapters_done(n):
+    return ["%d-%d" % (c, k) for c in range(1, n + 1) for k in range(1, 6)]
+
+
+def _garden_seed(chapters, garden=None, xp=0):
+    s = {"saveVer": 2, "xp": xp, "bytes": 0, "completed_lessons": _chapters_done(chapters),
+         "current_chapter": chapters + 1, "current_lesson": "%d-1" % (chapters + 1),
+         "settings": {"sound": False, "dailyGoal": 10, "name": ""}}
+    if garden is not None:
+        s["garden"] = garden
+    return s
+
+
+def _nd(i, kind, body=None, orelse=None, **args):
+    n = {"id": i, "kind": kind, "args": args}
+    if body is not None:
+        n["body"] = body
+    if orelse is not None:
+        n["orelse"] = orelse
+    return n
+
+
+def _garden(order_idx=0, program=None, store=None, cells=None, size=3, upgrades=None, mode="nodes", code=""):
+    order_ids = ["o_first", "o_hello", "o_plant", "o_lunch", "o_count", "o_row", "o_soup", "o_if", "o_potato",
+                 "o_grid4", "o_def", "o_def_row", "o_repeat", "o_while", "o_all"]
+    return {"v": 1, "size": size, "cells": cells if cells is not None else [None] * (size * size),
+            "pie": {"x": 0, "y": 0}, "clock": 20, "store": {"당근": 0, "감자": 0, **(store or {})},
+            "upgrades": upgrades or [], "order": {"idx": order_idx, "done": order_ids[:order_idx], "paid": order_ids[:order_idx]},
+            "program": program if program is not None else [_nd(1, "move", dir="오른쪽"), _nd(2, "harvest")],
+            "code": code, "mode": mode, "runs": 0}
+
+
+def _open_garden(a):
+    a.start()
+    a.page.click("#garden")
+    a.page.wait_for_selector(".screen.garden")
+    a.page.wait_for_timeout(150)
+
+
+def _garden_state(a):
+    return a.js("() => document.querySelector('.screen.garden').dataset.state")
+
+
+def _garden_run(a, skip=False):
+    """「실행」 → (재생이면 건너뛰기) → 끝날 때까지. 돌려줌: 실행 뒤 save.garden"""
+    a.wait_py()
+    runs = (a.save().get("garden") or {}).get("runs", 0)
+    a.page.click("#g-run")
+    if skip:
+        a.page.wait_for_selector(".screen.garden[data-state=replay]", timeout=30_000)
+        a.page.click("#g-skip")
+    a.page.wait_for_selector(".screen.garden[data-state=idle]", timeout=30_000)
+    g = a.save()["garden"]
+    assert g["runs"] == runs + 1, (g["runs"], runs)
+    return g
+
+
+def _close_done(a):
+    a.page.wait_for_selector(".modal .g-done-body", timeout=10_000)
+    a.page.wait_for_timeout(GUARD_WAIT)
+    a.page.click(".modal .btn.primary")
+    a.page.wait_for_selector(".modal .g-done-body", state="detached")
+
+
+def _code_preview(a):
+    return a.js("() => [...document.querySelectorAll('.g-code .g-line')].map(e => e.dataset.text).join('\\n')")
+
+
+def _sheet_pick(a, sel):
+    a.page.wait_for_selector(".modal.g-sheet")
+    a.page.click(".modal.g-sheet " + sel)
+    a.page.wait_for_selector(".modal.g-sheet", state="detached")
+
+
+def test_garden_locked_home():
+    with App("iPhone 17") as a:
+        a.start()
+        c = a.js("""() => { const c = document.querySelector('.garden-card'); return c && { cls: c.className, text: c.innerText,
+                     btn: !!c.querySelector('#garden') }; }""")
+        assert c and "locked" in c["cls"] and "1장을 끝내면 열려요" in c["text"] and not c["btn"], c
+        assert "파이의 텃밭" in c["text"], c
+        m = measure(a, "home-garden-locked")
+        assert not m["problems"], m["problems"]
+        assert not a.errors, a.errors
+
+
+def test_garden_first_orders():
+    with App("iPhone 17", save=_garden_seed(1, xp=40)) as a:
+        a.start()
+        c = a.js("() => document.querySelector('.garden-card').innerText")
+        assert "첫 수확" in c, c
+        a.page.eval_on_selector(".garden-card", "e => e.scrollIntoView({block: 'center'})")
+        a.shot("garden-home.png")
+        box = a.page.eval_on_selector("#garden", "e => { const r = e.getBoundingClientRect(); return [r.width, r.height]; }")
+        assert box[0] >= 44 and box[1] >= 44, box
+        a.page.click("#garden")
+        a.page.wait_for_selector(".screen.garden")
+        a.page.wait_for_timeout(200)
+        assert a.page.inner_text("h1") == "파이의 텃밭"
+        assert a.js("() => document.querySelectorAll('#board [data-cell]').length") == 9
+        assert "첫 수확" in a.page.inner_text(".g-order"), a.page.inner_text(".g-order")
+        assert _code_preview(a) == 'move("오른쪽")\nharvest()', _code_preview(a)
+        a.shot("garden-open.png")
+        a.shot("garden-open-full.png", full=True)
+        m = measure(a, "garden-nodes")
+        assert not m["problems"], m["problems"]
+        assert not m["small"], m["small"]
+        xp0 = a.save()["xp"]
+
+        # 시작 프로그램 실행 → 재생 중 노드 불·건너뛰기 → 주문 1 완료
+        a.wait_py()
+        a.page.click("#g-run")
+        a.page.wait_for_selector(".screen.garden[data-state=replay]", timeout=30_000)
+        a.page.wait_for_selector(".g-node.now", timeout=5_000)
+        a.shot("garden-replay.png")
+        a.page.click("#g-skip")
+        a.page.wait_for_selector(".modal .g-done-body", timeout=10_000)
+        assert "첫 수확" in a.page.inner_text(".modal"), a.page.inner_text(".modal")
+        assert "XP" in a.page.inner_text(".modal")
+        a.shot("garden-order-done.png")
+        _close_done(a)
+        s = a.save()
+        g = s["garden"]
+        assert s["xp"] == xp0 + 5, (s["xp"], xp0)
+        assert g["order"]["idx"] == 1 and g["order"]["paid"] == ["o_first"], g["order"]
+        assert g["store"]["당근"] == 1 and g["runs"] == 1 and g["pie"] == {"x": 1, "y": 0}, g
+        assert "당근 +1" in a.page.inner_text("#g-result"), a.page.inner_text("#g-result")
+        assert "파이의 인사" in a.page.inner_text(".g-order")
+
+        # 노드 더하기: 잠긴 노드는 흐리게, 말하기 추가
+        a.page.click('.g-add[data-parent=""]')
+        a.page.wait_for_selector(".modal.g-sheet")
+        lk = a.js("""() => { const b = document.querySelector('.g-sheet [data-kind=setvar]');
+                     return { dis: b.disabled || b.getAttribute('aria-disabled') === 'true', text: b.innerText }; }""")
+        assert lk["dis"] and "2장을 끝내면 열려요" in lk["text"], lk
+        a.shot("garden-add-sheet.png")
+        m = measure(a, "garden-add-sheet")
+        assert not m["small"], m["small"]
+        _sheet_pick(a, "[data-kind=say]")
+        assert a.js("() => document.querySelectorAll('.g-node').length") == 3
+        assert _code_preview(a).endswith('print("안녕!")'), _code_preview(a)
+
+        # 값 바꾸기: 말하기 글, 이동 방향
+        a.page.click('.g-node[data-kind=say] .g-arg[data-arg=text]')
+        a.page.wait_for_selector(".modal.g-sheet input")
+        a.page.fill(".modal.g-sheet input", "반가워요")
+        _sheet_pick(a, "#g-ok")
+        a.page.click('.g-node[data-kind=move] .g-arg[data-arg=dir]')
+        a.shot("garden-arg-sheet.png")
+        _sheet_pick(a, '[data-v="아래"]')
+        assert _code_preview(a) == 'move("아래")\nharvest()\nprint("반가워요")', _code_preview(a)
+        g = a.save()["garden"]
+        assert [n["kind"] for n in g["program"]] == ["move", "harvest", "say"], g["program"]
+        assert g["program"][2]["args"]["text"] == "반가워요"
+
+        # 다시 실행(건너뛰기) → 말하기 주문 완료, 말풍선
+        _garden_run(a, skip=True)
+        _close_done(a)
+        s = a.save()
+        assert s["xp"] == xp0 + 10 and s["garden"]["order"]["idx"] == 2, (s["xp"], s["garden"]["order"])
+        assert "반가워요" in a.js("() => document.querySelector('#board svg').textContent")
+        a.shot("garden-say.png")
+
+        # 한 번 더: 다음 주문(심기)은 아직 아님 → XP 그대로
+        _garden_run(a, skip=True)
+        a.page.wait_for_timeout(300)
+        assert not a.page.query_selector(".modal .g-done-body")
+        assert a.save()["xp"] == xp0 + 10
+        assert not a.errors, a.errors
+
+
+def test_garden_code_mode():
+    with App("iPhone 17", save=_garden_seed(1, _garden(order_idx=1)), reduced=True) as a:
+        _open_garden(a)
+        # 고치지 않았으면 바로 돌아옴
+        a.page.click("#to-code")
+        a.page.wait_for_selector(".g-editor .cm-content")
+        got = a.js("() => [...document.querySelectorAll('.g-editor .cm-line')].map(e => e.textContent).join('\\n')")
+        assert got.strip() == 'move("오른쪽")\nharvest()', got
+        a.page.click("#to-nodes")
+        a.page.wait_for_selector(".g-flow")
+        assert not a.page.query_selector(".modal")
+        assert a.save()["garden"]["mode"] == "nodes"
+
+        a.page.click("#to-code")
+        a.page.wait_for_selector(".g-editor .cm-content")
+        a.wait_py()
+        a.set_code('move("아래")\nprint("코드로 왔어요")\n')
+        a.page.wait_for_timeout(700)  # 저장 지연(500ms)
+        a.shot("garden-code.png")
+        m = measure(a, "garden-code")
+        assert not m["problems"], m["problems"]
+        assert not m["small"], m["small"]
+        g = _garden_run(a)
+        assert g["mode"] == "code" and g["code"].startswith('move("아래")'), g
+        assert g["pie"] == {"x": 0, "y": 1}, g["pie"]
+        assert g["order"]["idx"] == 1, "use orders count only in node mode"
+        assert "노드" in a.page.inner_text(".g-order"), a.page.inner_text(".g-order")
+        assert "코드로 왔어요" in a.js("() => document.querySelector('#board svg').textContent")
+
+        # 실행 중 오류: 그 줄 빨갛게 + 한국어 설명
+        a.set_code('move("오른쪽")\nmove("앞")\n')
+        _garden_run(a)
+        err = a.page.inner_text(".err-panel")
+        assert "방향은 위·아래·왼쪽·오른쪽 중 하나예요" in err and "값 오류" in err and "2번째 줄" in err, err
+        assert a.page.query_selector(".g-editor .cm-errline"), "error line marked"
+        assert a.save()["garden"]["pie"] == {"x": 1, "y": 1}, "state before the error is kept"
+        a.shot("garden-code-error.png")
+
+        # 고친 코드 → 노드로 돌아가기는 확인 창(그만두기 → 그대로, 돌아가기 → 노드)
+        a.page.click("#to-nodes")
+        a.page.wait_for_selector(".modal")
+        assert "사라져요" in a.page.inner_text(".modal"), a.page.inner_text(".modal")
+        a.page.click(".modal .btn.ghost")
+        a.page.wait_for_selector(".modal", state="detached")
+        assert a.page.query_selector(".g-editor .cm-content")
+        a.page.click("#to-nodes")
+        a.page.wait_for_selector(".modal .btn.primary")
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".g-flow")
+        g = a.save()["garden"]
+        assert g["mode"] == "nodes" and [n["kind"] for n in g["program"]] == ["move", "harvest"], g
+        assert not a.errors, a.errors
+
+
+def test_garden_node_errors():
+    prog = [_nd(1, "addvar", name="count", value=1), _nd(2, "move", dir="오른쪽")]
+    with App("iPhone 17", save=_garden_seed(2, _garden(order_idx=4, program=prog)), reduced=True) as a:
+        _open_garden(a)
+        bad = a.js("() => [...document.querySelectorAll('.g-node.bad')].map(e => e.dataset.id)")
+        assert bad == ["1"], bad
+        assert "count 값을 먼저 기억해요" in a.page.inner_text('.g-node[data-id="1"]')
+        a.wait_py()
+        a.page.click("#g-run")
+        a.page.wait_for_timeout(400)
+        assert a.save()["garden"]["runs"] == 0, "validation errors block the run"
+        assert "빨간 노드" in a.page.inner_text("#g-result"), a.page.inner_text("#g-result")
+        a.shot("garden-node-error.png")
+        # 고치기: 값 기억하기를 맨 앞에 넣고 위로 올림
+        a.page.click('.g-add[data-parent=""]')
+        _sheet_pick(a, "[data-kind=setvar]")
+        for _ in range(2):
+            a.page.click('.g-node[data-kind=setvar] .g-menu')
+            _sheet_pick(a, '[data-act=up]')
+        assert [n["kind"] for n in a.save()["garden"]["program"]] == ["setvar", "addvar", "move"]
+        assert not a.page.query_selector(".g-node.bad")
+        g = _garden_run(a)
+        assert g["order"]["idx"] == 5, "o_count (use addvar) done"
+        _close_done(a)
+        assert not a.errors, a.errors
+
+
+def test_garden_tired_and_deep_nodes():
+    prog = [
+        _nd(1, "def", body=[_nd(2, "if", cond="can_harvest", body=[_nd(3, "harvest")], orelse=[_nd(4, "say", text="아직이야")]),
+                            _nd(5, "move", dir="오른쪽")], name="tend"),
+        _nd(6, "setvar", name="count", value=0),
+        _nd(7, "while", cond={"var": "count", "op": "<", "num": 99}, body=[
+            _nd(8, "repeat", n=5, body=[_nd(9, "call", name="tend")]),
+            _nd(10, "move", dir="아래"),
+            _nd(11, "addvar", name="count", value=1),
+        ]),
+    ]
+    with App("iPhone 17", save=_garden_seed(5, _garden(order_idx=12, program=prog, size=4, upgrades=["grid4"])), reduced=True) as a:
+        _open_garden(a)
+        assert not a.page.query_selector(".g-node.bad"), a.page.inner_text(".g-flow")
+        a.shot("garden-nodes-deep.png", full=True)
+        m = measure(a, "garden-deep")
+        assert not m["problems"], m["problems"]
+        assert not m["small"], m["small"]
+        code = _code_preview(a)
+        assert "while count < 99:\n    for i in range(5):\n        tend()" in code and "\n    else:\n" in code, code
+        assert "    count = count + 1" in code, code
+        g = _garden_run(a)
+        txt = a.js("() => document.querySelector('#board svg').textContent")
+        assert "오늘은 여기까지! 지쳤어요" in txt, txt
+        assert "지쳤어요" in a.page.inner_text("#g-result")
+        assert g["clock"] == 20 + 500, g["clock"]
+        a.shot("garden-tired.png")
+        assert not a.errors, a.errors
+
+
+def test_garden_upgrades():
+    seed = _garden_seed(3, _garden(order_idx=9, store={"당근": 25}, upgrades=["감자 씨앗"]), xp=10)
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        assert "밭 넓히기" in a.page.inner_text(".g-order")
+        a.page.click("#g-grow")
+        a.page.wait_for_selector(".modal.g-sheet")
+        info = a.js("""() => Object.fromEntries([...document.querySelectorAll('.g-sheet [data-up]')].map(b =>
+                      [b.dataset.up, { dis: b.disabled, text: b.closest('.g-up').innerText }]))""")
+        assert not info["grid4"]["dis"], info
+        assert info["비료"]["dis"] and "감자 20개가 모자라요" in info["비료"]["text"], info
+        assert info["grid5"]["dis"] and "먼저 「밭 4×4」 성장이 필요해요" in info["grid5"]["text"], info
+        assert info["감자 씨앗"]["dis"] and "이미" in info["감자 씨앗"]["text"], info
+        a.shot("garden-grow.png")
+        m = measure(a, "garden-grow")
+        assert not m["small"], m["small"]
+        a.page.click('.g-sheet [data-up="grid4"]')
+        _close_done(a)
+        s = a.save()
+        g = s["garden"]
+        assert g["size"] == 4 and "grid4" in g["upgrades"] and g["store"]["당근"] == 5, g
+        assert g["order"]["idx"] == 10 and s["xp"] == 15, (g["order"], s["xp"])
+        assert a.js("() => document.querySelectorAll('#board [data-cell]').length") == 16
+        assert "당근" in a.page.inner_text(".g-store") and "5" in a.page.inner_text(".g-store")
+        a.shot("garden-grid4.png")
+        assert not a.errors, a.errors
+
+
+def test_garden_order_chain():
+    # 검토 C62 I3: 감자 주문 차례에 밭 4×4를 미리 사 두고 감자 주문을 해내면 밭 넓히기 주문도 바로 끝남
+    cells = [None] * 9
+    cells[1] = {"crop": "감자", "planted_at": 8}   # clock 20 → 다 자람(12)
+    seed = _garden_seed(3, _garden(order_idx=8, store={"당근": 25}, upgrades=["감자 씨앗"], cells=cells), xp=10)
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        assert "첫 감자" in a.page.inner_text(".g-order")
+        a.page.click("#g-grow")
+        _sheet_pick(a, '[data-up="grid4"]')
+        a.page.wait_for_timeout(GUARD_WAIT)
+        assert not a.page.query_selector(".modal .g-done-body"), "감자 주문 차례라 아직 완료 아님"
+        g = a.save()["garden"]
+        assert g["size"] == 4 and g["order"]["idx"] == 8 and a.save()["xp"] == 10, g
+        _garden_run(a)
+        a.page.wait_for_selector(".modal .g-done-body", timeout=10_000)
+        first = a.page.inner_text(".modal")
+        assert "첫 감자" in first and "밭 넓히기" in first, first
+        # 첫 창을 닫으면 이어서 끝난 주문의 창이 바로 뜬다
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_function("() => { const m = document.querySelector('.modal .g-done-body'); "
+                                 "return m && !m.innerText.includes('첫 감자'); }", timeout=5_000)
+        second = a.page.inner_text(".modal")
+        assert "밭 넓히기" in second and "주문 완료" in second, second
+        a.shot("garden-order-chain.png")
+        _close_done(a)
+        s = a.save()
+        assert s["garden"]["order"]["idx"] == 10, s["garden"]["order"]
+        assert s["garden"]["order"]["paid"][-2:] == ["o_potato", "o_grid4"], s["garden"]["order"]
+        assert s["xp"] == 20, s["xp"]
+        assert "내 노드 만들기" in a.page.inner_text(".g-order") or "4장" in a.page.inner_text(".g-order")
+        assert not a.errors, a.errors
+
+
+def test_garden_edit_minors():
+    # 글자 id 노드 안에 더하기(id를 숫자로 바꾸지 않음), 편집 창 뒤 초점, 「아니면 떼기」 확인, 실행 중 떠나도 저장
+    prog = [
+        {"id": "7", "kind": "repeat", "args": {"n": 2}, "body": [{"id": "8", "kind": "harvest", "args": {}}]},
+        _nd(9, "if", cond="can_harvest", body=[_nd(10, "harvest")], orelse=[_nd(11, "say", text="아직")]),
+    ]
+    with App("iPhone 17", save=_garden_seed(5, _garden(order_idx=12, program=prog, size=4, upgrades=["grid4"])),
+             reduced=True) as a:
+        _open_garden(a)
+        a.page.click('.g-add[data-parent="7"][data-slot=body]')
+        _sheet_pick(a, "[data-kind=move]")
+        g = a.save()["garden"]
+        assert g["program"][0]["id"] == "7" and [n["kind"] for n in g["program"][0]["body"]] == ["harvest", "move"], g["program"]
+        new_id = g["program"][0]["body"][1]["id"]
+        foc = a.js("() => { const e = document.activeElement; const n = e && e.closest('.g-node'); return n && [n.dataset.id, e.className]; }")
+        assert foc and foc[0] == str(new_id) and "g-arg" in foc[1], foc
+        # 값 바꾸기 뒤 초점은 그 값 단추
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=dir]' % new_id)
+        _sheet_pick(a, '[data-v="아래"]')
+        foc = a.js("() => { const e = document.activeElement; return e && e.closest('.g-node') && [e.closest('.g-node').dataset.id, e.dataset.arg]; }")
+        assert foc == [str(new_id), "dir"], foc
+        # 아니면 떼기: 안에 노드가 있으면 확인(그만두기 → 그대로, 떼기 → 지움)
+        a.page.click('.g-node[data-id="9"] .g-menu')
+        _sheet_pick(a, "[data-act=else-off]")
+        a.page.wait_for_selector(".modal:not(.g-sheet)")
+        assert "1개" in a.page.inner_text(".modal"), a.page.inner_text(".modal")
+        a.page.click(".modal .btn.ghost")
+        a.page.wait_for_selector(".modal", state="detached")
+        assert a.save()["garden"]["program"][1].get("orelse"), "그만두기 → 아니면 그대로"
+        a.page.click('.g-node[data-id="9"] .g-menu')
+        _sheet_pick(a, "[data-act=else-off]")
+        a.page.wait_for_selector(".modal:not(.g-sheet)")
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".modal", state="detached")
+        assert "orelse" not in a.save()["garden"]["program"][1], a.save()["garden"]["program"][1]
+        foc = a.js("() => { const e = document.activeElement; return e && e.closest('.g-node') && e.closest('.g-node').dataset.id; }")
+        assert foc == "9", foc
+        # 빈 아니면은 묻지 않고 바로 뗌
+        a.page.click('.g-node[data-id="9"] .g-menu')
+        _sheet_pick(a, "[data-act=else-on]")
+        a.page.click('.g-node[data-id="9"] .g-menu')
+        _sheet_pick(a, "[data-act=else-off]")
+        a.page.wait_for_timeout(200)
+        assert not a.page.query_selector(".modal") and "orelse" not in a.save()["garden"]["program"][1]
+        # 실행을 누르고 같은 순간 홈으로(결과는 작업자에서 늦게 옴): 결과·주문(반복 사용) XP가 저장에 남음
+        a.wait_py()
+        clock0 = a.save()["garden"]["clock"]
+        xp0 = a.save()["xp"]
+        a.js("() => { document.querySelector('#g-run').click(); document.querySelector('#g-back').click(); }")
+        a.page.wait_for_selector(".screen.home", timeout=10_000)
+        a.page.wait_for_function("() => (JSON.parse(localStorage.getItem(%s)).garden || {}).runs === 1" % json.dumps(SAVE_KEY),
+                                 timeout=15_000)
+        s = a.save()
+        g = s["garden"]
+        assert g["runs"] == 1 and g["clock"] > clock0, (g["runs"], g["clock"], clock0)
+        assert g["order"]["idx"] == 13 and s["xp"] == xp0 + 5, (g["order"], s["xp"], xp0)
+        assert not a.page.query_selector(".modal"), "떠난 화면의 창은 띄우지 않음"
+        assert not a.errors, a.errors
+
+
+def test_garden_waited_message():
+    # 확인만 하며 기다리면 「기다리다 지쳤어요」 + 시간은 움직일 때만 흐른다는 안내. 모드를 바꾸면 말풍선은 지워짐
+    prog = [_nd(1, "while", cond="not_can_harvest", body=[_nd(2, "say", text="기다려")])]
+    with App("iPhone 17", save=_garden_seed(5, _garden(order_idx=12, program=prog)), reduced=True) as a:
+        _open_garden(a)
+        g = _garden_run(a)
+        assert g["clock"] == 20, g["clock"]
+        res = a.page.inner_text("#g-result")
+        assert "파이가 기다리다 지쳤어요 — 텃밭의 시간은 파이가 움직일 때만 흘러요." in res, res
+        txt = a.js("() => document.querySelector('#board svg').textContent")
+        assert "기다리다 지쳤어요" in txt and "움직여야" in txt, txt
+        a.shot("garden-waited.png")
+        a.page.click("#to-code")
+        a.page.wait_for_selector(".g-editor .cm-content")
+        assert not a.page.query_selector("#board .g-bubble"), "모드를 바꾸면 말풍선 지움"
         assert not a.errors, a.errors
 
 

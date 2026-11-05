@@ -3,6 +3,7 @@
 import { OUTFITS, OUTFIT_RENAME_V2, OUTFIT_REFUND_V2 } from "../data/outfits.js";
 import { cleanSeenUpdates } from "./newcontent.js";
 import { newDaily, cleanDaily } from "./daily.js";
+import { newGarden, cleanGarden } from "./garden/state.js";
 
 export const SAVE_KEY = "ria-python.save";
 export const SAVE_VER = 2;
@@ -30,6 +31,7 @@ export function newSave() {
     pending_refund: 0, // saveVer 1→2에서 돌려준 바이트. 홈에서 한 번 알리고 0으로 (판정 C42)
     seen_updates: {},  // v0.7.1 「새 내용」 점: { 레슨 id: 끝까지 다시 본 판 "v0.7.1" }. saveVer 그대로, 없으면 {}
     daily: newDaily(), // v0.9 매일 도전 { date, picks, done, streak, best, last_done_date }. saveVer 그대로, 없으면 기본값
+    garden: newGarden(), // v0.10 파이의 텃밭(src/garden/state.js). saveVer 그대로, 없거나 망가지면 기본값
   };
 }
 
@@ -96,6 +98,7 @@ function clampRanges(s) {
   s.weak_concepts = wc;
   s.seen_updates = cleanSeenUpdates(s.seen_updates);
   s.daily = cleanDaily(s.daily);
+  s.garden = cleanGarden(s.garden);
   return s;
 }
 

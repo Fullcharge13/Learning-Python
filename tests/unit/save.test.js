@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SAVE_KEY, SAVE_VER, newSave, migrate, load, loadEx, store, takeRefundNotice, refundNoticeText } from "../../src/save.js";
+import { newGarden } from "../../src/garden/state.js";
 
 function fakeStorage(initial = {}) {
   const data = { ...initial };
@@ -30,6 +31,7 @@ const LEDGER_SHAPE = {
   pending_refund: 0,
   seen_updates: {}, // v0.7.1: 「새 내용」 점 — 다시 본 판 { 레슨 id: "v0.7.1" } (saveVer 그대로)
   daily: { date: null, picks: [], done: [], streak: 0, best: 0, last_done_date: null }, // v0.9 매일 도전(saveVer 그대로)
+  garden: newGarden(), // v0.10 파이의 텃밭(saveVer 그대로, 없으면 기본값)
 };
 
 test("constants", () => {

@@ -41,7 +41,12 @@ const { QUESTS } = await imp("data/quests.js");
 const { BADGES } = await imp("data/badges.js");
 const { OUTFITS } = await imp("data/outfits.js");
 const ria = await imp("src/ria.js");
-console.log(JSON.stringify({ chapters, CONCEPTS, QUESTS, BADGES, OUTFITS,
+const garden = await imp("data/garden.js");
+const gnodes = await imp("src/garden/nodes.js");
+const GARDEN = { orders: garden.ORDERS.map((o) => ({ id: o.id, need: o.need, title: o.title, xp: o.xp })),
+  upgrades: garden.UPGRADES.map((u) => ({ id: u.id, label: u.label || u.id, cost: u.cost })),
+  nodes: Object.entries(gnodes.NODES).map(([k, v]) => ({ kind: k, chapter: v.chapter, label: v.label })) };
+console.log(JSON.stringify({ chapters, CONCEPTS, QUESTS, BADGES, OUTFITS, GARDEN,
   outfitKo: ria.OUTFIT_KO, faceKo: ria.FACE_KO, faces: ria.FACE_IDS }));
 """
 
@@ -191,6 +196,26 @@ def build(d):
         w(f"**매일 도전**(v0.9): 홈 맨 위 「오늘의 도전」 카드. 하루 3문제 — 문제 틀 {n_tmpl}개에서 이름·숫자를 바꿔 만든 터치 2문제와 "
           "끝낸 레슨의 직접 작성 1문제(틀린 개념이 든 레슨을 더 자주). 끝낸 장에서만 나오고, 같은 날 다시 열면 같은 문제예요. "
           "다 풀면 XP 15 · 바이트 10, 「도전 n일째」 연속 7일마다 바이트 +20. 비행기 모드에서도 돼요.")
+    g = d.get("GARDEN")
+    if g:
+        w("")
+        w("## 파이의 텃밭 (v0.10)")
+        w("")
+        w("1장 평가를 통과하면 홈에 「파이의 텃밭」이 열려요. 노드를 위에서 아래로 이으면 진짜 파이썬 코드가 함께 만들어지고, "
+          "「실행」하면 브라우저 안 파이썬이 그 코드를 돌려 작은 뱀 파이가 텃밭에서 움직여요(익숙해지면 코드로 직접 쓰기). "
+          "리아 교수의 주문을 해내면 XP 5, 거둔 작물로 밭을 넓혀요. 한 실행에 행동 500번·살펴보기 2000번까지.")
+        w("")
+        w("| 장 | 열리는 노드 |")
+        w("|---|---|")
+        by = {}
+        for n in g["nodes"]:
+            by.setdefault(n["chapter"], []).append(n["label"])
+        for c in sorted(by):
+            w(f"| {c}장 | {' · '.join(by[c])} |")
+        w("")
+        w(f"주문 {len(g['orders'])}개: " + " · ".join(f"{o['title']}({o['need']}장)" for o in g["orders"]))
+        w("")
+        w("성장: " + " · ".join(u["label"] + "(" + ", ".join(f"{k} {v}" for k, v in u["cost"].items()) + ")" for u in g["upgrades"]))
     w("")
     for ch in d["chapters"]:
         c = ch["chapter"]

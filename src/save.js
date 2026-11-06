@@ -4,6 +4,7 @@ import { OUTFITS, OUTFIT_RENAME_V2, OUTFIT_REFUND_V2 } from "../data/outfits.js"
 import { cleanSeenUpdates } from "./newcontent.js";
 import { newDaily, cleanDaily } from "./daily.js";
 import { newGarden, cleanGarden } from "./garden/state.js";
+import { isDate, DAILY_GOALS } from "./rules.js";
 
 export const SAVE_KEY = "ria-python.save";
 export const SAVE_VER = 2;
@@ -32,6 +33,8 @@ export function newSave() {
     seen_updates: {},  // v0.7.1 「새 내용」 점: { 레슨 id: 끝까지 다시 본 판 "v0.7.1" }. saveVer 그대로, 없으면 {}
     daily: newDaily(), // v0.9 매일 도전 { date, picks, done, streak, best, last_done_date }. saveVer 그대로, 없으면 기본값
     garden: newGarden(), // v0.10 파이의 텃밭(src/garden/state.js). saveVer 그대로, 없거나 망가지면 기본값
+    goal_pending: null,  // v0.12.1 하루 목표 예약 { value: 10|20|30, from: "YYYY-MM-DD" } — 바꾼 목표는 다음 날부터(rules.js)
+    broken_notice: null, // v0.12.1 깨진 저장을 남긴 칸 이름. 홈에서 한 번 알리고 null로
   };
 }
 
@@ -97,8 +100,43 @@ function clampRanges(s) {
   }
   s.weak_concepts = wc;
   s.seen_updates = cleanSeenUpdates(s.seen_updates);
+  cleanTypes(s);
   s.daily = cleanDaily(s.daily);
   s.garden = cleanGarden(s.garden);
+  return s;
+}
+
+const strs = (a) => a.filter((x) => typeof x === "string");
+const dateOrNull = (v) => (isDate(v) ? v : null);
+const BROKEN_KEY_RE = /^ria-python\.(dev\.)?save\.broken(\.[1-9])?$/;
+
+// 칸 안쪽 값의 종류를 맞춘다(v0.12.1, QA): 배열 속 이상한 값, 숫자가 아닌 통계, 날짜가 아닌 날짜 칸 등
+function cleanTypes(s) {
+  s.completed_lessons = [...new Set(strs(s.completed_lessons))];
+  s.review_queue = [...new Set(strs(s.review_queue))];
+  s.badges = [...new Set(strs(s.badges))];
+  s.submission_logs = s.submission_logs.filter(isPlainObject);
+  const gr = {};
+  for (const [k, v] of Object.entries(s.grading_results)) if (isPlainObject(v)) gr[k] = v;
+  s.grading_results = gr;
+  for (const k of Object.keys(s.stats)) {
+    const v = s.stats[k];
+    s.stats[k] = typeof v === "number" && Number.isFinite(v) ? nonNegInt(v) : 0;
+  }
+  s.streak.lastGoalDate = dateOrNull(s.streak.lastGoalDate);
+  s.streak.todayDate = dateOrNull(s.streak.todayDate);
+  s.streak.todayXp = Math.max(0, s.streak.todayXp);
+  if (typeof s.last_active_at !== "string") s.last_active_at = null;
+  const q = s.quests;
+  q.date = dateOrNull(q.date);
+  q.ids = strs(q.ids);
+  q.done = strs(q.done);
+  const prog = {};
+  for (const [k, v] of Object.entries(q.progress)) if (typeof v === "number" && Number.isFinite(v) && v >= 0) prog[k] = v;
+  q.progress = prog;
+  const gp = s.goal_pending;
+  s.goal_pending = isPlainObject(gp) && DAILY_GOALS.includes(gp.value) && isDate(gp.from) ? { value: gp.value, from: gp.from } : null;
+  s.broken_notice = typeof s.broken_notice === "string" && BROKEN_KEY_RE.test(s.broken_notice) ? s.broken_notice : null;
   return s;
 }
 
@@ -138,6 +176,13 @@ export function takeRefundNotice(save) {
   const bytes = save && Number.isInteger(save.pending_refund) && save.pending_refund > 0 ? save.pending_refund : 0;
   return bytes ? { save: { ...save, pending_refund: 0 }, bytes } : { save, bytes: 0 };
 }
+// 깨진 저장 안내(v0.12.1, QA): 남긴 칸 이름과 깃발을 내린(null) 새 저장. 없으면 같은 저장
+export function takeBrokenNotice(save) {
+  const key = save && typeof save.broken_notice === "string" ? save.broken_notice : null;
+  return key ? { save: { ...save, broken_notice: null }, key } : { save, key: null };
+}
+export const BROKEN_NOTICE_TEXT = "저장을 읽지 못해 새로 시작했어요. 설정 → 저장 가져오기로 옛 기록을 되살릴 수 있어요";
+
 export const refundNoticeText = (n) => `없어진 옷 값 ${n}바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!`;
 
 // 깨진 원본을 남긴다. 이미 남긴 것은 덮지 않고 .broken.1 ~ .broken.5 중 빈 칸에 쓴다(모두 차면 .broken.5를 덮음).
@@ -147,8 +192,10 @@ function keepBroken(storage, text, key = SAVE_KEY) {
   for (let i = 1; i <= BROKEN_SLOTS; i++) keys.push(`${key}.broken.${i}`);
   try {
     const free = keys.find((k) => storage.getItem(k) === null);
-    storage.setItem(free ?? keys[keys.length - 1], text);
-  } catch { /* 남기지 못해도 새 저장으로 시작 */ }
+    const at = free ?? keys[keys.length - 1];
+    storage.setItem(at, text);
+    return at;
+  } catch { return null; /* 남기지 못해도 새 저장으로 시작 */ }
 }
 
 export function loadEx(storage, key = SAVE_KEY) {
@@ -156,21 +203,19 @@ export function loadEx(storage, key = SAVE_KEY) {
   try {
     text = storage.getItem(key);
   } catch {
-    return { save: newSave(), readFailed: true };
+    return { save: newSave(), readFailed: true, brokenKey: null };
   }
-  if (text === null || text === undefined) return { save: newSave(), readFailed: false };
+  if (text === null || text === undefined) return { save: newSave(), readFailed: false, brokenKey: null };
   let raw;
   try {
     raw = JSON.parse(text);
   } catch {
-    keepBroken(storage, text, key);
-    return { save: newSave(), readFailed: false };
+    return { save: newSave(), readFailed: false, brokenKey: keepBroken(storage, text, key) };
   }
   if (!isPlainObject(raw)) {
-    keepBroken(storage, text, key);
-    return { save: newSave(), readFailed: false };
+    return { save: newSave(), readFailed: false, brokenKey: keepBroken(storage, text, key) };
   }
-  return { save: migrate(raw), readFailed: false };
+  return { save: migrate(raw), readFailed: false, brokenKey: null };
 }
 
 export function load(storage, key = SAVE_KEY) {

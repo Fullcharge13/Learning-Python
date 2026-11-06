@@ -32,6 +32,8 @@ const LEDGER_SHAPE = {
   seen_updates: {}, // v0.7.1: 「새 내용」 점 — 다시 본 판 { 레슨 id: "v0.7.1" } (saveVer 그대로)
   daily: { date: null, picks: [], done: [], streak: 0, best: 0, last_done_date: null }, // v0.9 매일 도전(saveVer 그대로)
   garden: newGarden(), // v0.10 파이의 텃밭(saveVer 그대로, 없으면 기본값)
+  goal_pending: null,  // v0.12.1 하루 목표 예약(내일부터)
+  broken_notice: null, // v0.12.1 깨진 저장 안내(한 번)
 };
 
 test("constants", () => {

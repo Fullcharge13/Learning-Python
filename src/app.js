@@ -1,5 +1,5 @@
 // 리아와 파이썬! — 앱 입구. 상태는 app = { save, screen, modal } 하나, 화면 전환은 show() 하나.
-import { migrate, takeRefundNotice, refundNoticeText } from "./save.js";
+import { migrate, takeRefundNotice, refundNoticeText, takeBrokenNotice, BROKEN_NOTICE_TEXT } from "./save.js";
 import { readDevFlag, setDevMode, loadSlot, storeSlot, keysFor, markDev } from "./devmode.js";
 import { rollDay } from "./rules.js";
 import { ensureQuests } from "./quests.js";
@@ -29,7 +29,7 @@ import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 import * as garden from "./ui/garden.js";
 
-export const VERSION = "v0.12";
+export const VERSION = "v0.12.1";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -254,9 +254,10 @@ function paintDev() {
 function setDev(on) {
   on = !!on;
   if (on === app.dev) return;
-  const { save, readFailed } = setDevMode(storage, on);
+  const { save, readFailed, brokenKey } = setDevMode(storage, on);
   app.dev = on;
   app.save = save;
+  if (brokenKey) commit({ ...save, broken_notice: brokenKey });   // 깨진 저장 안내(홈에서 한 번)
   app.storeFailedShown = false;
   app.greetOverride = null;
   if (readFailed) toast("저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.", "warn");
@@ -298,6 +299,26 @@ const ctx = {
     commit(r.save);
     return { text: refundNoticeText(r.bytes), face: "wink", situation: "refund" };
   },
+  // 깨진 저장 안내(v0.12.1): 처음 한 번만. 깃발을 내린 저장을 바로 남기고 { text, key }
+  takeBrokenNotice() {
+    const r = takeBrokenNotice(app.save);
+    if (!r.key) return null;
+    commit(r.save);
+    return { text: BROKEN_NOTICE_TEXT, key: r.key };
+  },
+  /** 남겨 둔 깨진 저장 원문을 파일로 받기. 없으면 false */
+  exportBroken(key) {
+    let text = null;
+    try { text = storage.getItem(key); } catch { text = null; }
+    if (text === null || text === undefined) return false;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+    a.download = `ria-python-old-save-${localDate()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    return true;
+  },
   migrate,
 };
 
@@ -305,8 +326,10 @@ async function boot() {
   const root = document.getElementById("app");
   app.dev = readDevFlag(storage);
   paintDev();
-  const { save, readFailed } = loadSlot(storage, app.dev);
+  const { save, readFailed, brokenKey } = loadSlot(storage, app.dev);
   app.save = save;
+  // 깨진 저장(v0.12.1, QA 5): 새 저장에 남긴 칸 이름을 적어 바로 저장 → 홈에서 한 번 안내(새로고침해도 다시 .broken으로 남기지 않음)
+  if (brokenKey) commit({ ...save, broken_notice: brokenKey });
   if (readFailed) toast("저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.", "warn");
   initPy();
   requestPersist();

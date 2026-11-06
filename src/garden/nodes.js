@@ -147,6 +147,8 @@ export const MSG = {
   emptyHandler: "안 되면 칸에 노드를 하나 넣어요",
   noteOnly: "쪽지 읽기 안에서만 써요",
   noNote: (name) => `${name} 값은 줄 나누기·패턴 찾기 뒤에서만 써요`,
+  // v0.12.1: 패턴 찾기 안인데 그 패턴이 그 값을 만들지 않음(예: 숫자만 + 심기 crop)
+  patternLacks: (label, name, other) => `${label} 패턴에서는 ${name}이 생기지 않아요 — ${other} 패턴을 골라요`,
   noteN: "n은 쪽지에서 읽은 글자예요 — 숫자는 count·total에 기억해요",
   logReading: "농장일지를 읽는 동안에는 일지에 쓸 수 없어요",
   repeatNoAct: "쪽지 값만큼 반복할 때는 안에서 파이가 움직이거나 심거나 거둬야 해요",
@@ -350,7 +352,7 @@ function scopeWalk(program, visit) {
       const spec = NODES[n.kind];
       const ok = !!spec && argsOk(n);
       const a = isObj(n.args) ? n.args : {};
-      visit(n, { known: S.cur, notes: S.notes, stale: S.stale, inDef: ctx.inDef, loops: ctx.loops, ok, outerPos: ctx.outerPos, reading: ctx.reading });
+      visit(n, { known: S.cur, notes: S.notes, stale: S.stale, inDef: ctx.inDef, loops: ctx.loops, ok, outerPos: ctx.outerPos, reading: ctx.reading, finding: ctx.finding });
       if (ok && n.kind === "setvar" && !ctx.inDef) { S.cur.add(a.name); S.notes.delete(a.name); S.stale.delete(a.name); }
       if (ok && n.kind === "where") POS_NAMES.forEach((v) => S.cur.add(v));
       if (ok && n.kind === "splitline") bind(S, noteBinds(n));
@@ -366,7 +368,7 @@ function scopeWalk(program, visit) {
       } else if (n.kind === "def") {
         const T = { cur: new Set([...S.cur].filter((v) => !POS_NAMES.includes(v))), notes: new Set(), stale: new Set(S.stale) };
         drop(T, clobbers(n.body)); // 내 노드 안에서 덮는 이름은 지역 값 — 바깥 값을 못 읽음
-        block(n.body, T, { inDef: true, loops: [], outerPos: POS_NAMES.some((v) => S.cur.has(v)), reading: [] });
+        block(n.body, T, { inDef: true, loops: [], outerPos: POS_NAMES.some((v) => S.cur.has(v)), reading: [], finding: null });
       } else if (n.kind === "readnote") {
         const T = loopStart(S, n.body);
         T.notes.add("line");
@@ -375,7 +377,7 @@ function scopeWalk(program, visit) {
       } else if (n.kind === "findall") {
         const T = loopStart(S, n.body);
         if (ok) bind(T, noteBinds(n));
-        block(n.body, T, ctx);
+        block(n.body, T, ok ? { ...ctx, finding: a.pattern } : ctx);
         drop(S, clobbers([n]));
       } else if (n.kind === "while") {
         block(n.body, loopStart(S, n.body), ctx);
@@ -388,7 +390,7 @@ function scopeWalk(program, visit) {
     }
     return S;
   };
-  block(program, { cur: new Set(), notes: new Set(), stale: new Set() }, { inDef: false, loops: [], outerPos: false, reading: [] });
+  block(program, { cur: new Set(), notes: new Set(), stale: new Set() }, { inDef: false, loops: [], outerPos: false, reading: [], finding: null });
 }
 
 const innermost = (loops, type) => {
@@ -398,8 +400,14 @@ const innermost = (loops, type) => {
 // x·y를 못 읽을 때: 바깥에서 위치 알기를 했는데 내 노드 안이면 「그 안에서 해요」
 const noValMsg = (name, outerPos = false) => (POS_NAMES.includes(name) ? (outerPos ? MSG.defPos : MSG.noPos) : MSG.noVar(name));
 
-// 쪽지 값을 못 쓸 때: line은 쪽지 읽기 안에서만, crop·n은 줄 나누기·패턴 찾기 뒤에서만
-const noNoteMsg = (name) => (name === "line" ? MSG.noteOnly : MSG.noNote(name));
+// 쪽지 값을 못 쓸 때: line은 쪽지 읽기 안에서만, crop·n은 줄 나누기·패턴 찾기 뒤에서만.
+// (v0.12.1) 패턴 찾기 안인데 그 패턴이 그 값을 만들지 않으면 그 값을 만드는 패턴을 고르라고 알린다.
+const noNoteMsg = (name, finding = null) => {
+  if (name === "line") return MSG.noteOnly;
+  const p = finding && Object.hasOwn(PATTERNS, finding) ? PATTERNS[finding] : null;
+  const other = Object.values(PATTERNS).find((q) => q.vars.includes(name));
+  return p && other && !p.vars.includes(name) ? MSG.patternLacks(p.label, name, other.label) : MSG.noNote(name);
+};
 
 // 일지를 쓰는 내 노드 이름들(바로 쓰거나, 쓰는 내 노드를 부름 — 앞에서 만든 것만 부를 수 있으므로 순서대로 한 번)
 function logWriterDefs(program) {
@@ -420,7 +428,7 @@ function varErrors(program) {
     out.get(node).push(msg);
   };
   const writers = logWriterDefs(program);
-  scopeWalk(program, (n, { known, notes, stale, inDef, loops, ok, outerPos, reading }) => {
+  scopeWalk(program, (n, { known, notes, stale, inDef, loops, ok, outerPos, reading, finding }) => {
     if (!ok) return;
     const a = n.args;
     // 숫자로 쓰는 값(더하기·비교): 없으면 「먼저 기억해요」, 쪽지 글자로 덮였을 수 있으면 noteN
@@ -441,11 +449,11 @@ function varErrors(program) {
     if (n.kind === "sayval" || n.kind === "writelog") {
       const v = a.var;
       if (v === null) { /* 글자만 쓰는 일지 */ } else if (isLoopVar(v)) { if (!innermost(loops, v.type)) add(n, MSG.noLoopVar); }
-      else if (isNoteVar(v)) { if (!notes.has(v.noteVar)) add(n, noNoteMsg(v.noteVar)); }
+      else if (isNoteVar(v)) { if (!notes.has(v.noteVar)) add(n, noNoteMsg(v.noteVar, finding)); }
       else if (!known.has(v) && !notes.has(v)) add(n, numMsg(v)); // str(n)은 숫자·쪽지 글자 모두 됨
     }
-    if (n.kind === "plant" && isNoteVar(a.crop) && !notes.has("crop")) add(n, MSG.noNote("crop"));
-    if (n.kind === "repeat" && isNoteCount(a.n) && !notes.has("n")) add(n, MSG.noNote("n"));
+    if (n.kind === "plant" && isNoteVar(a.crop) && !notes.has("crop")) add(n, noNoteMsg("crop", finding));
+    if (n.kind === "repeat" && isNoteCount(a.n) && !notes.has("n")) add(n, noNoteMsg("n", finding));
     if (n.kind === "repeat" && isNoteCount(a.n) && !actsIn(n.body)) add(n, MSG.repeatNoAct);
     if ((n.kind === "splitline" || n.kind === "findall") && !notes.has("line")) add(n, MSG.noteOnly);
     if (reading.includes(LOG_FILE) && (n.kind === "writelog" || (n.kind === "call" && writers.has(a.name)))) add(n, MSG.logReading);
@@ -676,6 +684,33 @@ export function countNodes(program) {
 // "loopvar:act"(이동·심기 값으로 목록 변수를 고름 — 값 넣어 말하기만으로는 아님, 섞어 심기 주문),
 // v0.12: "crop:토마토"(토마토를 심기·목록·창고 조건에 씀), "readnote:<파일>", "findall:<패턴 id>"
 // (try·readnote·splitline·writelog·findall은 노드 종류 그대로)
+// v0.12.1: "readnote:<파일>:used"(그 쪽지 읽기 안에서 읽은 줄 — line 또는 거기서 나눈·찾은 crop·n — 을 노드 값으로 씀),
+//   "findall:<패턴 id>:used"(그 패턴 찾기 안에서 패턴이 만든 값을 씀). 숫자만 뽑기·어제 일지 읽기 주문이 값을 실제로 쓰게.
+// 노드가 값으로 읽는 쪽지 값 이름들(값 넣어 말하기·일지 쓰기 값, 심기 crop, 반복 int(n))
+function noteRefs(n) {
+  const a = isObj(n.args) ? n.args : {};
+  if ((n.kind === "sayval" || n.kind === "writelog") && isNoteVar(a.var)) return [a.var.noteVar];
+  if (n.kind === "plant" && isNoteVar(a.crop)) return [a.crop.noteVar];
+  if (n.kind === "repeat" && isNoteCount(a.n)) return [a.n.value];
+  return [];
+}
+// list 안에서 live 이름의 쪽지 값을 읽는가. derive(쪽지 읽기): 안의 줄 나누기·패턴 찾기가 만든 값도 그 줄에서 온 값.
+// 아니면(패턴 찾기): 안쪽 줄 나누기·패턴 찾기가 같은 이름을 다시 정하면 그 뒤·그 안은 다른 값. 안쪽 쪽지 읽기는 다른 쪽지.
+function readsNote(list, live, derive) {
+  let cur = new Set(live);
+  for (const n of Array.isArray(list) ? list : []) {
+    if (!n) continue;
+    if (noteRefs(n).some((v) => cur.has(v))) return true;
+    if (n.kind === "readnote") continue;
+    const binds = noteBinds(n);
+    const inner = new Set(cur);
+    for (const v of binds) derive ? inner.add(v) : inner.delete(v);
+    if (n.kind === "findall") { if (readsNote(n.body, inner, derive)) return true; continue; }
+    if (SLOTS.some((s) => readsNote(n[s], cur, derive))) return true;
+    if (n.kind === "splitline") cur = inner;
+  }
+  return false;
+}
 export function kindsUsed(program) {
   const s = new Set();
   walk(program, (n) => {
@@ -686,13 +721,32 @@ export function kindsUsed(program) {
     if (Object.values(a).some(isLoopVar)) s.add("loopvar");
     if ((n.kind === "move" && isLoopVar(a.dir)) || (n.kind === "plant" && isLoopVar(a.crop))) s.add("loopvar:act");
     if (usesTomato(n)) s.add(`crop:${TOMATO}`);
-    if (n.kind === "readnote" && typeof a.file === "string") s.add(`readnote:${a.file}`);
-    if (n.kind === "findall" && typeof a.pattern === "string") s.add(`findall:${a.pattern}`);
+    if (n.kind === "readnote" && typeof a.file === "string") {
+      s.add(`readnote:${a.file}`);
+      if (readsNote(n.body, ["line"], true)) s.add(`readnote:${a.file}:used`);
+    }
+    if (n.kind === "findall" && typeof a.pattern === "string") {
+      s.add(`findall:${a.pattern}`);
+      const vars = Object.hasOwn(PATTERNS, a.pattern) ? PATTERNS[a.pattern].vars : [];
+      if (readsNote(n.body, vars, false)) s.add(`findall:${a.pattern}:used`);
+    }
   });
   return s;
 }
 
 // ---- 화면 도우미(v0.11) ----
+/**
+ * (v0.12.1) 값 넣어 말하기·일지 쓰기에서 값을 고를 때: 기억한 값(source "var")이 아니면 — 쪽지 값(line·crop·n)·
+ * 위치(x·y)·목록 값 — 기본 앞·뒤 글자(「당근 」·「개」, 「수확 」·「개」)는 맞지 않으므로 비울 칸 { pre?: "", post?: "" }.
+ * 기본값과 다른(학습자가 고친) 글자는 두고, 다른 노드면 {}. 화면은 이번에 고친 글자인지도 따로 본다.
+ */
+export function valueTextReset(kind, args, source) {
+  if ((kind !== "sayval" && kind !== "writelog") || source === "var") return {};
+  const out = {};
+  for (const k of ["pre", "post"]) if ((args?.[k] ?? "") === NODES[kind].args[k].default) out[k] = "";
+  return out;
+}
+
 // id 노드 자리(그 노드가 실행되기 직전)의 범위 정보. 못 찾으면 null.
 function envAt(program, id) {
   let found = null;

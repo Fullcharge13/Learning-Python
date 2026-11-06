@@ -372,7 +372,17 @@ MEASURE_JS = r"""() => {
 }"""
 
 
+def _settle_animations(app, ms=1200):
+    """끝나는 CSS 움직임(창이 아래에서 올라오는 up .22s 등)이 끝날 때까지 기다림(v0.12.1 QA: 확인 창을 연 바로 뒤
+    재면 단추가 올라오는 도중이라 화면 밖으로 잡혔음). 무한 반복 움직임은 기다리지 않고, 길어도 ms까지만."""
+    app.page.evaluate("""(ms) => Promise.race([
+        Promise.all(document.getAnimations().filter(a => a.effect && a.effect.getComputedTiming().iterations !== Infinity)
+            .map(a => a.finished.catch(() => null))),
+        new Promise(r => setTimeout(r, ms))])""", ms)
+
+
 def measure(app, screen):
+    _settle_animations(app)
     m = app.js(MEASURE_JS)
     problems = []
     if max(m["sw"], m["bsw"]) > m["vw"]:
@@ -775,26 +785,20 @@ def test_status_after_milestone():
             fails.append("lesson path: home shows %s" % home)
         if a.errors:
             fails.append("lesson path errors: %s" % a.errors)
-    # 나) 설정에서 목표를 낮춰 7일 → 축하 창 (상태 줄이 같은 화면에 있음; 실행 기록 작업 9 남은 경미)
+    # 나) 설정에서 목표를 낮춰도 오늘은 인정하지 않음(v0.12.1 QA 4: 새 목표는 내일부터) → 축하 창 없음, 6일 그대로
     seed2 = dict(seed, streak=dict(seed["streak"], todayXp=12))
     with App("iPhone 17", save=seed2) as a:
         a.start()
         a.page.click('[data-go="settings"]')
         a.page.wait_for_selector(".screen.settings")
         a.page.click('[data-g="10"]')
-        a.page.wait_for_selector(".celebrate", timeout=3000)
-        a.page.wait_for_timeout(100)
-        bars = a.js("() => [...document.querySelectorAll('.status .stat.flame b')].map(e => e.textContent)")
-        a.shot("milestone-settings.png")
-        print("    settings path: status bars behind overlay %s" % bars)
-        if not bars or any(b != "7" for b in bars):
-            fails.append("settings path: status bar shows %s while overlay open" % bars)
-        a.page.wait_for_timeout(GUARD_WAIT)
-        a.page.click("#cel-ok")
-        a.page.wait_for_selector(".celebrate", state="detached")
+        a.page.wait_for_selector("#goal-note")
+        a.page.wait_for_timeout(300)
+        if a.page.query_selector(".celebrate"):
+            fails.append("settings path: celebration opened on goal change")
         after = a.page.inner_text(".status .stat.flame b")
-        if after != "7":
-            fails.append("settings path: after closing shows %s" % after)
+        if after != "6":
+            fails.append("settings path: status shows %s (want 6)" % after)
         if a.errors:
             fails.append("settings path errors: %s" % a.errors)
     assert not fails, "\n".join(fails)
@@ -2510,6 +2514,148 @@ def test_garden12_review_c71_seedpack_and_a11y():
         assert not a.errors, a.errors
 
 
+# ---------------------------------------------------------------- 텃밭 QA 고침 (v0.12.1)
+
+def test_garden121_confirm_in_view():
+    """비우기 확인 창: 아래로 스크롤된 화면에서 연 바로 뒤에 재도 단추가 화면 안(올라오는 움직임이 끝난 뒤 잼)"""
+    prog = [_nd(1, "repeat", n=2, body=[_nd(2, "move", dir="오른쪽")]), _nd(3, "move", dir="아래")]
+    with App("iPhone 17", save=_garden_seed(5, _garden(order_idx=12, program=prog))) as a:
+        _open_garden(a)
+        a.page.click("#g-clear")
+        a.page.wait_for_selector(".modal .modal-actions button")
+        m = measure(a, "garden121-clear-confirm")
+        assert not m["problems"], m["problems"]
+        r = a.js("""() => [...document.querySelectorAll('.modal .modal-actions button')].map(b => {
+            const r = b.getBoundingClientRect(); return [r.top, r.bottom, innerHeight]; })""")
+        assert all(0 <= t and b <= h for t, b, h in r), r
+        assert not a.errors, a.errors
+
+
+def _result_text(a):
+    return a.page.inner_text("#g-result")
+
+
+def test_garden121_note_shortfall():
+    """주문서대로: 쪽지와 다르게 심으면 결과 칸에 쪽지·심은 것·까닭(칸이 참)"""
+    prog = [_nd(1, "readnote", file="주문서.txt", body=[
+        _nd(2, "splitline"),
+        _nd(3, "repeat", n={"value": "n"}, body=[_nd(4, "plant", crop={"noteVar": "crop"}), _nd(5, "move", dir="오른쪽")])])]
+    cells = [None, {"crop": "감자", "planted_at": 440}] + [None] * 14
+    seed = _garden_seed(12, _garden12(24, program=prog, cells=cells))
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        g = _garden_run(a)
+        assert g["order"]["idx"] == 24, g["order"]
+        t = _result_text(a)
+        for want in ("쪽지: 당근 2 · 감자 1", "이번에 심은 것: 당근 1 · 감자 1", "빈 칸이 모자랐어요 — 먼저 거둬요"):
+            assert want in t, t
+        a.shot("garden121-shortfall.png")
+        m = measure(a, "garden121-shortfall")
+        assert not m["problems"], m["problems"]
+        assert not a.errors, a.errors
+
+
+def _g121_first():
+    """첫 주문(첫 수확): 오른쪽에 다 자란 당근, 재생이 몇 초 걸리게 이동을 더 붙임"""
+    prog = [_nd(1, "move", dir="오른쪽"), _nd(2, "harvest")] + [_nd(3 + k, "move", dir="아래" if k % 2 == 0 else "위") for k in range(10)]
+    cells = [None, {"crop": "당근", "planted_at": 0}] + [None] * 7
+    return _garden(order_idx=0, program=prog, cells=cells)
+
+
+def test_garden121_pending_done_after_leave():
+    """재생 중 홈으로 가도 XP는 저장되고, 다음에 텃밭을 열면 「주문 완료!」(조사 「예요」) → 닫으면 실행 단추에 초점"""
+    with App("iPhone 17", save=_garden_seed(1, _g121_first())) as a:
+        _open_garden(a)
+        a.wait_py()
+        a.page.click("#g-run")
+        a.page.wait_for_selector(".screen.garden[data-state=replay]", timeout=30_000)
+        a.page.click("#g-back")
+        a.page.wait_for_selector(".screen.home")
+        g = a.save()["garden"]
+        assert g["order"]["paid"] == ["o_first"] and g.get("pendingDone") == ["o_first"], g["order"]
+        a.page.click("#garden")
+        a.page.wait_for_selector(".modal .g-done-body", timeout=10_000)
+        t = a.page.inner_text(".modal .g-done-body")
+        assert "「첫 수확」 주문 완료!" in t and "다음 주문은 「파이의 인사」예요." in t, t
+        _close_done(a)
+        a.page.wait_for_timeout(200)
+        assert a.js("() => document.activeElement && document.activeElement.id") == "g-run"
+        assert a.save()["garden"]["pendingDone"] == []
+        # 한 번만: 다시 열어도 창 없음
+        a.page.click("#g-back")
+        a.page.wait_for_selector(".screen.home")
+        a.page.click("#garden")
+        a.page.wait_for_selector(".screen.garden")
+        a.page.wait_for_timeout(400)
+        assert not a.page.query_selector(".modal .g-done-body")
+        assert not a.errors, a.errors
+    # 새로 고침: 재생 중 앱을 다시 열어도 창이 뜸
+    with App("iPhone 17", save=_garden_seed(1, _g121_first())) as a:
+        _open_garden(a)
+        a.wait_py()
+        a.page.click("#g-run")
+        a.page.wait_for_selector(".screen.garden[data-state=replay]", timeout=30_000)
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        assert a.save()["garden"]["pendingDone"] == ["o_first"]
+        _open_garden(a)
+        a.page.wait_for_selector(".modal .g-done-body", timeout=10_000)
+        _close_done(a)
+        assert a.save()["garden"]["pendingDone"] == []
+        assert not a.errors, a.errors
+
+
+def test_garden121_run_done_focus():
+    """실행으로 주문을 해내고 창을 닫으면(키보드 Enter) 초점이 실행 단추로"""
+    with App("iPhone 17", save=_garden_seed(1, _g121_first()), reduced=True) as a:
+        _open_garden(a)
+        _garden_run(a)
+        a.page.wait_for_selector(".modal .g-done-body", timeout=10_000)
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.keyboard.press("Enter")
+        a.page.wait_for_selector(".modal .g-done-body", state="detached")
+        a.page.wait_for_timeout(200)
+        assert a.js("() => document.activeElement && document.activeElement.id") == "g-run"
+        assert a.save()["garden"]["pendingDone"] == []
+        assert not a.errors, a.errors
+
+
+def test_garden121_sayval_note_text():
+    """값 넣어 말하기: 쪽지 값을 고르면 기본 「당근 」·「개」를 비움(고친 글자는 둠) → 「수확 4개」가 그대로"""
+    seed = _garden_seed(12, _garden12(26, journal="수확 4개\n"))
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        _open_garden(a)
+        _add(a, None, "body", "readnote")
+        rid = _prog_at(a, 0)["id"]
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=file]' % rid)
+        _sheet_pick(a, '[data-v="농장일지.txt"]')
+        _add(a, rid, "body", "sayval")
+        sv = _prog_at(a, 0, "body", 0)
+        assert sv["args"] == {"pre": "", "var": {"noteVar": "line"}, "post": ""}, sv
+        # 위치 값도: 맨 바깥 위치 알기 뒤 값 넣어 말하기 → x, 글자 비움
+        _add(a, None, "body", "where")
+        _add(a, None, "body", "sayval")
+        sx = _prog_at(a, 2)
+        assert sx["args"] == {"pre": "", "var": "x", "post": ""}, sx
+        # 직접 쓴 뒷글자(기본값과 같아도)는 값을 다시 골라도 둠
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=post]' % sx["id"])
+        a.page.wait_for_selector(".modal.g-sheet input")
+        a.page.fill(".modal.g-sheet input", "개")
+        _sheet_pick(a, "#g-ok")
+        a.page.click('.g-node[data-id="%s"] .g-arg[data-arg=var]' % sx["id"])
+        _sheet_pick(a, '[data-name="y"]')
+        assert _prog_at(a, 2)["args"] == {"pre": "", "var": "y", "post": "개"}, _prog_at(a, 2)
+        for k in (2, 1):
+            a.page.click('.g-node[data-id="%s"] .g-menu' % _prog_at(a, k)["id"])
+            _sheet_pick(a, "[data-act=del]")
+        _garden_run(a)
+        assert "수확 4개" in a.js("() => document.querySelector('#board svg').textContent")
+        assert "개개" not in a.js("() => document.querySelector('#board svg').textContent")
+        _close_done(a)
+        assert a.save()["garden"]["order"]["paid"][-1] == "o_readlog"
+        assert not a.errors, a.errors
+
+
 # ---------------------------------------------------------------- 개발자 모드 (v0.11.1)
 
 def _ls(a, key):
@@ -2665,7 +2811,8 @@ def test_dev_mode():
         a.page.click('[data-g="30"]')
         a.page.wait_for_timeout(200)
         dev_save = json.loads(_ls(a, DEV_SAVE_KEY))
-        assert dev_save["settings"]["dailyGoal"] == 30 and dev_save.get("dev_mode") is True, dev_save["settings"]
+        # v0.12.1(QA 4): 바꾼 목표는 내일부터 → goal_pending에 예약
+        assert (dev_save.get("goal_pending") or {}).get("value") == 30 and dev_save.get("dev_mode") is True, dev_save
         assert _ls(a, SAVE_KEY) == real_before
 
         # 새로고침해도 켜져 있음(깃발이 남음)
@@ -2675,7 +2822,7 @@ def test_dev_mode():
         _below_banner(a, ".screen.splash h1, .screen.splash #go")
         a.shot("dev-splash.png")
         a.start()
-        assert a.js("() => window.__ria.app.save.settings.dailyGoal") == 30
+        assert a.js("() => (window.__ria.app.save.goal_pending || {}).value") == 30
         assert _ls(a, SAVE_KEY) == real_before
 
         # 끄기: 확인 창 없음 → 학습 기록 그대로
@@ -2696,6 +2843,159 @@ def test_dev_mode():
         assert "locked" in a.page.get_attribute('[data-lesson="17-3"]', "class")
         assert "locked" in a.page.get_attribute('[data-lesson="13-A1"]', "class")
         a.shot("dev-off-home.png")
+        assert not a.errors, a.errors
+
+
+# ---------------------------------------------------------------- v0.12.1 앱 전체 QA
+
+def _in_view(a, sel):
+    """요소가 상태 줄 아래·화면 안에 다 보이나"""
+    return a.js("""(sel) => { const e = document.querySelector(sel); if (!e) return 'missing';
+        const r = e.getBoundingClientRect(); const bar = document.querySelector('#app .status');
+        const top = bar ? bar.getBoundingClientRect().bottom : 0;
+        return r.top >= top - 1 && r.bottom <= innerHeight + 1 ? true : [Math.round(r.top), Math.round(r.bottom), Math.round(top), innerHeight]; }""", sel)
+
+
+def test_qa0121_closet_preview_in_view():
+    """의상실(QA 1·3): 아래쪽 카드(마법사 망토)를 누르면 미리보기·「300바이트로 사기」가 화면 안, 초점은 사기 단추 →
+    사면 초점은 「입고 있어요」. 맨 끝 카드(졸업 가운)도 미리보기가 화면 안. 캡처: qa0121-closet-*.png (iPhone 17)"""
+    seed = {"saveVer": 2, "xp": 500, "bytes": 1000, "completed_lessons": ["1-1"]}
+    with App("iPhone 17", save=seed) as a:
+        a.start()
+        a.page.click('[data-go="closet"]')
+        a.page.wait_for_selector(".screen.closet")
+        a.page.locator('[data-o="wizard"]').scroll_into_view_if_needed()
+        a.page.wait_for_timeout(200)
+        a.page.click('[data-o="wizard"]')
+        a.page.wait_for_selector('[data-o="wizard"][aria-pressed="true"]')
+        a.page.wait_for_function("() => { const b = document.querySelector('#buy'); if (!b) return false;"
+                                 " const r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }", timeout=3000)
+        a.page.wait_for_timeout(500)   # 부드러운 스크롤이 멈출 때까지
+        a.shot("qa0121-closet-wizard.png")
+        assert _in_view(a, "#buy") is True, _in_view(a, "#buy")
+        assert _in_view(a, ".stage .ria-wrap") is True, _in_view(a, ".stage .ria-wrap")
+        assert a.js("() => document.activeElement && document.activeElement.id") == "buy"
+        a.page.click("#buy")
+        a.page.wait_for_selector("#worn")
+        a.page.wait_for_timeout(100)
+        focus = a.js("() => [document.activeElement.id, document.activeElement.tagName, document.activeElement.textContent.trim()]")
+        assert focus[0] == "worn" and "입고 있어요" in focus[2], focus
+        assert a.save()["outfit"] == "wizard" and a.save()["bytes"] == 700, a.save()
+        a.page.click("#worn", force=True)   # aria-disabled: 눌러도 아무 일 없음
+        assert a.save()["outfit"] == "wizard"
+        a.shot("qa0121-closet-bought.png")
+        # 맨 끝 카드(판매 안 함): 미리보기가 화면 안, 초점은 이름
+        a.page.locator('[data-o="graduate"]').scroll_into_view_if_needed()
+        a.page.click('[data-o="graduate"]')
+        a.page.wait_for_timeout(900)
+        assert _in_view(a, ".stage .lock-note") is True, _in_view(a, ".stage .lock-note")
+        assert a.js("() => document.activeElement.closest('.stage') !== null")
+        assert not a.errors, a.errors
+    # 동작 줄이기: 바로 이동(부드러운 스크롤 없이)
+    with App("iPhone 17", save=seed, reduced=True) as a:
+        a.start()
+        a.page.click('[data-go="closet"]')
+        a.page.wait_for_selector(".screen.closet")
+        a.page.locator('[data-o="wizard"]').scroll_into_view_if_needed()
+        a.page.click('[data-o="wizard"]')
+        a.page.wait_for_timeout(60)
+        assert _in_view(a, "#buy") is True, _in_view(a, "#buy")
+        assert not a.errors, a.errors
+
+
+def _import_file(a, name, obj):
+    path = os.path.join(OUT, name)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(obj if isinstance(obj, str) else json.dumps(obj))
+    a.page.set_input_files("#import", path)
+
+
+def test_qa0121_import_checks():
+    """저장 가져오기(QA 2): 다른 JSON → 「리아와 파이썬! 저장 파일이 아니에요」, 창 없음, 저장 그대로 /
+    끝낸 레슨이 적은 저장 → 확인 창에 요약 + 「지금보다 끝낸 레슨이 2개 적어요」 → 그만두기 → 그대로 → 바꾸기 → 바뀜"""
+    seed = {"saveVer": 2, "xp": 90, "bytes": 40, "completed_lessons": ["1-1", "1-2", "1-3"], "current_lesson": "1-4"}
+    with App("iPhone 17", save=seed) as a:
+        a.start()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        before = a.save()
+        _import_file(a, "qa0121-foreign.json", {"hello": "world", "xp": "lots"})
+        a.page.wait_for_selector(".toast.warn")
+        assert "리아와 파이썬! 저장 파일이 아니에요" in a.page.inner_text("#toasts")
+        a.page.wait_for_timeout(300)
+        assert not a.page.query_selector(".modal"), "다른 JSON에 확인 창이 뜨면 안 됨"
+        assert a.save() == before
+        _import_file(a, "qa0121-xponly.json", {"xp": 5})
+        a.page.wait_for_timeout(400)
+        assert not a.page.query_selector(".modal") and a.save() == before
+        _import_file(a, "qa0121-less.json", {"saveVer": 2, "xp": 10, "bytes": 3, "completed_lessons": ["1-1"]})
+        a.page.wait_for_selector(".modal")
+        body = a.page.inner_text(".modal")
+        a.shot("qa0121-import-less.png")
+        assert "끝낸 레슨 1개, XP 10" in body, body
+        assert "지금보다 끝낸 레슨이 2개 적어요" in body, body
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal button:has-text('그만두기')")
+        a.page.wait_for_selector(".modal", state="detached")
+        assert a.save() == before
+        _import_file(a, "qa0121-less.json", {"saveVer": 2, "xp": 10, "bytes": 3, "completed_lessons": ["1-1"]})
+        a.page.wait_for_selector(".modal")
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal button:has-text('바꾸기')")
+        a.page.wait_for_selector("#app[data-screen=home]")
+        assert a.save()["completed_lessons"] == ["1-1"] and a.save()["xp"] == 10
+        assert not a.errors, a.errors
+
+
+def test_qa0121_goal_from_tomorrow():
+    """하루 목표(QA 4): 오늘 15 XP·목표 20에서 10으로 → 연속 기록 그대로, 「내일부터 10 XP」, 상태 줄은 오늘 목표 20"""
+    seed = {"saveVer": 2, "xp": 60, "completed_lessons": ["1-1"],
+            "streak": {"days": 3, "best": 3, "lastGoalDate": today(1), "todayDate": today(), "todayXp": 15},
+            "settings": {"sound": False, "dailyGoal": 20, "name": ""}}
+    with App("iPhone 17", save=seed) as a:
+        a.start()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        a.page.click('[data-g="10"]')
+        a.page.wait_for_selector("#goal-note")
+        s = a.save()
+        assert s["streak"]["days"] == 3 and s["streak"]["lastGoalDate"] == today(1), s["streak"]
+        assert s["settings"]["dailyGoal"] == 20, s["settings"]
+        tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+        assert s["goal_pending"] == {"value": 10, "from": tomorrow}, s.get("goal_pending")
+        assert "내일부터 10 XP" in a.page.inner_text("#goal-note")
+        assert a.page.get_attribute('[data-g="10"]', "aria-checked") == "true"
+        assert a.js("() => document.activeElement.dataset.g") == "10"
+        a.shot("qa0121-goal-pending.png")
+        # 지금 목표를 다시 고르면 예약 취소
+        a.page.click('[data-g="20"]')
+        a.page.wait_for_selector("#goal-note", state="detached")
+        assert a.save()["goal_pending"] is None
+        assert not a.errors, a.errors
+
+
+def test_qa0121_broken_save_notice():
+    """깨진 저장(QA 5): 읽지 못한 저장 → 홈에 한 번 안내 + 「옛 저장 내보내기」로 .broken 내용 받기 → 새로고침하면 안내 없음"""
+    with App("iPhone 17", save="{not a save") as a:
+        raw = a.js("() => localStorage.getItem('ria-python.save.broken')")
+        assert raw == json.dumps("{not a save"), raw
+        a.start()
+        a.page.wait_for_selector(".broken-notice")
+        text = a.page.inner_text(".broken-notice")
+        assert "저장을 읽지 못해 새로 시작했어요" in text and "설정 → 저장 가져오기" in text, text
+        a.shot("qa0121-broken-notice.png")
+        with a.page.expect_download() as dl:
+            a.page.click("#broken-export")
+        path = dl.value.path()
+        with open(path, encoding="utf-8") as f:
+            assert f.read() == raw
+        assert dl.value.suggested_filename.startswith("ria-python-old-save-"), dl.value.suggested_filename
+        assert a.save()["broken_notice"] is None
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.start()
+        assert not a.page.query_selector(".broken-notice")
+        assert a.js("() => localStorage.getItem('ria-python.save.broken.1')") is None, "다시 깨진 것으로 남기면 안 됨"
         assert not a.errors, a.errors
 
 

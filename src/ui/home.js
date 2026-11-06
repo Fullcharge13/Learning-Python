@@ -192,6 +192,7 @@ export function render(root, ctx) {
   const save = ctx.save;
   const currentId = ctx.currentLessonId();
   const cur = currentId ? ctx.lessonById(currentId) : null;
+  const broken = ctx.takeBrokenNotice ? ctx.takeBrokenNotice() : null; // 깨진 저장 안내(v0.12.1): 한 번만
   const notice = ctx.takeNotice ? ctx.takeNotice() : null; // 환불 안내가 있으면 그날 인사보다 먼저(판정 C42)
   const special = notice ? null : ctx.takeGreeting();
   const line = notice || ctx.say(special || "greet");
@@ -203,6 +204,10 @@ export function render(root, ctx) {
     ${statusBar(save)}
     <main>
       <h1 class="sr">학습 길</h1>
+      ${broken ? `<section class="panel broken-notice" role="status">
+        <p>${esc(broken.text)}</p>
+        <button class="btn ghost wide" id="broken-export">옛 저장 내보내기</button>
+      </section>` : ""}
       ${dst && dst.state !== "locked" ? dailyCard(dst) : ""}
       <section class="hello">
         ${riaSays({ outfit: save.outfit, face: line.face, text: line.text, size: 92, cls: notice ? "refund-notice" : "" })}
@@ -219,6 +224,10 @@ export function render(root, ctx) {
     ${tabBar("home")}
   </div>`;
   bindTabs(root, ctx);
+  const bx = root.querySelector("#broken-export");
+  if (bx) bx.addEventListener("click", () => {
+    toast(ctx.exportBroken(broken.key) ? "옛 저장을 파일로 내보냈어요. 고친 뒤 설정 → 저장 가져오기로 되살릴 수 있어요." : "옛 저장을 찾지 못했어요.", "");
+  });
   const go = root.querySelector("#continue");
   if (go) go.addEventListener("click", () => ctx.show("lesson", { id: currentId }));
   const dg = root.querySelector("#daily");

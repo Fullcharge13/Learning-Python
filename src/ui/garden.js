@@ -12,12 +12,12 @@ import {
   NODES, COND, VAR_NAMES, FUNC_NAMES, OPS, VALUE_RANGE, MAX_NODES, MSG as NODE_MSG,
   codegen, validate, unlockedKinds, newNode, insertNode, moveNode, removeNode, updateArgs, setElse, countNodes,
   CROP_NAMES, LIST_TYPES, LIST_ITEMS, LIST_LABELS, LIST_MAX, LIST_DEFAULTS, COND_LOCKS, availableValues, loopVarAvailable, cleanList,
-  NOTE_FILES, LOG_FILE, PATTERNS, MARK_LOCKS, TOMATO, noteVarAvailable,
+  NOTE_FILES, LOG_FILE, PATTERNS, MARK_LOCKS, TOMATO, noteVarAvailable, valueTextReset,
 } from "../garden/nodes.js";
 import { gardenExplain } from "../garden/errors.js";
 import {
   fillGarden, runInput, runFiles, applyRun, currentOrder, canBuy, buy, deliver, grantOrderXP, settleAll, passedChapters,
-  JOURNAL_MAX, SEEDS_MAX, cleanSeeds,
+  JOURNAL_MAX, SEEDS_MAX, cleanSeeds, josa, orderShortfall, addPendingDone, dropPendingDone,
 } from "../garden/state.js";
 import { UPGRADES, ORDERS, SEED_PACK } from "../../data/garden.js";
 import { BADGES } from "../../data/badges.js";
@@ -115,10 +115,15 @@ function goalText(o) {
         + (g.kind ? ` · 「${NODES[g.kind]?.label ?? g.kind}」 노드로` : "");
     case "use": {
       const k = String(g.kind ?? "");
-      const [base, opt] = k.includes(":") && !MARK_LABEL[k] ? k.split(/:(.*)/s) : [k, null];
+      const [base, rest] = k.includes(":") && !MARK_LABEL[k] ? k.split(/:(.*)/s) : [k, null];
+      // v0.12.1 「…:used」: 그 노드 안에서 읽은 줄·찾은 값을 노드에 넣어 써야 함
+      const used = !!rest && rest.endsWith(":used");
+      const opt = used ? rest.slice(0, -":used".length) : rest;
+      const pat = base === "findall" && opt ? PATTERNS[opt]?.label ?? opt : "";
       const head = MARK_LABEL[k] ? `「${MARK_LABEL[k]}」 — 노드로 끝까지 실행하기`
-        : base === "readnote" && opt ? `「쪽지 읽기」로 ${opt} 읽고 끝까지 실행하기`
-        : base === "findall" && opt ? `「패턴 찾기: ${PATTERNS[opt]?.label ?? opt}」로 끝까지 실행하기`
+        : base === "readnote" && opt ? (used ? `「쪽지 읽기」로 ${opt}${josa(opt, "을")} 열어 읽은 줄(line)을 노드에 넣어 끝까지 실행하기`
+          : `「쪽지 읽기」로 ${opt} 읽고 끝까지 실행하기`)
+        : pat ? `「패턴 찾기: ${pat}」${josa(pat, "으로")} ${used ? `찾은 값(${(PATTERNS[opt]?.vars ?? []).join("·")})을 노드에 넣어 ` : ""}끝까지 실행하기`
         : `「${NODES[k]?.label ?? k}」 노드를 넣고 끝까지 실행하기`;
       return g.journal ? `${head} · 「일지에 한 줄 이상 쓰기」` : head;
     }
@@ -221,6 +226,7 @@ export function render(root, ctx) {
     codeTimer: null,
     destroyed: false,
     lastHtml: "",        // 실행 결과 칸
+    textEdited: new Set(), // v0.12.1 이번에 학습자가 직접 쓴 앞·뒤 글자("노드id:pre") — 값을 바꿔도 비우지 않음
   };
 
   root.innerHTML = `<div class="screen garden" data-state="idle">
@@ -304,6 +310,8 @@ export function render(root, ctx) {
       save(st.garden);
       for (const o of st.orders) list.push({ order: o, res: grant(o) });
     }
+    // v0.12.1: 창을 보여 주기 전에 떠나거나 새로 고쳐도 다음에 열 때 보이게(창을 닫으면 orderDone이 뺌)
+    if (list.length) save(addPendingDone(S.garden, list.map((x) => x.order.id)));
     return list;
   }
   async function showOrders(list) {
@@ -662,7 +670,8 @@ export function render(root, ctx) {
     if (kind === "sayval" || kind === "writelog") {
       // 그 자리에서 쓸 수 있는 첫 값(기억한 값 → x·y → 목록 값 → 쪽지 값). 없으면 기본 count 그대로(오류로 알려 줌)
       const first = availableValues(next, n.id)[0];
-      if (first) next = updateArgs(next, n.id, { var: first.arg });
+      // 쪽지 값·위치·목록 값이면 기본 「당근 」·「개」를 비움(v0.12.1, 「당근 수확 3개개」 막기)
+      if (first) next = updateArgs(next, n.id, { var: first.arg, ...valueTextReset(kind, n.args, first.source) });
     }
     setProgram(next);
     focusFirst(`${nodeSel(n.id)} .g-arg`, `${nodeSel(n.id)} .g-menu`);
@@ -830,6 +839,7 @@ export function render(root, ctx) {
         },
       });
       if (v !== "ok" || S.destroyed) return;
+      S.textEdited.add(`${n.id}:${arg}`);
       setProgram(updateArgs(S.garden.program, n.id, { [arg]: val }));
       refocus();
       return;
@@ -855,7 +865,10 @@ export function render(root, ctx) {
         return;
       }
       if (v == null || S.destroyed || !vals[+v]) return;
-      setProgram(updateArgs(S.garden.program, n.id, { [arg]: vals[+v].arg }));
+      // 쪽지 값·위치·목록 값을 고르면 기본 앞·뒤 글자는 비움(이번에 직접 쓴 글자는 둠, v0.12.1)
+      const reset = valueTextReset(n.kind, n.args, vals[+v].source);
+      for (const k of Object.keys(reset)) if (S.textEdited.has(`${n.id}:${k}`)) delete reset[k];
+      setProgram(updateArgs(S.garden.program, n.id, { [arg]: vals[+v].arg, ...reset }));
       refocus();
       return;
     }
@@ -1059,7 +1072,7 @@ export function render(root, ctx) {
     }
   }
 
-  function resultHTML({ ap, r, err, code }) {
+  function resultHTML({ ap, r, err, code, short = null }) {
     const parts = [];
     const got = cropNames(ap ? ap.harvested : {});
     if (got.length) {
@@ -1080,6 +1093,8 @@ export function render(root, ctx) {
       const noTomato = ev.filter((e) => e.t === "plant_fail" && e.reason === "no_tomato_seed").length;
       if (noTomato && !err) notes.push(`토마토 씨앗이 없어 ${noTomato}번 못 심었어요(다 자란 토마토를 거두면 2개 생겨요)`);
       if (notes.length) parts.push(`<p class="g-lost">${notes.map(esc).join("<br>")}</p>`);
+      // v0.12.1 쪽지대로 심기 주문: 쪽지와 이번에 심은 것, 까닭(칸이 참·토마토 씨앗)
+      if (short) parts.push(`<div class="g-short" role="group" aria-label="주문과 다른 점">${short.lines.map((l) => `<p>${esc(l)}</p>`).join("")}</div>`);
       parts.push(`<p class="g-meta">행동 ${r.farm.actions}번</p>`);
     }
     // 텃밭 전용 설명이 있으면 먼저(오류 줄의 코드 글로 store()["수박"] 같은 KeyError를 가림)
@@ -1144,7 +1159,9 @@ export function render(root, ctx) {
       if (JSON.stringify(runInput(now, passed)) !== JSON.stringify(start)) return;
       S.garden = now;
     }
+    const was = currentOrder(S.garden, passed);   // 실행 전 주문(쪽지 주문을 못 해냈을 때 까닭을 보이려고)
     const ap = applyRun(S.garden, r, { program, mode, passed });
+    const short = !ap.orderDone && !ap.rejected && !was.waiting ? orderShortfall(was.order, r) : null;
     save(ap.garden);
     const done = ap.orderDone ? finishOrders(ap.orderDone) : [];
     if (S.destroyed) return;
@@ -1166,7 +1183,7 @@ export function render(root, ctx) {
     if (err && mode === "nodes" && err.line && lineMap) S.runErr = lineMap[err.line] ?? null;
     if (mode === "nodes") paintProg();
     else if (err && S.ed && err.line) S.ed.markLine(err.line, false);
-    resultEl.innerHTML = resultHTML({ ap, r, err, code });
+    resultEl.innerHTML = resultHTML({ ap, r, err, code, short });
     if (err || ap.rejected) ctx.sound.play("error");
     else if (cropNames(ap.harvested).length) ctx.sound.play("correct");
     setState("idle");
@@ -1180,7 +1197,7 @@ export function render(root, ctx) {
     ctx.sound.play("done");
     const { order: next, waiting } = after;
     const nextLine = !next ? "주문을 모두 해냈어요! 텃밭은 계속 가꿀 수 있어요."
-      : waiting ? `다음 주문은 ${next.need}장을 끝내면 이어져요.` : `다음 주문은 「${next.title}」이에요.`;
+      : waiting ? `다음 주문은 ${next.need}장을 끝내면 이어져요.` : `다음 주문은 「${next.title}」${josa(next.title, "이에요")}.`;
     const text = `「${order.title}」 주문 완료! 파이 덕분에 텃밭이 북적여요. ${nextLine}`;
     await dialog({
       title: "주문 완료!",
@@ -1189,6 +1206,13 @@ export function render(root, ctx) {
       buttons: [{ label: "좋아요", value: true, kind: "primary" }],
     });
     if (S.destroyed) return;
+    save(dropPendingDone(S.garden, order.id));
+    // 창을 닫으면 초점은 실행 단추로(재생·보내기 단추는 사라졌을 수 있음)
+    if (!runBtn.disabled && !runBtn.closest("[hidden]")) runBtn.focus({ preventScroll: true });
+    else {
+      const h = orderEl.querySelector("#g-order-title");
+      if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); }
+    }
     if (res && res.milestone) await celebrate({ outfit: ctx.save.outfit, milestone: res.milestone });
     const names = (res && res.newBadges ? res.newBadges : []).map((id) => BADGES.find((b) => b.id === id)?.name).filter(Boolean);
     if (names.length) toast(`새 배지를 받았어요: ${names.join(", ")}`);
@@ -1362,7 +1386,11 @@ export function render(root, ctx) {
   const settled = finishOrders(null);
   paintAll();
   resultEl.innerHTML = `<p class="g-msg idle">${esc(RUN_HINT)}</p>`;
-  if (settled.length) setTimeout(() => { if (!S.destroyed) showOrders(settled); }, 0);
+  // 아직 창을 못 본 주문(재생 중 떠남·새로 고침, v0.12.1) + 지금 막 끝난 주문: 차례로 「주문 완료!」
+  const resOf = new Map(settled.map((x) => [x.order.id, x.res]));
+  const pending = S.garden.pendingDone.map((id) => ORDERS.find((o) => o.id === id)).filter(Boolean)
+    .map((order) => ({ order, res: resOf.get(order.id) ?? null }));
+  if (pending.length) setTimeout(() => { if (!S.destroyed) showOrders(pending); }, 0);
 
   return () => {
     S.destroyed = true;

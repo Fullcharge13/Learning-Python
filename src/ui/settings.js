@@ -1,10 +1,10 @@
 // 설정: 소리, 하루 목표, 이름, 저장 내보내기·가져오기, 판 번호
 import { DAILY_GOALS } from "../rules.js";
-import { esc, toast, dialog, celebrate, icon } from "./dom.js";
+import { esc, toast, dialog, icon } from "./dom.js";
 import { collectOfflineStatus } from "../offline.js";
 import { curriculum, chapterWindow } from "../curriculum.js";
 import { applyGoalChange } from "../finish.js";
-import { newSave } from "../save.js";
+import { checkImport, importCompare, NOT_SAVE_TEXT } from "../importsave.js";
 import { isDev } from "../devgate.js";
 import { markDev } from "../devmode.js";
 import { tabBar, bindTabs, statusBar } from "./nav.js";
@@ -61,6 +61,9 @@ function courseCard(ctx) {
 export function render(root, ctx) {
   const s = ctx.save;
   const goal = DAILY_GOALS.includes(s.settings.dailyGoal) ? s.settings.dailyGoal : 20;
+  // 바꾼 목표는 내일부터(v0.12.1, QA 4). 고른 칸은 예약한 값, 아래에 「내일부터 N XP」
+  const pend = s.goal_pending && DAILY_GOALS.includes(s.goal_pending.value) ? s.goal_pending.value : null;
+  const picked = pend ?? goal;
   const dev = !!ctx.dev;
   const devTag = dev ? " (개발자 모드 저장)" : "";
   root.innerHTML = `<div class="screen settings with-tabs">
@@ -76,7 +79,8 @@ export function render(root, ctx) {
         <div class="row col" role="group" aria-labelledby="goal-label">
           <p class="row-label" id="goal-label">하루 목표<small>목표를 채운 날마다 연속 기록이 하루씩 늘어요</small></p>
           <div class="seg" role="radiogroup" aria-label="하루 목표">${DAILY_GOALS.map((g) =>
-            `<button role="radio" aria-checked="${g === goal}" data-g="${g}">${g} XP</button>`).join("")}</div>
+            `<button role="radio" aria-checked="${g === picked}" data-g="${g}">${g} XP</button>`).join("")}</div>
+          ${pend ? `<p class="goal-note" id="goal-note">오늘은 ${goal} XP · <b>내일부터 ${pend} XP</b></p>` : ""}
         </div>
         <div class="row col">
           <label for="name" class="row-label">부를 이름<small>리아 교수가 「○○님」이라고 불러요. 비워 둬도 돼요</small></label>
@@ -157,17 +161,20 @@ export function render(root, ctx) {
     snd.setAttribute("aria-checked", String(on));
     if (on) ctx.sound.play("correct");
   });
-  root.querySelectorAll("[data-g]").forEach((b) => b.addEventListener("click", async () => {
-    // 목표를 낮춰 오늘 모은 XP가 이미 넘으면 그날을 바로 인정(이정표 보상 포함)
-    const r = applyGoalChange(ctx.save, +b.dataset.g, ctx.today());
+  root.querySelectorAll("[data-g]").forEach((b) => b.addEventListener("click", () => {
+    // 새 목표는 내일부터(오늘 모은 XP로 바로 인정하지 않음). 지금 목표를 다시 고르면 예약을 지움
+    const g = +b.dataset.g;
+    const r = applyGoalChange(ctx.save, g, ctx.today());
     ctx.commit(r.save);
-    if (r.streakUp) toast(`오늘 목표 달성! 연속 ${r.save.streak.days}일이에요.`);
-    if (r.milestone) {
-      ctx.sound.play("levelup");
-      await celebrate({ outfit: ctx.save.outfit, milestone: r.milestone });
-    }
-    ctx.show("settings"); // 위 상태 줄 목표 숫자도 바로 맞춤
+    const now = DAILY_GOALS.includes(r.save.settings.dailyGoal) ? r.save.settings.dailyGoal : 20;
+    toast(r.pending ? `내일부터 하루 목표가 ${r.pending.value} XP예요. 오늘은 ${now} XP 그대로예요.` : `하루 목표 ${now} XP 그대로예요.`);
+    const y = window.scrollY;
+    ctx.show("settings");
+    window.scrollTo(0, y);
+    const again = document.querySelector(`[data-g="${g}"]`);
+    if (again) again.focus({ preventScroll: true });
   }));
+
   const name = root.querySelector("#name");
   name.addEventListener("change", () => {
     const v = cleanName(name.value);
@@ -194,15 +201,13 @@ export function render(root, ctx) {
     if (!f) return;
     let raw;
     try { raw = JSON.parse(await f.text()); } catch { toast("저장 파일을 읽지 못했어요. 내보내기로 만든 .json 파일인지 확인해 주세요.", "warn"); return; }
-    const known = Object.keys(newSave());
-    if (!raw || typeof raw !== "object" || Array.isArray(raw) || !Object.keys(raw).some((k) => known.includes(k))) {
-      toast("리아와 파이썬! 저장 파일이 아니에요. 설정의 「저장 내보내기」로 만든 파일을 골라 주세요.", "warn");
-      return;
-    }
+    // 아무 JSON이나 받아 진행을 지우지 않게(v0.12.1, QA 2): 저장 모양이 아니면 확인 창 없이 알림만
+    if (!checkImport(raw).ok) { toast(NOT_SAVE_TEXT, "warn"); return; }
     const next = ctx.migrate(raw);
+    const cmp = importCompare(ctx.save, next);
     const ok = await dialog({
       title: "이 저장으로 바꿀까요?",
-      body: `<p>끝낸 레슨 ${next.completed_lessons.length}개, XP ${Math.max(0, next.xp)}, 바이트 ${Math.max(0, next.bytes)}, 연속 기록 ${next.streak.days}일</p><p>${dev ? "개발자 모드 저장이 이 파일 내용으로 바뀌어요. 학습 기록은 그대로예요." : "지금 이 브라우저의 진행은 이 파일 내용으로 바뀌어요."}</p>`,
+      body: `<p>${esc(cmp.summary)}</p>${cmp.warn ? `<p class="import-warn"><b>${esc(cmp.warn)}</b></p>` : ""}<p>${dev ? "개발자 모드 저장이 이 파일 내용으로 바뀌어요. 학습 기록은 그대로예요." : "지금 이 브라우저의 진행은 이 파일 내용으로 바뀌어요."}</p>`,
       buttons: [{ label: "그만두기", value: false }, { label: "바꾸기", value: true, kind: "primary" }],
     });
     if (!ok) return;

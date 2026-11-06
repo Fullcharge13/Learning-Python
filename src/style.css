@@ -104,6 +104,7 @@ button { cursor: pointer; }
 .btn.coral { background: var(--coral-ink); color: #fff; box-shadow: 0 4px 0 #7E2516; }
 .btn.ghost { background: var(--card); color: var(--ink); border-color: var(--line); box-shadow: 0 3px 0 var(--line); }
 .btn:disabled { background: #E9E2D2; color: #6F6A5E; box-shadow: none; border-color: transparent; cursor: default; }
+.btn.is-off { background: #E9E2D2; color: #6F6A5E; box-shadow: none; border-color: transparent; cursor: default; } /* v0.12.1 초점 받는 「입고 있어요」 */
 .link { background: none; border: 0; color: var(--teal-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; min-height: 44px; padding: 0 4px; }
 .icon-btn { width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0; border-radius: 12px; color: var(--ink-2); }
 
@@ -553,6 +554,8 @@ body.kbd-open .lesson-foot.has-dock { padding-bottom: 8px; }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
 .seg button { min-height: 48px; border-radius: 14px; background: var(--card); border: 2px solid var(--line); font-weight: 800; }
 .seg button[aria-checked="true"] { background: var(--teal-ink); color: #fff; border-color: var(--teal-ink); }
+.goal-note { margin: 8px 0 0; font-size: .88rem; color: var(--teal-ink); } /* v0.12.1 「내일부터 N XP」 */
+.import-warn { color: #9A3B12; }
 input[type="text"] { width: 100%; min-height: 48px; font-size: 16px; padding: 10px 14px; border-radius: 14px; border: 2px solid var(--line); background: #fff; margin-top: 6px; }
 input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var(--focus); outline-offset: 1px; }
 .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -735,6 +738,10 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .g-got { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px 4px 6px; border-radius: 999px; background: var(--sun-soft); border: 2px solid var(--sun-deep); font-weight: 800; }
 .g-meta { font-size: .82rem; color: var(--ink-2); margin: 0 0 6px; }
 .g-lost { font-size: .9rem; font-weight: 700; color: var(--coral-ink); margin: 0 0 6px; }
+.g-short { margin: 0 0 6px; padding: 8px 10px; border: 2px dashed var(--line); border-radius: 12px; font-size: .9rem; overflow-wrap: anywhere; }
+.g-short p { margin: 0; }
+.g-short p + p { margin-top: 2px; }
+.g-short p:nth-child(n+3) { color: var(--coral-ink); font-weight: 700; }
 
 /* 주문 게시판 */
 .g-order { display: flex; gap: 10px; align-items: flex-start; }

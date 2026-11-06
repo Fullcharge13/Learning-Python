@@ -100,7 +100,8 @@ test("ORDERS v0.11: 6~9장 주문 7개의 장·목표(설계 §2)", () => {
 
 // 노드가 아닌 표지(kindsUsed가 함께 돌려줌)와 그 표지가 열리는 장
 const MARK_CHAPTER = { "cond:store": 8, "cond:pos": 9, loopvar: 7, "loopvar:act": 7, "crop:토마토": 10,
-  "readnote:농장일지.txt": 11, "readnote:주문서.txt": 11, "readnote:손글씨주문.txt": 11, "findall:num": 12, "findall:crop_num": 12 };
+  "readnote:농장일지.txt": 11, "readnote:주문서.txt": 11, "readnote:손글씨주문.txt": 11, "findall:num": 12, "findall:crop_num": 12,
+  "readnote:농장일지.txt:used": 11, "findall:num:used": 12 };
 
 test("ORDERS: 다섯 가지 목표 종류를 모두 씀, use 주문은 그 장에서 열리는 노드(또는 표지)", () => {
   const kinds = new Set(ORDERS.map((o) => o.goal.type));
@@ -682,9 +683,9 @@ test("ORDERS v0.12: 10~12장 주문 7개의 장·목표(설계 §3)", () => {
     ["o_try", 10, "씨앗이 떨어지면", { type: "use", kind: "try" }],
     ["o_note", 11, "주문서대로", { type: "plant_as_note", file: "주문서.txt", kind: "readnote" }],
     ["o_log", 11, "농장일지", { type: "use", kind: "writelog", journal: true }],
-    ["o_readlog", 11, "어제 일지 읽기", { type: "use", kind: "readnote:농장일지.txt" }],
+    ["o_readlog", 11, "어제 일지 읽기", { type: "use", kind: "readnote:농장일지.txt:used" }],
     ["o_hand", 12, "손글씨 주문", { type: "plant_as_note", file: "손글씨주문.txt", parse: "crop_num", kind: "findall" }],
-    ["o_digits", 12, "숫자만 뽑기", { type: "use", kind: "findall:num" }],
+    ["o_digits", 12, "숫자만 뽑기", { type: "use", kind: "findall:num:used" }],
   ];
   assert.deepEqual(ORDERS.slice(22).map((o) => o.id), want.map((w) => w[0]));
   for (const [id, need, title, goal] of want) {

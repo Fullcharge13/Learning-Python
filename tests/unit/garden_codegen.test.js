@@ -1329,11 +1329,13 @@ test("12장 findall: 패턴 세 가지, import re는 맨 위 한 줄(첫 패턴 
   assert.equal(g2.lineMap[1], f1.id);
   // 없으면 import도 없다
   assert.doesNotMatch(codegen([RN("주문서.txt", [N("splitline")])]).code, /import re/);
-  // 숫자만 패턴은 crop을, 작물만 패턴은 n을 주지 않는다
+  // 숫자만 패턴은 crop을, 작물만 패턴은 n을 주지 않는다(v0.12.1: 그 값을 만드는 패턴을 고르라고 알림)
   const pc = N("plant", { crop: NV("crop") });
-  assert.deepEqual(errOn(validate([RN("주문서.txt", [FA("num", [pc])])], ALL12), pc.id), [NO_NOTE("crop")]);
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [FA("num", [pc])])], ALL12), pc.id),
+    ["숫자만 패턴에서는 crop이 생기지 않아요 — 작물+숫자 패턴을 골라요"]);
   const rn = N("repeat", { n: { value: "n" } }, { body: [N("harvest")] });
-  assert.deepEqual(errOn(validate([RN("주문서.txt", [FA("crop", [rn])])], ALL12), rn.id), [NO_NOTE("n")]);
+  assert.deepEqual(errOn(validate([RN("주문서.txt", [FA("crop", [rn])])], ALL12), rn.id),
+    ["작물 이름만 패턴에서는 n이 생기지 않아요 — 작물+숫자 패턴을 골라요"]);
   // 패턴 찾기 뒤(밖)에서는 그 값을 못 씀(한 번도 안 맞을 수 있음)
   const pa = N("plant", { crop: NV("crop") });
   assert.deepEqual(errOn(validate([RN("주문서.txt", [FA("crop", [N("harvest")]), pa])], ALL12), pa.id), [NO_NOTE("crop")]);

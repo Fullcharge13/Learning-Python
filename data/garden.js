@@ -11,7 +11,9 @@
 //     use         { kind }                  그 노드를 쓴 노드 모드 실행이 오류·멈춤 없이 끝남.
 //                                           kind는 노드 종류 또는 nodes.kindsUsed의 표지("cond:store" 창고 조건,
 //                                           "cond:pos" x·y 비교, "loopvar" 목록 변수를 값으로 고름,
-//                                           "loopvar:act" 이동·심기 값으로 목록 변수를 고름)
+//                                           "loopvar:act" 이동·심기 값으로 목록 변수를 고름,
+//                                           v0.12.1 "readnote:<파일>:used"·"findall:<패턴>:used" 그 노드 안에서
+//                                           읽은 줄·찾은 값을 노드 값으로 씀 — 숫자만 뽑기·어제 일지 읽기)
 //     grid        { size }                  밭 넓히기 성장을 가짐
 //     (v0.12) use에 journal: true            실행 뒤 농장일지(result.farm.files)에 글이 있어야 함(농장일지 주문)
 //     plant_as_note { file, parse?, kind? }  이번 실행의 plant 사건(작물별 개수)이 그 주문 쪽지(note)에서 읽은 작물별 개수와
@@ -397,7 +399,7 @@ export const ORDERS = [
   {
     id: "o_readlog", need: 11, title: "어제 일지 읽기",
     text: "쪽지 읽기로 농장일지를 열어, 지난번에 적은 줄을 파이가 하나씩 말하게 해 봐요.",
-    goal: { type: "use", kind: "readnote:농장일지.txt" },
+    goal: { type: "use", kind: "readnote:농장일지.txt:used" },
     xp: 5,
     solution: prog(rd("농장일지.txt", [sv("일지: ", NV("line"), "")])),
     setup: farmSetup(["....", "....", "....", "...."], { clock: 440, store: { 당근: 74, 감자: 6, 토마토: 1 }, upgrades: [...SEED, ...G4], seeds: 2,
@@ -417,7 +419,7 @@ export const ORDERS = [
   {
     id: "o_digits", need: 12, title: "숫자만 뽑기",
     text: "이번 손글씨 쪽지에서는 숫자만 뽑아 봐요. 패턴을 숫자만으로 바꾸고, 찾은 숫자를 파이가 말하게 해요.",
-    goal: { type: "use", kind: "findall:num" },
+    goal: { type: "use", kind: "findall:num:used" },
     note: { file: "손글씨주문.txt", text: "리아: 감자4개랑 당근 1개 줄래요?" },
     xp: 5,
     solution: prog(rd("손글씨주문.txt", [fa("num", [sv("숫자 ", NV("n"), "")])])),

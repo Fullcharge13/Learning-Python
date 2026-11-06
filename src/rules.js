@@ -43,6 +43,26 @@ function dailyGoal(save) {
   const g = save.settings && save.settings.dailyGoal;
   return DAILY_GOALS.includes(g) ? g : 20;
 }
+export function nextDay(d) {
+  requireDate(d);
+  return fromDayNum(dayNum(d) + 1);
+}
+// 하루 목표 예약(v0.12.1, QA): 설정에서 바꾼 목표는 다음 날부터. goal_pending = { value, from }
+function duePending(save, today) {
+  const p = save && save.goal_pending;
+  if (!p || !DAILY_GOALS.includes(p.value) || !isDate(p.from) || !isDate(today)) return null;
+  return dayNum(today) >= dayNum(p.from) ? p.value : null;
+}
+/** 그날 쓰는 하루 목표: 예약한 날이 됐으면 새 목표, 아니면 지금 목표(10·20·30이 아니면 20) */
+export function goalFor(save, today) {
+  return duePending(save, today) ?? dailyGoal(save);
+}
+/** 예약한 날이 됐으면 새 목표를 설정으로 옮기고 예약을 지운다(아니면 같은 저장) */
+export function settleGoal(save, today) {
+  const v = duePending(save, today);
+  if (v === null) return save;
+  return { ...save, settings: { ...save.settings, dailyGoal: v }, goal_pending: null };
+}
 function copy(save) {
   return { ...save, streak: { ...save.streak } };
 }
@@ -70,7 +90,7 @@ export function reviewReward() {
 // - 보호권이 모자라면: 보호권은 쓰지 않고 기록만 0 (죄책감 없는 원칙, 설계 5-2)
 export function rollDay(save, today) {
   requireDate(today);
-  const out = copy(save);
+  const out = copy(settleGoal(save, today));
   const last = usableLast(save.streak.lastGoalDate, today);
   if (last === null) return { save: out, usedFreezes: 0, broke: false };
   const missed = dayNum(today) - dayNum(last) - 1;
@@ -104,7 +124,7 @@ export function addDailyXp(save, xp, today) {
 
   const last = usableLast(st.lastGoalDate, today);
   const alreadyCounted = last !== null && dayNum(last) >= dayNum(today); // 오늘 또는 미래(시계 되돌림)
-  if (!alreadyCounted && st.todayXp >= dailyGoal(save)) {
+  if (!alreadyCounted && st.todayXp >= goalFor(save, today)) {
     st.days = last === prevDay(today) ? st.days + 1 : 1;
     st.lastGoalDate = today;
     st.best = Math.max(st.best || 0, st.days);

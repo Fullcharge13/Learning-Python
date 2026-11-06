@@ -108,15 +108,16 @@ test("finish_total_bytes: 결과의 totalBytes = 저장 바이트 증가량(이�
   assert.equal(result.totalBytes, result.lessonBytes + result.questBytes + result.milestoneBytes);
 });
 
-test("goal_change: 목표를 낮추면 오늘 이미 모은 XP로 그날이 인정됨", () => {
+test("goal_change: 목표를 낮춰도 오늘은 인정하지 않음 — 새 목표는 내일부터(v0.12.1 QA, 옛 판정 뒤집음)", () => {
   const s0 = newSave();
   s0.streak = { days: 6, best: 6, lastGoalDate: "2026-10-28", todayDate: "2026-10-29", todayXp: 12 };
   const r = applyGoalChange(s0, 10, "2026-10-29");
-  assert.equal(r.save.settings.dailyGoal, 10);
-  assert.equal(r.save.streak.days, 7);
-  assert.equal(r.streakUp, true);
-  assert.equal(r.milestone, 7);
-  assert.equal(r.save.bytes, s0.bytes + 50);
+  assert.equal(r.save.settings.dailyGoal, 20);
+  assert.deepEqual(r.save.goal_pending, { value: 10, from: "2026-10-30" });
+  assert.equal(r.save.streak.days, 6);
+  assert.equal(r.streakUp, false);
+  assert.equal(r.milestone, null);
+  assert.equal(r.save.bytes, s0.bytes);
   assert.equal(r.save.xp, s0.xp);
 });
 

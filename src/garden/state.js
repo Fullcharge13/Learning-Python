@@ -9,6 +9,8 @@
 //
 // v0.12(설계 docs/specs/2026-11-05-텃밭-10-17장-설계.md §2·§4): seeds(토마토 씨앗 봉투, 기본 5, 0..20),
 //   files { "농장일지.txt": 끝 2000자 } 추가(saveVer 그대로, 없으면 기본값). 실행할 때 쪽지함은 runFiles가 만든다.
+// v0.12.1: pendingDone [주문 id…] — XP는 줬지만 「주문 완료!」 창을 아직 못 보여 준 주문(재생 중 떠남·새로 고침).
+//   다음에 텃밭을 열 때 창을 띄우고 닫으면 뺀다(없으면 []).
 //
 // 주문 판정은 지금 주문(order.idx) 하나만 본다. 그 주문의 장(need)을 통과하지 않았으면 기다림(판정·넘김 없음).
 // passed(통과한 장 번호 Set)를 넘기지 않으면 아무 장도 통과하지 않은 것으로 본다.
@@ -81,6 +83,7 @@ export function newGarden() {
     seeds: SEEDS_DEFAULT,
     files: { [LOG_FILE]: "" },
     order: { idx: 0, done: [], paid: [] },
+    pendingDone: [],
     program: defaultProgram(),
     code: "",
     mode: "nodes",
@@ -191,11 +194,24 @@ export function cleanGarden(raw) {
     seeds: cleanSeeds(raw.seeds),
     files: cleanFiles(raw.files),
     order: cleanOrder(raw.order),
+    pendingDone: cleanIds(raw.pendingDone, ORDER_IDS),
     program: programOk(raw.program) ? cleanProgram(structuredClone(raw.program)) : defaultProgram(),
     code: typeof raw.code === "string" ? raw.code.slice(0, CODE_MAX) : "",
     mode: raw.mode === "code" ? "code" : "nodes",
     runs: nonNeg(raw.runs),
   };
+}
+
+/** 창을 보여 줄 주문 id들을 더한 새 텃밭(이미 있으면 그대로 한 번만) */
+export function addPendingDone(garden, ids) {
+  const cur = Array.isArray(garden.pendingDone) ? garden.pendingDone : [];
+  const add = (ids || []).filter((id) => ORDER_IDS.has(id) && !cur.includes(id));
+  return { ...garden, pendingDone: [...cur, ...add.filter((id, i) => add.indexOf(id) === i)] };
+}
+/** 창을 보여 준 주문 id를 뺀 새 텃밭(없으면 받은 텃밭 그대로) */
+export function dropPendingDone(garden, id) {
+  const cur = Array.isArray(garden.pendingDone) ? garden.pendingDone : [];
+  return cur.includes(id) ? { ...garden, pendingDone: cur.filter((x) => x !== id) } : garden;
 }
 
 /** 저장에 garden을 채우거나 고친 새 저장(save.js migrate와 같은 정리) */
@@ -222,6 +238,27 @@ export function runInput(garden, passed) {
     seeds: cleanSeeds(garden.seeds),
     tomato_ok: toSet(passed).has(TOMATO_CHAPTER),
   };
+}
+
+// ---- 조사(v0.12.1) ----
+// 숫자를 읽었을 때 끝소리(0 영·1 일·2 이·3 삼·4 사·5 오·6 육·7 칠·8 팔·9 구): 받침 있음 true, ㄹ 받침 "ㄹ"
+const DIGIT_END = { 0: true, 1: "ㄹ", 2: false, 3: true, 4: false, 5: false, 6: true, 7: "ㄹ", 8: "ㄹ", 9: false };
+const JOSA = { 이에요: ["이에요", "예요"], 으로: ["으로", "로"], 을: ["을", "를"], 이: ["이", "가"], 은: ["은", "는"], 과: ["과", "와"] };
+/**
+ * 앞말(word) 끝소리에 맞는 조사. kind: "이에요"|"으로"|"을"|"이"|"은"|"과" (받침 있을 때 꼴로 부름).
+ * 으로는 ㄹ 받침이면 「로」. 한글이 아닌 끝 글자는 숫자만 읽어 보고 나머지(영어 등)는 받침 없음으로 본다.
+ */
+export function josa(word, kind) {
+  const [yes, no] = JOSA[kind] || JOSA.이;
+  const last = String(word ?? "").trim().replace(/[\s」』)\]"'.!?~]+$/u, "").slice(-1);
+  const code = last.charCodeAt(0);
+  let end = false;
+  if (code >= 0xac00 && code <= 0xd7a3) {
+    const jong = (code - 0xac00) % 28;
+    end = jong === 0 ? false : jong === 8 ? "ㄹ" : true;
+  } else if (/[0-9]/.test(last)) end = DIGIT_END[last];
+  if (kind === "으로") return end === true ? yes : no;
+  return end ? yes : no;
 }
 
 // ---- 쪽지함(v0.12) ----
@@ -266,6 +303,33 @@ export function runFiles(garden) {
 }
 
 const cloneGarden = (g) => structuredClone(g);
+
+// 작물별 개수 → 「당근 2 · 감자 1」(작물 표 순서, 0은 뺌)
+const countLine = (counts) => {
+  const parts = CROP_LIST.filter((c) => (counts[c] || 0) > 0).map((c) => `${c} ${counts[c]}`);
+  return parts.length ? parts.join(" · ") : "없음";
+};
+
+/**
+ * (v0.12.1) 쪽지대로 심기 주문을 이 실행이 못 해냈을 때 까닭: { lines: [쪽지, 심은 것, 힌트…] } | null.
+ * 쪽지 주문이 아니거나, 실행 결과(farm)가 없거나, 작물별 심은 수가 쪽지와 같으면 null(오류·멈춤은 다른 칸이 알림).
+ * 힌트: 이미 심긴 칸이라 못 심음(plant_fail occupied) → 먼저 거두기, 토마토 씨앗이 떨어짐(no_tomato_seed) → 씨앗 사기.
+ */
+export function orderShortfall(order, result) {
+  const g = order?.goal;
+  if (!g || g.type !== "plant_as_note" || order.note?.file !== g.file) return null;
+  const farm = result && isObj(result.farm) && Array.isArray(result.farm.events) ? result.farm : null;
+  if (!farm) return null;
+  const want = noteCounts(order.note.text, g.parse);
+  const got = {};
+  for (const e of farm.events) if (isObj(e) && e.t === "plant" && CROP_LIST.includes(e.crop)) got[e.crop] = (got[e.crop] || 0) + 1;
+  if (CROP_LIST.every((c) => (got[c] || 0) === (want[c] || 0))) return null;
+  const lines = [`쪽지: ${countLine(want)}`, `이번에 심은 것: ${countLine(got)}`];
+  const failed = (reason) => farm.events.some((e) => isObj(e) && e.t === "plant_fail" && e.reason === reason);
+  if (failed("occupied")) lines.push("빈 칸이 모자랐어요 — 먼저 거둬요");
+  if (failed("no_tomato_seed")) lines.push("토마토 씨앗이 떨어졌어요 — 성장에서 씨앗을 사요");
+  return { lines };
+}
 
 function advance(garden, order) {
   const o = garden.order;

@@ -1,6 +1,6 @@
 // 레슨·복습이 끝났을 때 저장에 반영하는 순수 함수 (계획 작업 9).
 // 순서: 개념 점수 → 보상 → XP·연속 기록(이정표) → 바이트 → 퀘스트 집계 → 통계·진도 → 배지
-import { lessonReward, reviewReward, earnXp, markConcept } from "./rules.js";
+import { lessonReward, reviewReward, earnXp, markConcept, settleGoal, nextDay, DAILY_GOALS } from "./rules.js";
 import { tick, ensureQuests } from "./quests.js";
 import { checkBadges } from "./badges.js";
 import { localDate } from "./today.js";
@@ -108,10 +108,12 @@ export function finishLesson(save, info, now = new Date()) {
   };
 }
 
-/** 설정에서 하루 목표를 바꿀 때: 이미 모은 오늘 XP로 목표를 채웠으면 그날을 인정(XP 0 적립) */
+/** 설정에서 하루 목표를 바꿀 때: 다음 날부터 쓰도록 goal_pending에 예약한다. 지금 목표를 다시 고르면 예약을 지운다 */
 export function applyGoalChange(save, goal, today) {
-  const s0 = { ...save, settings: { ...save.settings, dailyGoal: goal } };
-  const before = s0.streak.lastGoalDate;
-  const r = earnXp(s0, 0, today);
-  return { save: r.save, milestone: r.milestone, streakUp: r.save.streak.lastGoalDate === today && before !== today };
+  // v0.12.1(QA): 새 목표는 내일부터. 오늘의 연속 기록·목표 판정은 지금 목표 그대로(낮춰서 바로 인정되는 일 없음)
+  const s0 = settleGoal(save, today);
+  if (!DAILY_GOALS.includes(goal)) return { save: s0, milestone: null, streakUp: false, pending: s0.goal_pending || null };
+  const cur = DAILY_GOALS.includes(s0.settings.dailyGoal) ? s0.settings.dailyGoal : 20;
+  const pending = goal === cur ? null : { value: goal, from: nextDay(today) };
+  return { save: { ...s0, goal_pending: pending }, milestone: null, streakUp: false, pending };
 }

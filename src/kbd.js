@@ -18,6 +18,8 @@ export function nextBaseHeight(prev, height, width) {
 
 // 자주 쓰는 순서. ins: 넣을 글자, back: 넣은 뒤 커서를 뒤로 옮길 칸 수, act: 명령
 export const SYMBOL_ORDER = [
+  // v0.12.2: 삼성 키보드 등에서 엔터가 안 먹을 때도 새 줄을 만들 수 있게 맨 앞에 둠
+  { label: "↵ 줄 바꿈", act: "newline", aria: "줄 바꿈" },
   { label: ":", ins: ":" },
   { label: "(", ins: "(" },
   { label: ")", ins: ")" },
@@ -29,3 +31,12 @@ export const SYMBOL_ORDER = [
   { label: "<", ins: " < " },
   { label: ">", ins: " > " },
 ];
+
+/** v0.12.2: 처음 코드를 정답 줄 수까지 빈 줄로 채움(미리 번호가 붙은 줄을 만들어 둠). 정답 끝의 빈 줄은 세지 않음 */
+export function padStarter(starter, solution) {
+  const st = String(starter || "");
+  if (typeof solution !== "string") return st;
+  const need = solution.replace(/\n+$/, "").split("\n").length;
+  const have = st.split("\n").length;
+  return have >= need ? st : st + "\n".repeat(need - have);
+}

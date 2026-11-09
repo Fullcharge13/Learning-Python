@@ -3018,5 +3018,50 @@ def main():
     return 1 if fails else 0
 
 
+def test_android_newline():
+    """v0.12.2 (갤럭시 S25 제보): 안드로이드에서 세 번째 줄을 만들 수 있어야 한다.
+    ① 안드로이드는 EditContext를 쓰지 않음 ② 「↵ 줄 바꿈」 단추가 새 줄을 만듦(키보드 초점 유지)
+    ③ 처음 코드가 정답 줄 수만큼 빈 줄로 열림."""
+    LINES = "() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent)"
+    fails = []
+    for dev in ("Galaxy S24", "iPhone 17"):
+        with App(dev) as a:
+            a.start()
+            a.page.click("#continue")
+            _to_write(a)
+            item = next(x for x in a.lesson("1-1")["items"] if x["type"] == "write")
+            need = len((item.get("solution") or "").rstrip("\n").split("\n"))
+            have = len(a.js(LINES))
+            if have < need:
+                fails.append("%s: opened with %d lines, solution has %d" % (dev, have, need))
+            if a.js("() => !!document.querySelector('.cm-content').editContext"):
+                fails.append("%s: EditContext still on" % dev)
+            a.set_code("a = 1\nb = 2")
+            a.page.click("#foot .sym[data-act=newline]")
+            a.page.wait_for_timeout(150)
+            a.page.keyboard.type("c = 3")
+            got = a.js(LINES)
+            if got != ["a = 1", "b = 2", "c = 3"]:
+                fails.append("%s: after 줄 바꿈 button %r" % (dev, got))
+            if not a.js("() => !!document.activeElement.closest('.cm-editor')"):
+                fails.append("%s: editor lost focus after button" % dev)
+            if a.errors:
+                fails.append("%s: %s" % (dev, a.errors))
+    # 텃밭 코드 모드의 기호 줄도 같은 단추를 씀
+    with App("Galaxy S24", save=_garden_seed(5, _garden(mode="code", code='move("아래")'))) as a:
+        _open_garden(a)
+        a.page.click(".cm-content")
+        a.page.keyboard.press("End")
+        a.page.click("#g-syms .sym[data-act=newline]")
+        a.page.wait_for_timeout(150)
+        a.page.keyboard.type("harvest()")
+        got = a.js(LINES)
+        if got != ['move("아래")', "harvest()"]:
+            fails.append("garden code mode: after 줄 바꿈 button %r" % got)
+        if a.errors:
+            fails.append("garden: %s" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
 if __name__ == "__main__":
     sys.exit(main())

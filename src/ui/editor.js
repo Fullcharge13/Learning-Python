@@ -1,9 +1,13 @@
 // 코드 입력창: CodeMirror 6 (basicSetup에서 초보자에게 필요한 것만 골라 씀)
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, Decoration } from "@codemirror/view";
 import { EditorState, StateField, StateEffect } from "@codemirror/state";
-import { defaultKeymap, history, historyKeymap, indentMore, indentLess, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, indentMore, indentLess, indentWithTab, insertNewlineAndIndent } from "@codemirror/commands";
 import { indentOnInput, syntaxHighlighting, defaultHighlightStyle, bracketMatching, indentUnit } from "@codemirror/language";
 import { python } from "@codemirror/lang-python";
+
+// v0.12.2 (갤럭시 S25 제보: 세 번째 줄을 만들 수 없음): CodeMirror는 안드로이드에서만 크롬의 EditContext 입력을 쓰는데,
+// 삼성 키보드에서 엔터가 무시되는 사례가 있다. 오래 써 온 예전 입력 방식(contenteditable)으로 돌린다.
+EditorView.EDIT_CONTEXT = false;
 
 const setErr = StateEffect.define();
 const errLine = Decoration.line({ class: "cm-errline" });
@@ -109,6 +113,8 @@ export function createEditor(parent, { doc = "", label = "코드 입력창", onC
       view.focus();
     },
     indent() { indentMore(view); view.focus(); },
+    /** 줄 바꿈(엔터와 같음: 들여쓰기 맞춤). v0.12.2 기호 줄 단추 */
+    newline() { insertNewlineAndIndent(view); view.dispatch({ effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "nearest" }) }); view.focus(); },
     dedent() { indentLess(view); view.focus(); },
     destroy: () => view.destroy(),
   };

@@ -4,7 +4,7 @@ import { riaSVG } from "../ria.js";
 import { esc, icon, codeBlock, filesNote, chartNote } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { missingMessage } from "../shuffle.js";
-import { keyboardOpen, nextBaseHeight, SYMBOL_ORDER } from "../kbd.js";
+import { keyboardOpen, nextBaseHeight, SYMBOL_ORDER, padStarter } from "../kbd.js";
 
 const SYSTEM_ERRORS = new Set(["LoadError", "WorkerError", "NotReady"]);
 
@@ -97,7 +97,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     <div class="symwrap">
       <div class="symbols" role="toolbar" aria-label="기호 넣기">
         ${SYMBOL_ORDER.map((sy, i) => sy.act
-          ? `<button class="sym word" data-s="${i}">${esc(sy.label)}</button>`
+          ? `<button class="sym word" data-s="${i}" data-act="${esc(sy.act)}"${sy.aria ? ` aria-label="${esc(sy.aria)}"` : ""}>${esc(sy.label)}</button>`
           : `<button class="sym mono" data-s="${i}" aria-label="${esc(sy.aria || sy.label)} 넣기">${esc(sy.label)}</button>`).join("")}
       </div>
       <span class="sym-more" aria-hidden="true">›</span>
@@ -118,7 +118,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     return { top: top + 8, bottom: Math.max(0, vh - dockTop) + 8 };
   };
   const ed = createEditor(body.querySelector("#ed"), {
-    doc: init && typeof init.code === "string" ? init.code : (item.starter || ""),
+    doc: init && typeof init.code === "string" ? init.code : padStarter(item.starter || "", item.solution),
     label: "코드 입력창. 여기에 Python 코드를 써요", margins, onChange: draftChanged,
   });
   const consoleEl = body.querySelector("#console");
@@ -150,7 +150,8 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     b.addEventListener("pointerdown", keep);
     b.addEventListener("click", () => {
       const sy = SYMBOL_ORDER[+b.dataset.s];
-      if (sy.act === "indent") ed.indent();
+      if (sy.act === "newline") ed.newline();
+      else if (sy.act === "indent") ed.indent();
       else if (sy.act === "dedent") ed.dedent();
       else ed.insert(sy.ins, sy.back || 0);
     });

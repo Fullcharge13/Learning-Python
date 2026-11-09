@@ -256,7 +256,7 @@ export function render(root, ctx) {
       <div class="symwrap" id="g-syms" hidden>
         <div class="symbols" role="toolbar" aria-label="기호 넣기">
           ${SYMBOL_ORDER.map((sy, i) => sy.act
-            ? `<button class="sym word" data-s="${i}">${esc(sy.label)}</button>`
+            ? `<button class="sym word" data-s="${i}" data-act="${esc(sy.act)}"${sy.aria ? ` aria-label="${esc(sy.aria)}"` : ""}>${esc(sy.label)}</button>`
             : `<button class="sym mono" data-s="${i}" aria-label="${esc(sy.aria || sy.label)} 넣기">${esc(sy.label)}</button>`).join("")}
         </div>
       </div>
@@ -1342,7 +1342,8 @@ export function render(root, ctx) {
     b.addEventListener("click", () => {
       if (!S.ed || S.state !== "idle") return; // 실행·재생 중에는 코드를 고치지 않음
       const sy = SYMBOL_ORDER[+b.dataset.s];
-      if (sy.act === "indent") S.ed.indent();
+      if (sy.act === "newline") S.ed.newline();
+      else if (sy.act === "indent") S.ed.indent();
       else if (sy.act === "dedent") S.ed.dedent();
       else S.ed.insert(sy.ins, sy.back || 0);
     });

@@ -6,11 +6,11 @@
 //   plant는 planted_at = 그때 clock. say는 시간이 들지 않는다.
 //   (v0.12) 창고는 늘 CROPS의 작물 전부(없으면 0), 토마토 씨앗 봉투 seeds(없거나 이상하면 5, 0..20):
 //   토마토 plant −1, 토마토 harvest +2(최대 20). plant_fail(no_tomato_seed 등)·harvest_young은 봉투 그대로.
-// 그림은 이미지 파일 없이 SVG 글자로 만든다. 파이는 ria.js의 뱀 친구 그림(snake)을 작게 다시 쓴다.
+// 그림은 이미지 파일 없이 SVG 글자로 만든다. 파이는 snake.js의 뱀 친구 그림(snake, 세트1에서 옮김)을 작게 다시 쓴다.
 // <defs>·id를 쓰지 않아 같은 입력이면 같은 글자이고, 한 화면에 여러 장이어도 충돌하지 않는다.
 import { CROPS } from "../../data/garden.js";
 import { cleanSeeds, SEEDS_MAX } from "./state.js";
-import { snake } from "../ria.js";
+import { snake } from "../snake.js";
 
 export const CELL = 64;   // 칸 한 변(SVG 단위)
 const PAD = 8;            // 밭 바깥 여백

@@ -6,7 +6,7 @@
 - docs/img/ria-hero.png    : 기본 의상·미소, 크게
 - tests/out/ria-compare.png : 참고 그림(dev/ref/ria-outfits-2026-10-31.png, 저장소에 올리지 않음)과 코드 그림 10벌을 나란히. 참고 그림에 파이썬 로고가 있어 결과도 저장소 밖에 둔다(판정 C43)
 
-SVG 문자열은 `node`로 src/ria.js를 불러 얻고, Playwright Chromium으로 찍는다.
+SVG 문자열은 `node`로 src/ria.js(#리아_이미지_세트2, v0.12.4~)를 불러 얻고, Playwright Chromium으로 찍는다.
 """
 import json
 import pathlib

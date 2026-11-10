@@ -136,6 +136,7 @@ def build(d):
     w(f"| 배포 파일 만들기 | `python3 build.py` | `dist/`에 `index.html`(앱과 레슨 목록) + `lessons/`(장마다 문제 파일) + `manifest.webmanifest` + `sw.js` + 아이콘. **`lessons/` 폴더까지 함께** "
       f"이 폴더를 그대로 웹에 올리면 돼요 (Pyodide 제외 {max_kb}KB 이하) |")
     w("| README 다시 만들기 | `python3 tools/readme_gen.py` | 데이터 표를 바꾼 뒤 실행. `--check`는 어긋남만 검사 |")
+    w("| 리아 그림 데이터 다시 만들기 | `python3 tools/ria_set2_import.py` | 원본 `art/ria_set2_sheet.svg`(#리아_이미지_세트2)를 고친 뒤 실행 → `data/ria_set2.js` |")
     w("| 리아 그림 시트 다시 뽑기 | `python3 tools/ria_sheet.py` | `docs/img/ria-sheet.png`, `ria-hero.png` |")
     w("| README 첫머리 화면 캡처 바꾸기 | `python3 tests/flow.py` 뒤 `python3 tools/readme_shots.py` | `docs/img/screen-home.png`, `screen-write.png`, `screen-done.png` |")
     w("")
@@ -166,6 +167,7 @@ def build(d):
         ("data/", "개념·대사·퀘스트·배지·의상·오류 설명 표"),
         ("build.py", "모든 것을 HTML 한 장(dist/index.html)으로 합치기"),
         ("tools/", "개발 서버, README 생성, 그림 시트·아이콘 만들기"),
+        ("art/", "리아 그림 원본: #리아_이미지_세트2 시트(ria_set2_sheet.svg, 앱이 씀), #리아_이미지_세트1 보관본(ria_set1/, 빌드에 안 들어감)"),
         ("tests/", "시험 도구 (unit, py, sim, 브라우저 시험)"),
         ("docs/specs/", "설계서"),
         ("docs/plans/", "계획서와 실행 기록(ledger)"),
@@ -287,7 +289,8 @@ def build(d):
       "뱀 브로치가 특징이고, 「~해요」체로 차분하고 가볍게 장난치는 선배 교수 말투를 써요. 오류는 「단서」라고 불러요.")
     w("")
     faces = " · ".join(d["faceKo"][f] for f in d["faces"])
-    w(f"그림은 이미지 파일 없이 코드(SVG)로 그려서, 의상 {n_outfits}벌 × 표정 {len(d['faces'])}가지({faces})를 자유롭게 조합해요.")
+    w(f"그림은 이미지 파일 없이 SVG로 그려서, 의상 {n_outfits}벌 × 표정 {len(d['faces'])}가지({faces})를 자유롭게 조합해요. "
+      "지금 그림은 **#리아_이미지_세트2**(v0.12.4~, 원본 `art/ria_set2_sheet.svg`)이고, 그 전 코드 그림 **#리아_이미지_세트1**은 `art/ria_set1/`에 보관해요.")
     w("")
     w(f'<p align="center"><img src="docs/img/ria-sheet.png" alt="리아 교수 의상 {n_outfits}벌 × 표정 {len(d["faces"])}가지 시트" width="100%"></p>')
     w("")

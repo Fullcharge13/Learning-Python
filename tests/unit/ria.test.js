@@ -1,7 +1,7 @@
-// 작업 8: 리아 교수 그림 시험
+// 작업 8: 리아 교수 그림 시험 (v0.12.4: #리아_이미지_세트2 — art/ria_set2_sheet.svg에서 tools/ria_set2_import.py로 만든 data/ria_set2.js)
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { riaSVG, OUTFIT_IDS, FACE_IDS, RIA_COLORS } from "../../src/ria.js";
+import { riaSVG, OUTFIT_IDS, FACE_IDS, RIA_COLORS, RIA_SET, RIA_VIEWBOX } from "../../src/ria.js";
 import { OUTFITS as OUTFIT_TABLE } from "../../data/outfits.js";
 
 const OUTFITS = ["basic", "casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate"];
@@ -44,7 +44,17 @@ test("size: 너비가 size, 높이는 비율 유지", () => {
   const s = riaSVG({ size: 200 });
   assert.match(s, /width="200"/);
   assert.match(s, /height="260"/);
-  assert.match(s, /viewBox="0 0 200 260"/);
+  assert.match(s, /viewBox="166 -6 354 460"/);
+  assert.equal(RIA_VIEWBOX, "166 -6 354 460");
+});
+
+test("set2: 지금 쓰는 그림은 #리아_이미지_세트2, 칸 배경 네모 없음", () => {
+  assert.equal(RIA_SET, "set2");
+  for (const outfit of OUTFITS) for (const face of FACES) {
+    const s = riaSVG({ outfit, face });
+    assert.doesNotMatch(s, /<rect x="150" y="30" width="380" height="440"/, `${outfit}/${face}: 칸 배경`);
+    assert.doesNotMatch(s, /#fffdf6/i, `${outfit}/${face}: 칸 배경색`);
+  }
 });
 
 // ---- 검토 반영: 접근성·움직임 고리·size 처리 ----
@@ -67,24 +77,8 @@ test("hooks: svg.ria > g.ria-body, 떠다니는 효과는 g.ria-fx", () => {
     const s = riaSVG({ outfit, face });
     assert.match(s, /^<svg [^>]*class="ria"/);
     assert.match(s, /<g class="ria-body">/);
+    assert.match(s, /<title>/);
     assert.equal(s.split('class="ria-body"').length, 2);
-  }
-  for (const face of ["joy", "sparkle", "think", "surprise", "worry", "cheer", "wink"])
-    assert.match(riaSVG({ face }), /<g class="ria-fx">.+<\/g>/, face);
-  for (const outfit of ["basic", "casual", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate", "whitecoat"])
-    assert.match(riaSVG({ outfit }), /<g class="ria-fx">.+<\/g>/, outfit);
-});
-
-test("layer: 효과는 모자·헬멧보다 뒤에(위에) 그린다", () => {
-  // 각 모자·헬멧에만 쓰는 색이 효과 묶음보다 앞에 나와야 한다
-  const hatColor = { explorer: "#D9B77A", wizard: "#E2B04A", chef: "#E4E9EE", graduate: "#1C1E24" };
-  for (const [outfit, col] of Object.entries(hatColor)) {
-    for (const face of ["surprise", "sparkle", "think"]) {
-      const s = riaSVG({ outfit, face });
-      const fx = s.indexOf('class="ria-fx"');
-      assert.ok(fx > 0, `${outfit}/${face}: 효과 있음`);
-      assert.ok(s.lastIndexOf(col) < fx, `${outfit}/${face}: 효과가 모자 위`);
-    }
   }
 });
 
@@ -134,12 +128,12 @@ test("v0.6 python logo guard: 파이썬 로고의 파랑·노랑 짝(#3776AB/#4B
   }
 });
 
-test("v0.6 companions: 기본·마법사만 뱀 친구, 마법사 뱀은 모자를 씀", () => {
-  const has = (o) => riaSVG({ outfit: o }).includes('class="ria-snake"');
+test("set2 companions: 기본·마법사 그림에만 뱀 친구(초록)가 있다", () => {
+  const SNAKE = "#6fcf5a";
+  const has = (o) => riaSVG({ outfit: o }).toLowerCase().includes(SNAKE);
   assert.ok(has("basic"));
   assert.ok(has("wizard"));
   for (const o of OUTFITS.filter((x) => x !== "basic" && x !== "wizard")) assert.ok(!has(o), o);
-  assert.match(riaSVG({ outfit: "wizard" }), /class="ria-snake"[^]*?class="snake-hat"/);
 });
 
 test("v0.6 size budget: 한 장이 너무 크지 않다", () => {

@@ -4,7 +4,7 @@
     python3 tools/icon.py --update-docs-icons  # docs/img/ 복사본도 갱신
     python3 tools/icon.py --out DIR            # DIR/icons/ 에 씀
 
-- 리아 교수 얼굴(src/ria.js의 riaSVG, 기본 의상·기쁨)을 머리 부분만 잘라 쓴다. 그림 파일 없이 코드로 그린다.
+- 리아 교수 얼굴(src/ria.js의 riaSVG = #리아_이미지_세트2, 기본 의상·기쁨)을 머리 부분만 잘라 쓴다. 그림 파일 없이 코드로 그린다.
 - 배경: 크림색 종이(--paper) 위에 청록(--teal) 원.
   - icon-180 / icon-192 / icon-512: 모서리가 둥근 사각형(바깥은 투명)
   - apple-touch-icon(180): 꽉 찬 사각형(iOS가 모서리를 직접 깎고, 투명한 곳은 검게 칠하기 때문)
@@ -23,7 +23,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PAPER = "#FBF6EA"   # style.css --paper
 TEAL = "#1F9E93"    # style.css --teal
 TEAL_SOFT = "#DDF1EC"
-HEAD_VIEWBOX = "25 6 150 150"  # riaSVG 좌표(200×260)에서 머리·올림머리·어깨 윗부분
+HEAD_VIEWBOX = "206 50 280 280"  # #리아_이미지_세트2 좌표(보기 상자 166 -6 354 460)에서 머리·올림머리·연필 (v0.12.4)
 
 NODE_SCRIPT = """
 const m = await import(process.argv[1]);
@@ -47,7 +47,7 @@ def ria_head_svg():
                          check=True, capture_output=True, text=True, cwd=ROOT)
     svg = json.loads(out.stdout)
     # 보기 상자를 머리 부분으로 바꾸고 크기는 감싼 상자를 따르게 한다.
-    svg = svg.replace('viewBox="0 0 200 260"', 'viewBox="%s"' % HEAD_VIEWBOX, 1)
+    svg = svg.replace('viewBox="166 -6 354 460"', 'viewBox="%s"' % HEAD_VIEWBOX, 1)
     svg = svg.replace('width="200" height="260"', 'width="100%" height="100%"', 1)
     assert HEAD_VIEWBOX in svg and 'width="100%"' in svg, "riaSVG output shape changed"
     return svg

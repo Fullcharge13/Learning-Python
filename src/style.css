@@ -686,16 +686,6 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 
 /* ---------- 파이의 텃밭 (v0.10) ---------- */
 /* 홈 입구 */
-.garden-card { display: flex; align-items: center; gap: 12px; background: #EEF6E4; border-color: #8CC37A; }
-.gc-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--card); color: #3E8E41; }
-.gc-text { flex: 1; min-width: 0; }
-.garden-card h2 { margin: 0 0 2px; font-size: 1.1rem; }
-.garden-card p { margin: 0; font-size: .9rem; color: var(--ink-2); }
-.gc-order { font-weight: 700; color: #2F6B33 !important; }
-.garden-card .gc-go { flex: none; min-height: 48px; padding: 10px 14px; }
-.garden-card.locked { background: var(--paper-2); border-style: dashed; border-color: var(--line); padding: 12px 16px; }
-.garden-card.locked .gc-ic { color: var(--ink-2); width: 36px; height: 36px; }
-.garden-card.locked h2 { font-size: 1rem; margin: 0; }
 
 /* 화면 틀 */
 .screen.garden { padding-bottom: calc(96px + var(--sab)); }

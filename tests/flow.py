@@ -1286,7 +1286,7 @@ def _garden(order_idx=0, program=None, store=None, cells=None, size=3, upgrades=
 
 def _open_garden(a):
     a.start()
-    a.page.click("#garden")
+    a.page.click('.tabbar [data-go="garden"]')  # v0.12.6: 홈 카드 대신 하단 「텃밭」 칸
     a.page.wait_for_selector(".screen.garden")
     a.page.wait_for_timeout(150)
 
@@ -1327,12 +1327,14 @@ def _sheet_pick(a, sel):
 
 
 def test_garden_locked_home():
+    """v0.12.6: 홈에는 텃밭 카드가 없고, 1장 전에는 하단 「텃밭」 칸이 잠김(자물쇠·안내 이름표)."""
     with App("iPhone 17") as a:
         a.start()
-        c = a.js("""() => { const c = document.querySelector('.garden-card'); return c && { cls: c.className, text: c.innerText,
-                     btn: !!c.querySelector('#garden') }; }""")
-        assert c and "locked" in c["cls"] and "1장을 끝내면 열려요" in c["text"] and not c["btn"], c
-        assert "파이의 텃밭" in c["text"], c
+        assert not a.page.query_selector(".garden-card"), "홈 텃밭 카드 없음"
+        t = a.page.query_selector('.tabbar [data-go="garden"]')
+        assert t and t.get_attribute("data-locked") == "1", "텃밭 칸 잠김"
+        assert "1장을 끝내면 열려요" in t.get_attribute("aria-label"), t.get_attribute("aria-label")
+        assert t.query_selector(".tab-lock"), "자물쇠"
         m = measure(a, "home-garden-locked")
         assert not m["problems"], m["problems"]
         assert not a.errors, a.errors
@@ -1341,13 +1343,11 @@ def test_garden_locked_home():
 def test_garden_first_orders():
     with App("iPhone 17", save=_garden_seed(1, xp=40)) as a:
         a.start()
-        c = a.js("() => document.querySelector('.garden-card').innerText")
-        assert "첫 수확" in c, c
-        a.page.eval_on_selector(".garden-card", "e => e.scrollIntoView({block: 'center'})")
+        assert not a.page.query_selector(".garden-card"), "홈 텃밭 카드 없음(v0.12.6)"
         a.shot("garden-home.png")
-        box = a.page.eval_on_selector("#garden", "e => { const r = e.getBoundingClientRect(); return [r.width, r.height]; }")
+        box = a.page.eval_on_selector('.tabbar [data-go="garden"]', "e => { const r = e.getBoundingClientRect(); return [r.width, r.height]; }")
         assert box[0] >= 44 and box[1] >= 44, box
-        a.page.click("#garden")
+        a.page.click('.tabbar [data-go="garden"]')
         a.page.wait_for_selector(".screen.garden")
         a.page.wait_for_timeout(200)
         assert a.page.inner_text("h1") == "파이의 텃밭"
@@ -2573,7 +2573,7 @@ def test_garden121_pending_done_after_leave():
         a.page.wait_for_selector(".screen.home")
         g = a.save()["garden"]
         assert g["order"]["paid"] == ["o_first"] and g.get("pendingDone") == ["o_first"], g["order"]
-        a.page.click("#garden")
+        a.page.click('.tabbar [data-go="garden"]')
         a.page.wait_for_selector(".modal .g-done-body", timeout=10_000)
         t = a.page.inner_text(".modal .g-done-body")
         assert "「첫 수확」 주문 완료!" in t and "다음 주문은 「파이의 인사」예요." in t, t
@@ -2584,7 +2584,7 @@ def test_garden121_pending_done_after_leave():
         # 한 번만: 다시 열어도 창 없음
         a.page.click("#g-back")
         a.page.wait_for_selector(".screen.home")
-        a.page.click("#garden")
+        a.page.click('.tabbar [data-go="garden"]')
         a.page.wait_for_selector(".screen.garden")
         a.page.wait_for_timeout(400)
         assert not a.page.query_selector(".modal .g-done-body")
@@ -2771,7 +2771,7 @@ def test_dev_mode():
         m = measure(a, "home-dev")
         assert not m["problems"] and not m["small"], m
         assert a.page.query_selector(".panel.daily"), "오늘의 도전 카드"
-        assert a.page.query_selector(".garden-card #garden"), "텃밭 입구 열림"
+        assert not a.page.query_selector('.tabbar [data-go="garden"][data-locked]'), "텃밭 칸 열림"
         a.shot("dev-home.png")
         cls = a.page.get_attribute('[data-lesson="17-3"]', "class")
         assert "locked" not in cls, cls
@@ -2785,8 +2785,7 @@ def test_dev_mode():
         _home(a)
 
         # 텃밭: 9장 노드(위치 알기)·지금 주문 기다림 없음
-        a.page.eval_on_selector("#garden", "e => e.scrollIntoView({block: 'center'})")
-        a.page.click("#garden")
+        a.page.click('.tabbar [data-go="garden"]')
         a.page.wait_for_selector(".screen.garden")
         a.page.wait_for_timeout(200)
         _below_banner(a, ".g-top #g-back")
@@ -3079,6 +3078,8 @@ def test_garden_tab():
         a.page.wait_for_timeout(300)
         if a.js("() => document.body.dataset.screen") != "home":
             fails.append("locked tab opened %s" % a.js("() => document.body.dataset.screen"))
+        if a.page.query_selector(".garden-card"):
+            fails.append("home still has locked garden card")
         if "1장을 끝내면 열려요" not in a.page.inner_text(".toasts"):
             fails.append("no locked toast: %r" % a.page.inner_text(".toasts"))
         m = measure(a, "home-5tabs")
@@ -3091,6 +3092,9 @@ def test_garden_tab():
         a.start()
         if not a.page.query_selector('.tabbar [data-go="garden"] .tab-dot'):
             fails.append("no news dot when just unlocked")
+        # v0.12.6: 하단 칸과 겹치는 홈의 텃밭 카드는 없음
+        if a.page.query_selector(".garden-card") or a.page.query_selector("#garden"):
+            fails.append("home still has garden card")
         a.shot("tab-garden-news.png")
         a.page.click('.tabbar [data-go="garden"]')
         a.page.wait_for_selector(".screen.garden")

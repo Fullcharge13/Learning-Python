@@ -203,7 +203,7 @@ button { cursor: pointer; }
 .tabbar {
   position: fixed; z-index: 30; bottom: 0; left: 50%; transform: translateX(-50%);
   width: 100%; max-width: var(--maxw);
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   padding: 6px calc(8px + var(--sar)) calc(6px + var(--sab)) calc(8px + var(--sal));
   background: var(--card); border-top: 2px solid var(--line);
 }
@@ -213,6 +213,12 @@ button { cursor: pointer; }
   font-size: .78rem; font-weight: 700; color: var(--ink-2);
 }
 .tab.on { color: var(--teal-ink); background: var(--teal-soft); }
+/* v0.12.5 텃밭 칸: 잠김 자물쇠·새 소식 점(아이콘 오른쪽 위) */
+.tab-ic { position: relative; display: inline-flex; line-height: 0; }
+.tab-dot { position: absolute; top: -2px; right: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--coral-ink); box-shadow: 0 0 0 2px var(--card); }
+.tab-lock { position: absolute; bottom: -3px; right: -8px; width: 15px; height: 15px; border-radius: 50%; background: var(--card); display: grid; place-items: center; }
+.tab-lock svg { width: 12px; height: 12px; }
+.tab.locked { opacity: .55; }
 
 main { padding: 16px calc(16px + var(--sar)) 0 calc(16px + var(--sal)); }
 .page-title { font-size: 1.6rem; margin: 6px 0 14px; }

@@ -7,7 +7,7 @@ import { applyGoalChange } from "../finish.js";
 import { checkImport, importCompare, NOT_SAVE_TEXT } from "../importsave.js";
 import { isDev } from "../devgate.js";
 import { markDev } from "../devmode.js";
-import { tabBar, bindTabs, statusBar } from "./nav.js";
+import { tabBar, bindTabs, gardenTabOf, statusBar } from "./nav.js";
 import { localDate } from "../today.js";
 
 /** 이름: 앞뒤 빈칸과 끝의 「님」을 빼고 8자까지 */
@@ -111,7 +111,7 @@ export function render(root, ctx) {
       </section>
       <p class="ver center">리아와 파이썬! ${esc(ctx.version)} · <a class="lic-link" href="licenses.txt" target="_blank" rel="noopener">사용한 프로그램</a></p>
     </main>
-    ${tabBar("settings")}
+    ${tabBar("settings", gardenTabOf(ctx))}
   </div>`;
   bindTabs(root, ctx);
 

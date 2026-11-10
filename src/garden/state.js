@@ -653,6 +653,22 @@ export function grantOrderXP(save, order, now = new Date()) {
   };
 }
 
+// ---- 하단 메뉴 「텃밭」 칸 (v0.12.5) ----
+/**
+ * "locked" | "news" | "open". passed = 통과한 장 Set.
+ * 새 소식: 막 열리고 한 번도 실행 안 함 · 주문 완료 창이 남음 · 지금 주문이 보내기이고 창고가 충분(장 기다림 아님).
+ */
+export function gardenTab(garden, passed) {
+  const p = toSet(passed);
+  if (!p.has(1)) return "locked";
+  const g = isObj(garden) ? garden : newGarden();
+  if (nonNeg(g.runs) === 0 && nonNeg(g.order?.idx) === 0) return "news";
+  if (Array.isArray(g.pendingDone) && g.pendingDone.length) return "news";
+  const { order, waiting } = currentOrder(g, p);
+  if (order && !waiting && order.goal.type === "deliver" && nonNeg(g.store?.[order.goal.crop]) >= order.goal.n) return "news";
+  return "open";
+}
+
 // ---- 장 ----
 /** 통과한 장 번호 Set: 장 평가를 끝낸 장(심화 해금 advancedOpen과 같은 기준). 개발자 모드 저장이면 모든 장 */
 export function passedChapters(save, chapters) {

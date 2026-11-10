@@ -3,7 +3,7 @@ import { QUESTS } from "../../data/quests.js";
 import { CONCEPTS } from "../../data/concepts.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, bar, riaSays, dialog, toast } from "./dom.js";
-import { tabBar, bindTabs, statusBar } from "./nav.js";
+import { tabBar, bindTabs, gardenTabOf, statusBar } from "./nav.js";
 import { pathEndText } from "../curriculum.js";
 import { hasNewContent } from "../newcontent.js";
 import { currentOrder, passedChapters, newGarden } from "../garden/state.js";
@@ -221,7 +221,7 @@ export function render(root, ctx) {
       ${sections || '<p class="panel">레슨을 불러오지 못했어요. 새로고침해 주세요.</p>'}
       <p class="path-end">${esc(pathEndText({ chapters: ctx.chapters, completed: save.completed_lessons }))}</p>
     </main>
-    ${tabBar("home")}
+    ${tabBar("home", gardenTabOf(ctx))}
   </div>`;
   bindTabs(root, ctx);
   const bx = root.querySelector("#broken-export");
@@ -233,7 +233,7 @@ export function render(root, ctx) {
   const dg = root.querySelector("#daily");
   if (dg) dg.addEventListener("click", () => ctx.show("lesson", { daily: true }));
   const gd = root.querySelector("#garden");
-  if (gd) gd.addEventListener("click", () => ctx.show("garden"));
+  if (gd) gd.addEventListener("click", () => ctx.show("garden", { from: "home" }));
   const rv = root.querySelector("#review");
   if (rv) rv.addEventListener("click", () => ctx.show("lesson", { review: true }));
   root.querySelectorAll("[data-lesson]").forEach((b) => b.addEventListener("click", async () => {

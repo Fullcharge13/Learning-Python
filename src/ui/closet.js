@@ -5,7 +5,7 @@ import { buyFreeze, FREEZE_PRICE, FREEZE_MAX } from "../rules.js";
 import { checkBadges } from "../badges.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, toast } from "./dom.js";
-import { tabBar, bindTabs, statusBar } from "./nav.js";
+import { tabBar, bindTabs, gardenTabOf, statusBar } from "./nav.js";
 
 // 고른 옷의 미리보기·사기 단추가 상태 줄 아래·화면 안에 오게(QA 1). 동작 줄이기면 바로 이동
 function bringStage(root) {
@@ -76,7 +76,7 @@ export function render(root, ctx, params = {}) {
           <button class="btn ghost" id="freeze"${s.freezes >= FREEZE_MAX || s.bytes < FREEZE_PRICE ? " disabled" : ""}>${s.freezes >= FREEZE_MAX ? "가득 찼어요" : `${FREEZE_PRICE}바이트`}</button>
         </section>
       </main>
-      ${tabBar("closet")}
+      ${tabBar("closet", gardenTabOf(ctx))}
     </div>`;
     bindTabs(root, ctx);
     root.querySelectorAll("[data-o]").forEach((b) => b.addEventListener("click", () => { sel = b.dataset.o; line = null; paint("pick"); }));

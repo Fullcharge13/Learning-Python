@@ -3066,5 +3066,58 @@ def test_android_newline():
     assert not fails, "\n".join(fails)
 
 
+def test_garden_tab():
+    """v0.12.5: 하단 메뉴 「텃밭」 칸. 잠김 안내, 새 소식 점, 텃밭 안에서는 메뉴 숨김, 「<」는 들어오기 전 화면으로."""
+    fails = []
+    tabs = "() => [...document.querySelectorAll('.tabbar [data-go]')].map(e => e.dataset.go)"
+    # 1) 1장 전: 잠김 → 누르면 안내만, 홈에 그대로
+    with App("iPhone 17") as a:
+        a.start()
+        if a.js(tabs) != ["home", "garden", "badges", "closet", "settings"]:
+            fails.append("tab order %r" % a.js(tabs))
+        a.page.click('.tabbar [data-go="garden"]')
+        a.page.wait_for_timeout(300)
+        if a.js("() => document.body.dataset.screen") != "home":
+            fails.append("locked tab opened %s" % a.js("() => document.body.dataset.screen"))
+        if "1장을 끝내면 열려요" not in a.page.inner_text(".toasts"):
+            fails.append("no locked toast: %r" % a.page.inner_text(".toasts"))
+        m = measure(a, "home-5tabs")
+        if m["small"]:
+            fails.append("small targets %r" % m["small"])
+        if m["problems"]:
+            fails.append("problems %r" % m["problems"])
+    # 2) 막 열림(실행 0번): 점 → 누르면 텃밭, 메뉴 없음, 「<」는 홈
+    with App("Galaxy S24", save=_garden_seed(1)) as a:
+        a.start()
+        if not a.page.query_selector('.tabbar [data-go="garden"] .tab-dot'):
+            fails.append("no news dot when just unlocked")
+        a.shot("tab-garden-news.png")
+        a.page.click('.tabbar [data-go="garden"]')
+        a.page.wait_for_selector(".screen.garden")
+        if a.page.query_selector(".tabbar"):
+            fails.append("tabbar shown inside garden")
+        a.page.click("#g-back")
+        a.page.wait_for_selector(".screen.home")
+        if a.errors:
+            fails.append("errors %r" % a.errors)
+    # 3) 의상실에서 들어가면 「<」로 의상실에 돌아감
+    with App("iPhone 17", save=_garden_seed(2, _garden(order_idx=6, store={"당근": 3}) | {"runs": 4})) as a:
+        a.start()
+        a.page.click('[data-go="closet"]')
+        a.page.wait_for_selector(".screen.closet")
+        if a.page.query_selector('.tabbar [data-go="garden"] .tab-dot'):
+            fails.append("dot shown though soup order short (3/10)")
+        a.page.click('.tabbar [data-go="garden"]')
+        a.page.wait_for_selector(".screen.garden")
+        a.page.click("#g-back")
+        a.page.wait_for_selector(".screen.closet", timeout=3000)
+    # 4) 보내기 주문에 창고가 충분하면 점
+    with App("iPhone 17", save=_garden_seed(2, _garden(order_idx=6, store={"당근": 10}) | {"runs": 4})) as a:
+        a.start()
+        if not a.page.query_selector('.tabbar [data-go="garden"] .tab-dot'):
+            fails.append("no dot though soup order deliverable (10/10)")
+    assert not fails, "\n".join(fails)
+
+
 if __name__ == "__main__":
     sys.exit(main())

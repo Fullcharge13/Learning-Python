@@ -207,7 +207,7 @@ function bindStepper(box, onChange) {
 }
 
 // ---- 화면 ----
-export function render(root, ctx) {
+export function render(root, ctx, params = {}) {
   const passed = passedChapters(ctx.save, ctx.chapters);
   const unlocked = unlockedKinds(passed);
   const tomatoOpen = unlocked.has(TOMATO_LOCK);
@@ -231,7 +231,7 @@ export function render(root, ctx) {
 
   root.innerHTML = `<div class="screen garden" data-state="idle">
     <header class="g-top">
-      <button class="icon-btn" id="g-back" aria-label="홈으로">${icon("back")}</button>
+      <button class="icon-btn" id="g-back" aria-label="돌아가기">${icon("back")}</button>
       <h1>파이의 텃밭</h1>
       <p class="g-store" id="g-store"></p>
     </header>
@@ -1368,7 +1368,10 @@ export function render(root, ctx) {
     const add = t.closest(".g-add");
     if (add) { openAdd(add.dataset.parent === "" ? null : add.dataset.parent, add.dataset.slot); return; }
   });
-  root.querySelector("#g-back").addEventListener("click", () => ctx.show("home"));
+  // v0.12.5: 들어오기 전 화면(하단 메뉴에서 왔으면 그 화면)으로
+  const BACK_TO = new Set(["home", "badges", "closet", "settings"]);
+  const backTo = BACK_TO.has(params?.from) ? params.from : "home";
+  root.querySelector("#g-back").addEventListener("click", () => ctx.show(backTo));
   runBtn.addEventListener("click", doRun);
   root.querySelector("#g-grow").addEventListener("click", openGrow);
   root.querySelector("#g-notes")?.addEventListener("click", openNotes);

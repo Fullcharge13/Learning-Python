@@ -2,7 +2,7 @@
 import { BADGES } from "../../data/badges.js";
 import { CONCEPTS } from "../../data/concepts.js";
 import { esc } from "./dom.js";
-import { tabBar, bindTabs, statusBar } from "./nav.js";
+import { tabBar, bindTabs, gardenTabOf, statusBar } from "./nav.js";
 
 const ART = {
   first_print: ["teal", ">_"], ch1: ["teal", "1장"], ch2: ["teal", "2장"], ch3: ["teal", "3장"],
@@ -69,7 +69,7 @@ export function render(root, ctx) {
           : `<p class="muted">아직 없어요. 틀린 문제가 생기면 여기에 모여요.</p>`}
       </section>
     </main>
-    ${tabBar("badges")}
+    ${tabBar("badges", gardenTabOf(ctx))}
   </div>`;
   bindTabs(root, ctx);
 }

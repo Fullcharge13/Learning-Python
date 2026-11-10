@@ -933,3 +933,9 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .g-done-body .ria-row { margin-bottom: 10px; }
 .g-done-xp { display: flex; justify-content: center; align-items: center; gap: 6px; margin: 0; font-size: 1.3rem; font-weight: 900; color: var(--teal-ink); }
 .g-done-xp .ic { color: var(--sun-deep); fill: var(--sun); }
+
+/* v0.13.0 언어 고르기(시작 화면·설정) */
+.lang-pick { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
+.lang-btn { min-height: 44px; min-width: 104px; padding: 8px 16px; border-radius: 999px; border: 2px solid var(--line);
+  background: var(--card); color: var(--ink-2); font: inherit; font-weight: 700; cursor: pointer; }
+.lang-btn.on { border-color: var(--teal-ink); background: var(--teal-soft); color: var(--teal-ink); }

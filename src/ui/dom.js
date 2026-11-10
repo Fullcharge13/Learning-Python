@@ -1,15 +1,16 @@
 // 화면 공용 도우미: 글자 이스케이프, 요소 만들기, 리아 말풍선, 아이콘, 창(modal)
 import { riaSVG } from "../ria.js";
 import { chartsHTML } from "../chart.js";
+import { t } from "../i18n.js";
 
 export function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 export function el(html) {
-  const t = document.createElement("template");
-  t.innerHTML = html.trim();
-  return t.content.firstElementChild;
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html.trim();
+  return tpl.content.firstElementChild;
 }
 
 export const $ = (root, sel) => root.querySelector(sel);
@@ -97,11 +98,11 @@ export function toast(msg, kind = "", { action = null, ms = 4200 } = {}) {
     box = el('<div id="toasts" class="toasts" role="status" aria-live="polite"></div>');
     document.body.appendChild(box);
   }
-  const t = el(`<div class="toast ${kind}${action ? " has-act" : ""}"><span>${esc(msg)}</span>${action ? `<button class="toast-act">${esc(action.label)}</button>` : ""}</div>`);
-  const timer = setTimeout(() => t.remove(), ms);
-  const close = () => { clearTimeout(timer); t.remove(); };
-  if (action) t.querySelector(".toast-act").addEventListener("click", () => { close(); action.onClick(); });
-  box.appendChild(t);
+  const item = el(`<div class="toast ${kind}${action ? " has-act" : ""}"><span>${esc(msg)}</span>${action ? `<button class="toast-act">${esc(action.label)}</button>` : ""}</div>`);
+  const timer = setTimeout(() => item.remove(), ms);
+  const close = () => { clearTimeout(timer); item.remove(); };
+  if (action) item.querySelector(".toast-act").addEventListener("click", () => { close(); action.onClick(); });
+  box.appendChild(item);
   return close;
 }
 
@@ -120,11 +121,11 @@ export function codeBlock(code, cls = "") {
 export function filesNote(files) {
   if (!files || typeof files !== "object") return "";
   return Object.entries(files).map(([name, text]) =>
-    `<div class="file-note"><p class="ex-label">${icon("book")}<span>파일 <code>${esc(name)}</code></span></p><pre class="out">${esc(text)}</pre></div>`).join("");
+    `<div class="file-note"><p class="ex-label">${icon("book")}<span>${t`파일`} <code>${esc(name)}</code></span></p><pre class="out">${esc(text)}</pre></div>`).join("");
 }
 
 /** 그래프 보기(v0.5 E3): 그림(객체·목록) 앞에 이름표. 그림이 없으면 "" */
-export function chartNote(chart, label = "그래프") {
+export function chartNote(chart, label = t`그래프`) {
   const html = chartsHTML(chart);
   return html ? `<div class="chart-note"><p class="ex-label">${esc(label)}</p>${html}</div>` : "";
 }
@@ -133,7 +134,7 @@ export function chartNote(chart, label = "그래프") {
 export function stdinNote(stdin) {
   if (stdin == null || stdin === "") return "";
   const vals = String(stdin).split("\n");
-  return `<p class="stdin-note">${icon("send")}<span>입력하는 값: ${vals.map((v) => `<code>${esc(v)}</code>`).join(" ")}</span></p>`;
+  return `<p class="stdin-note">${icon("send")}<span>${t`입력하는 값:`} ${vals.map((v) => `<code>${esc(v)}</code>`).join(" ")}</span></p>`;
 }
 
 /** 개념 카드의 예제 칸. 카드는 실행하지 않고 저장된 out·chart를 보여 준다.
@@ -141,16 +142,17 @@ export function stdinNote(stdin) {
 export function cardExample(c) {
   if (!c || !c.code) return "";
   if (c.show_only) {
-    return `<div class="example show-only"><p class="ex-label">${icon("eye")}<span>실제 컴퓨터용 코드(여기서는 실행 안 함)</span></p>${codeBlock(c.code)}</div>`;
+    return `<div class="example show-only"><p class="ex-label">${icon("eye")}<span>${t`실제 컴퓨터용 코드(여기서는 실행 안 함)`}</span></p>${codeBlock(c.code)}</div>`;
   }
-  return `<div class="example">${filesNote(c.files)}<p class="ex-label">예제</p>${codeBlock(c.code)}${stdinNote(c.stdin)}
-        ${c.out != null ? `<p class="ex-label">실행 결과</p><pre class="out">${esc(c.out)}</pre>` : ""}${chartNote(c.chart)}</div>`;
+  return `<div class="example">${filesNote(c.files)}<p class="ex-label">${t`예제`}</p>${codeBlock(c.code)}${stdinNote(c.stdin)}
+        ${c.out != null ? `<p class="ex-label">${t`실행 결과`}</p><pre class="out">${esc(c.out)}</pre>` : ""}${chartNote(c.chart)}</div>`;
 }
 
+// 읽을 때마다 지금 언어로(getter). 쓰는 쪽은 MILESTONE_REWARD[n] 그대로
 export const MILESTONE_REWARD = {
-  7: "보너스 50바이트를 받았어요",
-  30: "졸업 가운과 학사모를 선물로 받았어요",
-  100: "「연속 100일」 배지를 받았어요",
+  get 7() { return t`보너스 50바이트를 받았어요`; },
+  get 30() { return t`졸업 가운과 학사모를 선물로 받았어요`; },
+  get 100() { return t`「연속 100일」 배지를 받았어요`; },
 };
 
 /** 연속 기록 이정표 축하 창. 누르면(또는 Enter·Esc) 닫히고 resolve */
@@ -159,10 +161,10 @@ export function celebrate({ outfit, milestone }) {
     const prev = document.activeElement;
     const wrap = el(`<div class="celebrate" role="dialog" aria-modal="true" aria-labelledby="cel-title">
       <div class="cel-card">
-        <div class="ria-wrap big jump">${riaSVG({ outfit, face: "sparkle", size: 150 })}<span class="sfx" aria-hidden="true">짠!</span></div>
-        <h2 id="cel-title" class="cel-title">${icon("flame")}연속 ${esc(milestone)}일!</h2>
+        <div class="ria-wrap big jump">${riaSVG({ outfit, face: "sparkle", size: 150 })}<span class="sfx" aria-hidden="true">${t`짠!`}</span></div>
+        <h2 id="cel-title" class="cel-title">${icon("flame")}${t`연속 ${esc(milestone)}일!`}</h2>
         <p class="cel-reward">${esc(MILESTONE_REWARD[milestone] || "")}</p>
-        <button class="btn sun wide" id="cel-ok">좋아요</button>
+        <button class="btn sun wide" id="cel-ok">${t`좋아요`}</button>
       </div>
     </div>`);
     const shownAt = performance.now();
@@ -179,4 +181,17 @@ export function celebrate({ outfit, milestone }) {
     document.body.appendChild(wrap);
     wrap.querySelector("#cel-ok").focus({ preventScroll: true });
   });
+}
+
+// 언어 고르기 단추(v0.13.0, 시작 화면·설정). 언어 이름은 그 언어로 쓰므로 번역하지 않는다.
+const LANG_NAMES = [["ko", "한국어"], ["en", "English"]]; // I18N_SKIP: 언어 이름은 늘 그 언어로
+export function langPick(current) {
+  return `<div class="lang-pick" role="group" aria-label="${t`언어`}">${LANG_NAMES.map(([id, name]) => // I18N_SKIP: 두 언어 함께 쓰는 이름표
+    `<button type="button" class="lang-btn${id === current ? " on" : ""}" data-lang="${id}" lang="${id}" aria-pressed="${id === current}">${name}</button>`).join("")}</div>`;
+}
+export function bindLangPick(root, ctx) {
+  root.querySelectorAll(".lang-pick [data-lang]").forEach((b) => b.addEventListener("click", () => {
+    if (b.getAttribute("aria-pressed") === "true") return;
+    ctx.setLanguage(b.dataset.lang);
+  }));
 }

@@ -44,7 +44,7 @@ SRC = os.path.join(ROOT, "src")
 PYODIDE_VERSION = "314.0.7"
 PYODIDE_CDN = "https://cdn.jsdelivr.net/npm/pyodide@%s/" % PYODIDE_VERSION
 PYODIDE_DEV = "/node_modules/pyodide/"
-MAX_RAW = 800 * 1024  # 판정 C28 → C61(760) → C68(v0.12, 800KB)
+MAX_RAW = 820 * 1024  # 판정 C28 → C61(760) → C68(v0.12, 800KB) → C76(v0.13.0 영어판 문구 감싸기, 820KB)
 TARGET = ["es2022", "safari16"]
 
 # esbuild를 JS API로 부른다(한 번에 세 묶음을 글자로 받기 위해).
@@ -125,7 +125,7 @@ process.stdout.write(JSON.stringify({ index, files, contents, tasks }));
 """
 
 
-OWNED = ("index.html", "manifest.webmanifest", "sw.js", "icons", "lessons", "licenses.txt")
+OWNED = ("index.html", "manifest.webmanifest", "sw.js", "icons", "lessons", "lang", "licenses.txt")
 HOOKS = ("RIA_WORKER_URL", "RIA_RUNNER_SRC")
 
 
@@ -292,6 +292,7 @@ window.RIA_PYODIDE_URL = {pyodide};
 window.RIA_RUNNER_SRC = {runner};
 window.RIA_LESSON_INDEX = {lesson_index};
 window.RIA_CHAPTER_FILES = {chapter_files};
+window.RIA_LANG_FILES = {lang_files};
 (function () {{
   try {{
     window.RIA_WORKER_URL = URL.createObjectURL(new Blob([{worker}], {{ type: "text/javascript" }}));
@@ -305,6 +306,32 @@ window.RIA_CHAPTER_FILES = {chapter_files};
 </script>"""
 
 
+LANG_RE = re.compile(r"^lang/(en)-([0-9a-f]{8})\.json$")
+
+
+def lang_packs():
+    """영어판(v0.13.0): i18n/en/ui*.json + data.json → {"en": (이름, JSON 바이트)}. 설계 docs/specs/2026-11-11-영어판-설계.md §2"""
+    d = os.path.join(ROOT, "i18n", "en")
+    ui, data = {}, {}
+    for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if not f.endswith(".json"):
+            continue
+        with open(os.path.join(d, f), encoding="utf-8") as fh:
+            part = json.load(fh)
+        target = data if f == "data.json" else ui if f.startswith("ui") else None
+        if target is None:
+            continue
+        for k, v in part.items():
+            if k in target and target[k] != v:
+                raise SystemExit("build: i18n key %r has two different English texts (%s)" % (k, f))
+            target[k] = v
+    if not ui and not data:
+        return {}
+    body = json.dumps({"ui": ui, "data": data}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    name = "lang/en-%s.json" % hashlib.sha256(body).hexdigest()[:8]
+    return {"en": (name, body)}
+
+
 def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_dir=None):
     need_node()
     with open(os.path.join(SRC, "app.js"), encoding="utf-8") as f:
@@ -313,6 +340,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     version = app_version(app_src)
     pyodide_url = PYODIDE_DEV if dev_pyodide else PYODIDE_CDN
     split = split_lessons(lessons_dir or os.path.join(ROOT, "data", "lessons"))
+    packs = lang_packs()
     b = bundle()
     if not all(h in b["app"] for h in HOOKS):
         raise SystemExit("build: bundled app lost %s" % "/".join(HOOKS))
@@ -328,7 +356,8 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
         raise SystemExit("build: could not insert head links after <title>")
     config = CONFIG.format(version=js_string(version), pyodide=js_string(pyodide_url),
                            runner=js_string(runner), worker=js_string(b["worker"]),
-                           lesson_index=js_value(split["index"]), chapter_files=js_value(split["files"]))
+                           lesson_index=js_value(split["index"]), chapter_files=js_value(split["files"]),
+                           lang_files=js_value({k: v[0] for k, v in packs.items()}))
     if "<!-- RIA:CONFIG -->" not in html:
         raise SystemExit("build: marker CONFIG not found in src/index.html")
     html = html.replace("<!-- RIA:CONFIG -->", config, 1)
@@ -352,6 +381,14 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
             f.write(body)
         chapter_sizes.append((name, len(body)))
     chapter_files = [name for name, _ in chapter_sizes]
+    lang_sizes = []
+    if packs:
+        os.makedirs(os.path.join(out, "lang"))
+    for l, (name, body) in sorted(packs.items()):
+        with open(os.path.join(out, name), "wb") as f:
+            f.write(body)
+        lang_sizes.append((name, len(body)))
+    chapter_files += [name for name, _ in lang_sizes]  # 서비스 작업자가 장 파일처럼 미리 받아 둠(오프라인 언어 바꾸기)
 
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     import icon  # noqa: E402  (Playwright가 필요해서 쓸 때만 불러옴)
@@ -389,6 +426,8 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     print("lessons: %d chapter files, %.1f KB total" % (len(chapter_sizes), sum(sz for _, sz in chapter_sizes) / 1024))
     for name, sz in chapter_sizes:
         print("  %s %.1f KB" % (name, sz / 1024))
+    for name, sz in lang_sizes:
+        print("lang: %s %.1f KB" % (name, sz / 1024))
     if raw > MAX_RAW:
         raise SystemExit("build: index.html is over %d KB" % (MAX_RAW // 1024))
 

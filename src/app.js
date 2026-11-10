@@ -1,5 +1,7 @@
 // 리아와 파이썬! — 앱 입구. 상태는 app = { save, screen, modal } 하나, 화면 전환은 show() 하나.
-import { migrate, takeRefundNotice, refundNoticeText, takeBrokenNotice, BROKEN_NOTICE_TEXT } from "./save.js";
+import { migrate, takeRefundNotice, refundNoticeText, takeBrokenNotice, brokenNoticeText } from "./save.js";
+import { t, tx, setLang, lang, EN_PUBLIC, pickStartLang } from "./i18n.js";
+import { loadLangPack } from "./langload.js";
 import { readDevFlag, setDevMode, loadSlot, storeSlot, keysFor, markDev } from "./devmode.js";
 import { rollDay } from "./rules.js";
 import { ensureQuests } from "./quests.js";
@@ -29,7 +31,7 @@ import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 import * as garden from "./ui/garden.js";
 
-export const VERSION = "v0.12.6";
+export const VERSION = "v0.13.0";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -99,7 +101,7 @@ function dayStart() {
   const away = daysSince(app.save.last_active_at);
   if (away != null && away >= 3) app.greetOverride = "welcome_back";
   else if (r.broke) app.greetOverride = "streak_broken";
-  if (r.usedFreezes > 0) toast(`기록 보호권 ${r.usedFreezes}개로 연속 기록을 지켰어요.`);
+  if (r.usedFreezes > 0) toast(t`기록 보호권 ${r.usedFreezes}개로 연속 기록을 지켰어요.`);
   s = ensureQuests(s, today);
   s = ensureDaily(s, today, app.chapters);
   if (JSON.stringify(s) !== before) commit(s);
@@ -113,15 +115,15 @@ function commit(next) {
   const ok = storeSlot(storage, next, app.dev);
   if (!ok && !app.storeFailedShown) {
     app.storeFailedShown = true;
-    toast("저장하지 못했어요. 브라우저 저장 공간이 꽉 찼거나 막혀 있어요. 설정에서 저장 내보내기를 해 두면 안전해요.", "warn");
+    toast(t`저장하지 못했어요. 브라우저 저장 공간이 꽉 찼거나 막혀 있어요. 설정에서 저장 내보내기를 해 두면 안전해요.`, "warn");
   }
   if (ok) app.storeFailedShown = false;
   // 화면에 있는 상태 줄(연속 기록·바이트·XP)을 새 값으로
   const bar = document.querySelector("#app .status");
   if (bar) {
-    const t = document.createElement("template");
-    t.innerHTML = statusBar(next).trim();
-    bar.replaceWith(t.content.firstElementChild);
+    const tpl = document.createElement("template");
+    tpl.innerHTML = statusBar(next).trim();
+    bar.replaceWith(tpl.content.firstElementChild);
   }
   return ok;
 }
@@ -159,7 +161,7 @@ function currentLessonId() {
 
 function outfitShort() {
   const o = OUTFITS.find((x) => x.id === app.save.outfit);
-  return o ? o.short : "";
+  return o ? tx(`outfit.${o.id}.short`, o.short) : "";
 }
 
 /** 대사 고르기: 상황별 직전 줄을 따로 기억(C17) */
@@ -247,10 +249,44 @@ function paintDev() {
   try {
     document.documentElement.classList.toggle("dev-on", app.dev);
     const b = document.getElementById("dev-banner");
-    if (b) b.hidden = !app.dev;
+    if (b) { b.hidden = !app.dev; b.textContent = t`개발자 모드`; } // index.html의 글자를 언어에 맞춤(v0.13.0)
   } catch { /* 화면 없음 */ }
 }
 /** 켜고 끄기: 깃발을 남기고 그 칸의 저장으로 바꾼 뒤 오늘에 맞춤. 학습 기록은 켜 있는 동안 읽지도 쓰지도 않는다 */
+// ---- 언어 (v0.13.0) ----
+// 공개 전(EN_PUBLIC=false)에는 개발자 모드에서만 고를 수 있고 영어가 적용된다
+const langAllowed = () => EN_PUBLIC || app.dev;
+function applyLang(l) {
+  setLang(l === "en" && langAllowed() ? "en" : "ko");
+  document.documentElement.lang = lang();
+  document.title = t`리아와 파이썬` + "!";
+  paintDev();
+}
+/** 지금 저장의 언어로 맞춘다(영어 꾸러미가 없으면 받아 옴). 못 받으면 한국어로 두고 false */
+const wantLang = () => (app.save.settings.lang === "en" && langAllowed() ? "en" : "ko");
+/** 지금 저장의 언어로 맞춘다(영어 꾸러미가 없으면 받아 옴). 못 받으면 한국어. 돌려주는 값: 언어가 바뀌었는가 */
+async function syncLang() {
+  const before = lang();
+  const want = wantLang();
+  if (want === "en" && !(await loadLangPack("en"))) applyLang("ko");
+  else applyLang(want);
+  return lang() !== before;
+}
+/** 언어 바꾸기(시작 화면·설정). 바꾸면 지금 화면을 다시 그린다 */
+async function setLanguage(l) {
+  if (l !== "ko" && l !== "en") return false;
+  const dev = app.dev;
+  if (l === "en" && !(await loadLangPack("en"))) {
+    toast(t`인터넷에 연결되면 바꿀 수 있어요.`, "warn");
+    return false;
+  }
+  if (dev !== app.dev) return false; // 받는 동안 개발자 모드 칸이 바뀌었으면 다른 저장에 쓰지 않는다(검토 I4)
+  commit({ ...app.save, settings: { ...app.save.settings, lang: l } });
+  applyLang(l);
+  show(app.screen, app.params);
+  return true;
+}
+
 function setDev(on) {
   on = !!on;
   if (on === app.dev) return;
@@ -260,10 +296,14 @@ function setDev(on) {
   if (brokenKey) commit({ ...save, broken_notice: brokenKey });   // 깨진 저장 안내(홈에서 한 번)
   app.storeFailedShown = false;
   app.greetOverride = null;
-  if (readFailed) toast("저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.", "warn");
+  if (readFailed) toast(t`저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.`, "warn");
+  // 개발자 모드 칸마다 언어가 다를 수 있다(공개 전 영어는 개발자 모드만). 꾸러미가 이미 있으면 바로 맞춰
+  // 오늘 안내(dayStart)도 그 언어로 나오게 한다(검토 I2). 아직 없으면 받은 뒤, 언어가 바뀐 때만 다시 그림(검토 I1)
+  applyLang(wantLang());
   paintDev();
   if (app.lessons.length) resume.read();
   dayStart();
+  if (wantLang() !== lang()) syncLang().then((changed) => { if (changed && app.screen) show(app.screen, app.params); });
 }
 
 const ctx = {
@@ -273,6 +313,8 @@ const ctx = {
   get save() { return app.save; },
   get dev() { return app.dev; },
   setDev,
+  setLanguage,
+  get langPicker() { return langAllowed(); },
   commit, show, say, sound, toast, finish,
   daily, dailyStep, finishDaily: finishDailyChallenge,
   get chapters() { return app.chapters; },
@@ -304,7 +346,7 @@ const ctx = {
     const r = takeBrokenNotice(app.save);
     if (!r.key) return null;
     commit(r.save);
-    return { text: BROKEN_NOTICE_TEXT, key: r.key };
+    return { text: brokenNoticeText(), key: r.key };
   },
   /** 남겨 둔 깨진 저장 원문을 파일로 받기. 없으면 false */
   exportBroken(key) {
@@ -326,11 +368,15 @@ async function boot() {
   const root = document.getElementById("app");
   app.dev = readDevFlag(storage);
   paintDev();
-  const { save, readFailed, brokenKey } = loadSlot(storage, app.dev);
+  const { save, readFailed, brokenKey, fresh } = loadSlot(storage, app.dev);
   app.save = save;
+  // 처음 여는 사람(저장 없음): 공개 뒤에는 휴대폰 언어(v0.13.0 §1). 쓰던 사람은 저장 값
+  if (fresh && pickStartLang(navigator.languages || [navigator.language], false, EN_PUBLIC) === "en") {
+    app.save = { ...save, settings: { ...save.settings, lang: "en" } };
+  }
   // 깨진 저장(v0.12.1, QA 5): 새 저장에 남긴 칸 이름을 적어 바로 저장 → 홈에서 한 번 안내(새로고침해도 다시 .broken으로 남기지 않음)
   if (brokenKey) commit({ ...save, broken_notice: brokenKey });
-  if (readFailed) toast("저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.", "warn");
+  if (readFailed) toast(t`저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.`, "warn");
   initPy();
   requestPersist();
   try {
@@ -348,6 +394,7 @@ async function boot() {
   app.lessons = app.chapters.flatMap((c) => c.lessons);
   app.advanced = app.chapters.flatMap((c) => c.advanced || []);
   if (app.lessons.length) resume.read();   // 낡은 기록 치우기(레슨 목록을 못 받았으면 건드리지 않음)
+  await syncLang();   // 오늘 안내(dayStart)보다 먼저: 안내가 고른 언어로(검토 I2)
   dayStart();
   show("splash");
   document.addEventListener("visibilitychange", () => {
@@ -365,5 +412,5 @@ async function boot() {
 boot().catch((e) => {
   console.error(e);
   const root = document.getElementById("app");
-  if (root) root.innerHTML = `<p class="fatal">앱을 시작하지 못했어요. 새로고침해 주세요.</p>`;
+  if (root) root.innerHTML = `<p class="fatal">${t`앱을 시작하지 못했어요. 새로고침해 주세요.`}</p>`;
 });

@@ -3,16 +3,22 @@
 import { advancedOpen, advancedState, isAdvancedId } from "./advanced.js";
 import { isDev } from "./devgate.js";
 import { hasNewContent } from "./newcontent.js";
+import { t, tp } from "./i18n.js";
 
 // 다음 판에 열릴 장 제목. UPCOMING[i]는 (i + 4)장. 이미 불러온 장 번호는 자동으로 숨긴다.
+// I18N_SKIP: 한국어 원문 표(시험용). 화면 제목은 upcomingTitles()가 언어에 맞춰 낸다
 export const UPCOMING = ["함수", "반복문", "문자열 다루기", "리스트", "딕셔너리", "튜플과 집합", "예외 처리", "파일",
-  "정규표현식", "네트워크 기초", "웹 API와 JSON", "객체지향", "데이터베이스와 SQL", "데이터 시각화"];
+  "정규표현식", "네트워크 기초", "웹 API와 JSON", "객체지향", "데이터베이스와 SQL", "데이터 시각화"]; // I18N_SKIP: 위와 같은 표
 const UPCOMING_FROM = 4;
+// UPCOMING과 같은 순서(한국어면 같은 글자)
+const upcomingTitles = () => [tp("chapter", "함수"), t`반복문`, t`문자열 다루기`, t`리스트`, t`딕셔너리`, t`튜플과 집합`, t`예외 처리`, t`파일`,
+  t`정규표현식`, t`네트워크 기초`, t`웹 API와 JSON`, t`객체지향`, t`데이터베이스와 SQL`, t`데이터 시각화`];
 
 /** 아직 없는 다음 장들: [{ no, title }] */
 export function upcomingChapters(chapters) {
   const have = new Set((chapters || []).map((c) => c.id));
-  return UPCOMING.map((title, i) => ({ no: UPCOMING_FROM + i, title })).filter((u) => !have.has(u.no));
+  const titles = upcomingTitles();
+  return UPCOMING.map((title, i) => ({ no: UPCOMING_FROM + i, title: titles[i] ?? title })).filter((u) => !have.has(u.no));
 }
 
 /**
@@ -83,10 +89,10 @@ export function pathEndText({ chapters, completed }) {
   const last = (chapters || []).reduce((m, c) => Math.max(m, c.id), 0);
   const next = upcomingChapters(chapters)[0];
   if (all.length && all.every((l) => doneSet.has(l.id))) {
-    return next ? "지금 판의 레슨을 모두 끝냈어요! 복습으로 실력을 다져요" : "과정을 모두 끝냈어요! 복습으로 실력을 다져요";
+    return next ? t`지금 판의 레슨을 모두 끝냈어요! 복습으로 실력을 다져요` : t`과정을 모두 끝냈어요! 복습으로 실력을 다져요`;
   }
-  if (!next) return `${last}장이 마지막 장이에요. 끝까지 함께 가 봐요`;
-  return `${last}장까지가 지금 판의 전부예요. ${next.no}장(${next.title})부터는 다음 업데이트에서 열려요`;
+  if (!next) return t`${last}장이 마지막 장이에요. 끝까지 함께 가 봐요`;
+  return t`${last}장까지가 지금 판의 전부예요. ${next.no}장(${next.title})부터는 다음 업데이트에서 열려요`;
 }
 
 /**

@@ -6,10 +6,15 @@ import { esc, icon, bar, riaSays, dialog, toast } from "./dom.js";
 import { tabBar, bindTabs, gardenTabOf, statusBar } from "./nav.js";
 import { pathEndText } from "../curriculum.js";
 import { hasNewContent } from "../newcontent.js";
+import { t, tx, lang, tp } from "../i18n.js";
 
 // 「새 내용」 점(v0.7.1): 노드 옆 작은 꼬리표. 누르기는 노드가 받는다(pointer-events: none, 노드 크기 그대로)
-const NEW_LABEL = "새 내용 있음";
-const newDot = (id, cls = "") => `<span class="new-dot${cls}" role="img" aria-label="${NEW_LABEL}" data-for="${esc(id)}">새 내용</span>`;
+const newLabel = () => t`새 내용 있음`;
+const newDot = (id, cls = "") => `<span class="new-dot${cls}" role="img" aria-label="${esc(newLabel())}" data-for="${esc(id)}">${t`새 내용`}</span>`;
+const conceptName = (id) => tx(`concept.${id}.name`, (CONCEPTS.find((x) => x.id === id) || { name: id }).name);
+
+// 장 평가 레슨 제목에 이미 「평가」가 있으면 「장 평가」 꼬리표를 붙이지 않음. 영어 레슨 제목은 Checkpoint
+const EXAM_TITLE = () => (lang() === "en" ? /평가|checkpoint/i : /평가/);
 
 const ROW = 112;          // 레슨 한 칸 높이
 const W = 320;            // 길 폭
@@ -48,13 +53,13 @@ function advBranch(ctx, chapter, ex, ey) {
     const st = states[i];
     const k = String(l.id).split("-A")[1] || String(i + 1);
     const x = cx - span / 2 + i * STAR_GAP;
-    const stateKo = { locked: "잠김, 장 평가를 통과하면 열려요", open: "열림", done: "완료", perfect: "실수 없이 완료" }[st];
+    const stateKo = { locked: t`잠김, 장 평가를 통과하면 열려요`, open: t`열림`, done: t`완료`, perfect: t`실수 없이 완료` }[st];
     const fresh = hasNewContent(l, ctx.save);
     return `<button class="star-node ${st}" style="left:${x - STAR / 2}px;top:${sy - STAR / 2}px" data-lesson="${esc(l.id)}"
-      aria-label="${esc(`심화 ${l.id} ${l.title}, ${stateKo}${fresh ? `, ${NEW_LABEL}` : ""}`)}">${starGlyph(k, st)}</button>${fresh
+      aria-label="${esc(`${t`심화 ${l.id} ${l.title}, ${stateKo}`}${fresh ? `, ${newLabel()}` : ""}`)}">${starGlyph(k, st)}</button>${fresh
       ? `<span class="new-dot-at" style="left:${x + STAR / 2 - 14}px;top:${sy - STAR / 2 - 10}px">${newDot(l.id, " star")}</span>` : ""}`;
   }).join("");
-  const cap = `<span class="adv-cap${opened ? " open" : ""}" style="top:${sy + STAR / 2 + 6}px">심화 ${doneN}/${adv.length}${opened ? "" : " · 장 평가 뒤 열림"}</span>`;
+  const cap = `<span class="adv-cap${opened ? " open" : ""}" style="top:${sy + STAR / 2 + 6}px">${opened ? t`심화 ${doneN}/${adv.length}` : t`심화 ${doneN}/${adv.length} · 장 평가 뒤 열림`}</span>`;
   return { links, nodes: stars + cap };
 }
 
@@ -65,22 +70,23 @@ function questCard(save) {
     if (!def) return "";
     const p = Math.min(def.goal, Math.max(0, (q.progress || {})[id] || 0));
     const done = (q.done || []).includes(id);
+    const qName = tx(`quest.${id}.name`, def.name);
     return `<li class="quest${done ? " done" : ""}">
       <span class="q-ic">${icon(done ? "check" : "star")}</span>
       <div class="q-main">
-        <span class="q-name">${esc(def.name)}${done ? '<span class="sr"> (완료)</span>' : ""}</span>
-        ${bar(p, def.goal, "q-bar", def.name)}
+        <span class="q-name">${esc(qName)}${done ? `<span class="sr"> ${t`(완료)`}</span>` : ""}</span>
+        ${bar(p, def.goal, "q-bar", qName)}
       </div>
       <span class="q-num">${p}/${def.goal}</span>
-      <span class="q-reward" aria-label="보상 ${def.reward}바이트">+${def.reward}</span>
+      <span class="q-reward" aria-label="${esc(t`보상 ${def.reward}바이트`)}">+${def.reward}</span>
     </li>`;
   }).join("");
   const opened = !!q.chest;
   return `<section class="panel quests" aria-labelledby="q-title">
-    <h2 id="q-title">오늘의 퀘스트</h2>
+    <h2 id="q-title">${t`오늘의 퀘스트`}</h2>
     <ul class="quest-list">${rows}</ul>
     <p class="chest${opened ? " open" : ""}">${icon(opened ? "chestOpen" : "chest")}
-      <span>${opened ? "보물상자를 열었어요 (+10바이트)" : "3개를 모두 끝내면 보물상자 +10바이트"}</span></p>
+      <span>${opened ? t`보물상자를 열었어요 (+10바이트)` : t`3개를 모두 끝내면 보물상자 +10바이트`}</span></p>
   </section>`;
 }
 
@@ -90,18 +96,18 @@ function dailyCard(st) {
   if (st.state === "locked") {
     return `<section class="panel daily locked" aria-labelledby="d-title">
       <span class="daily-ic" aria-hidden="true">${icon("lock")}</span>
-      <div class="daily-text"><h2 id="d-title">오늘의 도전</h2><p>1장을 끝내면 열려요</p></div>
+      <div class="daily-text"><h2 id="d-title">${t`오늘의 도전`}</h2><p>${t`1장을 끝내면 열려요`}</p></div>
     </section>`;
   }
   const dots = Array.from({ length: st.total }, (_, i) => `<span class="d-dot${i < st.done ? " on" : ""}"></span>`).join("");
-  const label = st.state === "done" ? "완료됨" : st.state === "partial" ? "이어서" : "시작";
-  const streak = st.streak > 0 ? `도전 ${st.streak}일째` : "첫 도전";
-  const note = st.state === "done" ? "내일 새 문제가 와요" : "3문제 · XP 15 · 바이트 10";
+  const label = st.state === "done" ? t`완료됨` : st.state === "partial" ? t`이어서` : t`시작`;
+  const streak = st.streak > 0 ? t`도전 ${st.streak}일째` : t`첫 도전`;
+  const note = st.state === "done" ? t`내일 새 문제가 와요` : t`3문제 · XP 15 · 바이트 10`;
   return `<section class="panel daily ${st.state}" aria-labelledby="d-title">
     <div class="daily-text">
-      <h2 id="d-title">오늘의 도전</h2>
+      <h2 id="d-title">${t`오늘의 도전`}</h2>
       <p class="daily-streak">${icon("flame")}<span>${esc(streak)}</span></p>
-      <div class="daily-dots" role="img" aria-label="${esc(`${st.total}문제 중 ${st.done}문제 풀었어요`)}">${dots}</div>
+      <div class="daily-dots" role="img" aria-label="${esc(t`${st.total}문제 중 ${st.done}문제 풀었어요`)}">${dots}</div>
       <p class="daily-note">${esc(note)}</p>
     </div>
     <button class="btn ${st.state === "done" ? "ghost" : "sun"} daily-go" id="daily"${st.state === "done" ? " disabled" : ""}>${icon(st.state === "done" ? "check" : "play")}${label}</button>
@@ -111,13 +117,13 @@ function dailyCard(st) {
 function reviewCard(save) {
   const queue = save.review_queue || [];
   if (!queue.length) return "";
-  const names = queue.slice(0, 3).map((c) => (CONCEPTS.find((x) => x.id === c) || { name: c }).name);
+  const names = queue.slice(0, 3).map(conceptName);
   return `<section class="panel review">
     <div class="review-text">
-      <h2>복습할 개념 ${queue.length}개</h2>
-      <p>${esc(names.join(", "))}${queue.length > 3 ? " 외" : ""}</p>
+      <h2>${t`복습할 개념 ${queue.length}개`}</h2>
+      <p>${esc(queue.length > 3 ? t`${names.join(", ")} 외` : names.join(", "))}</p>
     </div>
-    <button class="btn sun" id="review">${icon("review")}복습 5문제</button>
+    <button class="btn sun" id="review">${icon("review")}${t`복습 5문제`}</button>
   </section>`;
 }
 
@@ -142,21 +148,21 @@ function pathSection(ctx, chapter, startIndex, currentId) {
     const cur = l.id === currentId && st === "open";
     const p = pts[i];
     const glyph = st === "locked" ? icon("lock") : st === "perfect" ? icon("star", "fill") : st === "done" ? icon("check") : `<b>${esc(l.id)}</b>`;
-    const stateKo = { locked: "잠김", open: cur ? "지금 할 레슨" : "열림", done: "완료", perfect: "실수 없이 완료" }[st];
+    const stateKo = { locked: t`잠김`, open: cur ? t`지금 할 레슨` : t`열림`, done: t`완료`, perfect: t`실수 없이 완료` }[st];
     const side = p.x > W / 2 ? "left" : "right";
     const fresh = hasNewContent(l, ctx.save);
     return `<div class="node-wrap" style="left:${p.x - NODE / 2}px;top:${p.y - NODE / 2}px">
-      <button class="node ${st}${cur ? " current" : ""}" data-lesson="${esc(l.id)}" aria-label="${esc(`${l.id} ${l.title}, ${stateKo}${fresh ? `, ${NEW_LABEL}` : ""}`)}">${glyph}</button>
+      <button class="node ${st}${cur ? " current" : ""}" data-lesson="${esc(l.id)}" aria-label="${esc(`${l.id} ${l.title}, ${stateKo}${fresh ? `, ${newLabel()}` : ""}`)}">${glyph}</button>
       ${fresh ? newDot(l.id) : ""}
-      <span class="node-label">${l.isExam && !/평가/.test(l.title) ? '<em>장 평가</em>' : ""}${esc(l.title)}</span>
+      <span class="node-label">${l.isExam && !EXAM_TITLE().test(l.title) ? `<em>${t`장 평가`}</em>` : ""}${esc(l.title)}</span>
       ${cur ? `<span class="node-ria ${side}" aria-hidden="true">${riaSVG({ outfit: ctx.save.outfit, face: "cheer", size: 58 })}</span>` : ""}
     </div>`;
   }).join("");
   const last = pts[pts.length - 1];
   const br = hasAdv ? advBranch(ctx, chapter, last.x, last.y) : { links: "", nodes: "" };
   const advAll = hasAdv && chapter.advanced.every((l) => ["done", "perfect"].includes(ctx.lessonState(l.id)));
-  return `<section class="chapter" aria-label="${esc(`${chapter.id}장 ${chapter.title}`)}">
-    <h2 class="chapter-title"><span class="ch-no">${chapter.id}장</span>${esc(chapter.title)}${advAll ? `<span class="ch-star" title="심화 모두 완료">${icon("star", "fill")}<span class="sr">심화 모두 완료</span></span>` : ""}</h2>
+  return `<section class="chapter" aria-label="${esc(t`${chapter.id}장 ${chapter.title}`)}">
+    <h2 class="chapter-title"><span class="ch-no">${t`${chapter.id}장`}</span>${esc(chapter.title)}${advAll ? `<span class="ch-star" title="${esc(t`심화 모두 완료`)}">${icon("star", "fill")}<span class="sr">${t`심화 모두 완료`}</span></span>` : ""}</h2>
     <div class="path" style="width:${W}px;height:${H}px">
       <svg class="snake" viewBox="0 ${-30} ${W} ${H + 30}" width="${W}" height="${H + 30}" aria-hidden="true">
         ${br.links}
@@ -184,21 +190,21 @@ export function render(root, ctx) {
   root.innerHTML = `<div class="screen home with-tabs">
     ${statusBar(save)}
     <main>
-      <h1 class="sr">학습 길</h1>
+      <h1 class="sr">${t`학습 길`}</h1>
       ${broken ? `<section class="panel broken-notice" role="status">
         <p>${esc(broken.text)}</p>
-        <button class="btn ghost wide" id="broken-export">옛 저장 내보내기</button>
+        <button class="btn ghost wide" id="broken-export">${t`옛 저장 내보내기`}</button>
       </section>` : ""}
       ${dst && dst.state !== "locked" ? dailyCard(dst) : ""}
       <section class="hello">
         ${riaSays({ outfit: save.outfit, face: line.face, text: line.text, size: 92, cls: notice ? "refund-notice" : "" })}
-        ${cur && !allDone ? `<button class="btn primary wide" id="continue">${icon("play")}<span>${save.completed_lessons.length ? "이어서 하기" : "첫 레슨 시작"} · ${esc(cur.id)} ${esc(cur.title)}</span></button>` : ""}
-        ${allDone ? `<p class="all-done">준비된 레슨을 모두 끝냈어요. 다시 풀거나 복습하며 XP를 모아 봐요.</p>` : ""}
+        ${cur && !allDone ? `<button class="btn primary wide" id="continue">${icon("play")}<span>${save.completed_lessons.length ? t`이어서 하기` : t`첫 레슨 시작`} · ${esc(cur.id)} ${esc(cur.title)}</span></button>` : ""}
+        ${allDone ? `<p class="all-done">${t`준비된 레슨을 모두 끝냈어요. 다시 풀거나 복습하며 XP를 모아 봐요.`}</p>` : ""}
       </section>
       ${dst && dst.state === "locked" ? dailyCard(dst) : ""}
       ${reviewCard(save)}
       ${questCard(save)}
-      ${sections || '<p class="panel">레슨을 불러오지 못했어요. 새로고침해 주세요.</p>'}
+      ${sections || `<p class="panel">${t`레슨을 불러오지 못했어요. 새로고침해 주세요.`}</p>`}
       <p class="path-end">${esc(pathEndText({ chapters: ctx.chapters, completed: save.completed_lessons }))}</p>
     </main>
     ${tabBar("home", gardenTabOf(ctx))}
@@ -206,7 +212,7 @@ export function render(root, ctx) {
   bindTabs(root, ctx);
   const bx = root.querySelector("#broken-export");
   if (bx) bx.addEventListener("click", () => {
-    toast(ctx.exportBroken(broken.key) ? "옛 저장을 파일로 내보냈어요. 고친 뒤 설정 → 저장 가져오기로 되살릴 수 있어요." : "옛 저장을 찾지 못했어요.", "");
+    toast(ctx.exportBroken(broken.key) ? t`옛 저장을 파일로 내보냈어요. 고친 뒤 설정 → 저장 가져오기로 되살릴 수 있어요.` : t`옛 저장을 찾지 못했어요.`, "");
   });
   const go = root.querySelector("#continue");
   if (go) go.addEventListener("click", () => ctx.show("lesson", { id: currentId }));
@@ -217,13 +223,13 @@ export function render(root, ctx) {
   root.querySelectorAll("[data-lesson]").forEach((b) => b.addEventListener("click", async () => {
     const id = b.dataset.lesson;
     const st = ctx.lessonState(id);
-    if (st === "locked") { toast(b.classList.contains("star-node") ? "장 평가를 통과하면 심화 레슨이 열려요." : "앞 레슨을 끝내면 열려요."); return; }
+    if (st === "locked") { toast(b.classList.contains("star-node") ? t`장 평가를 통과하면 심화 레슨이 열려요.` : t`앞 레슨을 끝내면 열려요.`); return; }
     if (st === "done" || st === "perfect") {
       const l = ctx.lessonById(id);
       const ok = await dialog({
-        title: `${id} ${l.title} 다시 하기`,
-        body: `<p>끝낸 레슨도 다시 풀 수 있어요. 다시 하기는 XP만 조금 받고 바이트는 없어요.</p>`,
-        buttons: [{ label: "그만두기", value: false }, { label: "다시 풀기", value: true, kind: "primary" }],
+        title: t`${id} ${l.title} 다시 하기`,
+        body: `<p>${t`끝낸 레슨도 다시 풀 수 있어요. 다시 하기는 XP만 조금 받고 바이트는 없어요.`}</p>`,
+        buttons: [{ label: tp("cancel", "그만두기"), value: false }, { label: t`다시 풀기`, value: true, kind: "primary" }],
       });
       if (!ok) return;
     }

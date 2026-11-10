@@ -5,6 +5,7 @@ import { cleanSeenUpdates } from "./newcontent.js";
 import { newDaily, cleanDaily } from "./daily.js";
 import { newGarden, cleanGarden } from "./garden/state.js";
 import { isDate, DAILY_GOALS } from "./rules.js";
+import { t, normLang } from "./i18n.js";
 
 export const SAVE_KEY = "ria-python.save";
 export const SAVE_VER = 2;
@@ -28,7 +29,7 @@ export function newSave() {
     quests: { date: null, ids: [], progress: {}, done: [], chest: false },
     badges: [], outfits: ["basic"], outfit: "basic",
     stats: { lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0 },
-    settings: { sound: true, dailyGoal: 20, name: "" },
+    settings: { sound: true, dailyGoal: 20, name: "", lang: "ko" }, // lang: v0.13.0 영어판(ko|en)
     pending_refund: 0, // saveVer 1→2에서 돌려준 바이트. 홈에서 한 번 알리고 0으로 (판정 C42)
     seen_updates: {},  // v0.7.1 「새 내용」 점: { 레슨 id: 끝까지 다시 본 판 "v0.7.1" }. saveVer 그대로, 없으면 {}
     daily: newDaily(), // v0.9 매일 도전 { date, picks, done, streak, best, last_done_date }. saveVer 그대로, 없으면 기본값
@@ -85,6 +86,7 @@ const nonNegInt = (v) => Math.max(0, Math.floor(v));
 
 // 값의 범위를 맞춘다(타입은 fill에서 이미 숫자로 맞춰져 있음).
 function clampRanges(s) {
+  s.settings.lang = normLang(s.settings.lang); // v0.13.0: 모르는 값은 ko
   s.freezes = Math.min(MAX_FREEZES, nonNegInt(s.freezes));
   s.xp = nonNegInt(s.xp);
   s.bytes = nonNegInt(s.bytes);
@@ -181,9 +183,11 @@ export function takeBrokenNotice(save) {
   const key = save && typeof save.broken_notice === "string" ? save.broken_notice : null;
   return key ? { save: { ...save, broken_notice: null }, key } : { save, key: null };
 }
-export const BROKEN_NOTICE_TEXT = "저장을 읽지 못해 새로 시작했어요. 설정 → 저장 가져오기로 옛 기록을 되살릴 수 있어요";
+// 한국어 원문(시험용). 화면에는 brokenNoticeText()로 낸다
+export const BROKEN_NOTICE_TEXT = "저장을 읽지 못해 새로 시작했어요. 설정 → 저장 가져오기로 옛 기록을 되살릴 수 있어요"; // I18N_SKIP: 한국어 원문 상수, 화면은 brokenNoticeText()
+export const brokenNoticeText = () => t`저장을 읽지 못해 새로 시작했어요. 설정 → 저장 가져오기로 옛 기록을 되살릴 수 있어요`;
 
-export const refundNoticeText = (n) => `없어진 옷 값 ${n}바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!`;
+export const refundNoticeText = (n) => t`없어진 옷 값 ${n}바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!`;
 
 // 깨진 원본을 남긴다. 이미 남긴 것은 덮지 않고 .broken.1 ~ .broken.5 중 빈 칸에 쓴다(모두 차면 .broken.5를 덮음).
 // key: 저장 칸(기본 학습 기록. 개발자 모드 저장은 src/devmode.js가 자기 키를 넘김)
@@ -203,19 +207,19 @@ export function loadEx(storage, key = SAVE_KEY) {
   try {
     text = storage.getItem(key);
   } catch {
-    return { save: newSave(), readFailed: true, brokenKey: null };
+    return { save: newSave(), readFailed: true, brokenKey: null, fresh: false };
   }
-  if (text === null || text === undefined) return { save: newSave(), readFailed: false, brokenKey: null };
+  if (text === null || text === undefined) return { save: newSave(), readFailed: false, brokenKey: null, fresh: true }; // fresh: v0.13.0 처음 여는 사람
   let raw;
   try {
     raw = JSON.parse(text);
   } catch {
-    return { save: newSave(), readFailed: false, brokenKey: keepBroken(storage, text, key) };
+    return { save: newSave(), readFailed: false, brokenKey: keepBroken(storage, text, key), fresh: false };
   }
   if (!isPlainObject(raw)) {
-    return { save: newSave(), readFailed: false, brokenKey: keepBroken(storage, text, key) };
+    return { save: newSave(), readFailed: false, brokenKey: keepBroken(storage, text, key), fresh: false };
   }
-  return { save: migrate(raw), readFailed: false, brokenKey: null };
+  return { save: migrate(raw), readFailed: false, brokenKey: null, fresh: false };
 }
 
 export function load(storage, key = SAVE_KEY) {

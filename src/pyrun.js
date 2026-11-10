@@ -70,7 +70,7 @@ function cleanResult(r) {
 // 텃밭 결과(v0.10): 모양만 지킨다(값 검사는 runner가 함). 화면은 events를 재생하고 state를 저장한다.
 // state는 그대로 넘긴다(v0.12의 seeds·store["토마토"] 포함). files(v0.12 쪽지함)는 runner가 준 때만
 // { "농장일지.txt": 글자(끝 2000자, 코드 포인트로 셈) } 모양으로 지킨다.
-export const FARM_JOURNAL = "농장일지.txt";
+export const FARM_JOURNAL = "농장일지.txt";   // I18N_SKIP runner가 주는 파일 이름(데이터 열쇠), 화면 표시는 텃밭 쪽 몫
 export const FARM_JOURNAL_MAX = 2000;
 
 // 끝 n글자(코드 포인트 — 파이썬 글자 수와 같음, 판정 C71). UTF-16 칸으로 자르면 이모지 반쪽이 남는다

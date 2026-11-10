@@ -3,8 +3,11 @@
 //   그 밖에 저장의 아는 키가 하나 이상 있어야 리아와 파이썬! 저장으로 본다.
 // - 확인 창에 요약과, 지금보다 끝낸 레슨이 적으면 그 수를 알린다.
 import { newSave } from "./save.js";
+import { t } from "./i18n.js";
 
-export const NOT_SAVE_TEXT = "리아와 파이썬! 저장 파일이 아니에요. 설정의 「저장 내보내기」로 만든 파일을 골라 주세요.";
+// 한국어 원문(시험·열쇠 대조용). 화면에는 notSaveText()로 낸다
+export const NOT_SAVE_TEXT = "리아와 파이썬! 저장 파일이 아니에요. 설정의 「저장 내보내기」로 만든 파일을 골라 주세요."; // I18N_SKIP: 한국어 원문 상수, 화면은 notSaveText()
+export const notSaveText = () => t`리아와 파이썬! 저장 파일이 아니에요. 설정의 「저장 내보내기」로 만든 파일을 골라 주세요.`;
 
 const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 
@@ -26,8 +29,8 @@ const doneCount = (s) => (Array.isArray(s && s.completed_lessons) ? s.completed_
 export function importCompare(current, next) {
   const fewerLessons = Math.max(0, doneCount(current) - doneCount(next));
   return {
-    summary: `끝낸 레슨 ${doneCount(next)}개, XP ${n(next.xp)}, 바이트 ${n(next.bytes)}, 연속 기록 ${n(next.streak && next.streak.days)}일`,
+    summary: t`끝낸 레슨 ${doneCount(next)}개, XP ${n(next.xp)}, 바이트 ${n(next.bytes)}, 연속 기록 ${n(next.streak && next.streak.days)}일`,
     fewerLessons,
-    warn: fewerLessons > 0 ? `지금보다 끝낸 레슨이 ${fewerLessons}개 적어요` : null,
+    warn: fewerLessons > 0 ? t`지금보다 끝낸 레슨이 ${fewerLessons}개 적어요` : null,
   };
 }

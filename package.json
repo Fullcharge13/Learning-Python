@@ -8,6 +8,8 @@
   },
   "devDependencies": {
     "@codemirror/lang-python": "^6.2.1",
+    "acorn": "8.14.0",
+    "acorn-walk": "8.3.4",
     "codemirror": "^6.0.2",
     "esbuild": "^0.28.2",
     "pyodide": "^314.0.7"

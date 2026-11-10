@@ -3123,5 +3123,105 @@ def test_garden_tab():
     assert not fails, "\n".join(fails)
 
 
+def _hangul_left(a, allow=()):
+    """화면 글자에서 레슨 내용(목록의 장·레슨 제목·목표·요약)과 허용 글자를 뺀 뒤 남은 한글 줄. v0.13.0: 레슨은 아직 한국어"""
+    return a.js("""(allow) => {
+        let text = document.body.innerText + "\\n" + [...document.querySelectorAll("[aria-label], [title], [placeholder]")]
+            .map((e) => [e.getAttribute("aria-label"), e.getAttribute("title"), e.getAttribute("placeholder")].filter(Boolean).join("\\n")).join("\\n");
+        const idx = window.RIA_LESSON_INDEX || [];
+        const parts = [];
+        for (const c of idx) { parts.push(c.title || ""); for (const l of [...(c.lessons || []), ...(c.advanced || [])]) parts.push(l.title || "", l.goal || "", ...(l.summary || [])); }
+        for (const p of [...parts, ...allow].filter(Boolean).sort((x, y) => y.length - x.length)) text = text.split(p).join("");
+        return text.split("\\n").filter((ln) => /[가-힣]/.test(ln)).slice(0, 8);
+    }""", list(allow))
+
+
+def test_language_switch():
+    """v0.13.0: 「한국어 / English」 — 공개 전에는 개발자 모드에서만. 영어로 바꾸면 화면 문구가 영어(레슨 내용 빼고),
+    다시 한국어로 바꿔도 진도·바이트 그대로."""
+    fails = []
+    with App("iPhone 17") as a:
+        if a.page.query_selector(".lang-pick"):
+            fails.append("picker on splash in normal mode")
+        a.start()
+        a.page.click('.tabbar [data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        if a.page.query_selector(".lang-pick"):
+            fails.append("picker in settings in normal mode")
+    seed = dict(_garden_seed(1, xp=40), dev_mode=True)
+    for dev in ("Galaxy S24", "iPhone 17"):
+        with App(dev) as a:
+            a.js("([k1, k2, v]) => { localStorage.setItem(k1, '1'); localStorage.setItem(k2, v); }",
+                 [DEV_FLAG_KEY, DEV_SAVE_KEY, json.dumps(seed)])
+            a.page.reload()
+            a.page.wait_for_selector(".screen.splash .lang-pick")
+            a.page.click('.lang-pick [data-lang="en"]')
+            a.page.wait_for_function("() => document.documentElement.lang === 'en'")
+            a.page.wait_for_selector(".screen.splash #go")
+            a.page.wait_for_timeout(300)
+            if a.page.inner_text("#go").strip() != "Start":
+                fails.append("%s splash button %r" % (dev, a.page.inner_text("#go")))
+            left = _hangul_left(a, ["한국어"])
+            if left:
+                fails.append("%s splash hangul %r" % (dev, left))
+            a.shot("lang-en-splash-%s.png" % slug(dev))
+            a.start()
+            for name in ("home", "badges", "closet", "settings"):
+                if name != "home":
+                    a.page.click('.tabbar [data-go="%s"]' % name)
+                    a.page.wait_for_selector(".screen.%s" % name)
+                a.page.wait_for_timeout(300)
+                left = _hangul_left(a, ["한국어"] if name == "settings" else [])
+                if left:
+                    fails.append("%s %s hangul %r" % (dev, name, left))
+                m = measure(a, "lang-en-%s" % name)
+                if m["problems"] or m["small"]:
+                    fails.append("%s %s layout %r %r" % (dev, name, m["problems"], m["small"]))
+                a.shot("lang-en-%s-%s.png" % (name, slug(dev)))
+            # 레슨 화면 틀(레슨 내용은 v0.13.1부터 영어) + 그만두기 창
+            a.page.click('.tabbar [data-go="home"]')
+            a.page.wait_for_selector(".screen.home")
+            a.page.click("#continue")
+            a.page.wait_for_selector(".card-view, article.item", timeout=20_000)
+            lid = a.js("() => window.__ria.app.params && window.__ria.app.params.id")
+            lesson_text = a.js("""(id) => window.__ria.ctx.getLesson(id).then((l) => { const out = [];
+                const walk = (o) => { if (typeof o === 'string') out.push(...o.split('\\n')); else if (o && typeof o === 'object') Object.values(o).forEach(walk); };
+                walk(l); return out.filter((x) => x.trim()); })""", lid)
+            left = _hangul_left(a, lesson_text)
+            if left:
+                fails.append("%s lesson chrome hangul %r" % (dev, left))
+            a.page.click("#quit")
+            a.page.wait_for_selector(".modal [data-i]")
+            left = _hangul_left(a, lesson_text)
+            if left:
+                fails.append("%s quit dialog hangul %r" % (dev, left))
+            a.shot("lang-en-lesson-quit-%s.png" % slug(dev))
+            a.page.click(".modal [data-i='1']")
+            a.page.wait_for_selector(".screen.home", timeout=10_000)
+            a.page.click('.tabbar [data-go="settings"]')
+            a.page.wait_for_selector(".screen.settings")
+            # 다시 한국어: 진도 그대로
+            before = a.js("() => ({ xp: window.__ria.app.save.xp, done: window.__ria.app.save.completed_lessons.length })")
+            a.page.click('.lang-pick [data-lang="ko"]')
+            a.page.wait_for_function("() => document.documentElement.lang === 'ko'")
+            after = a.js("() => ({ xp: window.__ria.app.save.xp, done: window.__ria.app.save.completed_lessons.length, lang: window.__ria.app.save.settings.lang })")
+            if after["lang"] != "ko" or after["xp"] != before["xp"] or after["done"] != before["done"]:
+                fails.append("%s back to ko %r → %r" % (dev, before, after))
+            if "설정" not in a.page.inner_text(".tabbar"):
+                fails.append("%s tabbar not Korean after switch back" % dev)
+            # 영어로 다시 바꾼 뒤 개발자 모드를 끄면(학습 기록 칸, 공개 전) 한국어
+            a.page.click('.lang-pick [data-lang="en"]')
+            a.page.wait_for_function("() => document.documentElement.lang === 'en'")
+            a.page.click("#dev")
+            a.page.wait_for_function("() => document.documentElement.lang === 'ko'", timeout=5000)
+            if "설정" not in a.page.inner_text(".tabbar") or a.page.query_selector(".lang-pick"):
+                fails.append("%s dev off: not Korean / picker still shown" % dev)
+            if _ls(a, SAVE_KEY) and json.loads(_ls(a, SAVE_KEY))["settings"].get("lang", "ko") != "ko":
+                fails.append("%s learning save got lang en" % dev)
+            if a.errors:
+                fails.append("%s errors %r" % (dev, a.errors))
+    assert not fails, "\n".join(fails)
+
+
 if __name__ == "__main__":
     sys.exit(main())

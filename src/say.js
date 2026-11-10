@@ -1,5 +1,6 @@
 // 리아 교수 대사 고르기 (설계서 6-3)
 import { LINES, FALLBACK_LINE } from "../data/lines.js";
+import { lang, tx } from "./i18n.js";
 
 const VALUE_KEYS = ["streak", "xp", "outfit"];
 const has = (v) => v !== undefined && v !== null && String(v).trim() !== "";
@@ -11,10 +12,26 @@ function usable(text, vars) {
 
 // 자리 표시를 한 번에 채운다(바꿔 넣은 글자를 다시 바꾸지 않음, $ 패턴 해석 없음).
 // 이름이 비면 줄 맨 앞 「{name}님, 」 덩어리를 통째로 뺀다(대사 표는 이 꼴로만 씀 — 시험 name_form).
+// 영어(v0.13.0): 영어 대사는 줄 맨 앞 「{name}, 」 꼴만 쓴다. 이름이 비면 그 덩어리를 빼고 첫 글자를 대문자로.
+function fillEn(text, vars) {
+  const name = has(vars.name) ? String(vars.name).trim() : "";
+  let dropped = false;
+  let out = text.replace(/^\{name\}, ?|\{(name|streak|xp|outfit)\}/g, (m, key) => {
+    if (key === undefined) { if (name) return `${name}, `; dropped = true; return ""; }
+    if (key === "name") return name;
+    return has(vars[key]) ? String(vars[key]) : "";
+  });
+  out = out.replace(/\s{2,}/g, " ").trim();
+  if (dropped) out = out.charAt(0).toUpperCase() + out.slice(1);
+  return out;
+}
+
 function fill(text, vars) {
+  // 영어 대사가 빠져 한국어 원문이 온 경우는 한국어 규칙으로
+  if (lang() === "en" && !text.includes("{name}님")) return fillEn(text, vars); // I18N_SKIP: 한국어 대사 꼴 판별용 토큰
   const name = has(vars.name) ? String(vars.name).trim() : "";
   const out = text.replace(/\{name\}님, ?|\{(name|streak|xp|outfit)\}/g, (m, key) => {
-    if (key === undefined) return name ? `${name}님, ` : ""; // 「{name}님, 」 덩어리
+    if (key === undefined) return name ? `${name}님, ` : ""; // 「{name}님, 」 덩어리 — I18N_SKIP: 한국어 대사 전용 갈래(영어는 fillEn)
     if (key === "name") return name;
     return has(vars[key]) ? String(vars[key]) : "";
   });
@@ -40,12 +57,14 @@ function unit(rng) {
 export function say(situation, vars = {}, rng = Math.random, last = null) {
   vars = vars ?? {};
   if (typeof rng !== "function") rng = Math.random;
-  const lines = Array.isArray(LINES[situation]) ? LINES[situation] : [];
+  const raw = Array.isArray(LINES[situation]) ? LINES[situation] : [];
+  // 영어면 같은 번호의 영어 대사(tx line.<상황>.<번호>). 한국어면 표 그대로
+  const lines = raw.map((l, i) => ({ text: tx(`line.${situation}.${i}`, l.text), face: l.face }));
   const ok = lines.map((l, i) => i).filter((i) => usable(lines[i].text, vars));
   // 고를 줄이 둘 이상이면 직전 줄을 뺀다
   const pool = ok.length >= 2 ? ok.filter((i) => i !== last) : ok;
   if (pool.length === 0) {
-    return { text: fill(FALLBACK_LINE.text, vars), face: FALLBACK_LINE.face, index: -1 };
+    return { text: fill(tx("line._fallback.0", FALLBACK_LINE.text), vars), face: FALLBACK_LINE.face, index: -1 };
   }
   const index = pool[Math.min(pool.length - 1, Math.floor(unit(rng) * pool.length))];
   return { text: fill(lines[index].text, vars), face: lines[index].face, index };

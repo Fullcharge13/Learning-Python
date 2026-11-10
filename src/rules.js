@@ -1,6 +1,7 @@
 // 진도 규칙 (작업 2) — 순수 함수만. 실제 시계는 읽지 않고 "YYYY-MM-DD" 문자열을 받는다.
 // 모든 함수는 받은 저장을 고치지 않고, 변화가 없어도 언제나 새 객체를 돌려준다.
 import { ADV_XP, ADV_BYTES } from "./advanced.js";
+import { t } from "./i18n.js";
 
 export const FREEZE_PRICE = 200;
 export const FREEZE_MAX = 2;
@@ -27,7 +28,7 @@ export function isDate(s) {
   return fromDayNum(dayNum(s)) === s;
 }
 function requireDate(today) {
-  if (!isDate(today)) throw new Error(`날짜 형식이 잘못됨: ${String(today)}`);
+  if (!isDate(today)) throw new Error(`날짜 형식이 잘못됨: ${String(today)}`);   // I18N_SKIP 개발자용 예외(화면에 안 나옴)
 }
 function cleanXp(xp) {
   return typeof xp === "number" && Number.isFinite(xp) && xp > 0 ? xp : 0;
@@ -157,8 +158,8 @@ export function earnXp(save, xp, today) {
 
 // ---- 보호권 구매 ----
 export function buyFreeze(save) {
-  if (save.freezes >= FREEZE_MAX) return new Error("보호권은 최대 2개까지 가질 수 있어요");
-  if (save.bytes < FREEZE_PRICE) return new Error("바이트가 모자라요");
+  if (save.freezes >= FREEZE_MAX) return new Error(t`보호권은 최대 2개까지 가질 수 있어요`);
+  if (save.bytes < FREEZE_PRICE) return new Error(t`바이트가 모자라요`);
   return { ...save, bytes: save.bytes - FREEZE_PRICE, freezes: save.freezes + 1 };
 }
 
@@ -167,7 +168,7 @@ const DELTA = { wrong: 2, hint: 1, right: -1 };
 
 export function markConcept(save, concept, outcome) {
   if (typeof outcome !== "string" || !Object.hasOwn(DELTA, outcome)) {
-    throw new Error(`알 수 없는 결과: ${String(outcome)}`);
+    throw new Error(`알 수 없는 결과: ${String(outcome)}`);   // I18N_SKIP 개발자용 예외(화면에 안 나옴)
   }
   const prev = Object.hasOwn(save.weak_concepts, concept) ? save.weak_concepts[concept] : 0;
   const score = Math.max(0, prev + DELTA[outcome]);

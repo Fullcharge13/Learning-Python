@@ -3,19 +3,22 @@ import { BADGES } from "../../data/badges.js";
 import { CONCEPTS } from "../../data/concepts.js";
 import { esc } from "./dom.js";
 import { tabBar, bindTabs, gardenTabOf, statusBar } from "./nav.js";
+import { t, tx, tp } from "../i18n.js";
 
+// 글자가 말인 배지 그림은 함수(그릴 때 지금 언어로)
 const ART = {
-  first_print: ["teal", ">_"], ch1: ["teal", "1장"], ch2: ["teal", "2장"], ch3: ["teal", "3장"],
-  streak7: ["coral", "7일"], streak30: ["coral", "30일"], streak100: ["coral", "100"],
+  first_print: ["teal", ">_"], ch1: ["teal", () => t`1장`], ch2: ["teal", () => t`2장`], ch3: ["teal", () => t`3장`],
+  streak7: ["coral", () => t`7일`], streak30: ["coral", () => t`30일`], streak100: ["coral", "100"],
   fixer: ["navy", "fix"], hintfree10: ["navy", "10"], perfectionist: ["sun", "★"],
-  reviewer: ["navy", "30"], collector: ["sun", "3벌"], night_owl: ["navy", "☾"],
+  reviewer: ["navy", "30"], collector: ["sun", () => t`3벌`], night_owl: ["navy", "☾"],
   advanced1: ["teal", "A+"], advancedAll: ["sun", "A★"],   // v0.7 심화
 };
 const COL = { teal: ["#1F9E93", "#12756D"], coral: ["#F08A5D", "#C4512F"], navy: ["#3C5170", "#1F2B3D"], sun: ["#FFD43B", "#C99A00"] };
 
 /** 코드로 그린 배지. 얻기 전에는 회색 실루엣 */
 export function badgeArt(id, earned, size = 64) {
-  const [c, glyph] = ART[id] || ["navy", "?"];
+  const [c, g] = ART[id] || ["navy", "?"];
+  const glyph = typeof g === "function" ? g() : g;
   const [fill, edge] = earned ? COL[c] : ["#E4DCCB", "#C9BEA6"];
   const ink = earned ? (c === "sun" ? "#3A2E00" : "#FFFFFF") : "#9A8F78";
   const fs = glyph.length >= 3 ? 15 : glyph.length === 2 ? 17 : 22;
@@ -42,31 +45,31 @@ export function render(root, ctx) {
   root.innerHTML = `<div class="screen badges with-tabs">
     ${statusBar(s)}
     <main>
-      <h1 class="page-title">배지 <small>${have.size}/${BADGES.length}</small></h1>
+      <h1 class="page-title">${t`배지`} <small>${have.size}/${BADGES.length}</small></h1>
       <ul class="badge-grid">${BADGES.map((b) => {
         const e = have.has(b.id);
         return `<li class="badge${e ? " earned" : ""}">
           ${badgeArt(b.id, e)}
-          <span class="b-name">${esc(b.name)}</span>
-          <span class="b-desc">${e ? "얻었어요" : esc(b.desc)}</span>
+          <span class="b-name">${esc(tx(`badge.${b.id}.name`, b.name))}</span>
+          <span class="b-desc">${e ? t`얻었어요` : esc(tx(`badge.${b.id}.desc`, b.desc))}</span>
         </li>`;
       }).join("")}</ul>
       <section class="panel">
-        <h2>학습 기록</h2>
+        <h2>${t`학습 기록`}</h2>
         <dl class="stat-grid">
-          <div><dt>끝낸 레슨</dt><dd>${n(mainDone)}<small>/${ctx.lessons.length}</small></dd></div>
-          ${advTotal ? `<div><dt>끝낸 심화</dt><dd>${n(advDone)}<small>/${advTotal}</small></dd></div>` : ""}
-          <div><dt>맞힌 문제</dt><dd>${n(st.items)}</dd></div>
-          <div><dt>실수 없는 레슨</dt><dd>${n(st.perfect)}</dd></div>
-          <div><dt>힌트 없이 통과</dt><dd>${n(st.hintfree)}</dd></div>
-          <div><dt>오류 고쳐 통과</dt><dd>${n(st.fixed)}</dd></div>
-          <div><dt>복습 문제</dt><dd>${n(st.review_items)}</dd></div>
-          <div><dt>최고 연속 기록</dt><dd>${n(s.streak.best)}<small>일</small></dd></div>
-          <div><dt>모은 XP</dt><dd>${n(s.xp)}</dd></div>
+          <div><dt>${t`끝낸 레슨`}</dt><dd>${n(mainDone)}<small>/${ctx.lessons.length}</small></dd></div>
+          ${advTotal ? `<div><dt>${t`끝낸 심화`}</dt><dd>${n(advDone)}<small>/${advTotal}</small></dd></div>` : ""}
+          <div><dt>${t`맞힌 문제`}</dt><dd>${n(st.items)}</dd></div>
+          <div><dt>${t`실수 없는 레슨`}</dt><dd>${n(st.perfect)}</dd></div>
+          <div><dt>${t`힌트 없이 통과`}</dt><dd>${n(st.hintfree)}</dd></div>
+          <div><dt>${t`오류 고쳐 통과`}</dt><dd>${n(st.fixed)}</dd></div>
+          <div><dt>${t`복습 문제`}</dt><dd>${n(st.review_items)}</dd></div>
+          <div><dt>${t`최고 연속 기록`}</dt><dd>${n(s.streak.best)}<small>${tp("unit-day", "일", s.streak.best)}</small></dd></div>
+          <div><dt>${t`모은 XP`}</dt><dd>${n(s.xp)}</dd></div>
         </dl>
-        <h3>자주 틀린 개념</h3>
-        ${weak.length ? `<ol class="weak">${weak.map(([id]) => `<li>${esc((CONCEPTS.find((c) => c.id === id) || { name: id }).name)}</li>`).join("")}</ol>`
-          : `<p class="muted">아직 없어요. 틀린 문제가 생기면 여기에 모여요.</p>`}
+        <h3>${t`자주 틀린 개념`}</h3>
+        ${weak.length ? `<ol class="weak">${weak.map(([id]) => `<li>${esc(tx(`concept.${id}.name`, (CONCEPTS.find((c) => c.id === id) || { name: id }).name))}</li>`).join("")}</ol>`
+          : `<p class="muted">${t`아직 없어요. 틀린 문제가 생기면 여기에 모여요.`}</p>`}
       </section>
     </main>
     ${tabBar("badges", gardenTabOf(ctx))}

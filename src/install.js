@@ -4,6 +4,8 @@
 // - 앱 안 브라우저(카카오톡·네이버·인스타그램·페이스북·라인): 사파리로 열라는 짧은 안내("inapp")
 // - iOS용 크롬·파이어폭스·엣지와 그 밖의 기기: 안내 없음
 
+import { t } from "./i18n.js";
+
 export const INSTALL_HINT_KEY = "ria-python.installHint";
 
 const IN_APP = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|\bLine\//;
@@ -39,4 +41,6 @@ export function shouldShowInstallHint(o) {
 }
 
 // 홈 화면 앱은 사파리와 저장 공간이 따로라서, 처음 한 번은 인터넷이 될 때 열어야 파일을 받아 둔다(판정 C32)
-export const INSTALL_AFTER_TEXT = "추가한 뒤, 인터넷이 될 때 아이콘으로 한 번 열어 주세요. 그래야 비행기 모드에서도 열려요.";
+// 한국어 원문(시험용). 화면에는 installAfterText()로 낸다
+export const INSTALL_AFTER_TEXT = "추가한 뒤, 인터넷이 될 때 아이콘으로 한 번 열어 주세요. 그래야 비행기 모드에서도 열려요."; // I18N_SKIP: 한국어 원문 상수, 화면은 installAfterText()
+export const installAfterText = () => t`추가한 뒤, 인터넷이 될 때 아이콘으로 한 번 열어 주세요. 그래야 비행기 모드에서도 열려요.`;

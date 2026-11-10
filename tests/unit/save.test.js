@@ -27,7 +27,7 @@ const LEDGER_SHAPE = {
   quests: { date: null, ids: [], progress: {}, done: [], chest: false },
   badges: [], outfits: ["basic"], outfit: "basic",
   stats: { lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0 },
-  settings: { sound: true, dailyGoal: 20, name: "" },
+  settings: { sound: true, dailyGoal: 20, name: "", lang: "ko" },
   pending_refund: 0,
   seen_updates: {}, // v0.7.1: 「새 내용」 점 — 다시 본 판 { 레슨 id: "v0.7.1" } (saveVer 그대로)
   daily: { date: null, picks: [], done: [], streak: 0, best: 0, last_done_date: null }, // v0.9 매일 도전(saveVer 그대로)
@@ -80,7 +80,7 @@ test("migrate: fills missing nested fields, keeps existing values", () => {
   assert.equal(s.saveVer, 2);
   assert.deepEqual(s.completed_lessons, ["1-1"]);
   assert.deepEqual(s.streak, { days: 3, best: 0, lastGoalDate: "2026-10-28", todayDate: null, todayXp: 0 });
-  assert.deepEqual(s.settings, { sound: false, dailyGoal: 20, name: "" });
+  assert.deepEqual(s.settings, { sound: false, dailyGoal: 20, name: "", lang: "ko" });
   assert.deepEqual(s.stats, LEDGER_SHAPE.stats);
   assert.deepEqual(s.quests, LEDGER_SHAPE.quests);
 });
@@ -458,4 +458,19 @@ test("migrate v0.9: 깨진 daily 값은 고침, 맞는 값은 그대로", () => 
   const st = fakeStorage();
   store(st, { ...newSave(), daily: good });
   assert.deepEqual(load(st).daily, good);
+});
+
+test("v0.13.0 settings.lang: 옛 저장은 ko, 모르는 값은 ko, en은 그대로", () => {
+  assert.equal(newSave().settings.lang, "ko");
+  assert.equal(migrate({ saveVer: 2, settings: { sound: true } }).settings.lang, "ko");
+  assert.equal(migrate({ saveVer: 2, settings: { lang: "fr" } }).settings.lang, "ko");
+  assert.equal(migrate({ saveVer: 2, settings: { lang: 3 } }).settings.lang, "ko");
+  assert.equal(migrate({ saveVer: 2, settings: { lang: "en" } }).settings.lang, "en");
+});
+
+test("v0.13.0 loadEx.fresh: 저장이 아예 없을 때만 true(처음 여는 사람 → 휴대폰 언어)", () => {
+  const mem = (v) => ({ getItem: () => v, setItem() {}, removeItem() {} });
+  assert.equal(loadEx(mem(null)).fresh, true);
+  assert.equal(loadEx(mem(JSON.stringify(newSave()))).fresh, false);
+  assert.equal(loadEx(mem("{broken")).fresh, false);
 });

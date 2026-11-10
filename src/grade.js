@@ -3,6 +3,7 @@
 import { OUTFITS } from "../data/outfits.js";
 import { ERRORS, ERROR_ALIASES } from "../data/errors.js";
 import { chartMismatch } from "./chart.js";
+import { t, tx, lang } from "./i18n.js";
 
 // 줄마다 오른쪽 공백 제거, \r\n → \n, 끝 줄바꿈 제거.
 export function normalize(text) {
@@ -46,13 +47,16 @@ function fill(text, line, type, seconds) {
   let s = String(text);
   if (line == null) {
     // 줄 번호가 있을 때만 말이 되는 부분을 빼고, 줄을 「코드 어딘가」로 바꾼다(data/errors.js 머리말).
-    s = s.replace(/\[\[[^\]]*\]\]/g, "").replace(/\{line\}번째 줄/g, "코드 어딘가");
+    // 영어판 문구는 「line {line}」을 쓰고, 없으면 「somewhere in your code」(문장 첫머리 Line이면 대문자로).
+    const where = t`코드 어딘가`;
+    const lineRe = lang() === "en" ? /\b[Ll]ine \{line\}/g : /\{line\}번째 줄/g;
+    s = s.replace(/\[\[[^\]]*\]\]/g, "").replace(lineRe, (m) => (m[0] === "L" ? where[0].toUpperCase() + where.slice(1) : where));
   } else {
     s = s.replace(/\[\[|\]\]/g, "");
   }
   return s
     .replace(/\{line\}/g, line == null ? "" : String(line))
-    .replace(/\{type\}/g, type || "오류")
+    .replace(/\{type\}/g, type || t`오류`)
     .replace(/\{seconds\}/g, String(seconds));
 }
 
@@ -69,6 +73,8 @@ export function explain(error, outfit, opts = {}) {
   const entry = ERRORS[key];
   const o = typeof outfit === "string" ? OUTFITS.find((x) => x.id === outfit) : null;
   const voice = o && o.voice;   // 탐험가 → "detective" (판정 C42)
-  const body = voice && typeof entry[voice] === "string" ? entry[voice] : entry.body;
-  return { title: fill(entry.title, line, type, seconds), body: fill(body, line, type, seconds), line };
+  // 영어판: 같은 칸 이름으로 tx("error.<종류>.title|body|detective")에서 찾는다(없으면 한국어 원문)
+  const body = voice && typeof entry[voice] === "string" ? tx(`error.${key}.${voice}`, entry[voice]) : tx(`error.${key}.body`, entry.body);
+  const title = tx(`error.${key}.title`, entry.title);
+  return { title: fill(title, line, type, seconds), body: fill(body, line, type, seconds), line };
 }

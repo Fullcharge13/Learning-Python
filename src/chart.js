@@ -9,10 +9,14 @@
 //       chart가 객체면 그림이 정확히 1개, 목록이면 같은 수·같은 차례여야 한다.
 //       선(series): 선 수·차례·값, 기대에 name이 적혀 있으면 이름도. 선 하나끼리는 예전 말(「그래프 값이 달라요」).
 
+import { t, lang } from "./i18n.js";
+
 export const CHART_MAX = 3;
 export const LINES_MAX = 3;
-const KINDS = { bar: "막대 그래프", line: "꺾은선 그래프" };
-const TEXT_KEYS = [["title", "그래프 제목이 달라요"], ["xlabel", "가로축 이름이 달라요"], ["ylabel", "세로축 이름이 달라요"]];
+// 종류 이름·틀린 까닭은 읽을 때마다 언어를 따른다(영어판 v0.13.0)
+const KINDS = { bar: () => t`막대 그래프`, line: () => t`꺾은선 그래프` };
+const kindName = (k) => (Object.hasOwn(KINDS, k) ? KINDS[k]() : null);
+const TEXT_KEYS = [["title", () => t`그래프 제목이 달라요`], ["xlabel", () => t`가로축 이름이 달라요`], ["ylabel", () => t`세로축 이름이 달라요`]];
 
 function esc(v) {
   return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -36,7 +40,7 @@ export function cleanCharts(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
   for (const c of list) {
-    if (!c || typeof c !== "object" || !KINDS[c.kind] || !Array.isArray(c.labels) || !c.labels.length) continue;
+    if (!c || typeof c !== "object" || !Object.hasOwn(KINDS, c.kind) || !Array.isArray(c.labels) || !c.labels.length) continue;
     const n = c.labels.length;
     let g;
     if (c.series != null) {
@@ -56,28 +60,28 @@ export function cleanCharts(list) {
 }
 
 function oneMismatch(exp, got) {
-  if (exp.kind != null && exp.kind !== got.kind) return `그래프 종류가 달라요(기대: ${KINDS[exp.kind] || exp.kind})`;
+  if (exp.kind != null && exp.kind !== got.kind) return t`그래프 종류가 달라요(기대: ${kindName(exp.kind) || exp.kind})`;
   if (exp.labels != null) {
     const a = exp.labels.map(String), b = (got.labels || []).map(String);
-    if (a.length !== b.length || a.some((x, i) => x !== b[i])) return "그래프 이름(가로축 항목)이 달라요";
+    if (a.length !== b.length || a.some((x, i) => x !== b[i])) return t`그래프 이름(가로축 항목)이 달라요`;
   }
   if (exp.values != null || exp.series != null) {
     const es = linesOf(exp), gs = linesOf(got);
     const sameVals = (a, b) => a.length === b.length && a.every((x, i) => sameNumber(x, b[i]));
     if (es.length === 1 && gs.length === 1) {
-      if (es[0].name != null && String(es[0].name).trim() !== String(gs[0].name ?? "").trim()) return "선 이름이 달라요";
-      if (!sameVals(es[0].values || [], gs[0].values || [])) return "그래프 값이 달라요";
+      if (es[0].name != null && String(es[0].name).trim() !== String(gs[0].name ?? "").trim()) return t`선 이름이 달라요`;
+      if (!sameVals(es[0].values || [], gs[0].values || [])) return t`그래프 값이 달라요`;
     } else if (es.length !== gs.length) {
-      return `선 개수가 달라요(기대 ${es.length}개, 내 코드 ${gs.length}개)`;
+      return t`선 개수가 달라요(기대 ${es.length}개, 내 코드 ${gs.length}개)`;
     } else {
       for (let i = 0; i < es.length; i++) {
-        if (es[i].name != null && String(es[i].name).trim() !== String(gs[i].name ?? "").trim()) return `${i + 1}번째 선 이름이 달라요`;
-        if (!sameVals(es[i].values || [], gs[i].values || [])) return `${i + 1}번째 선 값이 달라요`;
+        if (es[i].name != null && String(es[i].name).trim() !== String(gs[i].name ?? "").trim()) return t`${i + 1}번째 선 이름이 달라요`;
+        if (!sameVals(es[i].values || [], gs[i].values || [])) return t`${i + 1}번째 선 값이 달라요`;
       }
     }
   }
   for (const [k, msg] of TEXT_KEYS) {
-    if (exp[k] != null && String(exp[k]).trim() !== String(got[k] ?? "").trim()) return msg;
+    if (exp[k] != null && String(exp[k]).trim() !== String(got[k] ?? "").trim()) return msg();
   }
   return null;
 }
@@ -86,11 +90,11 @@ function oneMismatch(exp, got) {
 export function chartMismatch(expected, charts) {
   const want = Array.isArray(expected) ? expected : [expected];
   const got = Array.isArray(charts) ? charts : [];
-  if (!got.length) return "그래프가 그려지지 않았어요. 마지막에 chart.show()를 불렀는지 확인해 봐요";
-  if (got.length !== want.length) return `그래프 개수가 달라요(기대 ${want.length}개, 내 코드 ${got.length}개)`;
+  if (!got.length) return t`그래프가 그려지지 않았어요. 마지막에 chart.show()를 불렀는지 확인해 봐요`;
+  if (got.length !== want.length) return t`그래프 개수가 달라요(기대 ${want.length}개, 내 코드 ${got.length}개)`;
   for (let i = 0; i < want.length; i++) {
     const why = oneMismatch(want[i] || {}, got[i] || {});
-    if (why) return want.length > 1 ? `${i + 1}번째 ${why}` : why;
+    if (why) return want.length > 1 ? t`${i + 1}번째 ${why}` : why;
   }
   return null;
 }
@@ -101,15 +105,15 @@ export function fmtNum(v) {
   return String(parseFloat(Number(v).toPrecision(6)));
 }
 
-const lineName = (s, i) => (s.name != null ? String(s.name) : `선 ${i + 1}`);
+const lineName = (s, i) => (s.name != null ? String(s.name) : t`선 ${i + 1}`);
 
 /** 읽기 프로그램·글로 보는 설명: 「막대 그래프 「제목」(가로축 x, 세로축 y): 사과 3, 배 5」
  *  여러 선: 「꺾은선 그래프: 월, 화 / 철수: 3, 5 / 영희: 1, 2」 */
 export function chartText(c) {
-  let s = KINDS[c.kind] || "그래프";
-  if (c.title) s += ` 「${c.title}」`;
-  const ax = [c.xlabel ? `가로축 ${c.xlabel}` : "", c.ylabel ? `세로축 ${c.ylabel}` : ""].filter(Boolean);
-  if (ax.length) s += `(${ax.join(", ")})`;
+  let s = kindName(c.kind) || t`그래프`;
+  if (c.title) s = t`${s} 「${c.title}」`;
+  const ax = [c.xlabel ? t`가로축 ${c.xlabel}` : "", c.ylabel ? t`세로축 ${c.ylabel}` : ""].filter(Boolean);
+  if (ax.length) s += (lang() === "en" ? " " : "") + `(${ax.join(", ")})`;
   if (Array.isArray(c.series)) {
     return s + ": " + [c.labels.join(", "), ...c.series.map((ln, i) => `${lineName(ln, i)}: ${ln.values.map(fmtNum).join(", ")}`)].join(" / ");
   }

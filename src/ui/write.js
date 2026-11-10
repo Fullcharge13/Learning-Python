@@ -5,6 +5,7 @@ import { esc, icon, codeBlock, filesNote, chartNote } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { missingMessage } from "../shuffle.js";
 import { keyboardOpen, nextBaseHeight, SYMBOL_ORDER, padStarter } from "../kbd.js";
+import { t, lang } from "../i18n.js";
 
 const SYSTEM_ERRORS = new Set(["LoadError", "WorkerError", "NotReady"]);
 
@@ -21,12 +22,12 @@ export const DRAFT_DEBOUNCE_MS = 500;
 // over({ title, text }, 선택): 화면 전용 설명(예: 텃밭 gardenExplain)이 있으면 일반 설명 대신 쓴다
 export function errorPanel(err, outfit, over = null) {
   const ex = over ? { title: over.title, body: over.text } : explain(err, outfit);
-  const orig = err.type === "Timeout" ? "Timeout: 3초 안에 끝나지 않음"
+  const orig = err.type === "Timeout" ? `Timeout: ${t`3초 안에 끝나지 않음`}`
     : `${err.type}${err.msg ? ": " + err.msg : ""}`;
   // 앱이 만든 한국어 오류 문구(차트 등)는 일반 설명보다 먼저 그대로 보여 준다
   const own = !over && /[가-힣]/.test(err.msg || "") ? `<p class="err-own">${esc(err.msg)}</p>` : "";
   return `<div class="err-panel">
-      <p class="err-orig mono" lang="en">${esc(orig)}${err.line ? ` <span lang="ko">(${err.line}번째 줄)</span>` : ""}</p>
+      <p class="err-orig mono" lang="en">${esc(orig)}${err.line ? ` <span lang="${lang()}">(${t`${err.line}번째 줄`})</span>` : ""}</p>
       <h3>${icon("cross")}${esc(ex.title)}</h3>
       ${own}<p>${esc(ex.body)}</p>
     </div>`;
@@ -70,23 +71,23 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
   if (exp && task.trimEnd().endsWith("\n" + exp)) task = task.trimEnd().slice(0, -(exp.length + 1));
 
   body.innerHTML = `<article class="item write">
-    <button class="qtoggle" id="qtoggle" aria-expanded="false" aria-controls="taskblock">${icon("book")}<span>문제 보기</span></button>
+    <button class="qtoggle" id="qtoggle" aria-expanded="false" aria-controls="taskblock">${icon("book")}<span>${t`문제 보기`}</span></button>
     <div class="task-block" id="taskblock">
-      <span class="tag code-tag">직접 써 보기</span>
+      <span class="tag code-tag">${t`직접 써 보기`}</span>
       <h1 class="q">${esc(task)}</h1>
       <div class="expect">
-        <p class="ex-label">기대 출력</p>
+        <p class="ex-label">${t`기대 출력`}</p>
         <pre class="out">${esc(normalize(pub.expect))}</pre>
-        ${chartNote(pub.chart, "기대 그래프")}
+        ${chartNote(pub.chart, t`기대 그래프`)}
         ${filesNote(runEnv(item, pub).files)}
-        ${stdinOf(pub) ? `<p class="stdin-note">${icon("send")}<span>입력하는 값: ${stdinOf(pub).split("\n").map((v) => `<code>${esc(v)}</code>`).join(" ")}</span></p>` : ""}
+        ${stdinOf(pub) ? `<p class="stdin-note">${icon("send")}<span>${t`입력하는 값: ${stdinOf(pub).split("\n").map((v) => `<code>${esc(v)}</code>`).join(" ")}`}</span></p>` : ""}
       </div>
     </div>
     <p class="py-chip" id="pychip" hidden></p>
     <div class="editor-box" id="ed"></div>
     <div class="help-row">
-      <button class="btn ghost small" id="hint">${icon("bulb")}<span>힌트 <span id="hn">0</span>/${hints.length}</span></button>
-      <button class="btn ghost small" id="sol">${icon("eye")}<span>정답 보기</span></button>
+      <button class="btn ghost small" id="hint">${icon("bulb")}<span>${t`힌트 ${`<span id="hn">0</span>`}/${hints.length}`}</span></button>
+      <button class="btn ghost small" id="sol">${icon("eye")}<span>${t`정답 보기`}</span></button>
     </div>
     <ol class="hints" id="hints"></ol>
     <section class="console" id="console" aria-live="polite"></section>
@@ -95,16 +96,16 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
 
   foot.innerHTML = `<div class="dock">
     <div class="symwrap">
-      <div class="symbols" role="toolbar" aria-label="기호 넣기">
+      <div class="symbols" role="toolbar" aria-label="${t`기호 넣기`}">
         ${SYMBOL_ORDER.map((sy, i) => sy.act
           ? `<button class="sym word" data-s="${i}" data-act="${esc(sy.act)}"${sy.aria ? ` aria-label="${esc(sy.aria)}"` : ""}>${esc(sy.label)}</button>`
-          : `<button class="sym mono" data-s="${i}" aria-label="${esc(sy.aria || sy.label)} 넣기">${esc(sy.label)}</button>`).join("")}
+          : `<button class="sym mono" data-s="${i}" aria-label="${esc(t`${sy.aria || sy.label} 넣기`)}">${esc(sy.label)}</button>`).join("")}
       </div>
       <span class="sym-more" aria-hidden="true">›</span>
     </div>
     <div class="dock-actions">
-      <button class="btn ghost" id="run">${icon("play")}<span>실행</span></button>
-      <button class="btn primary" id="submit">${icon("check")}<span>제출</span></button>
+      <button class="btn ghost" id="run">${icon("play")}<span>${t`실행`}</span></button>
+      <button class="btn primary" id="submit">${icon("check")}<span>${t`제출`}</span></button>
     </div>
   </div>`;
   foot.classList.add("has-dock");
@@ -119,7 +120,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
   };
   const ed = createEditor(body.querySelector("#ed"), {
     doc: init && typeof init.code === "string" ? init.code : padStarter(item.starter || "", item.solution),
-    label: "코드 입력창. 여기에 Python 코드를 써요", margins, onChange: draftChanged,
+    label: t`코드 입력창. 여기에 Python 코드를 써요`, margins, onChange: draftChanged,
   });
   const consoleEl = body.querySelector("#console");
   const runBtn = foot.querySelector("#run");
@@ -133,11 +134,11 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     chip.hidden = false;
     if (status === "error") {
       chip.className = "py-chip err";
-      chip.innerHTML = `파이썬을 받지 못했어요. 인터넷 연결을 확인해 주세요. <button class="link" id="pyretry">다시 시도</button>`;
+      chip.innerHTML = `${t`파이썬을 받지 못했어요. 인터넷 연결을 확인해 주세요.`} <button class="link" id="pyretry">${t`다시 시도`}</button>`;
       chip.querySelector("#pyretry").addEventListener("click", () => { ctx.py.preload().catch(() => {}); });
     } else {
       chip.className = "py-chip";
-      chip.innerHTML = `<span class="dot" aria-hidden="true"></span>${phase === "restart" ? "다시 준비 중" : "파이썬 준비 중"}`;
+      chip.innerHTML = `<span class="dot" aria-hidden="true"></span>${phase === "restart" ? t`다시 준비 중` : t`파이썬 준비 중`}`;
     }
   }
   paintPy();
@@ -176,7 +177,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       if (!on) {
         document.body.classList.remove("show-task");
         qtoggle.setAttribute("aria-expanded", "false");
-        qtoggle.querySelector("span").textContent = "문제 보기";
+        qtoggle.querySelector("span").textContent = t`문제 보기`;
       }
     }
     if (on) {
@@ -219,7 +220,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     const show = !document.body.classList.contains("show-task");
     document.body.classList.toggle("show-task", show);
     qtoggle.setAttribute("aria-expanded", String(show));
-    qtoggle.querySelector("span").textContent = show ? "문제 접기" : "문제 보기";
+    qtoggle.querySelector("span").textContent = show ? t`문제 접기` : t`문제 보기`;
     place();
   });
   // 줄이 바뀔 때마다 커서 줄이 보이게
@@ -233,11 +234,11 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     return `<div class="ria-row small"><div class="ria-wrap">${riaSVG({ outfit: ctx.save.outfit, face: l.face, size: 56 })}${sfx ? `<span class="sfx" aria-hidden="true">${esc(sfx)}</span>` : ""}</div><p class="bubble">${esc(l.text)}</p></div>`;
   }
   function showRunning() {
-    consoleEl.innerHTML = riaLine("running", "타닥타닥");
+    consoleEl.innerHTML = riaLine("running", t`타닥타닥`);
   }
   function systemError(r) {
-    consoleEl.innerHTML = `<div class="err-panel soft"><h3>파이썬이 아직 준비되지 않았어요</h3>
-      <p>인터넷 연결을 확인하고 잠시 뒤 다시 눌러 주세요. 이번 실행은 제출 횟수에 들어가지 않아요.</p>
+    consoleEl.innerHTML = `<div class="err-panel soft"><h3>${t`파이썬이 아직 준비되지 않았어요`}</h3>
+      <p>${t`인터넷 연결을 확인하고 잠시 뒤 다시 눌러 주세요. 이번 실행은 제출 횟수에 들어가지 않아요.`}</p>
       <p class="err-orig mono" lang="en">${esc(r.error.type)}: ${esc(r.error.msg || "")}</p></div>`;
   }
   function setBusy(b) {
@@ -257,12 +258,12 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       if (st.destroyed) return; // 화면을 떠난 뒤 도착한 결과는 버림
       if (r.error && SYSTEM_ERRORS.has(r.error.type)) { systemError(r); return; }
       const out = normalize(r.stdout);
-      let html = `<p class="ex-label">실행 결과</p><pre class="out${out ? "" : " empty"}">${out ? esc(out) : "(출력 없음)"}</pre>${chartNote(r.charts)}`;
+      let html = `<p class="ex-label">${t`실행 결과`}</p><pre class="out${out ? "" : " empty"}">${out ? esc(out) : t`(출력 없음)`}</pre>${chartNote(r.charts)}`;
       if (r.error) {
         st.hadError = true;
         ed.markLine(r.error.line);
         ctx.sound.play("error");
-        html += errorHTML(r.error) + riaLine("error", "어라?");
+        html += errorHTML(r.error) + riaLine("error", t`어라?`);
       }
       consoleEl.innerHTML = html;
     } finally { if (!st.destroyed) setBusy(false); }
@@ -287,7 +288,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       st.submits++;
       log({ pass: v.pass });
       if (v.pass) {
-        consoleEl.innerHTML = `<p class="pass-line">${icon("check")}시험 ${tests.length}개 모두 통과</p>`;
+        consoleEl.innerHTML = `<p class="pass-line">${icon("check")}${t`시험 ${tests.length}개 모두 통과`}</p>`;
         onPass({ solutionSeen: st.solutionSeen, hintUsed: st.hintsShown > 0, hadError: st.hadError, firstSubmit: st.submits === 1 });
         return;
       }
@@ -298,31 +299,36 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
         st.hadError = true;
         ed.markLine(r.error.line, false);
         ctx.sound.play("error");
-        html = (normalize(r.stdout) ? `<p class="ex-label">실행 결과</p><pre class="out">${esc(normalize(r.stdout))}</pre>` : "") + chartNote(r.charts) + errorHTML(r.error) + riaLine("error", "어라?");
+        html = (normalize(r.stdout) ? `<p class="ex-label">${t`실행 결과`}</p><pre class="out">${esc(normalize(r.stdout))}</pre>` : "") + chartNote(r.charts) + errorHTML(r.error) + riaLine("error", t`어라?`);
       } else if (v.reason === "chart") {
         // 출력은 맞고 그래프가 다름(v0.5 E3): 쉬운 말 + 기대 그래프와 내 그래프
         ctx.sound.play("wrong");
-        const t = tests[v.failedIndex];
-        html = `<div class="err-panel soft"><h3>${icon("cross")}${esc(v.chartWhy)}</h3>${t.public ? "" : `<p>숨은 시험 ${v.failedIndex + 1}번에서 그래프가 달라요.</p>`}</div>`
-          + (t.public ? `<div class="chart-diff">${chartNote(t.chart, "기대 그래프")}${chartNote(r.charts, "내 그래프")}</div>` : chartNote(r.charts, "내 그래프"))
+        const tc = tests[v.failedIndex];
+        html = `<div class="err-panel soft"><h3>${icon("cross")}${esc(v.chartWhy)}</h3>${tc.public ? "" : `<p>${t`숨은 시험 ${v.failedIndex + 1}번에서 그래프가 달라요.`}</p>`}</div>`
+          + (tc.public ? `<div class="chart-diff">${chartNote(tc.chart, t`기대 그래프`)}${chartNote(r.charts, t`내 그래프`)}</div>` : chartNote(r.charts, t`내 그래프`))
           + riaLine("wrong");
       } else if (v.reason === "missing") {
         ctx.sound.play("wrong");
-        html = `<div class="err-panel soft"><h3>${icon("cross")}조건이 하나 남았어요</h3><p>${esc(missingMessage(r.missing))} 같은 결과를 그 방법으로 만들어 볼까요?</p></div>` + riaLine("wrong");
+        html = `<div class="err-panel soft"><h3>${icon("cross")}${t`조건이 하나 남았어요`}</h3><p>${t`${esc(missingMessage(r.missing))} 같은 결과를 그 방법으로 만들어 볼까요?`}</p></div>` + riaLine("wrong");
       } else {
         ctx.sound.play("wrong");
         if (v.publicDiff) {
-          html = `<div class="diff"><div><p class="ex-label">기대 출력</p><pre class="out">${esc(v.publicDiff.expected)}</pre></div>
-            <div><p class="ex-label bad">내 출력</p><pre class="out bad">${v.publicDiff.actual ? esc(v.publicDiff.actual) : "(출력 없음)"}</pre></div></div>
-            <p class="result-explain">${icon("cross")}출력이 기대 출력과 달라요. 띄어쓰기와 기호까지 한 글자씩 비교해 봐요.</p>`;
+          html = `<div class="diff"><div><p class="ex-label">${t`기대 출력`}</p><pre class="out">${esc(v.publicDiff.expected)}</pre></div>
+            <div><p class="ex-label bad">${t`내 출력`}</p><pre class="out bad">${v.publicDiff.actual ? esc(v.publicDiff.actual) : t`(출력 없음)`}</pre></div></div>
+            <p class="result-explain">${icon("cross")}${t`출력이 기대 출력과 달라요. 띄어쓰기와 기호까지 한 글자씩 비교해 봐요.`}</p>`;
         } else {
-          const t = tests[v.failedIndex];
-          const inp = stdinOf(t);
-          html = `<div class="err-panel soft"><h3>${icon("cross")}다른 경우에서 결과가 달라요</h3><p>${inp ? `입력값이 ${esc(inp.split("\n").join(", "))}일 때` : t && t.files ? `파일 내용이 다른 숨은 시험 ${v.failedIndex + 1}번에서` : `숨은 시험 ${v.failedIndex + 1}번에서`} 기대한 출력과 달라요. 입력이 바뀌어도 맞는 코드인지 확인해 봐요.</p></div>`;
+          const tc = tests[v.failedIndex];
+          const inp = stdinOf(tc);
+          // 「…에서/…일 때」와 뒷말은 한 문장이라 경우마다 문장째 옮긴다
+          const no = v.failedIndex + 1;
+          const why = inp ? t`입력값이 ${esc(inp.split("\n").join(", "))}일 때 기대한 출력과 달라요. 입력이 바뀌어도 맞는 코드인지 확인해 봐요.`
+            : tc && tc.files ? t`파일 내용이 다른 숨은 시험 ${no}번에서 기대한 출력과 달라요. 입력이 바뀌어도 맞는 코드인지 확인해 봐요.`
+            : t`숨은 시험 ${no}번에서 기대한 출력과 달라요. 입력이 바뀌어도 맞는 코드인지 확인해 봐요.`;
+          html = `<div class="err-panel soft"><h3>${icon("cross")}${t`다른 경우에서 결과가 달라요`}</h3><p>${why}</p></div>`;
         }
         html += riaLine("wrong");
       }
-      html = `<p class="submit-count">제출 ${st.submits}번째 · 시험 ${tests.length}개 중 ${v.failedIndex}개 통과</p>` + html;
+      html = `<p class="submit-count">${t`제출 ${st.submits}번째 · 시험 ${tests.length}개 중 ${v.failedIndex}개 통과`}</p>` + html;
       consoleEl.innerHTML = html;
       if (st.submits >= 3 && !st.solutionSeen) revealSolution(true);
       notify();
@@ -352,7 +358,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     const isCode = i === hints.length - 1 && /[()"=]/.test(h);
     const li = document.createElement("li");
     li.className = "hint";
-    li.innerHTML = `<span class="hint-no">힌트 ${i + 1}</span>${isCode ? codeBlock(h) : `<p>${esc(h)}</p>`}${i === 1 && showCards ? `<button class="link" data-cards>개념 카드 다시 보기</button>` : ""}`;
+    li.innerHTML = `<span class="hint-no">${t`힌트 ${i + 1}`}</span>${isCode ? codeBlock(h) : `<p>${esc(h)}</p>`}${i === 1 && showCards ? `<button class="link" data-cards>${t`개념 카드 다시 보기`}</button>` : ""}`;
     hintList.appendChild(li);
     const cb = li.querySelector("[data-cards]");
     if (cb) cb.addEventListener("click", showCards);
@@ -370,10 +376,10 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
   function paintSolution(auto) {
     st.solutionSeen = true;
     solEl.hidden = false;
-    solEl.innerHTML = `<h2>${auto ? "세 번 제출했으니 정답을 같이 볼까요?" : "정답과 해설"}</h2>
+    solEl.innerHTML = `<h2>${auto ? t`세 번 제출했으니 정답을 같이 볼까요?` : t`정답과 해설`}</h2>
       ${codeBlock(item.solution || "")}
       ${item.explain ? `<p>${esc(item.explain)}</p>` : ""}
-      <button class="btn ghost small" id="usesol">정답을 입력창에 넣기</button>`;
+      <button class="btn ghost small" id="usesol">${t`정답을 입력창에 넣기`}</button>`;
     solEl.querySelector("#usesol").addEventListener("click", () => { ed.setCode(item.solution || ""); ed.focus(); });
     body.querySelector("#sol").disabled = true;
   }

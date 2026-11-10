@@ -12,11 +12,14 @@
 // 아래 judgeInstance와 같은 규칙으로 모든 씨앗이 TEMPLATE_ATTEMPTS번 안에 문제가 되는지 확인한다.
 // 앱은 씨앗을 0~99에서만 고르므로 학습자가 받는 문제는 모두 점검기가 미리 돌려 본 것이다.
 import { normalize } from "./grade.js";
+import { t } from "./i18n.js";
 
 export const TEMPLATE_SEEDS = 100;
 export const TEMPLATE_ATTEMPTS = 5;
 export const OPTION_COLS = 30;               // 보기 한 줄 폭(한글 2칸) — 점검기와 같은 값
-export const ERROR_OPTION = "오류가 나요";   // 오답 코드가 오류를 내면 이 보기
+// 오답 코드가 오류를 내면 이 보기. 화면에는 errorOption()(언어 따름)을 쓴다
+export const ERROR_OPTION = "오류가 나요";   // I18N_SKIP 한국어 기준값(tests/content.py와 같은 값), 화면은 errorOption()
+export const errorOption = () => t`오류가 나요`;
 export const OUT_KEY = "OUT";
 const VAR_RE = /\{([A-Z][A-Z0-9_]*)\}/g;
 
@@ -99,7 +102,7 @@ export function judgeInstance(inst, results) {
         explain: fillOut(inst.explain), ...(inst.stdin ? { stdin: inst.stdin } : {}) },
     };
   }
-  const opts = results.map((r) => { const t = outText(r); return t === null ? ERROR_OPTION : t; });
+  const opts = results.map((r) => { const o = outText(r); return o === null ? errorOption() : o; });
   if (opts.some((o) => o.includes("\n"))) return { ok: false, why: "multiline" };
   if (opts.some((o) => !o.trim())) return { ok: false, why: "empty" };
   if (opts.some((o) => textWidth(o) > OPTION_COLS)) return { ok: false, why: "wide" };

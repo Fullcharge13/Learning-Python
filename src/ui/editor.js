@@ -4,6 +4,7 @@ import { EditorState, StateField, StateEffect } from "@codemirror/state";
 import { defaultKeymap, history, historyKeymap, indentMore, indentLess, indentWithTab, insertNewlineAndIndent } from "@codemirror/commands";
 import { indentOnInput, syntaxHighlighting, defaultHighlightStyle, bracketMatching, indentUnit } from "@codemirror/language";
 import { python } from "@codemirror/lang-python";
+import { t } from "../i18n.js";
 
 // 안드로이드 입력 방식은 CodeMirror 기본(크롬 EditContext)을 그대로 둔다. v0.12.2에서 엔터 문제 때문에 껐더니
 // 삼성 키보드(천지인)에서 글자가 거의 입력되지 않았다(실기기 제보, v0.12.3에서 되돌림, C73). 끄지 말 것.
@@ -57,7 +58,7 @@ const theme = EditorView.theme({
 
 /** @returns {{ view, getCode, setCode, focus, markLine, insert, indent, dedent, destroy }} */
 // margins(): 화면에 고정된 머리 줄·아래 줄이 가리는 높이 { top, bottom }. 커서를 보이게 스크롤할 때 이만큼 비켜 둔다(C30)
-export function createEditor(parent, { doc = "", label = "코드 입력창", onChange, margins } = {}) {
+export function createEditor(parent, { doc = "", label = t`코드 입력창`, onChange, margins } = {}) {
   const view = new EditorView({
     parent,
     state: EditorState.create({

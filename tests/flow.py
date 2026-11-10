@@ -3020,7 +3020,7 @@ def main():
 
 def test_android_newline():
     """v0.12.2 (갤럭시 S25 제보): 안드로이드에서 세 번째 줄을 만들 수 있어야 한다.
-    ① 안드로이드는 EditContext를 쓰지 않음 ② 「↵ 줄 바꿈」 단추가 새 줄을 만듦(키보드 초점 유지)
+    ① 안드로이드는 EditContext를 그대로 씀(v0.12.3, 끄면 글자 입력이 망가짐) ② 「↵ 줄 바꿈」 단추가 새 줄을 만듦(키보드 초점 유지)
     ③ 처음 코드가 정답 줄 수만큼 빈 줄로 열림."""
     LINES = "() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent)"
     fails = []
@@ -3034,8 +3034,11 @@ def test_android_newline():
             have = len(a.js(LINES))
             if have < need:
                 fails.append("%s: opened with %d lines, solution has %d" % (dev, have, need))
-            if a.js("() => !!document.querySelector('.cm-content').editContext"):
-                fails.append("%s: EditContext still on" % dev)
+            # v0.12.3: 안드로이드는 CodeMirror 기본(EditContext)을 그대로 쓴다. 끄면 삼성 키보드(천지인)에서
+            # 글자가 거의 입력되지 않는다는 실기기 제보(C73). 다시 끄지 못하게 지킨다.
+            ec = a.js("() => !!document.querySelector('.cm-content').editContext")
+            if dev.startswith("Galaxy") and not ec:
+                fails.append("%s: EditContext is off (must stay on for Android, C73)" % dev)
             a.set_code("a = 1\nb = 2")
             a.page.click("#foot .sym[data-act=newline]")
             a.page.wait_for_timeout(150)

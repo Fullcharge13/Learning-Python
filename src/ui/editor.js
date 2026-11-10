@@ -5,9 +5,8 @@ import { defaultKeymap, history, historyKeymap, indentMore, indentLess, indentWi
 import { indentOnInput, syntaxHighlighting, defaultHighlightStyle, bracketMatching, indentUnit } from "@codemirror/language";
 import { python } from "@codemirror/lang-python";
 
-// v0.12.2 (갤럭시 S25 제보: 세 번째 줄을 만들 수 없음): CodeMirror는 안드로이드에서만 크롬의 EditContext 입력을 쓰는데,
-// 삼성 키보드에서 엔터가 무시되는 사례가 있다. 오래 써 온 예전 입력 방식(contenteditable)으로 돌린다.
-EditorView.EDIT_CONTEXT = false;
+// 안드로이드 입력 방식은 CodeMirror 기본(크롬 EditContext)을 그대로 둔다. v0.12.2에서 엔터 문제 때문에 껐더니
+// 삼성 키보드(천지인)에서 글자가 거의 입력되지 않았다(실기기 제보, v0.12.3에서 되돌림, C73). 끄지 말 것.
 
 const setErr = StateEffect.define();
 const errLine = Decoration.line({ class: "cm-errline" });

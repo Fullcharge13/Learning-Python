@@ -18,7 +18,10 @@ const ANDROID_STEPS = () => [
   [ADD, t`「홈 화면에 추가」 또는 「앱 설치」를 골라요`],
   [INSTALL(), t`「설치」 또는 「추가」를 눌러요`],
 ];
-const ANDROID_WHY = () => t`홈 화면 아이콘으로 앱처럼 바로 열리고, 주소창 없이 화면을 넓게 써요.`;
+// v0.14.2: 안드로이드는 크롬과 홈 화면 앱이 같은 기록을 써서 다시 열 필요는 없고, 7일 지움도 없다.
+// 대신 크롬에서 쿠키·사이트 데이터를 지우면 진도도 지워진다
+const ANDROID_AFTER = () => t`크롬과 홈 화면 앱은 같은 기록을 써요. 설정에 「오프라인 준비 완료」가 보이면 비행기 모드에서도 열려요.`;
+const ANDROID_WHY = () => t`크롬에서 「인터넷 사용 기록 삭제」로 쿠키·사이트 데이터를 지우면 기록도 함께 지워져요. 가끔 설정의 「저장 내보내기」로 백업해 두세요.`;
 
 const STEPS = () => [
   [SHARE, t`공유 버튼(안 보이면 ··· 메뉴 안)을 눌러요`],
@@ -48,6 +51,7 @@ function safariBody(outfit, first = "ios") {
         </section>
         <section class="ins-panel" id="ins-android" data-p="android" role="tabpanel" aria-labelledby="ins-tab-android"${first === "android" ? "" : " hidden"}>
           ${stepList(ANDROID_STEPS())}
+          <p class="ins-after">${icon("play")}<span>${esc(ANDROID_AFTER())}</span></p>
           <p class="ins-why">${esc(ANDROID_WHY())}</p>
         </section>`;
 }

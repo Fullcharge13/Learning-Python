@@ -232,8 +232,9 @@
  "크롬 오른쪽 위 ⋮ 메뉴를 눌러요": "Tap the ⋮ menu at the top right of Chrome",
  "「홈 화면에 추가」 또는 「앱 설치」를 골라요": "Choose “Add to Home screen” or “Install app”",
  "「설치」 또는 「추가」를 눌러요": "Tap “Install” or “Add”",
- "홈 화면 아이콘으로 앱처럼 바로 열리고, 주소창 없이 화면을 넓게 써요.": "It opens like an app from your Home Screen, with no address bar and more room on screen.",
  "휴대폰 종류": "Phone type",
  "아이폰 (사파리)": "iPhone (Safari)",
- "안드로이드 (크롬)": "Android (Chrome)"
+ "안드로이드 (크롬)": "Android (Chrome)",
+ "크롬과 홈 화면 앱은 같은 기록을 써요. 설정에 「오프라인 준비 완료」가 보이면 비행기 모드에서도 열려요.": "Chrome and the Home Screen app share the same progress. Once Settings shows “Ready to use offline”, it opens in airplane mode too.",
+ "크롬에서 「인터넷 사용 기록 삭제」로 쿠키·사이트 데이터를 지우면 기록도 함께 지워져요. 가끔 설정의 「저장 내보내기」로 백업해 두세요.": "If you clear cookies and site data in Chrome (“Delete browsing data”), your progress is deleted too. Back it up now and then with “Export Save” in Settings."
 }

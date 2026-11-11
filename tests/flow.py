@@ -3582,8 +3582,18 @@ def test_install_sheet_platforms():
             steps = a.js("() => [...document.querySelectorAll('.ins-panel:not([hidden]) .ins-steps li')].length")
             if steps != 3:
                 fails.append("%s %s: %d steps" % (dev, loc, steps))
-            if first == "android" and "⋮" not in a.page.inner_text(".ins-panel:not([hidden])"):
-                fails.append("%s %s: android steps lack the ⋮ menu" % (dev, loc))
+            if first == "android":
+                txt = a.page.inner_text(".ins-panel:not([hidden])")
+                if "⋮" not in txt:
+                    fails.append("%s %s: android steps lack the ⋮ menu" % (dev, loc))
+                # v0.14.2: 안드로이드도 비행기 모드(초록)·기록 주의(노랑) 안내
+                boxes = a.js("() => [...document.querySelectorAll('#ins-android .ins-after, #ins-android .ins-why')].map(e => e.className.split(' ')[0])")
+                if boxes != ["ins-after", "ins-why"]:
+                    fails.append("%s %s: android boxes %r" % (dev, loc, boxes))
+                want = ("비행기 모드", "사이트 데이터", "저장 내보내기") if loc == "ko-KR" else ("airplane mode", "site data", "Export")
+                for w in want:
+                    if w not in txt:
+                        fails.append("%s %s: android text lacks %r" % (dev, loc, w))
             if loc == "en-US":
                 left = _hangul_left(a, ["한국어"])
                 if left:

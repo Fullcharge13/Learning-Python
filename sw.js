@@ -5,19 +5,27 @@
 //   저장본은 설치 때만 채운다(받은 새 판을 옛 저장본에 섞지 않음 → 오프라인은 언제나 한 판이 통째로).
 // - Pyodide 파일(주소가 PYODIDE_PREFIX로 시작): 저장본 먼저 → 없으면 받아서 저장. 버전 고정 주소라 바뀌지 않음.
 // - 장 파일(lessons/chN-<지문8자>.json, v0.3 작업 1): 설치 때 모두 미리 받음(하나가 실패해도 설치는 계속, 처음 열 때 받음).
-//   영어 장(lessons/en/, v0.13.4)은 미리 받지 않고 처음 열 때 받아 저장한다.
 //   이름에 내용 지문이 있어 바뀌지 않으므로 저장본 먼저. 게임 저장본에 함께 들어 있어 새 판 활성화 때 함께 지워진다.
+//   Python 실행기(py/runner-<지문>.py, v0.14.0 판정 C80)도 같은 방법(설치 때 미리 받음).
+// - 영어 장(lessons/en/, v0.14.0 판정 C81): 설치 때 미리 받지 않고, 처음 열 때·영어 사용자의 앱이 미리 받을 때
+//   판과 상관없는 저장소(ria-lang-en)에 넣는다. 새 판이 켜지면 그 판 목록에 없는 옛 영어 장만 지운다.
 // - GET이 아닌 요청, 다른 주소의 요청은 건드리지 않는다.
 // - 게임 저장본 이름에 판 번호와 내용 지문이 들어 있어, 새 판을 올리면 활성화 때 옛 저장본을 지운다.
 //   Pyodide 저장본은 Pyodide 버전으로만 이름이 바뀐다(판을 올려도 10MB를 다시 받지 않게).
 
-const VERSION = "v0.13.6";
-const GAME_CACHE = "ria-game-v0.13.6-7e8889ae5c";
+const VERSION = "v0.14.0";
+const GAME_CACHE = "ria-game-v0.14.0-6e582a6a85";
 const PY_CACHE = "ria-pyodide-314.0.7";
 const PYODIDE_PREFIX = new URL("https://cdn.jsdelivr.net/npm/pyodide@314.0.7/", self.location.href).href;
-const GAME_FILES = ["./", "index.html", "manifest.webmanifest", "licenses.txt", "icons/apple-touch-icon.png", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
-const CHAPTER_FILES = ["lessons/ch1-335d9e46.json", "lessons/ch2-89b60a90.json", "lessons/ch3-a4e6ec46.json", "lessons/ch4-a480e773.json", "lessons/ch5-cb9026b3.json", "lessons/ch6-ba5538f0.json", "lessons/ch7-6a49b6c8.json", "lessons/ch8-364dbb0d.json", "lessons/ch9-4b400353.json", "lessons/ch10-6c525f3e.json", "lessons/ch11-fcb52ebe.json", "lessons/ch12-f90cf7ba.json", "lessons/ch13-b92a0458.json", "lessons/ch14-b306b667.json", "lessons/ch15-eb9bff22.json", "lessons/ch16-dc387c35.json", "lessons/ch17-d4d588a5.json", "lang/en-2e4b3817.json"];
-const CHAPTER_RE = /\/(lessons\/(en\/)?ch[1-9]\d*|lang\/[a-z]{2})-[0-9a-f]{8}\.json$/; // 장 파일·언어 꾸러미(v0.13.0): 이름에 지문이 있어 저장본 먼저
+const GAME_FILES = ["./", "index.html", "manifest.webmanifest", "manifest.en.webmanifest", "licenses.txt", "icons/apple-touch-icon.png", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
+// v0.14.0(판정 C81): 영어 장 파일은 판과 상관없는 저장소에 둔다(이름이 내용 지문 → 새 판에도 그대로 쓸 수 있음).
+// 설치 때 미리 받지 않고(한국어 사용자가 판마다 영어를 더 받지 않게) 처음 열 때·영어 사용자의 앱이 미리 받을 때 저장.
+// 새 판이 켜질 때 이번 판 목록(LANG_CHAPTER_FILES)에 없는 옛 파일만 지운다.
+const LANG_CACHE = "ria-lang-en";
+const LANG_CHAPTER_FILES = ["lessons/en/ch1-d67772a9.json", "lessons/en/ch10-56dcb00e.json", "lessons/en/ch11-135a31eb.json", "lessons/en/ch12-3f1d4216.json", "lessons/en/ch13-0af10dbe.json", "lessons/en/ch14-6cfdc76a.json", "lessons/en/ch15-7b8ae211.json", "lessons/en/ch16-b9d55954.json", "lessons/en/ch17-47ca806b.json", "lessons/en/ch2-d8af68e3.json", "lessons/en/ch3-081d5b36.json", "lessons/en/ch4-0912eb86.json", "lessons/en/ch5-c5450c84.json", "lessons/en/ch6-ae9efe89.json", "lessons/en/ch7-4513680e.json", "lessons/en/ch8-3854d93a.json", "lessons/en/ch9-85fc0189.json"];
+const LANG_CHAPTER_RE = /\/lessons\/en\/ch[1-9]\d*-[0-9a-f]{8}\.json$/;
+const CHAPTER_FILES = ["lessons/ch1-335d9e46.json", "lessons/ch2-89b60a90.json", "lessons/ch3-a4e6ec46.json", "lessons/ch4-a480e773.json", "lessons/ch5-cb9026b3.json", "lessons/ch6-ba5538f0.json", "lessons/ch7-6a49b6c8.json", "lessons/ch8-364dbb0d.json", "lessons/ch9-4b400353.json", "lessons/ch10-6c525f3e.json", "lessons/ch11-fcb52ebe.json", "lessons/ch12-f90cf7ba.json", "lessons/ch13-b92a0458.json", "lessons/ch14-b306b667.json", "lessons/ch15-eb9bff22.json", "lessons/ch16-dc387c35.json", "lessons/ch17-d4d588a5.json", "lang/en-870f9158.json", "py/runner-9cf08488.py"];
+const CHAPTER_RE = /\/((lessons\/(en\/)?ch[1-9]\d*|lang\/[a-z]{2})-[0-9a-f]{8}\.json|py\/runner-[0-9a-f]{8}\.py)$/; // 장 파일·언어 꾸러미(v0.13.0): 이름에 지문이 있어 저장본 먼저
 const NETWORK_TIMEOUT_MS = 4000; // 게임 파일: 이보다 느리면 저장본을 먼저 보여 줌
 // 처음 설치 때 미리 받아 두는 Pyodide 핵심 파일(실패해도 설치는 계속, 쓸 때 다시 받음)
 // sqlite3(16장)도 여기에 들어 있다: _sqlite3는 pyodide.asm.wasm에, sqlite3 모듈은 python_stdlib.zip에(Pyodide 314.0.7)
@@ -53,8 +61,15 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     for (const key of await caches.keys()) {
-      if (key.startsWith("ria-") && key !== GAME_CACHE && key !== PY_CACHE) await caches.delete(key);
+      if (key.startsWith("ria-") && key !== GAME_CACHE && key !== PY_CACHE && key !== LANG_CACHE) await caches.delete(key);
     }
+    try {
+      const lc = await caches.open(LANG_CACHE);
+      for (const req of await lc.keys()) {
+        const path = new URL(req.url).pathname;
+        if (!LANG_CHAPTER_FILES.some((f) => path.endsWith("/" + f))) await lc.delete(req);
+      }
+    } catch (_) { /* 저장소를 못 열면 다음 판에서 */ }
     await self.clients.claim();
   })());
 });
@@ -72,7 +87,7 @@ async function pyodideFirst(request) {
 
 // 장 파일: 저장본 먼저 → 없으면 받아서 저장(이름이 내용 지문이라 바뀌지 않음)
 async function chapterFirst(request) {
-  const cache = await caches.open(GAME_CACHE);
+  const cache = await caches.open(LANG_CHAPTER_RE.test(new URL(request.url).pathname) ? LANG_CACHE : GAME_CACHE);
   const hit = await cache.match(request, { ignoreSearch: true });
   if (hit) return hit;
   const res = await fetch(request);

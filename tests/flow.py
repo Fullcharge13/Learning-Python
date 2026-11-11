@@ -3378,5 +3378,28 @@ def test_english_garden_code_mode_switch():
         assert not a.errors, a.errors
 
 
+def test_garden_sheet_once():
+    """v0.13.6: 「노드」 단추가 빠르게 두 번 눌려도(아이폰에서 두 번 톡) 노드 더하기 창은 한 장만 열리고,
+    노드를 고르면 창이 남지 않는다(사용자 보고: 노드는 생기는데 창이 그대로)."""
+    with App("iPhone 17", save=_garden_seed(4, _garden(order_idx=4)), reduced=True) as a:
+        _open_garden(a)
+        a.js("""() => { const b = document.querySelector('.g-add[data-parent=""][data-slot=body]'); b.click(); b.click(); }""")
+        a.page.wait_for_selector(".modal.g-sheet")
+        a.page.wait_for_timeout(300)
+        n = a.js("() => document.querySelectorAll('.modal.g-sheet').length")
+        assert n == 1, "add-node sheets open: %d" % n
+        before = len(a.save()["garden"]["program"])
+        a.page.click(".modal.g-sheet [data-kind=move]")
+        a.page.wait_for_timeout(300)
+        assert not a.page.query_selector(".modal.g-sheet"), "a sheet is still open after picking"
+        assert len(a.save()["garden"]["program"]) == before + 1
+        # 노드 메뉴(⋯)·값 고르기도 두 번 눌려 겹치지 않음
+        a.js("() => { const b = document.querySelector('.g-node .g-menu'); b.click(); b.click(); }")
+        a.page.wait_for_selector(".modal.g-sheet")
+        a.page.wait_for_timeout(300)
+        assert a.js("() => document.querySelectorAll('.modal.g-sheet').length") == 1
+        assert not a.errors, a.errors
+
+
 if __name__ == "__main__":
     sys.exit(main())

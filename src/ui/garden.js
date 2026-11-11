@@ -1397,9 +1397,14 @@ export function render(root, ctx, params = {}) {
   if (vv) { vv.addEventListener("resize", place); vv.addEventListener("scroll", place); }
 
   // ---- 누르기(한 곳에서) ----
+  // v0.13.6: 고르기 창·물음 창이 이미 열려 있으면 새 창을 열지 않는다 — 아이폰에서 단추가 빠르게 두 번 눌리면
+  // 같은 창이 두 장 겹쳐, 고른 뒤에도 아래 창이 남았다(사용자 보고)
+  const modalOpen = () => !!document.querySelector(".modal-back");
+  const whenFree = (fn) => () => { if (!modalOpen()) fn(); };
   root.addEventListener("click", (e) => {
     const el0 = e.target;
     if (S.state !== "idle") return; // 실행·재생 중에는 편집하지 않음(나가기·재생 단추는 따로 묶음)
+    if (modalOpen()) return;
     const arg = el0.closest(".g-arg");
     if (arg) { openArg(arg.closest(".g-node").dataset.id, arg.dataset.arg); return; }
     const menu = el0.closest(".g-menu");
@@ -1412,8 +1417,8 @@ export function render(root, ctx, params = {}) {
   const backTo = BACK_TO.has(params?.from) ? params.from : "home";
   root.querySelector("#g-back").addEventListener("click", () => ctx.show(backTo));
   runBtn.addEventListener("click", doRun);
-  root.querySelector("#g-grow").addEventListener("click", openGrow);
-  root.querySelector("#g-notes")?.addEventListener("click", openNotes);
+  root.querySelector("#g-grow").addEventListener("click", whenFree(openGrow));
+  root.querySelector("#g-notes")?.addEventListener("click", whenFree(openNotes));
   root.querySelector("#g-skip").addEventListener("click", () => { S.skip = true; if (S.wake) S.wake(); });
   const speedBtn = root.querySelector("#g-speed");
   speedBtn.addEventListener("click", () => {

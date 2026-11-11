@@ -7,9 +7,14 @@ const MAX_CHAPTERS = 30;
 async function loadChapter(n) {
   return import(`../data/lessons/ch${n}.js`);
 }
+// 영어 장(v0.13.1): 있는 것만
+async function loadChapterEn(n) {
+  return import(`../data/lessons/en/ch${n}.js`);
+}
 
-/** [{CHAPTER, LESSONS}] (있는 장만) */
-export async function loadDevChapters() {
-  const got = await Promise.allSettled(Array.from({ length: MAX_CHAPTERS }, (_, i) => loadChapter(i + 1)));
+/** [{CHAPTER, LESSONS}] (있는 장만). lang "en"이면 영어 장 파일들 */
+export async function loadDevChapters(lang = "ko") {
+  const load = lang === "en" ? loadChapterEn : loadChapter;
+  const got = await Promise.allSettled(Array.from({ length: MAX_CHAPTERS }, (_, i) => load(i + 1)));
   return got.filter((r) => r.status === "fulfilled" && r.value && Array.isArray(r.value.LESSONS)).map((r) => r.value);
 }

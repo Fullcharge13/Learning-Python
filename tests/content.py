@@ -629,7 +629,40 @@ class Lesson:
 
 
 # ── 검사 ────────────────────────────────────────────────────────────────
+# --lang en (v0.13.1 영어 레슨): data/lessons/en/을 보고, 한국어 문장 검사는 끄고 글자 수 한도를 영어에 맞게 늘린다
+LANG = "ko"
+EN_TEXT_FACTOR = 2.2   # 같은 뜻의 영어는 한국어보다 대략 2배 길다(화면 폭은 영어 글자가 더 좁음)
+
+
+# 영어 레슨의 질문·보기 낱말(한국어 「출력」「오류」「오류가 나는」「오류 없이」에 해당). 번역 지침에 같은 규칙을 적어 둠
+# src/template.js errorOption()의 영어: 앱과 같은 값을 쓰도록 영어 표에서 읽는다(v0.13.4 검토 M6)
+with open(os.path.join(ROOT, "i18n", "en", "ui.lesson.json"), encoding="utf-8") as _f:
+    EN_ERROR_OPTION = json.load(_f)["오류가 나요"]
+
+
+def asks_output(q):
+    return ("출력" in q) if LANG == "ko" else bool(re.search(r"\b(output|print|prints|printed)\b", q, re.I))
+
+
+def says_error(opt):
+    return ("오류" in opt) if LANG == "ko" else ("error" in opt.lower())
+
+
+def asks_error_code(q):
+    """「오류가 나는 코드는?」 → True, 「오류 없이 … 코드는?」 → False, 아니면 None"""
+    if LANG == "ko":
+        return True if "오류가 나는" in q else (False if "오류 없이" in q else None)
+    if re.search(r"\bwithout (an |any )?errors?\b", q, re.I):
+        return False
+    if re.search(r"\b(causes?|raises?|gives?|throws?) an error\b", q, re.I):
+        return True
+    return None
+
+
 def check_text(rep, where, value, limit, need_hangul=True, one_line=True):
+    if LANG == "en":
+        limit = int(limit * EN_TEXT_FACTOR)
+        need_hangul = False
     if not isinstance(value, str) or not value.strip():
         rep.err(where, "글이 비어 있음")
         return
@@ -1063,14 +1096,14 @@ def check_choice(rep, where, item, chapter):
     if r["error"]:
         # 「출력은?」 문제인데 코드가 오류를 내면 정답 보기는 「오류」를 말해야 함.
         # 그 밖의 질문(「어떤 오류?」 등)은 보기 비교를 하지 않음.
-        if "출력" in q and "오류" not in item["options"][item["answer"]]:
+        if asks_output(q) and not says_error(item["options"][item["answer"]]):
             rep.err(where, "코드가 오류(%s)를 내는데 정답 보기 %r 에 「오류」가 없음"
                     % (r["error"]["type"], item["options"][item["answer"]]))
         return
     out = normalize(r["stdout"])
     opts = [normalize(o) for o in item["options"]]
     hits = [i for i, o in enumerate(opts) if o == out]
-    if "출력" in q:
+    if asks_output(q):
         # 「출력은?」 문제: 실제 출력과 같은 보기가 정확히 정답 하나여야 함
         if hits != [item["answer"]]:
             rep.err(where, "출력 문제인데 실제 출력 %r 이 정답 보기 %r 와 다름" % (out, opts[item["answer"]]))
@@ -1086,11 +1119,8 @@ def check_codeless_error(rep, where, item, q, env=None):
     opts = item["options"]
     if not all("print(" in o for o in opts):
         return
-    if "오류가 나는" in q:
-        want_error = True
-    elif "오류 없이" in q:
-        want_error = False
-    else:
+    want_error = asks_error_code(q)
+    if want_error is None:
         return
     errs = [bool(safe_run(rep, where, o, stdin_of(rep, where, item), **(env or {}))["error"]) for o in opts]
     picked = [i for i, e in enumerate(errs) if e == want_error]
@@ -1566,7 +1596,7 @@ def judge_instance(inst, results):
         if any(i != ai and text(r) == ans for i, r in enumerate(results)):
             return "dup"
         return None
-    opts = ["오류가 나요" if text(r) is None else text(r) for r in results]
+    opts = [("오류가 나요" if LANG == "ko" else EN_ERROR_OPTION) if text(r) is None else text(r) for r in results]
     if any("\n" in o for o in opts):
         return "multiline"
     if any(not o.strip() for o in opts):
@@ -1784,6 +1814,17 @@ def parse_templates(argv):
 
 
 def main(argv):
+    global LANG, LESSON_DIR
+    if "--lang" in argv:
+        i = argv.index("--lang")
+        val = argv[i + 1] if i + 1 < len(argv) else ""
+        if val not in ("ko", "en"):
+            print("--lang ko|en (받은 값: %r)" % val)
+            return 2
+        if val == "en":
+            LANG = "en"
+            LESSON_DIR = os.path.join(ROOT, "data", "lessons", "en")
+        argv = argv[:i] + argv[i + 2:]
     full = parse_full(argv)  # None | 0(있는 장 수) | N
     adv_upto = parse_advanced(argv)  # None | N(1~N장에 심화가 있어야 함)
     tpl_upto = parse_templates(argv)  # None | N(1~N장에 매일 도전 틀이 4개 이상)

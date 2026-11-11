@@ -628,7 +628,7 @@ export const ADVANCED = [
           "round(값, 2)는 정수로 바꿔 준다",
         ],
         answer: 0,
-        explain: "소수는 2진법으로 가까운 값만 저장해서 계산 끝에 작은 오차가 붙을 수 있어요. round(값, 2)의 결과도 float예요.",
+        explain: "소수는 2진법으로 가까운 값만 저장해서 계산 끝에 작은 오차가 붙을 수 있어요. 소수(float)를 round(값, 2)로 다듬은 결과도 float예요.",
       },
     ],
   },
@@ -784,7 +784,7 @@ export const ADVANCED = [
         code: "print(round(1.609 * 5, 1))",
         options: ["8.0", "8.1", "8"],
         answer: 0,
-        explain: "1.609 × 5 는 8.045쯤이에요. 소수 첫째 자리까지 다듬으면 8.0이고, round의 결과는 float라서 소수점이 남아요.",
+        explain: "1.609 × 5 는 8.045쯤이에요. 소수 첫째 자리까지 다듬으면 8.0이고, float를 round로 다듬은 결과는 float라서 소수점이 남아요.",
       },
       {
         type: "choice", concept: "floaterr",

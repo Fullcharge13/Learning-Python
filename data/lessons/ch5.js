@@ -662,7 +662,7 @@ export const ADVANCED = [
         stdin: "7",
       },
       {
-        say: "continue는 else에 영향이 없어요. 한 바퀴만 건너뛸 뿐 반복은 끝까지 도니까요. else를 건너뛰게 하는 건 break뿐이에요. 앞 코드에 9를 넣으면 3에서 break해서 else는 실행되지 않아요.",
+        say: "continue는 else에 영향이 없어요. 한 바퀴만 건너뛸 뿐 반복은 끝까지 도니까요. else를 건너뛰게 하는 건 중간에 빠져나가는 break예요(return도 같아요). 앞 코드에 9를 넣으면 3에서 break해서 else는 실행되지 않아요.",
         code: 'for i in range(1, 6):\n    if i % 2 == 0:\n        continue\n    print(i, end=" ")\nelse:\n    print("끝")',
         out: "1 3 5 끝",
       },

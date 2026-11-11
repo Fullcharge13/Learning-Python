@@ -64,6 +64,8 @@
 | 들여쓰기 | indentation |
 | 주석 | comment |
 | 오류 | error |
+| 단서 (오류 메시지를 부르는 말) | clue |
+| 오류가 나요 (보기) | It causes an error |
 | 출력 / 입력 | output / input |
 | 빈칸 채우기 | fill in the blank |
 | 순서 맞추기 | put in order |

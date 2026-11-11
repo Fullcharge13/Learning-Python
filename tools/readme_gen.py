@@ -134,7 +134,7 @@ def build(d):
     w("|---|---|---|")
     w("| 개발하면서 열어 보기 | `python3 tools/dev.py` | 코드를 묶어 `http://127.0.0.1:8765/dev/`로 열어 줘요 |")
     w(f"| 배포 파일 만들기 | `python3 build.py` | `dist/`에 `index.html`(앱과 레슨 목록) + `lessons/`(장마다 문제 파일) + `manifest.webmanifest` + `sw.js` + 아이콘. **`lessons/` 폴더까지 함께** "
-      f"이 폴더를 그대로 웹에 올리면 돼요 (Pyodide 제외 {max_kb}KB 이하) |")
+      f"이 폴더를 그대로 웹에 올리면 돼요(영어판 `lessons/en/`·`lang/` 포함) (Pyodide 제외 {max_kb}KB 이하) |")
     w("| README 다시 만들기 | `python3 tools/readme_gen.py` | 데이터 표를 바꾼 뒤 실행. `--check`는 어긋남만 검사 |")
     w("| 리아 그림 데이터 다시 만들기 | `python3 tools/ria_set2_import.py` | 원본 `art/ria_set2_sheet.svg`(#리아_이미지_세트2)를 고친 뒤 실행 → `data/ria_set2.js` |")
     w("| 리아 그림 시트 다시 뽑기 | `python3 tools/ria_sheet.py` | `docs/img/ria-sheet.png`, `ria-hero.png` |")
@@ -147,6 +147,9 @@ def build(d):
     w("| `npm test` | 규칙 단위 시험: 저장·옛 저장 옮기기, 연속 기록 날짜 계산, XP·바이트, 퀘스트·배지·상점, 채점 비교, 대사, 그림 |")
     w("| `python3 -m pytest tests/py -q` | 채점기(`runner.py`)를 일반 Python으로 시험: `input()` 값, 오류 줄 번호, 코드 구조 조건 |")
     w(f"| `python3 tests/content.py --full {len(d['chapters'])}` | 레슨 {n_lessons}개 전체 점검: 정답 코드가 시험을 통과하는지, 시작 코드는 통과하지 않는지, 힌트 4개 등 |")
+    w(f"| `python3 tests/content.py --lang en --full {len(d['chapters'])}` | 영어 레슨(`data/lessons/en/`)을 같은 방법으로 점검: 영어 코드 실행 결과 = 정답 |")
+    w("| `python3 tests/lesson_parity.py` | 영어 레슨이 한국어와 모양이 같은지(id·정답·문제 수), 한글이 남지 않았는지, 모든 장이 영어인지 |")
+    w("| `python3 tests/i18n_coverage.py` | 영어 화면 문구: 감싸지 않은 한글·빠진 영어·남는 영어·값 자리 수 |")
     w("| `python3 tests/grader_browser.py` | 실제 브라우저(Chromium) 안 Pyodide 작업자: 실행, 입력, 3초 시간 초과 뒤 재시작 |")
     w("| `python3 tests/build_test.py` | 배포 파일: 한 장인지, 크기 상한, 버전 표시, 오프라인 열기 |")
     w("| `python3 tests/flow.py` | 아이폰 17 크기 화면 순회: 넘침·콘솔 오류·터치 크기·첫 레슨 끝까지·옛 저장 |")
@@ -323,7 +326,7 @@ def build(d):
         "심화 채점의 남은 빈틈: SQL 문제는 JOIN·HAVING 낱말이 SQL 글자 안에 있는지만 보고(16-A1~A3), 15-A1은 starter 아래쪽을 지우고 직접 찍으면 통과하며, 14-A2는 다시 읽은 값을 꼭 쓰지 않아도, 13-A1은 정해진 답 표로도 통과해요. 일부러 꾀를 내야 하는 빈틈이라 그대로 두었어요.",
         "레슨 중간 진행은 24시간 동안만 이어서 할 수 있어요. 다른 휴대폰이나 브라우저로는 이어지지 않아요.",
         "PC에서도 열리지만 휴대폰 폭 그대로 가운데에 놓여요.",
-        "영어판(English)을 만드는 중이에요(v0.13.0~). 공개(v0.14.0) 전에는 개발자 모드에서만 시작 화면·설정의 「한국어 / English」로 고를 수 있고, 지금은 화면 문구만 영어예요(레슨·텃밭은 다음 판들에서).",
+        "영어판(English)을 만드는 중이에요(v0.13.0~). 공개(v0.14.0) 전에는 개발자 모드에서만 시작 화면·설정의 「한국어 / English」로 고를 수 있고, 화면 문구와 레슨 17장(본 과정·심화·매일 도전) 모두 영어예요(v0.13.4). 텃밭과 파이썬 오류 설명은 다음 판(v0.13.5)에서. 영어 장 파일은 처음 열 때 받아 저장해요.",
         "안드로이드(갤럭시) 삼성 키보드에서 코드 입력창의 엔터가 안 먹는다는 제보가 있어요. 키보드와 상관없이 쓸 수 있게 기호 줄 맨 앞에 「↵ 줄 바꿈」 단추를 두었고, 처음 주어지는 코드는 정답 줄 수만큼 빈 줄이 미리 있어요(v0.12.2). 입력 방식 자체를 바꾸는 시도는 글자 입력을 망가뜨려 되돌렸어요(v0.12.3). 자동 시험은 Chromium에 갤럭시 화면을 입혀서 하므로 진짜 삼성 키보드의 동작은 실기기로만 확인할 수 있어요.",
     ]
     for x in limits:

@@ -1,6 +1,6 @@
 // 리아와 파이썬! — 앱 입구. 상태는 app = { save, screen, modal } 하나, 화면 전환은 show() 하나.
 import { migrate, takeRefundNotice, refundNoticeText, takeBrokenNotice, brokenNoticeText } from "./save.js";
-import { t, tx, setLang, lang, EN_PUBLIC, pickStartLang } from "./i18n.js";
+import { t, tx, setLang, lang, EN_PUBLIC, pickStartLang, packOf } from "./i18n.js";
 import { loadLangPack } from "./langload.js";
 import { readDevFlag, setDevMode, loadSlot, storeSlot, keysFor, markDev } from "./devmode.js";
 import { rollDay } from "./rules.js";
@@ -13,7 +13,7 @@ import { finishLesson } from "./finish.js";
 import { ensureDaily, dailyStatus, recordDaily, finishDaily, finishedItems } from "./daily.js";
 import { createPersist } from "./persist.js";
 import { readResume, writeResume, clearResume } from "./resume.js";
-import { createLessonData, chaptersForConcepts } from "./lessondata.js";
+import { createLessonData, chaptersForConcepts, mergeLangLessons } from "./lessondata.js";
 import { advancedIds } from "./advanced.js";
 import { lessonStateOf } from "./curriculum.js";
 import { loadDevChapters } from "./lessondev.js";
@@ -31,7 +31,7 @@ import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 import * as garden from "./ui/garden.js";
 
-export const VERSION = "v0.13.0";
+export const VERSION = "v0.13.4";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -51,11 +51,31 @@ const requestPersist = createPersist();
 
 // 레슨 목록과 장 가져오기(v0.3 작업 1). 배포판: build.py가 넣은 목록·장 파일 이름표 → 장은 열 때 받음.
 // 개발판: 둘 다 없음 → data/lessons/chN.js를 전부 import(lessondev.js, 배포판에서는 빈 모듈).
-async function initLessonData() {
+// v0.13.1 영어 레슨: 영어면 영어 장(있는 것만, 없는 장은 한국어)으로. 목록·이름은 영어 꾸러미(lessons) 안에
+async function initLessonData(l = "ko") {
   if (window.RIA_CHAPTER_FILES && window.RIA_LESSON_INDEX) {
-    return createLessonData({ index: window.RIA_LESSON_INDEX, files: window.RIA_CHAPTER_FILES, base: location.href });
+    const ko = { index: window.RIA_LESSON_INDEX, files: window.RIA_CHAPTER_FILES };
+    const m = l === "en" ? mergeLangLessons(ko, packOf("en") && packOf("en").lessons) : ko;
+    return createLessonData({ index: m.index, files: m.files, base: location.href });
   }
-  return createLessonData({ modules: await loadDevChapters() });
+  const mods = await loadDevChapters();
+  if (l !== "en") return createLessonData({ modules: mods });
+  const en = new Map((await loadDevChapters("en")).map((m) => [m.CHAPTER && m.CHAPTER.id, m]));
+  return createLessonData({ modules: mods.map((m) => en.get(m.CHAPTER && m.CHAPTER.id) || m) });
+}
+/** 지금 언어의 레슨 목록으로(언어를 바꾼 뒤). 레슨 id는 언어와 상관없이 같다 */
+async function reloadLessons() {
+  const l = lang();
+  try {
+    app.data = await initLessonData(l);
+    app.chapters = app.data.index;
+    app.dataLang = l;
+  } catch (e) {
+    console.error(e);
+    return;
+  }
+  app.lessons = app.chapters.flatMap((c) => c.lessons);
+  app.advanced = app.chapters.flatMap((c) => c.advanced || []);
 }
 
 const app = {
@@ -63,6 +83,7 @@ const app = {
   chapters: [], lessons: [],   // 레슨 목록(문제·카드 없음). 전체는 ctx.getLesson / getChapter. lessons는 본 과정만
   advanced: [],                // 심화 레슨 목록(v0.7, 선택 레슨)
   data: null,
+  dataLang: null,        // app.data(레슨 목록·장 파일)가 어느 언어로 불러온 것인지(v0.13.4)
   swChanged: false,      // 이 페이지를 다루던 서비스 작업자가 새 판으로 바뀜 → 장 파일 이름표가 옛것일 수 있음
   cleanup: null,
   greetOverride: null,   // 다음 홈 인사 한 번: "welcome_back" | "streak_broken"
@@ -239,8 +260,8 @@ async function afterDone() {
 // 하던 레슨 기록(v0.6.2 다): 본 저장과 따로 한 칸. 없는 레슨·24시간 지난 기록은 읽을 때 지운다
 // 개발자 모드에서는 따로 둔 칸(keysFor(true).resume)
 const resume = {
-  read: () => readResume(storage, { now: Date.now(), exists: (id) => !!lessonById(id), key: keysFor(app.dev).resume }),
-  write: (rec) => writeResume(storage, rec, keysFor(app.dev).resume),
+  read: () => readResume(storage, { now: Date.now(), exists: (id) => !!lessonById(id), key: keysFor(app.dev).resume, lang: lang() }),
+  write: (rec) => writeResume(storage, { ...rec, lang: lang() }, keysFor(app.dev).resume),
   clear: () => clearResume(storage, keysFor(app.dev).resume),
 };
 
@@ -270,6 +291,7 @@ async function syncLang() {
   const want = wantLang();
   if (want === "en" && !(await loadLangPack("en"))) applyLang("ko");
   else applyLang(want);
+  if (app.data && app.dataLang !== lang()) await reloadLessons();
   return lang() !== before;
 }
 /** 언어 바꾸기(시작 화면·설정). 바꾸면 지금 화면을 다시 그린다 */
@@ -283,6 +305,7 @@ async function setLanguage(l) {
   if (dev !== app.dev) return false; // 받는 동안 개발자 모드 칸이 바뀌었으면 다른 저장에 쓰지 않는다(검토 I4)
   commit({ ...app.save, settings: { ...app.save.settings, lang: l } });
   applyLang(l);
+  if (app.dataLang !== lang()) await reloadLessons();
   show(app.screen, app.params);
   return true;
 }
@@ -304,6 +327,7 @@ function setDev(on) {
   if (app.lessons.length) resume.read();
   dayStart();
   if (wantLang() !== lang()) syncLang().then((changed) => { if (changed && app.screen) show(app.screen, app.params); });
+  else if (app.data && app.dataLang !== lang()) reloadLessons().then(() => { if (app.screen) show(app.screen, app.params); });
 }
 
 const ctx = {
@@ -384,9 +408,11 @@ async function boot() {
     const sw = navigator.serviceWorker;
     if (sw && sw.controller) sw.addEventListener("controllerchange", () => { app.swChanged = true; });
   } catch { /* 지원 안 함 */ }
+  await syncLang();   // 오늘 안내(dayStart)보다 먼저: 안내가 고른 언어로(검토 I2). 레슨 목록도 이 언어로(v0.13.1)
   try {
-    app.data = await initLessonData();
+    app.data = await initLessonData(lang());
     app.chapters = app.data.index;
+    app.dataLang = lang();
   } catch (e) {
     console.error(e);
     app.chapters = [];
@@ -394,7 +420,6 @@ async function boot() {
   app.lessons = app.chapters.flatMap((c) => c.lessons);
   app.advanced = app.chapters.flatMap((c) => c.advanced || []);
   if (app.lessons.length) resume.read();   // 낡은 기록 치우기(레슨 목록을 못 받았으면 건드리지 않음)
-  await syncLang();   // 오늘 안내(dayStart)보다 먼저: 안내가 고른 언어로(검토 I2)
   dayStart();
   show("splash");
   document.addEventListener("visibilitychange", () => {

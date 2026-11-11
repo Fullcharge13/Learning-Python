@@ -309,8 +309,9 @@ window.RIA_LANG_FILES = {lang_files};
 LANG_RE = re.compile(r"^lang/(en)-([0-9a-f]{8})\.json$")
 
 
-def lang_packs():
-    """영어판(v0.13.0): i18n/en/ui*.json + data.json → {"en": (이름, JSON 바이트)}. 설계 docs/specs/2026-11-11-영어판-설계.md §2"""
+def lang_packs(en_lessons=None):
+    """영어판(v0.13.0): i18n/en/ui*.json + data.json (+ v0.13.1 영어 레슨 목록·장 파일 이름) → {"en": (이름, JSON 바이트)}.
+    설계 docs/specs/2026-11-11-영어판-설계.md §2·§3"""
     d = os.path.join(ROOT, "i18n", "en")
     ui, data = {}, {}
     for f in sorted(os.listdir(d)) if os.path.isdir(d) else []:
@@ -327,7 +328,10 @@ def lang_packs():
             target[k] = v
     if not ui and not data:
         return {}
-    body = json.dumps({"ui": ui, "data": data}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    pack = {"ui": ui, "data": data}
+    if en_lessons:
+        pack["lessons"] = {"index": en_lessons["index"], "files": en_lessons["files"]}
+    body = json.dumps(pack, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     name = "lang/en-%s.json" % hashlib.sha256(body).hexdigest()[:8]
     return {"en": (name, body)}
 
@@ -340,7 +344,14 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     version = app_version(app_src)
     pyodide_url = PYODIDE_DEV if dev_pyodide else PYODIDE_CDN
     split = split_lessons(lessons_dir or os.path.join(ROOT, "data", "lessons"))
-    packs = lang_packs()
+    # 영어 레슨(v0.13.1): data/lessons/en/chN.js → lessons/en/chN-<지문>.json, 목록은 영어 꾸러미 안에
+    en_dir = os.path.join(lessons_dir or os.path.join(ROOT, "data", "lessons"), "en")
+    en_split = None
+    if os.path.isdir(en_dir) and any(re.fullmatch(r"ch[1-9]\d*\.js", f) for f in os.listdir(en_dir)):
+        en_split = split_lessons(en_dir)
+        en_split["files"] = {n: name.replace("lessons/", "lessons/en/", 1) for n, name in en_split["files"].items()}
+        en_split["contents"] = {name.replace("lessons/", "lessons/en/", 1): body for name, body in en_split["contents"].items()}
+    packs = lang_packs(en_split)
     b = bundle()
     if not all(h in b["app"] for h in HOOKS):
         raise SystemExit("build: bundled app lost %s" % "/".join(HOOKS))
@@ -363,7 +374,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     html = html.replace("<!-- RIA:CONFIG -->", config, 1)
     html = replace_block(html, "SCRIPT", "<script>" + inline_script(b["app"]) + "</script>")
     check_output(html)
-    check_no_lesson_text(html, split["tasks"])
+    check_no_lesson_text(html, split["tasks"] + (en_split["tasks"] if en_split else []))
 
     os.makedirs(out, exist_ok=True)
     clean(out)
@@ -380,7 +391,17 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
         with open(os.path.join(out, name), "wb") as f:
             f.write(body)
         chapter_sizes.append((name, len(body)))
-    chapter_files = [name for name, _ in chapter_sizes]
+    if en_split:
+        os.makedirs(os.path.join(out, "lessons", "en"))
+        for n, name in sorted(en_split["files"].items(), key=lambda kv: int(kv[0])):
+            body = en_split["contents"][name].encode("utf-8")
+            if hashlib.sha256(body).hexdigest()[:8] != re.search(r"-([0-9a-f]{8})\.json$", name).group(1):
+                raise SystemExit("build: chapter file hash mismatch for " + name)
+            with open(os.path.join(out, name), "wb") as f:
+                f.write(body)
+            chapter_sizes.append((name, len(body)))
+    # 영어 장(v0.13.4)은 미리 받지 않는다: 한국어 사용자가 판마다 영어 레슨을 더 받지 않게. 처음 열 때 sw가 받아 저장.
+    chapter_files = [name for name, _ in chapter_sizes if not name.startswith("lessons/en/")]
     lang_sizes = []
     if packs:
         os.makedirs(os.path.join(out, "lang"))

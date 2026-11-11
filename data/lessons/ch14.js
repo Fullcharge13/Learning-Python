@@ -354,7 +354,7 @@ export const LESSONS = [
         server: { "https://ria.example/bus/1": R({ route: "7번", min: 4 }) },
         chips: ["decode", "encode", "split"],
         answer: 0,
-        explain: "read가 돌려주는 본문은 바이트라서 decode(\"utf-8\")로 문자열로 바꿔야 loads가 읽어요.",
+        explain: "read가 돌려주는 본문은 바이트예요. decode(\"utf-8\")로 문자열로 바꿔야 글자로 찍거나 다룰 수 있어요. (사실 loads는 바이트도 읽지만, 이 과정에서는 문자열로 바꿔 다뤄요.)",
       },
       {
         type: "blank", concept: "api",
@@ -764,7 +764,7 @@ export const TEMPLATES = [
     ),
     chips: ["decode", "read", "split"], answer: 0,
     vars: { N: { min: 2, max: 9 } },
-    explain: "API 답은 바이트라 decode()로 글자로 바꿔야 loads할 수 있어요. 바이트에는 read()가 없고, split은 리스트를 만들어 loads가 오류예요.",
+    explain: "API 답은 바이트라 decode()로 글자로 바꿔요. 바이트에는 read()가 없고, split은 리스트를 만들어 loads가 오류예요.",
   },
 ];
 

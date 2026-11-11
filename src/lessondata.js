@@ -12,6 +12,27 @@
 import { lessonUpdated } from "./newcontent.js";
 
 export const CHAPTER_FILE_RE = /^lessons\/ch([1-9]\d*)-([0-9a-f]{8})\.json$/;
+// 영어 장 파일(v0.13.1, 설계 docs/specs/2026-11-11-영어판-설계.md §3): lessons/en/chN-<지문>.json
+export const LANG_CHAPTER_FILE_RE = /^lessons\/en\/ch([1-9]\d*)-([0-9a-f]{8})\.json$/;
+
+/**
+ * 영어 레슨 합치기: 영어가 있는 장은 영어 목록 칸·파일, 없는 장은 한국어 그대로(장 번호 순).
+ * ko/en = { index, files } (배포판) — en이 없으면 한국어 그대로. english = 영어로 나오는 장 번호들
+ */
+export function mergeLangLessons(ko, en) {
+  const enIdx = new Map(((en && en.index) || []).map((c) => [c.id, c]));
+  // 꾸러미의 파일 이름이 영어 장 꼴(lessons/en/chN-<지문>.json)이고 장 번호가 맞을 때만 쓴다(v0.13.4 검토 M3)
+  const enFiles = {};
+  for (const [k, v] of Object.entries((en && en.files) || {})) {
+    const mm = typeof v === "string" && v.match(LANG_CHAPTER_FILE_RE);
+    if (mm && String(Number(mm[1])) === String(k)) enFiles[k] = v;
+  }
+  const index = (ko.index || []).map((c) => (enIdx.has(c.id) && enFiles[c.id] ? enIdx.get(c.id) : c));
+  const files = { ...(ko.files || {}) };
+  const english = [];
+  for (const c of index) if (enIdx.get(c.id) === c) { files[c.id] = enFiles[c.id]; english.push(c.id); }
+  return { index, files, english };
+}
 
 /** 장 파일 이름: lessons/ch6-0123abcd.json */
 export function chapterFileName(n, hash8) {

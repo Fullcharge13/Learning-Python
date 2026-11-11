@@ -557,7 +557,7 @@ export const ADVANCED = [
         stdin: "0",
       },
       {
-        say: "오류 종류도 골라요. 값의 종류가 틀리면 TypeError, 종류는 맞는데 값이 이치에 안 맞으면 ValueError예요. type(price) != int는 「price가 정수 종류가 아니면」이에요. 먼저 걸린 검사 하나만 던져져요.",
+        say: "오류 종류도 골라요. 종류가 틀리면 TypeError, 종류는 맞는데 값이 이치에 안 맞으면 ValueError예요. type(price) != int는 「정수가 아니면」이에요(보통은 isinstance로 검사해요). 먼저 걸린 검사만 던져져요.",
         code: J(
           "def add_tip(price, tip):",
           "    if type(price) != int:",
@@ -724,7 +724,7 @@ export const ADVANCED = [
         stdin: "abc",
       },
       {
-        say: "finally는 함수를 떠나기 직전에 늘 실행돼요. return으로 나갈 때도, 오류를 다시 던질 때도요. 그래서 abc는 기록, 정리, 바깥 순서로 나와요.",
+        say: "finally는 try 문을 떠나기 직전에 늘 실행돼요. return으로 함수를 나갈 때도, 여기처럼 오류를 다시 던질 때도요. 그래서 abc를 넣으면 기록, 정리, 바깥 순서로 나와요.",
         code: J(
           "def run(text):",
           "    try:",

@@ -676,6 +676,21 @@ def test_sw_chapter_files():
         assert '"lessons/%s"' % f in sw, "sw.js must precache " + f
 
 
+def test_sw_skips_english_chapters():
+    """v0.13.4: 영어 장 파일은 설치 때 미리 받지 않는다(한국어 사용자가 판마다 ~800KB를 더 받지 않게).
+    처음 열 때 chapterFirst가 받아 저장한다. 언어 꾸러미(80KB)는 계속 미리 받는다."""
+    _build()
+    en = os.path.join(DIST, "lessons", "en")
+    assert os.path.isdir(en) and os.listdir(en), "English chapter files must still be built"
+    sw = _read(os.path.join(DIST, "sw.js"))
+    m = re.search(r"const CHAPTER_FILES = (\[.*?\]);", sw)
+    assert m, "CHAPTER_FILES not in sw.js"
+    pre = json.loads(m.group(1))
+    assert not [f for f in pre if f.startswith("lessons/en/")], "sw.js must not precache English chapters"
+    assert any(f.startswith("lessons/ch") for f in pre), "Korean chapters stay precached"
+    assert any(f.startswith("lang/en-") for f in pre), "language pack stays precached"
+
+
 def _flow_module():
     spec = importlib.util.spec_from_file_location("ria_flow", os.path.join(ROOT, "tests", "flow.py"))
     mod = importlib.util.module_from_spec(spec)

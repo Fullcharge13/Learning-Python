@@ -636,7 +636,7 @@ export const ADVANCED = [
         out: "주말",
       },
       {
-        say: "숫자도 똑같아요. case _: 는 else처럼 나머지를 모두 받아요. 위에서부터 처음 맞는 case 하나만 실행하고, _ 는 모든 값에 맞으니 맨 마지막에 둬요.",
+        say: "숫자도 똑같아요. case _: 는 else처럼 나머지를 모두 받아요. 위에서부터 처음 맞는 case 하나만 실행하고, _ 는 모든 값에 맞으니 맨 마지막에 둬요. 아래에 다른 case가 있으면 SyntaxError예요.",
         code: 'grade = 2\nmatch grade:\n    case 1:\n        print("새내기")\n    case 2 | 3:\n        print("중간")\n    case _:\n        print("그 외")',
         out: "중간",
       },
@@ -710,7 +710,7 @@ export const ADVANCED = [
           "case _: 는 맨 위에 두어야 한다",
         ],
         answer: 0,
-        explain: "if·elif처럼 처음 맞는 case 하나만 실행돼요. _ 는 모든 값에 맞으니 맨 위에 두면 아래 case는 쓸모가 없어요.",
+        explain: "if·elif처럼 처음 맞는 case 하나만 실행돼요. _ 는 모든 값에 맞아서, case _: 아래에 다른 case를 두면 Python이 실행하기 전에 SyntaxError를 내요. 그래서 case _: 는 늘 맨 마지막이에요.",
       },
     ],
   },

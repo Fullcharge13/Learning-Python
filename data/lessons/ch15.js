@@ -218,7 +218,7 @@ export const LESSONS = [
         ),
         chips: ["self", "this", "me"],
         answer: 0,
-        explain: "파이썬에서 객체 자신을 부르는 이름은 self예요. this와 me는 정해 둔 적 없는 이름이라 NameError예요.",
+        explain: "객체 자신은 첫 매개변수 self로 받아요. 여기서는 this나 me라는 이름이 정해진 적이 없어서(매개변수는 self) NameError예요.",
       },
       {
         type: "order", concept: "init",
@@ -308,7 +308,7 @@ export const LESSONS = [
     updated: "v0.9",
     summary: [
       "클래스 안의 def가 메서드",
-      "첫 매개변수는 언제나 self",
+      "첫 매개변수는 객체 자신(이름은 늘 self로 써요)",
       "객체.메서드()로 불러서 속성을 바꿈",
       "self.items = []에 메서드로 담기",
     ],
@@ -369,7 +369,7 @@ export const LESSONS = [
         ),
         options: ["오류 (TypeError)", "멍", "아무것도 안 찍혀요"],
         answer: 0,
-        explain: "d.bark()라고 부르면 Python이 d를 첫 번째 값으로 몰래 넘겨요. 받을 자리(self)가 없어서 「0개 받는데 1개가 왔다」는 단서(TypeError)가 나요. 메서드의 첫 매개변수는 언제나 self예요.",
+        explain: "d.bark()라고 부르면 Python이 d를 첫 번째 값으로 몰래 넘겨요. 받을 자리(self)가 없어서 「0개 받는데 1개가 왔다」는 단서(TypeError)가 나요. 메서드의 첫 매개변수는 객체 자신을 받는 자리이고, 이름은 약속대로 self로 써요.",
       },
       {
         type: "choice", concept: "method",
@@ -510,7 +510,7 @@ export const LESSONS = [
         q: "메서드를 만들 때 첫 번째 매개변수 이름은?",
         options: ["self", "this", "객체 이름 a"],
         answer: 0,
-        explain: "첫 매개변수는 언제나 self예요. a.deposit(500)에서 a가 self로 들어와서 self.balance가 a의 값이 돼요.",
+        explain: "메서드의 첫 매개변수는 객체 자신을 받는 자리이고, 이름은 약속대로 self로 써요. a.deposit(500)에서 a가 self로 들어와서 self.balance가 a의 값이 돼요.",
       },
     ],
   },
@@ -740,7 +740,7 @@ export const LESSONS = [
         ),
         options: ["오류 (TypeError)", "가득", "아무것도 안 찍혀요"],
         answer: 0,
-        explain: "c.fill()은 c를 첫 번째 값으로 몰래 넘기는데 받을 자리(self)가 없어요. 메서드의 첫 매개변수는 언제나 self예요.",
+        explain: "c.fill()은 c를 첫 번째 값으로 몰래 넘기는데 받을 자리(self)가 없어요. 메서드의 첫 매개변수는 객체 자신을 받는 자리이고, 이름은 약속대로 self로 써요.",
       },
       {
         type: "choice", concept: "inherit",

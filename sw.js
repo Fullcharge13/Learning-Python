@@ -5,6 +5,7 @@
 //   저장본은 설치 때만 채운다(받은 새 판을 옛 저장본에 섞지 않음 → 오프라인은 언제나 한 판이 통째로).
 // - Pyodide 파일(주소가 PYODIDE_PREFIX로 시작): 저장본 먼저 → 없으면 받아서 저장. 버전 고정 주소라 바뀌지 않음.
 // - 장 파일(lessons/chN-<지문8자>.json, v0.3 작업 1): 설치 때 모두 미리 받음(하나가 실패해도 설치는 계속, 처음 열 때 받음).
+//   영어 장(lessons/en/, v0.13.4)은 미리 받지 않고 처음 열 때 받아 저장한다.
 //   이름에 내용 지문이 있어 바뀌지 않으므로 저장본 먼저. 게임 저장본에 함께 들어 있어 새 판 활성화 때 함께 지워진다.
 // - GET이 아닌 요청, 다른 주소의 요청은 건드리지 않는다.
 // - 게임 저장본 이름에 판 번호와 내용 지문이 들어 있어, 새 판을 올리면 활성화 때 옛 저장본을 지운다.
@@ -16,7 +17,7 @@ const PY_CACHE = "ria-pyodide-__RIA_PYODIDE_VERSION__";
 const PYODIDE_PREFIX = new URL("__RIA_PYODIDE_URL__", self.location.href).href;
 const GAME_FILES = __RIA_GAME_FILES__;
 const CHAPTER_FILES = __RIA_CHAPTER_FILES__;
-const CHAPTER_RE = /\/(lessons\/ch[1-9]\d*|lang\/[a-z]{2})-[0-9a-f]{8}\.json$/; // 장 파일·언어 꾸러미(v0.13.0): 이름에 지문이 있어 저장본 먼저
+const CHAPTER_RE = /\/(lessons\/(en\/)?ch[1-9]\d*|lang\/[a-z]{2})-[0-9a-f]{8}\.json$/; // 장 파일·언어 꾸러미(v0.13.0): 이름에 지문이 있어 저장본 먼저
 const NETWORK_TIMEOUT_MS = 4000; // 게임 파일: 이보다 느리면 저장본을 먼저 보여 줌
 // 처음 설치 때 미리 받아 두는 Pyodide 핵심 파일(실패해도 설치는 계속, 쓸 때 다시 받음)
 // sqlite3(16장)도 여기에 들어 있다: _sqlite3는 pyodide.asm.wasm에, sqlite3 모듈은 python_stdlib.zip에(Pyodide 314.0.7)

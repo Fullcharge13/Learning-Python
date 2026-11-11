@@ -19,7 +19,7 @@ export const LESSONS = [
         out: "4500",
       },
       {
-        say: "딕셔너리를 통째로 찍으면 {'라떼': 4000} 처럼 작은따옴표로 나와요. 없는 키를 부르면 KeyError 단서가 나오고, 단서에 찾으려던 키가 적혀 있어요.",
+        say: "딕셔너리를 통째로 찍으면 {'라떼': 4000} 처럼 보통 작은따옴표로 나와요. 없는 키를 부르면 KeyError 단서가 나오고, 단서에 찾으려던 키가 적혀 있어요.",
         code: "menu = {\"라떼\": 4000}\nprint(menu)",
         out: "{'라떼': 4000}",
       },
@@ -55,7 +55,7 @@ export const LESSONS = [
         code: "price = {\"라떼\": 4000}\nprint(price)",
         options: ["{'라떼': 4000}", "{\"라떼\": 4000}", "라떼: 4000"],
         answer: 0,
-        explain: "딕셔너리를 통째로 찍으면 작은따옴표와 중괄호가 그대로 나와요. 파이썬은 문자열을 작은따옴표로 보여 줘요.",
+        explain: "딕셔너리를 통째로 찍으면 작은따옴표와 중괄호가 그대로 나와요. 파이썬은 문자열을 보통 작은따옴표로 보여 줘요.",
       },
       {
         type: "order", concept: "dict",
@@ -818,7 +818,7 @@ print(best)`,
         q: "80.0이 찍히게 줄을 놓아 보세요.",
         lines: ["v = [90, 80, 70]", "avg = sum(v) / len(v)", "print(round(avg, 1))"],
         expect: "80.0",
-        explain: "점수 리스트를 만들고, 평균을 구하고, 반올림해 찍어요. 평균을 구하기 전에 쓰면 NameError예요.",
+        explain: "점수 리스트를 만들고, 평균을 구하고, round로 소수 첫째 자리까지 다듬어 찍어요. 평균을 구하기 전에 쓰면 NameError예요.",
       },
       {
         type: "choice", concept: "dictlist",

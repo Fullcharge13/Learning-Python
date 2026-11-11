@@ -138,3 +138,37 @@ test("templates_chapter: 개발판·배포판 모두 getChapter가 TEMPLATES를 
   const split = createLessonData({ index: buildLessonIndex([{ ...mod(1), TEMPLATES: TPL(1) }]), files: FILES, base: BASE, fetch: f });
   assert.equal((await split.getChapter(1)).TEMPLATES[0].id, "1-T1");
 });
+
+// v0.13.1 영어 레슨: 영어가 있는 장은 영어 목록·파일, 없는 장은 한국어로 채운다
+import { mergeLangLessons, LANG_CHAPTER_FILE_RE } from "../../src/lessondata.js";
+
+test("mergeLangLessons: 영어 장이 있으면 영어, 없으면 한국어(장 번호 순)", () => {
+  const ko = { index: [{ id: 1, title: "첫 코드", lessons: [] }, { id: 2, title: "변수", lessons: [] }],
+    files: { 1: "lessons/ch1-aaaaaaaa.json", 2: "lessons/ch2-bbbbbbbb.json" } };
+  const en = { index: [{ id: 1, title: "First Code", lessons: [] }], files: { 1: "lessons/en/ch1-cccccccc.json" } };
+  const m = mergeLangLessons(ko, en);
+  assert.deepEqual(m.index.map((c) => c.title), ["First Code", "변수"]);
+  assert.deepEqual(m.files, { 1: "lessons/en/ch1-cccccccc.json", 2: "lessons/ch2-bbbbbbbb.json" });
+  assert.deepEqual(m.english, [1]);
+  // 영어가 없으면 한국어 그대로
+  const k = mergeLangLessons(ko, null);
+  assert.deepEqual(k.files, ko.files);
+  assert.deepEqual(k.english, []);
+});
+
+test("LANG_CHAPTER_FILE_RE: 영어 장 파일 이름", () => {
+  assert.match("lessons/en/ch12-deadbeef.json", LANG_CHAPTER_FILE_RE);
+  assert.ok(!LANG_CHAPTER_FILE_RE.test("lessons/ch12-deadbeef.json"));
+});
+
+test("mergeLangLessons: 파일 없는 영어 장·한국어에 없는 장·잘못된 파일 이름은 한국어로(v0.13.4 검토 M3·M4)", () => {
+  const ko = { index: [{ id: 1, title: "첫 코드" }, { id: 2, title: "변수" }, { id: 3, title: "조건문" }],
+    files: { 1: "lessons/ch1-aaaaaaaa.json", 2: "lessons/ch2-bbbbbbbb.json", 3: "lessons/ch3-dddddddd.json" } };
+  // 꾸러미 JSON에서 오면 열쇠는 글자("1")
+  const en = { index: [{ id: 1, title: "First Code" }, { id: 2, title: "Variables" }, { id: 3, title: "If" }, { id: 9, title: "Nine" }],
+    files: { "1": "lessons/en/ch1-cccccccc.json", "3": "../evil.json", "9": "lessons/en/ch9-eeeeeeee.json" } };
+  const m = mergeLangLessons(ko, en);
+  assert.deepEqual(m.index.map((c) => c.title), ["First Code", "변수", "조건문"], "2 has no file, 3 has a bad name, 9 unknown");
+  assert.deepEqual(m.files, { 1: "lessons/en/ch1-cccccccc.json", 2: "lessons/ch2-bbbbbbbb.json", 3: "lessons/ch3-dddddddd.json" });
+  assert.deepEqual(m.english, [1]);
+});

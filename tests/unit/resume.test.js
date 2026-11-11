@@ -158,3 +158,19 @@ test("resume: 기록 모양 — 칸 이름·초안·저장 시각", () => {
   assert.equal(rec.flow._lesson, undefined);   // 레슨 내용은 넣지 않음
   JSON.stringify(rec);
 });
+
+test("resume: 언어가 바뀌었으면 진행은 이어 가되 쓰기 문제 초안은 버림(v0.13.4 검토 M1)", () => {
+  const st = memStore();
+  const S = newSession(lesson()); S.flow = nextCard(S.flow);
+  const item = { index: 3, code: 'print("안녕")', hintsShown: 1, solutionSeen: false, submits: 2, hadError: false };
+  writeResume(st, packResume({ lessonId: "1-2", S, item, now: T0, lang: "ko" }));
+  const same = readResume(st, { now: T0, exists: () => true, lang: "ko" });
+  assert.equal(same.item.code, 'print("안녕")');
+  const other = readResume(st, { now: T0, exists: () => true, lang: "en" });
+  assert.ok(other, "progress kept");
+  assert.equal(other.item, null, "draft from the other language dropped");
+  // 언어 표시 없는 옛 기록은 한국어로 본다
+  const old = JSON.parse(st.getItem(RESUME_KEY)); delete old.lang; st.setItem(RESUME_KEY, JSON.stringify(old));
+  assert.equal(readResume(st, { now: T0, exists: () => true, lang: "ko" }).item.index, 3);
+  assert.equal(readResume(st, { now: T0, exists: () => true, lang: "en" }).item, null);
+});

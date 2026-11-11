@@ -175,11 +175,11 @@ export const LESSONS = [
       {
         type: "choice", concept: "http",
         q: "화면에 무엇이 출력될까요?",
-        code: J("from urllib.request import urlopen", "from urllib.error import HTTPError", "from urllib.error import URLError", "url = \"https://ria.example/closed\"", "try:", "    urlopen(url)", "except HTTPError as e:", "    print(\"코드\", e.code)", "except URLError:", "    print(\"연결 실패\")"),
+        code: J("from urllib.request import urlopen", "from urllib.error import HTTPError", "from urllib.error import URLError", "url = \"https://closed.example/\"", "try:", "    urlopen(url)", "except HTTPError as e:", "    print(\"코드\", e.code)", "except URLError:", "    print(\"연결 실패\")"),
         server: SRV_MENU,
         options: ["연결 실패", "코드 404", "코드 500"],
         answer: 0,
-        explain: "연습 서버 표에 없는 주소는 응답 자체가 없어서 URLError예요. 응답이 왔는데 오류 코드면 HTTPError예요.",
+        explain: "closed.example이라는 서버는 연습 서버 표에 없어서(서버를 못 찾아서) 응답 자체가 없어요. 그래서 URLError예요. 서버가 응답했는데 오류 코드면 HTTPError예요.",
       },
       {
         type: "blank", concept: "http",
@@ -208,7 +208,7 @@ export const LESSONS = [
           { stdin: "https://ria.example/menu", expect: "아메리카노 3000원", public: true },
           { stdin: "https://ria.example/news", expect: "신메뉴 쑥라떼 출시", public: false },
           { stdin: "https://ria.example/old", expect: "오류 코드 404", public: false },
-          { stdin: "https://ria.example/closed", expect: "연결 실패", public: false },
+          { stdin: "https://closed.example/", expect: "연결 실패", public: false },
         ],
         require: ["Call:urlopen", "Name:HTTPError", "Name:URLError"],
         hints: [
@@ -477,11 +477,11 @@ export const LESSONS = [
       {
         type: "choice", concept: "http",
         q: "화면에 무엇이 출력될까요?",
-        code: J("from urllib.request import urlopen", "from urllib.error import HTTPError", "from urllib.error import URLError", "url = \"https://ria.example/gone\"", "try:", "    urlopen(url)", "except HTTPError:", "    print(\"코드 오류\")", "except URLError:", "    print(\"연결 실패\")"),
+        code: J("from urllib.request import urlopen", "from urllib.error import HTTPError", "from urllib.error import URLError", "url = \"https://gone.example/\"", "try:", "    urlopen(url)", "except HTTPError:", "    print(\"코드 오류\")", "except URLError:", "    print(\"연결 실패\")"),
         server: SRV_MENU,
         options: ["연결 실패", "코드 오류", "아무것도 안 찍혀요"],
         answer: 0,
-        explain: "연습 서버 표에 없는 주소는 응답이 없어서 URLError예요. HTTPError는 응답이 와서 코드가 400 이상일 때만이에요.",
+        explain: "gone.example 서버는 찾을 수 없어서 응답이 없어요. 그래서 URLError예요. HTTPError는 서버가 응답했고 코드가 400 이상일 때만이에요.",
       },
       {
         type: "blank", concept: "html",
@@ -579,7 +579,7 @@ const SRV_PRICE2 = {
 
 const SRV_CODE = {
   "https://ria.example/shop/open": { status: 200, body: "영업 중", type: "text/plain" },
-  "https://ria.example/shop/new": { status: 201, body: "접수됨", type: "text/plain" },
+  "https://ria.example/shop/new": { status: 201, body: "만들어짐", type: "text/plain" },
   "https://ria.example/shop/vip": { status: 403, body: "회원 전용", type: "text/plain" },
   "https://ria.example/shop/old": { status: 404, body: "없음", type: "text/plain" },
   "https://ria.example/shop/err": { status: 500, body: "서버 문제", type: "text/plain" },
@@ -615,7 +615,7 @@ export const ADVANCED = [
         server: SRV_PRICE1,
       },
       {
-        say: "값이 둘 이상이면 &로 이어요. 연습 서버는 순서까지 똑같은 주소에만 답해요. 값은 영문과 숫자만 써요(한글은 14-4에서 만나요).",
+        say: "값이 둘 이상이면 &로 이어요. 연습 서버는 순서까지 똑같은 주소에만 답해요. (진짜 서버는 보통 순서를 따지지 않아요.) 값은 영문과 숫자만 써요(한글은 14-4에서 만나요).",
         code: J("from urllib.request import urlopen", "base = \"https://ria.example/price\"", "q = \"?item=tea&size=big\"", "with urlopen(base + q) as r:", "    print(r.read().decode())"),
         out: "4000원",
         server: SRV_PRICE2,
@@ -645,7 +645,7 @@ export const ADVANCED = [
         server: SRV_PRICE2,
         options: ["연결 실패", "성공", "오류 코드 404"],
         answer: 0,
-        explain: "연습 서버 표에는 item이 앞, size가 뒤인 주소만 있어요. 순서가 바뀐 주소는 글자가 달라서 답이 없고 URLError예요.",
+        explain: "연습 서버 표에는 item이 앞, size가 뒤인 주소만 있어요. 순서가 바뀐 주소는 글자가 달라서 답이 없고 URLError예요. 진짜 서버라면 보통 순서와 상관없이 답해요.",
       },
       {
         type: "blank", concept: "queryparam",
@@ -727,8 +727,8 @@ export const ADVANCED = [
       },
       {
         say: "성공 코드도 200만 있지 않아요. 201처럼 2로 시작하면 모두 성공이라 오류 없이 지나가요. r.status로 숫자를 확인해요.",
-        code: J("from urllib.request import urlopen", "url = input()", "with urlopen(url) as r:", "    if r.status == 201:", "        print(\"새로 접수됨\")", "    else:", "        print(\"그냥 성공\")"),
-        out: "새로 접수됨",
+        code: J("from urllib.request import urlopen", "url = input()", "with urlopen(url) as r:", "    if r.status == 201:", "        print(\"새로 만들어짐\")", "    else:", "        print(\"그냥 성공\")"),
+        out: "새로 만들어짐",
         stdin: "https://ria.example/shop/new",
         server: SRV_CODE,
       },
@@ -760,7 +760,7 @@ export const ADVANCED = [
         server: SRV_CODE,
         options: ["201", "200", "오류가 나요"],
         answer: 0,
-        explain: "새로 접수됐다는 뜻의 201도 2로 시작해서 성공이에요. 오류가 아니니 except로 가지 않고 r.status에 숫자가 담겨요.",
+        explain: "새로 만들어졌다(Created)는 뜻의 201도 2로 시작해서 성공이에요. 오류가 아니니 except로 가지 않고 r.status에 숫자가 담겨요.",
       },
       {
         type: "blank", concept: "statuscode",

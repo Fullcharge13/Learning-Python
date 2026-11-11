@@ -60,6 +60,7 @@ import functools
 import http.server
 import json
 import os
+import re
 import socketserver
 import subprocess
 import sys
@@ -3124,16 +3125,20 @@ def test_garden_tab():
 
 
 def _hangul_left(a, allow=()):
-    """화면 글자에서 레슨 내용(목록의 장·레슨 제목·목표·요약)과 허용 글자를 뺀 뒤 남은 한글 줄. v0.13.0: 레슨은 아직 한국어"""
+    """화면 글자에서 허용 글자를 뺀 뒤 남은 한글 줄. v0.13.4: 레슨도 모두 영어라 레슨 내용도 빼지 않는다"""
     return a.js("""(allow) => {
         let text = document.body.innerText + "\\n" + [...document.querySelectorAll("[aria-label], [title], [placeholder]")]
             .map((e) => [e.getAttribute("aria-label"), e.getAttribute("title"), e.getAttribute("placeholder")].filter(Boolean).join("\\n")).join("\\n");
-        const idx = window.RIA_LESSON_INDEX || [];
-        const parts = [];
-        for (const c of idx) { parts.push(c.title || ""); for (const l of [...(c.lessons || []), ...(c.advanced || [])]) parts.push(l.title || "", l.goal || "", ...(l.summary || [])); }
-        for (const p of [...parts, ...allow].filter(Boolean).sort((x, y) => y.length - x.length)) text = text.split(p).join("");
+        for (const p of [...allow].filter(Boolean).sort((x, y) => y.length - x.length)) text = text.split(p).join("");
         return text.split("\\n").filter((ln) => /[가-힣]/.test(ln)).slice(0, 8);
     }""", list(allow))
+
+
+def _lessons_lang(a):
+    """지금 레슨 목록·1-1 내용의 언어: 'ko'(한글 있음) / 'en'(없음). 언어를 바꾼 뒤 레슨도 따라 바뀌는지(v0.13.4 검토 I3)"""
+    return a.js("""async () => { const app = window.__ria.app; const l = await window.__ria.ctx.getLesson('1-1');
+        const ko = /[가-힣]/; const t = (app.chapters[0] && app.chapters[0].title) || '';
+        return { data: app.dataLang, title: ko.test(t) ? 'ko' : 'en', lesson: ko.test(JSON.stringify(l)) ? 'ko' : 'en' }; }""")
 
 
 def test_language_switch():
@@ -3183,16 +3188,12 @@ def test_language_switch():
             a.page.wait_for_selector(".screen.home")
             a.page.click("#continue")
             a.page.wait_for_selector(".card-view, article.item", timeout=20_000)
-            lid = a.js("() => window.__ria.app.params && window.__ria.app.params.id")
-            lesson_text = a.js("""(id) => window.__ria.ctx.getLesson(id).then((l) => { const out = [];
-                const walk = (o) => { if (typeof o === 'string') out.push(...o.split('\\n')); else if (o && typeof o === 'object') Object.values(o).forEach(walk); };
-                walk(l); return out.filter((x) => x.trim()); })""", lid)
-            left = _hangul_left(a, lesson_text)
+            left = _hangul_left(a)
             if left:
                 fails.append("%s lesson chrome hangul %r" % (dev, left))
             a.page.click("#quit")
             a.page.wait_for_selector(".modal [data-i]")
-            left = _hangul_left(a, lesson_text)
+            left = _hangul_left(a)
             if left:
                 fails.append("%s quit dialog hangul %r" % (dev, left))
             a.shot("lang-en-lesson-quit-%s.png" % slug(dev))
@@ -3209,17 +3210,83 @@ def test_language_switch():
                 fails.append("%s back to ko %r → %r" % (dev, before, after))
             if "설정" not in a.page.inner_text(".tabbar"):
                 fails.append("%s tabbar not Korean after switch back" % dev)
+            a.page.wait_for_function("() => window.__ria.app.dataLang === 'ko'", timeout=10_000)
+            if _lessons_lang(a) != {"data": "ko", "title": "ko", "lesson": "ko"}:
+                fails.append("%s lessons not Korean after switch back %r" % (dev, _lessons_lang(a)))
             # 영어로 다시 바꾼 뒤 개발자 모드를 끄면(학습 기록 칸, 공개 전) 한국어
             a.page.click('.lang-pick [data-lang="en"]')
-            a.page.wait_for_function("() => document.documentElement.lang === 'en'")
+            a.page.wait_for_function("() => document.documentElement.lang === 'en' && window.__ria.app.dataLang === 'en'", timeout=10_000)
+            if _lessons_lang(a) != {"data": "en", "title": "en", "lesson": "en"}:
+                fails.append("%s lessons not English after switch %r" % (dev, _lessons_lang(a)))
             a.page.click("#dev")
             a.page.wait_for_function("() => document.documentElement.lang === 'ko'", timeout=5000)
+            try:
+                a.page.wait_for_function("() => window.__ria.app.dataLang === 'ko'", timeout=10_000)
+            except Exception:  # noqa: BLE001
+                pass
+            if _lessons_lang(a) != {"data": "ko", "title": "ko", "lesson": "ko"}:
+                fails.append("%s lessons not Korean after dev off %r" % (dev, _lessons_lang(a)))
             if "설정" not in a.page.inner_text(".tabbar") or a.page.query_selector(".lang-pick"):
                 fails.append("%s dev off: not Korean / picker still shown" % dev)
             if _ls(a, SAVE_KEY) and json.loads(_ls(a, SAVE_KEY))["settings"].get("lang", "ko") != "ko":
                 fails.append("%s learning save got lang en" % dev)
             if a.errors:
                 fails.append("%s errors %r" % (dev, a.errors))
+    assert not fails, "\n".join(fails)
+
+
+def test_english_lesson():
+    """v0.13.1~: 개발자 모드 영어에서 1-1을 끝까지 풀면 레슨 화면·완료 화면에 한글이 없다(영어 레슨 파일 ch1이 있을 때)."""
+    if not os.path.exists(os.path.join(ROOT, "data", "lessons", "en", "ch1.js")):
+        return
+    fails = []
+    seed = dict(_garden_seed(1, xp=40), dev_mode=True, settings={"sound": False, "dailyGoal": 20, "name": "", "lang": "en"})
+    seed["completed_lessons"] = []
+    seed["current_lesson"] = "1-1"
+    with App("iPhone 17") as a:
+        a.js("([k1, k2, v]) => { localStorage.setItem(k1, '1'); localStorage.setItem(k2, v); }",
+             [DEV_FLAG_KEY, DEV_SAVE_KEY, json.dumps(seed)])
+        a.page.reload()
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=20_000)
+        a.start()
+        lesson = a.lesson("1-1")
+        if re.search(r"[가-힣]", json.dumps(lesson, ensure_ascii=False)):
+            fails.append("1-1 lesson data has Hangul (Korean file loaded?)")
+        seen = []
+
+        def hook(name, app):
+            left = _hangul_left(app)
+            if left:
+                seen.append("%s: %r" % (name, left))
+        a.page.click('[data-lesson="1-1"]')
+        a.page.wait_for_selector(".card-view, article.item", timeout=20_000)
+        a.play("1-1", wrong=(0,), hook=hook)
+        a.page.wait_for_selector(".screen.done")
+        a.page.wait_for_timeout(400)
+        a.dismiss()
+        left = _hangul_left(a)
+        if left:
+            fails.append("done screen hangul %r" % left)
+        a.shot("en-lesson-done.png")
+        fails += seen
+        # v0.13.4: 뒤쪽 장(리스트)·심화(웹 API 연습 서버)도 영어로 끝까지
+        for lid in ("7-1", "14-A1"):
+            a.js("(id) => window.__ria.ctx.show('lesson', { id })", lid)
+            a.page.wait_for_selector(".card-view, article.item", timeout=20_000)
+            if re.search(r"[가-힣]", json.dumps(a.lesson(lid), ensure_ascii=False)):
+                fails.append("%s lesson data has Hangul" % lid)
+            seen = []
+            a.play(lid, hook=hook)
+            a.page.wait_for_selector(".screen.done", timeout=20_000)
+            a.page.wait_for_timeout(300)
+            a.dismiss()
+            left = _hangul_left(a)
+            if left:
+                seen.append("%s done: %r" % (lid, left))
+            fails += seen
+            a.shot("en-lesson-done-%s.png" % lid)
+        if a.errors:
+            fails.append("errors %r" % a.errors)
     assert not fails, "\n".join(fails)
 
 

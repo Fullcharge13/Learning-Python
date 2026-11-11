@@ -170,7 +170,7 @@ export const LESSONS = [
         code: "nums = [1, 2, 3]\nnums.___(4)\nprint(nums)",
         chips: ["append", "remove", "pop"],
         answer: 0,
-        explain: "맨 뒤에 추가하는 건 append예요. remove(4)는 지울 4가 없어서 ValueError예요. pop은 맨 뒤를 꺼내는 메서드라 값을 넣을 수 없어요.",
+        explain: "맨 뒤에 추가하는 건 append예요. remove(4)는 지울 4가 없어서 ValueError예요. pop(4)는 4번 칸을 꺼내라는 뜻인데 그런 칸이 없어서 IndexError예요. pop은 꺼내기만 하고 넣지는 못해요.",
       },
       {
         type: "choice", concept: "listmod",
@@ -355,7 +355,7 @@ export const LESSONS = [
         out: "60 30 3\n[10, 20, 30]\n[30, 10, 20]\n[10, 20, 30]",
       },
       {
-        say: "b = a 는 복사가 아니라 이름표를 하나 더 붙인 거예요. 한쪽을 바꾸면 다른 쪽도 바뀌어요. 진짜 복사본은 list(a)로 만들고, index(값)은 위치를 알려줘요.",
+        say: "b = a 는 복사가 아니라 이름표를 하나 더 붙인 거예요. 한쪽을 바꾸면 다른 쪽도 바뀌어요. 따로 쓰는 복사본은 list(a)로 만들어요(겉 리스트 한 겹만 복사해요). index(값)은 위치를 알려줘요.",
         code: "a = [1, 2]\nb = a\nc = list(a)\na.append(3)\nprint(b)\nprint(c)\nprint(a.index(3))",
         out: "[1, 2, 3]\n[1, 2]\n2",
       },
@@ -561,7 +561,7 @@ export const ADVANCED = [
     summary: [
       "[식 for 변수 in 리스트]는 새 리스트를 한 줄로",
       "뒤에 if 조건을 하나 붙이면 골라 담음",
-      "for는 하나, if는 많아야 하나(여럿은 and)",
+      "여기선 for·if 하나씩, 조건 여럿은 and",
     ],
     cards: [
       {

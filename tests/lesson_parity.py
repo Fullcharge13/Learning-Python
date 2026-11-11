@@ -77,6 +77,10 @@ def hangul(o, path, errs):
         errs.append("%s: 한글 %r" % (path, o[:60]))
 
 
+def ko_chapters():
+    return sorted(int(m.group(1)) for f in os.listdir(KO_DIR) for m in [re.match(r"^ch([1-9]\d*)\.js$", f)] if m)
+
+
 def en_chapters():
     if not os.path.isdir(EN_DIR):
         return []
@@ -98,10 +102,20 @@ def main(argv):
         full = int(argv[argv.index("--full") + 1])
     chs = en_chapters()
     fails = 0
+    if "--ch" in argv:  # 장 하나만(번역하는 사람용)
+        chs = [int(argv[argv.index("--ch") + 1])]
+    elif sorted(chs) != ko_chapters():
+        # v0.13.4: 모든 장이 영어다. 한국어 장을 새로 넣으면 영어도 같이 넣어야 한다(검토 M5)
+        print("FAIL 영어 장 %r ≠ 한국어 장 %r" % (chs, ko_chapters()))
+        fails += 1
     if full is not None and chs != list(range(1, full + 1)):
         print("FAIL --full %d: 영어 장 %r" % (full, chs))
         fails += 1
     for n in chs:
+        if not os.path.exists(os.path.join(KO_DIR, "ch%d.js" % n)) or not os.path.exists(os.path.join(EN_DIR, "ch%d.js" % n)):
+            fails += 1
+            print("FAIL ch%d: 한국어나 영어 파일이 없음" % n)
+            continue
         errs = check_chapter(n)
         if errs:
             fails += 1

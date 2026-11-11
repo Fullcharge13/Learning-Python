@@ -2,7 +2,7 @@
 // 본 저장(ria-python.save)과 따로 localStorage 한 칸(RESUME_KEY)에 둔다. 모든 읽기·쓰기는 try/catch.
 // 기록: { v, lessonId, mode: "lesson", flow(레슨 내용 뺀 진행 상태), combo, marks, logs, marked, write,
 //        reviewCorrect, itemsSolved, item: 지금 write 문제 { index, code(초안), hintsShown, solutionSeen,
-//        submits, hadError } | null, savedAt(ms) }
+//        submits, hadError } | null, savedAt(ms), lang(v0.13.4, 없으면 "ko") }
 // 레슨을 끝냄·「처음부터」·「그만두기」·24시간 지남·없는 레슨이면 지운다.
 // 터치 문제 보기 순서는 이어 할 때 다시 섞여도 된다. 문제 차례와 결과는 그대로.
 
@@ -19,10 +19,10 @@ export function hasProgress(flow) {
   return !!flow && (flow.cardPos > 0 || flow.answered > 0);
 }
 
-export function packResume({ lessonId, S, item = null, now = Date.now() }) {
+export function packResume({ lessonId, S, item = null, now = Date.now(), lang = "ko" }) {
   const flow = {};
   for (const k of FLOW_KEYS) flow[k] = clone(S.flow[k]);
-  const rec = { v: VER, lessonId: String(lessonId), mode: "lesson", flow, savedAt: now, item: null };
+  const rec = { v: VER, lessonId: String(lessonId), mode: "lesson", flow, savedAt: now, item: null, lang: lang === "en" ? "en" : "ko" };
   for (const k of S_KEYS) rec[k] = clone(S[k] === undefined ? null : S[k]);
   if (item && Number.isInteger(item.index)) {
     rec.item = {
@@ -61,8 +61,8 @@ function wellFormed(r) {
 }
 
 /** 기록 읽기. 없거나 깨졌거나 24시간 지났거나 없는 레슨이면 지우고 null.
- *  @param opts { now, exists(lessonId) => boolean, key(기본 RESUME_KEY) } */
-export function readResume(storage, { now = Date.now(), exists = () => true, key = RESUME_KEY } = {}) {
+ *  @param opts { now, exists(lessonId) => boolean, key(기본 RESUME_KEY), lang(지금 언어: 다르면 쓰기 초안은 버림, v0.13.4) } */
+export function readResume(storage, { now = Date.now(), exists = () => true, key = RESUME_KEY, lang = null } = {}) {
   let text = null;
   try { text = storage ? storage.getItem(key) : null; } catch { return null; }
   if (text == null) return null;
@@ -71,6 +71,8 @@ export function readResume(storage, { now = Date.now(), exists = () => true, key
   let ok = wellFormed(r) && now - r.savedAt <= RESUME_MAX_MS && now - r.savedAt >= -60_000;
   if (ok) { try { ok = !!exists(r.lessonId); } catch { ok = false; } }
   if (!ok) { clearResume(storage, key); return null; }
+  // 다른 언어로 쓰던 초안은 이 언어 레슨의 정답과 맞지 않는다. 진행(카드·푼 문제)은 언어와 상관없어 그대로
+  if (lang && (r.lang === "en" ? "en" : "ko") !== lang) r.item = null;
   return r;
 }
 

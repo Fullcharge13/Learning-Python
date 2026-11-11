@@ -64,7 +64,7 @@ export function render(root, ctx) {
           <div><dt>${t`힌트 없이 통과`}</dt><dd>${n(st.hintfree)}</dd></div>
           <div><dt>${t`오류 고쳐 통과`}</dt><dd>${n(st.fixed)}</dd></div>
           <div><dt>${t`복습 문제`}</dt><dd>${n(st.review_items)}</dd></div>
-          <div><dt>${t`최고 연속 기록`}</dt><dd>${n(s.streak.best)}<small>${tp("unit-day", "일", s.streak.best)}</small></dd></div>
+          <div><dt>${t`최고 연속 기록`}</dt><dd>${n(s.streak.best)}<small class="unit">${tp("unit-day", "일", s.streak.best)}</small></dd></div>
           <div><dt>${t`모은 XP`}</dt><dd>${n(s.xp)}</dd></div>
         </dl>
         <h3>${t`자주 틀린 개념`}</h3>

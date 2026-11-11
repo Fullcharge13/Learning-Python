@@ -68,3 +68,15 @@ test("offline_chapters_all: 장 파일 전부 + Pyodide면 준비, 다른 저장
     urlsByCache: { "ria-pyodide-1": ALL, "ria-game-x": [ORIGIN + "lessons/xch1-11111111.json"] } });
   assert.equal(near.ready, false);
 });
+
+test("offlineStatus: 영어 장은 ria-lang-en 저장소에 있어도 준비됨으로 센다(v0.14.0 판정 C81)", () => {
+  const py = PYODIDE_REQUIRED.map((f) => "https://cdn.example/pyodide/" + f);
+  const base = { controlled: true, cacheNames: ["ria-pyodide-1", "ria-game-v1", "ria-lang-en"] };
+  const files = ["lessons/en/ch1-aaaaaaaa.json", "py/runner-bbbbbbbb.py"];
+  const ok = offlineStatus({ ...base, chapterFiles: files, urlsByCache: {
+    "ria-pyodide-1": py, "ria-game-v1": ["https://x/py/runner-bbbbbbbb.py"], "ria-lang-en": ["https://x/lessons/en/ch1-aaaaaaaa.json"] } });
+  assert.equal(ok.ready, true, JSON.stringify(ok));
+  const miss = offlineStatus({ ...base, chapterFiles: files, urlsByCache: {
+    "ria-pyodide-1": py, "ria-game-v1": ["https://x/lessons/en/ch1-aaaaaaaa.json"], "ria-lang-en": [] } });
+  assert.deepEqual(miss.missing, ["py/runner-bbbbbbbb.py"]);
+});

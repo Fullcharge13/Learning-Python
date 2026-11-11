@@ -97,13 +97,15 @@ export function cleanFarm(f) {
 }
 
 export class PyRun {
-  constructor({ indexURL = PYODIDE_CDN, runnerSource, workerURL, loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS } = {}) {
+  constructor({ indexURL = PYODIDE_CDN, runnerSource, runnerURL, workerURL, loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS } = {}) {
     let idx = new URL(indexURL, baseHref()).href; // 작업자가 blob 주소여도 되도록 절대 주소로
     if (!idx.endsWith("/")) idx += "/";
     this.indexURL = idx;
     this.workerURL = workerURL || new URL("./worker.js", import.meta.url);
     this.loadTimeoutMs = loadTimeoutMs; // 다음 불러오기부터 적용
     this._runnerSource = runnerSource;  // 문자열, 받는 중인 Promise, 또는 null(다시 받기)
+    // v0.14.0(판정 C80): 배포판은 runner.py를 첫 파일에 넣지 않고 py/runner-<지문>.py 주소를 준다(서비스 작업자가 미리 받음)
+    this._runnerURL = runnerURL ? new URL(runnerURL, baseHref()).href : null;
     this.status = "loading";
     this.phase = "first-load";
     this.onstatus = null;
@@ -158,7 +160,7 @@ export class PyRun {
 
   _source() {
     if (this._runnerSource == null) {
-      const pr = fetch(new URL("./py/runner.py", import.meta.url)).then((r) => {
+      const pr = fetch(this._runnerURL || new URL("./py/runner.py", import.meta.url)).then((r) => {
         if (!r.ok) throw new Error("runner.py " + r.status);
         return r.text();
       });

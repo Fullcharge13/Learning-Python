@@ -109,6 +109,13 @@ def build(d):
     w("")
     w("> 이 저장소는 앱의 **소스 코드**예요. 공부는 위 링크의 앱에서 하고, 아래 「실행 방법」은 앱을 고치거나 다시 만들 때 써요.")
     w("")
+    # v0.14.0 영어판 공개: 영어로 읽는 사람을 위한 짧은 소개
+    w(f"> **English** — *Ria & Python!* is a free, Duolingo-style Python course for your phone: {len(d['chapters'])} chapters "
+      "from your first `print` to data charts, taught by Professor Ria in 5–10 minute lessons with tap questions and real code "
+      "you write and run right in the browser (no install, works offline once opened). "
+      f"[Open the app]({APP_URL}) — it starts in English if your phone is set to English, "
+      "and you can switch any time under *Settings → Language*. Pi's Garden, the coding mini-game, is in English too.")
+    w("")
     w('<p align="center">'
       '<img src="docs/img/screen-home.png" alt="홈 화면: 리아 교수, 오늘의 퀘스트, 학습 길" width="220"> '
       '<img src="docs/img/screen-write.png" alt="직접 작성 문제: 과제, 기대 출력, 코드 입력창과 실행·제출 버튼" width="220"> '
@@ -326,7 +333,7 @@ def build(d):
         "심화 채점의 남은 빈틈: SQL 문제는 JOIN·HAVING 낱말이 SQL 글자 안에 있는지만 보고(16-A1~A3), 15-A1은 starter 아래쪽을 지우고 직접 찍으면 통과하며, 14-A2는 다시 읽은 값을 꼭 쓰지 않아도, 13-A1은 정해진 답 표로도 통과해요. 일부러 꾀를 내야 하는 빈틈이라 그대로 두었어요.",
         "레슨 중간 진행은 24시간 동안만 이어서 할 수 있어요. 다른 휴대폰이나 브라우저로는 이어지지 않아요.",
         "PC에서도 열리지만 휴대폰 폭 그대로 가운데에 놓여요.",
-        "영어판(English)을 만드는 중이에요(v0.13.0~). 공개(v0.14.0) 전에는 개발자 모드에서만 시작 화면·설정의 「한국어 / English」로 고를 수 있고, 화면 문구, 레슨 17장(본 과정·심화·매일 도전), 텃밭(노드가 만드는 코드·쪽지·주문)과 파이썬 실행 안내(텃밭·차트·연습 서버 오류)까지 모두 영어예요(v0.13.5). 영어 텃밭은 carrot·up·orders.txt 같은 영어 이름을 쓰고, 저장은 언어와 상관없이 같아요. 영어 장 파일은 처음 열 때 받아 저장해요.",
+        "영어판(English, v0.14.0 공개): 휴대폰 언어가 한국어가 아니면 영어로 시작하고, 누구나 시작 화면·설정의 「한국어 / English」로 바꿀 수 있어요. 화면 문구, 레슨 17장(본 과정·심화·매일 도전), 텃밭(노드가 만드는 코드·쪽지·주문)과 파이썬 실행 안내까지 모두 영어예요. 영어 텃밭은 carrot·up·orders.txt 같은 영어 이름을 쓰고, 저장은 언어와 상관없이 같아요. 영어로 배우면 영어 장 파일을 미리 받아 두어 오프라인에서도 돼요.",
         "안드로이드(갤럭시) 삼성 키보드에서 코드 입력창의 엔터가 안 먹는다는 제보가 있어요. 키보드와 상관없이 쓸 수 있게 기호 줄 맨 앞에 「↵ 줄 바꿈」 단추를 두었고, 처음 주어지는 코드는 정답 줄 수만큼 빈 줄이 미리 있어요(v0.12.2). 입력 방식 자체를 바꾸는 시도는 글자 입력을 망가뜨려 되돌렸어요(v0.12.3). 자동 시험은 Chromium에 갤럭시 화면을 입혀서 하므로 진짜 삼성 키보드의 동작은 실기기로만 확인할 수 있어요.",
     ]
     for x in limits:

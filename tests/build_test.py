@@ -104,7 +104,7 @@ def test_html_static():
     assert APP_VERSION in html
     assert CDN in html, "deploy build must point Pyodide at the CDN (C19)"
     assert "/node_modules/" not in html
-    assert "RIA_WORKER_URL" in html and "RIA_RUNNER_SRC" in html
+    assert "RIA_WORKER_URL" in html and "RIA_RUNNER_URL" in html
     assert '<link rel="manifest" href="manifest.webmanifest">' in html
     assert 'rel="apple-touch-icon"' in html
     assert 'name="apple-mobile-web-app-capable"' in html
@@ -127,6 +127,13 @@ def test_manifest_and_icons():
     for i in m["icons"]:
         w, h = _png_size(os.path.join(DIST, i["src"]))
         assert "%dx%d" % (w, h) == i["sizes"], (i, w, h)
+    # v0.14.0: 영어 앱 이름(영어로 쓰는 사람의 홈 화면에 추가) — 아이콘·색·주소는 한국어판과 같다
+    with open(os.path.join(DIST, "manifest.en.webmanifest"), encoding="utf-8") as f:
+        en = json.load(f)
+    assert en["name"] == "Ria & Python!" and en["short_name"] == "Ria & Python" and en["lang"] == "en", en
+    for k in ("start_url", "scope", "display", "theme_color", "background_color", "icons"):
+        assert en[k] == m[k], k
+    assert not re.search(r"[가-힣]", json.dumps(en, ensure_ascii=False)), en
     for doc in DOC_ICONS:
         assert os.path.exists(os.path.join(ROOT, "docs", "img", doc)), doc
     for rel, px in ICON_SIZES.items():
@@ -192,7 +199,7 @@ def test_node_missing():
 
 def test_guards():
     b = _build_module()
-    ok = "const py = new PyRun({ indexURL, workerURL: window.RIA_WORKER_URL, runnerSource: window.RIA_RUNNER_SRC });"
+    ok = "const py = new PyRun({ indexURL, workerURL: window.RIA_WORKER_URL, runnerURL: window.RIA_RUNNER_URL });"
     b.check_app_hooks(ok)
     for bad in ("const py = new PyRun({ indexURL });", "new PyRun({ indexURL, workerURL: window.RIA_WORKER_URL })"):
         try:
@@ -221,7 +228,7 @@ def test_guards():
 class _Handler(http.server.SimpleHTTPRequestHandler):
     """dist-dev와 /node_modules/를 함께 준다. 시험이 STATE로 네트워크 상태를 흉내 낸다."""
     STATE = {"block_pyodide": False, "slow_s": 0, "block_chapters": False, "slow_chapter_s": 0,
-             "chapter_404": False, "block_names": (), "block_sw": False}
+             "chapter_404": False, "block_names": (), "block_sw": False, "slow_pyodide_s": 0}
     extensions_map = {
         **http.server.SimpleHTTPRequestHandler.extensions_map,
         ".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm",
@@ -246,6 +253,8 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if p == "/sw.js" and self.STATE["block_sw"]:
             self.send_error(404)  # 새 서비스 작업자 설치 실패 흉내
             return
+        if p.startswith("/node_modules/pyodide/") and self.STATE["slow_pyodide_s"]:
+            time.sleep(self.STATE["slow_pyodide_s"])   # 느린 첫 설치(서비스 작업자가 Pyodide를 미리 받는 동안) 흉내
         if p.startswith("/lessons/") and self.STATE["slow_chapter_s"]:
             time.sleep(self.STATE["slow_chapter_s"])
         if p in ("/", "/index.html") and self.STATE["slow_s"]:
@@ -281,14 +290,14 @@ class _Browser:
     def __init__(self, folder, service_workers="allow", init_save=None):
         from playwright.sync_api import sync_playwright
         _Handler.STATE.update(block_pyodide=False, slow_s=0, block_chapters=False, slow_chapter_s=0,
-                              chapter_404=False, block_names=(), block_sw=False)
+                              chapter_404=False, block_names=(), block_sw=False, slow_pyodide_s=0)
         self.httpd = _Server(("127.0.0.1", 0), functools.partial(_Handler, directory=folder))
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.url = "http://127.0.0.1:%d/" % self.httpd.server_address[1]
         self.pw = sync_playwright().start()
         self.browser = self.pw.chromium.launch()
         device = {k: v for k, v in self.pw.devices["iPhone 17"].items() if k != "default_browser_type"}
-        self.context = self.browser.new_context(service_workers=service_workers, **device)
+        self.context = self.browser.new_context(service_workers=service_workers, locale="ko-KR", **device)  # v0.14.0: 처음 언어는 휴대폰 언어
         if init_save is not None:
             self.context.add_init_script("if (!sessionStorage.getItem('seeded')) { localStorage.setItem('ria-python.save', %s); sessionStorage.setItem('seeded', '1'); }"
                                          % json.dumps(json.dumps(init_save)))
@@ -691,6 +700,27 @@ def test_sw_skips_english_chapters():
     assert any(f.startswith("lang/en-") for f in pre), "language pack stays precached"
 
 
+def test_runner_separate_file():
+    """v0.14.0(판정 C80): runner.py는 첫 파일에 넣지 않고 py/runner-<지문>.py로 따로 둔다(첫 파일 여유).
+    내용은 strip_runner 결과 그대로, 서비스 작업자가 미리 받고(오프라인) 저장본 먼저로 준다."""
+    _build()
+    html = _read(os.path.join(DIST, "index.html"))
+    m = re.search(r'window\.RIA_RUNNER_URL = "(py/runner-([0-9a-f]{8})\.py)";', html)
+    assert m, "RIA_RUNNER_URL missing"
+    rel, h = m.group(1), m.group(2)
+    with open(os.path.join(DIST, rel), "rb") as f:
+        body = f.read()
+    assert hashlib.sha256(body).hexdigest()[:8] == h
+    mod = _build_module()
+    with open(os.path.join(ROOT, "src", "py", "runner.py"), encoding="utf-8") as f:
+        assert body.decode("utf-8") == mod.strip_runner(f.read())
+    assert "def _make_farm" not in html and "RIA_RUNNER_SRC" not in html, "runner source must not be inlined"
+    sw = _read(os.path.join(DIST, "sw.js"))
+    pre = json.loads(re.search(r"const CHAPTER_FILES = (\[.*?\]);", sw).group(1))
+    assert rel in pre, "sw must precache the runner file"
+    assert "py\\/runner" in sw, "sw must serve the runner cache-first"
+
+
 def _flow_module():
     spec = importlib.util.spec_from_file_location("ria_flow", os.path.join(ROOT, "tests", "flow.py"))
     mod = importlib.util.module_from_spec(spec)
@@ -861,6 +891,114 @@ def test_chapter_cache_rotation():
         b.close()
         shutil.rmtree(folder, ignore_errors=True)
         shutil.rmtree(alt, ignore_errors=True)
+
+
+def test_lang_cache_survives_rotation():
+    """v0.14.0(판정 C81, 검토 I1): 처음 열 때 받은 영어 장은 판과 상관없는 저장소(ria-lang-en)에 들어가 새 판이 와도 남고,
+    새 판에서 이름(지문)이 바뀐 영어 장의 옛 파일만 지운다."""
+    folder = os.path.join(OUT, "dist-rotate-en")
+    alt = os.path.join(OUT, "lessons-alt-en")
+    shutil.rmtree(alt, ignore_errors=True)
+    shutil.copytree(_snapshot(), alt)
+    p = os.path.join(alt, "en", "ch1.js")
+    src = _read(p)
+    changed = re.sub(r'(export const CHAPTER = \{[^}]*title: ")', r"\1(Test) ", src, count=1)
+    assert changed != src
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(changed)
+    r = _run_build("--dev-pyodide", "--out", folder, "--lessons-dir", alt)
+    assert r.returncode == 0, r.stdout + r.stderr
+    old_en = sorted(os.listdir(os.path.join(folder, "lessons", "en")))
+    b = _Browser(folder)
+    try:
+        b.page.goto(b.url)
+        b.home()
+        b.wait_controlled()
+        ch1 = next(f for f in old_en if f.startswith("ch1-"))
+        ch2 = next(f for f in old_en if f.startswith("ch2-"))
+        for f in (ch1, ch2):  # 학습자가 영어 장을 연 것처럼
+            assert b.page.evaluate("(u) => fetch(u).then(r => r.ok)", "lessons/en/" + f)
+        lang = [k for k in b.cache_keys() if k.startswith("ria-lang-")]
+        assert lang == ["ria-lang-en"], b.cache_keys()
+        assert not _wait_chapters_cached(b, ["lessons/en/" + ch1, "lessons/en/" + ch2])
+        old_game = [k for k in b.cache_keys() if k.startswith("ria-game-")]
+        r = _run_build("--dev-pyodide", "--out", folder, "--lessons-dir", _snapshot())
+        assert r.returncode == 0, r.stdout + r.stderr
+        new_en = sorted(os.listdir(os.path.join(folder, "lessons", "en")))
+        assert ch1 not in new_en and ch2 in new_en, (old_en, new_en)
+        b.page.evaluate("async () => { const r = await navigator.serviceWorker.getRegistration(); await r.update(); }")
+        deadline = time.monotonic() + 30
+        while True:
+            keys = [k for k in b.cache_keys() if k.startswith("ria-game-")]
+            if (keys and old_game[0] not in keys) or time.monotonic() > deadline:
+                break
+            b.page.wait_for_timeout(200)
+        assert keys and old_game[0] not in keys, "new version did not activate"
+        b.page.wait_for_timeout(500)
+        urls = b.cached_urls()
+        assert [u for u in urls if u.endswith("/lessons/en/" + ch2)], "unchanged English chapter lost on new version"
+        assert not [u for u in urls if u.endswith("/lessons/en/" + ch1)], "old English chapter file not pruned"
+        print("    English chapters kept across versions: %s kept, %s pruned" % (ch2, ch1))
+    finally:
+        b.close()
+        shutil.rmtree(folder, ignore_errors=True)
+        shutil.rmtree(alt, ignore_errors=True)
+
+
+def test_english_offline():
+    """v0.14.0(판정 C81, 검토 I1·I2): 영어로 배우는 사람은 앱을 열면 영어 장을 모두 미리 받아 두고(ria-lang-en),
+    설정의 「오프라인 준비」가 영어 장 기준으로 맞으며, 비행기 모드에서도 뒤쪽 영어 장 레슨이 열린다."""
+    _build("--dev-pyodide", "--out", DEV_OUT)
+    seed = {"saveVer": 2, "xp": 0, "settings": {"sound": False, "dailyGoal": 10, "name": "", "lang": "en"}}
+    b = _Browser(DEV_OUT, init_save=seed)
+    try:
+        pg = b.page
+        pg.goto(b.url)
+        b.home()
+        assert pg.evaluate("() => document.documentElement.lang") == "en"
+        b.wait_controlled()
+        r = pg.evaluate("() => window.__ria.ctx.py.run('print(1)')")   # Pyodide 저장(판정 C32)
+        assert r["stdout"] == "1\n", r
+        en_files = pg.evaluate("() => window.__ria.app.data.fileList().filter(f => f.startsWith('lessons/en/'))")
+        assert len(en_files) == 17, en_files
+        missing = _wait_chapters_cached(b, en_files, timeout=60)
+        assert not missing, "English chapters not warmed: %r" % missing
+        assert "ria-lang-en" in b.cache_keys(), b.cache_keys()
+        pg.click('.tabbar [data-go="settings"]')
+        pg.wait_for_selector("#offline[data-ready]", timeout=15_000)
+        assert pg.get_attribute("#offline", "data-ready") == "true", pg.inner_text("#offline")
+        print("    English offline ready: %d chapters warmed" % len(en_files))
+        b.context.set_offline(True)
+        pg.reload()
+        b.home()
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { id: '14-1' })")
+        pg.wait_for_selector(".card-view, article.item", timeout=15_000)
+        assert not re.search(r"[가-힣]", pg.inner_text(".screen")), pg.inner_text(".screen")[:300]
+        b.context.set_offline(False)
+        assert not [e for e in b.errors if e.startswith("pageerror")], b.errors
+    finally:
+        b.close()
+
+
+def test_english_warm_after_slow_install():
+    """v0.14.0 검토 I1: 처음 여는 영어 사용자 — 서비스 작업자 설치(Pyodide 미리 받기)가 미리 받기 시점(4초)보다 늦어도,
+    작업자가 페이지를 다루기 시작하면(controllerchange) 영어 장을 미리 받는다."""
+    _build("--dev-pyodide", "--out", DEV_OUT)
+    seed = {"saveVer": 2, "xp": 0, "settings": {"sound": False, "dailyGoal": 10, "name": "", "lang": "en"}}
+    b = _Browser(DEV_OUT, init_save=seed)
+    try:
+        _Handler.STATE["slow_pyodide_s"] = 7
+        pg = b.page
+        pg.goto(b.url)
+        b.home()
+        b.wait_controlled()
+        _Handler.STATE["slow_pyodide_s"] = 0
+        en_files = pg.evaluate("() => window.__ria.app.data.fileList().filter(f => f.startsWith('lessons/en/'))")
+        missing = _wait_chapters_cached(b, en_files, timeout=40)
+        assert not missing, "English chapters not warmed after a slow first install: %d missing" % len(missing)
+    finally:
+        _Handler.STATE["slow_pyodide_s"] = 0
+        b.close()
 
 
 def test_review_lazy():

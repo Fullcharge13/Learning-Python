@@ -40,7 +40,8 @@ function advBranch(ctx, chapter, ex, ey) {
   const adv = chapter.advanced || [];
   if (!adv.length) return { links: "", nodes: "" };
   const span = (adv.length - 1) * STAR_GAP;
-  const cx = Math.min(Math.max(ex, span / 2 + STAR / 2 + 8), W - span / 2 - STAR / 2 - 8);
+  // 양 끝 여백 24px: 320px 휴대폰(iPhone SE)은 길(W=320)이 화면 여백만큼 밀려 오른쪽 별이 화면 밖으로 나갔다(v0.14.0 QA M3)
+  const cx = Math.min(Math.max(ex, span / 2 + STAR / 2 + 24), W - span / 2 - STAR / 2 - 24);
   const sy = ey + BR_DY;
   const states = adv.map((l) => ctx.lessonState(l.id));
   const opened = states.some((st) => st !== "locked");

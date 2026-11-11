@@ -2,6 +2,8 @@
 import { migrate, takeRefundNotice, refundNoticeText, takeBrokenNotice, brokenNoticeText } from "./save.js";
 import { t, tx, setLang, lang, EN_PUBLIC, pickStartLang, packOf } from "./i18n.js";
 import { loadLangPack } from "./langload.js";
+import { warmLangFiles } from "./langwarm.js";
+import { latestOnly } from "./latest.js";
 import { readDevFlag, setDevMode, loadSlot, storeSlot, keysFor, markDev } from "./devmode.js";
 import { rollDay } from "./rules.js";
 import { ensureQuests } from "./quests.js";
@@ -31,7 +33,7 @@ import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 import * as garden from "./ui/garden.js";
 
-export const VERSION = "v0.13.6";
+export const VERSION = "v0.14.0";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -64,10 +66,14 @@ async function initLessonData(l = "ko") {
   return createLessonData({ modules: mods.map((m) => en.get(m.CHAPTER && m.CHAPTER.id) || m) });
 }
 /** 지금 언어의 레슨 목록으로(언어를 바꾼 뒤). 레슨 id는 언어와 상관없이 같다 */
+// 언어를 빠르게 오가면 불러오기가 겹칠 수 있다(개발판은 장 모듈을 하나씩 불러와 느림) → 마지막 것만 쓴다(v0.13.4 검토 M2)
+const loadLatest = latestOnly((l) => initLessonData(l));
 async function reloadLessons() {
   const l = lang();
   try {
-    app.data = await initLessonData(l);
+    const r = await loadLatest(l);
+    if (r.stale || l !== lang()) return;
+    app.data = r.value;
     app.chapters = app.data.index;
     app.dataLang = l;
   } catch (e) {
@@ -99,7 +105,7 @@ const sound = createSound(() => app.save && app.save.settings && app.save.settin
 function initPy() {
   const indexURL = (typeof window !== "undefined" && window.RIA_PYODIDE_URL) || PYODIDE_CDN;
   // build.py가 작업자·runner를 HTML에 넣으면 이 두 값을 채운다(판정 C29). 개발판에서는 undefined → 기본 동작
-  const py = new PyRun({ indexURL, workerURL: window.RIA_WORKER_URL, runnerSource: window.RIA_RUNNER_SRC });
+  const py = new PyRun({ indexURL, workerURL: window.RIA_WORKER_URL, runnerURL: window.RIA_RUNNER_URL });
   let everReady = false;
   py.onstatus = (status, phase) => {
     if (status === "ready") everReady = true;
@@ -281,6 +287,11 @@ function applyLang(l) {
   setLang(l === "en" && langAllowed() ? "en" : "ko");
   document.documentElement.lang = lang();
   document.title = t`리아와 파이썬` + "!";
+  // v0.14.0: 홈 화면에 추가할 때의 앱 이름도 언어별(안드로이드는 manifest, 아이폰은 apple-mobile-web-app-title)
+  const man = document.querySelector('link[rel="manifest"]');
+  if (man) man.setAttribute("href", lang() === "en" ? "manifest.en.webmanifest" : "manifest.webmanifest");
+  const apple = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (apple) apple.setAttribute("content", t`리아와 파이썬`);
   paintDev();
 }
 /** 지금 저장의 언어로 맞춘다(영어 꾸러미가 없으면 받아 옴). 못 받으면 한국어로 두고 false */
@@ -293,6 +304,16 @@ async function syncLang() {
   else applyLang(want);
   if (app.data && app.dataLang !== lang()) await reloadLessons();
   return lang() !== before;
+}
+/** v0.14.0(판정 C81): 영어로 배우면 영어 장 파일을 미리 받아 둔다(오프라인). 배포판·작업자가 있을 때만, 조용히 */
+let warmTimer = null;
+function warmLang(delayMs = 4000) {
+  clearTimeout(warmTimer);
+  if (lang() !== "en" || !app.data) return;
+  warmTimer = setTimeout(() => {
+    if (lang() !== "en" || !app.data) return;
+    warmLangFiles(app.data.fileList().filter((f) => f.startsWith("lessons/en/"))).catch(() => {});
+  }, delayMs);
 }
 /** 언어 바꾸기(시작 화면·설정). 바꾸면 지금 화면을 다시 그린다 */
 async function setLanguage(l) {
@@ -307,6 +328,7 @@ async function setLanguage(l) {
   applyLang(l);
   if (app.dataLang !== lang()) await reloadLessons();
   show(app.screen, app.params);
+  warmLang(1000);
   return true;
 }
 
@@ -350,7 +372,8 @@ const ctx = {
   getChapter: (n) => app.data.getChapter(n),
   chaptersForConcepts: (concepts) => chaptersForConcepts(app.chapters, concepts, app.save.completed_lessons),
   swChanged: () => app.swChanged,
-  get chapterFiles() { return app.data ? app.data.fileList() : []; },
+  // 오프라인 준비에 필요한 파일: 지금 언어의 장 파일 + Python 실행기(v0.14.0 판정 C80: 첫 파일 밖)
+  get chapterFiles() { return [...(app.data ? app.data.fileList() : []), ...(window.RIA_RUNNER_URL ? [window.RIA_RUNNER_URL] : [])]; },
   lessonState, currentLessonId,
   today: () => localDate(),
   get py() { return app.py; },
@@ -397,6 +420,7 @@ async function boot() {
   // 처음 여는 사람(저장 없음): 공개 뒤에는 휴대폰 언어(v0.13.0 §1). 쓰던 사람은 저장 값
   if (fresh && pickStartLang(navigator.languages || [navigator.language], false, EN_PUBLIC) === "en") {
     app.save = { ...save, settings: { ...save.settings, lang: "en" } };
+    commit(app.save);   // 고른 언어를 남겨 둔다(다음에 열 때도 영어, 설정에서 바꿀 수 있음)
   }
   // 깨진 저장(v0.12.1, QA 5): 새 저장에 남긴 칸 이름을 적어 바로 저장 → 홈에서 한 번 안내(새로고침해도 다시 .broken으로 남기지 않음)
   if (brokenKey) commit({ ...save, broken_notice: brokenKey });
@@ -430,6 +454,10 @@ async function boot() {
     if (app.screen === "home" && (before !== after || app.greetOverride)) show("home");
   });
   root.removeAttribute("aria-busy");
+  warmLang();
+  window.addEventListener("online", () => warmLang(1000));
+  // 처음 여는 사람: 서비스 작업자 설치(Pyodide 미리 받기)가 끝나 페이지를 다루기 시작할 때 다시(v0.14.0 검토 I1)
+  try { navigator.serviceWorker?.addEventListener("controllerchange", () => warmLang(1000)); } catch { /* 지원 안 함 */ }
   // 시험 도구가 상태를 볼 수 있게
   window.__ria = { app, ctx };
 }

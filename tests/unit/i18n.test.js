@@ -74,8 +74,8 @@ test("pickStartLang: 공개 뒤 처음 여는 사람은 휴대폰 언어, 쓰던
   assert.equal(pickStartLang(["en-US"], false, false), "ko"); // 공개 전
 });
 
-test("EN_PUBLIC: v0.13.x 동안은 공개 전", () => {
-  assert.equal(EN_PUBLIC, false);
+test("EN_PUBLIC: v0.14.0부터 공개", () => {
+  assert.equal(EN_PUBLIC, true);
 });
 
 test("tp: 뜻이 다른 같은 한국어는 문맥 열쇠로, 없으면 한국어 원문(열쇠 글자가 보이지 않게)", () => {

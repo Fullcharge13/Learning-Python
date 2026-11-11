@@ -125,8 +125,8 @@ process.stdout.write(JSON.stringify({ index, files, contents, tasks }));
 """
 
 
-OWNED = ("index.html", "manifest.webmanifest", "sw.js", "icons", "lessons", "lang", "licenses.txt")
-HOOKS = ("RIA_WORKER_URL", "RIA_RUNNER_SRC")
+OWNED = ("index.html", "manifest.webmanifest", "manifest.en.webmanifest", "sw.js", "icons", "lessons", "lang", "py", "licenses.txt")
+HOOKS = ("RIA_WORKER_URL", "RIA_RUNNER_URL")
 
 
 
@@ -289,7 +289,7 @@ def strip_runner(source):
 CONFIG = """<script>
 window.RIA_VERSION = {version};
 window.RIA_PYODIDE_URL = {pyodide};
-window.RIA_RUNNER_SRC = {runner};
+window.RIA_RUNNER_URL = {runner_url};
 window.RIA_LESSON_INDEX = {lesson_index};
 window.RIA_CHAPTER_FILES = {chapter_files};
 window.RIA_LANG_FILES = {lang_files};
@@ -357,6 +357,9 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
         raise SystemExit("build: bundled app lost %s" % "/".join(HOOKS))
     with open(os.path.join(SRC, "py", "runner.py"), encoding="utf-8") as f:
         runner = strip_runner(f.read())
+    # v0.14.0(판정 C80): runner.py는 첫 파일 밖 py/runner-<지문>.py(서비스 작업자가 미리 받고 저장본 먼저)
+    runner_body = runner.encode("utf-8")
+    runner_name = "py/runner-%s.py" % hashlib.sha256(runner_body).hexdigest()[:8]
     with open(os.path.join(SRC, "index.html"), encoding="utf-8") as f:
         html = f.read()
 
@@ -366,7 +369,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     if 'rel="manifest"' not in html:
         raise SystemExit("build: could not insert head links after <title>")
     config = CONFIG.format(version=js_string(version), pyodide=js_string(pyodide_url),
-                           runner=js_string(runner), worker=js_string(b["worker"]),
+                           runner_url=js_string(runner_name), worker=js_string(b["worker"]),
                            lesson_index=js_value(split["index"]), chapter_files=js_value(split["files"]),
                            lang_files=js_value({k: v[0] for k, v in packs.items()}))
     if "<!-- RIA:CONFIG -->" not in html:
@@ -382,6 +385,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     with open(os.path.join(out, "index.html"), "wb") as f:
         f.write(data)
     shutil.copy(os.path.join(ROOT, "manifest.webmanifest"), os.path.join(out, "manifest.webmanifest"))
+    shutil.copy(os.path.join(ROOT, "manifest.en.webmanifest"), os.path.join(out, "manifest.en.webmanifest"))  # v0.14.0 영어 앱 이름
     os.makedirs(os.path.join(out, "lessons"))
     chapter_sizes = []
     for n, name in sorted(split["files"].items(), key=lambda kv: int(kv[0])):
@@ -410,6 +414,10 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
             f.write(body)
         lang_sizes.append((name, len(body)))
     chapter_files += [name for name, _ in lang_sizes]  # 서비스 작업자가 장 파일처럼 미리 받아 둠(오프라인 언어 바꾸기)
+    os.makedirs(os.path.join(out, "py"))
+    with open(os.path.join(out, runner_name), "wb") as f:
+        f.write(runner_body)
+    chapter_files.append(runner_name)  # Python 실행에 꼭 필요 → 미리 받음(오프라인)
 
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     import icon  # noqa: E402  (Playwright가 필요해서 쓸 때만 불러옴)
@@ -419,10 +427,10 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     icon_files = sorted({i["src"] for i in manifest["icons"]} | {"icons/apple-touch-icon.png"})
     with open(os.path.join(out, "licenses.txt"), "w", encoding="utf-8") as f:
         f.write(third_party_notices(b["inputs"], pyodide_url))
-    game_files = ["./", "index.html", "manifest.webmanifest", "licenses.txt"] + icon_files
+    game_files = ["./", "index.html", "manifest.webmanifest", "manifest.en.webmanifest", "licenses.txt"] + icon_files
 
     h = hashlib.sha256(data)
-    for rel in icon_files + ["manifest.webmanifest", "licenses.txt"]:
+    for rel in icon_files + ["manifest.webmanifest", "manifest.en.webmanifest", "licenses.txt"]:
         with open(os.path.join(out, rel), "rb") as f:
             h.update(f.read())
     with open(os.path.join(ROOT, "sw.js"), encoding="utf-8") as f:
@@ -430,7 +438,8 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     sw = (sw.replace("__RIA_VERSION__", version).replace("__RIA_HASH__", h.hexdigest()[:10])
             .replace("__RIA_PYODIDE_VERSION__", PYODIDE_VERSION).replace("__RIA_PYODIDE_URL__", pyodide_url)
             .replace("__RIA_GAME_FILES__", json.dumps(game_files))
-            .replace("__RIA_CHAPTER_FILES__", json.dumps(chapter_files)))
+            .replace("__RIA_CHAPTER_FILES__", json.dumps(chapter_files))
+            .replace("__RIA_LANG_CHAPTER_FILES__", json.dumps(sorted(n for n, _ in chapter_sizes if n.startswith("lessons/en/")))))
     if "__RIA_" in sw:
         raise SystemExit("build: placeholder left in sw.js")
     with open(os.path.join(out, "sw.js"), "w", encoding="utf-8") as f:

@@ -1,5 +1,5 @@
 <!-- 이 파일은 tools/readme_gen.py가 data/ 표에서 자동으로 만든다. 손으로 고치지 말 것. -->
-# 리아와 파이썬! v0.13.6
+# 리아와 파이썬! v0.14.0
 
 리아 교수와 하루 5~10분, 휴대폰 브라우저에서 Python을 첫 코드부터 데이터 시각화까지 터치 문제와 직접 코드 작성으로 익히는 듀오링고식 학습 웹앱이에요. 설치할 것 없이 브라우저 안에서 코드가 실행되고 바로 채점돼요.
 
@@ -7,11 +7,13 @@
 
 > 이 저장소는 앱의 **소스 코드**예요. 공부는 위 링크의 앱에서 하고, 아래 「실행 방법」은 앱을 고치거나 다시 만들 때 써요.
 
+> **English** — *Ria & Python!* is a free, Duolingo-style Python course for your phone: 17 chapters from your first `print` to data charts, taught by Professor Ria in 5–10 minute lessons with tap questions and real code you write and run right in the browser (no install, works offline once opened). [Open the app](https://fullcharge13.github.io/Learning-Python/) — it starts in English if your phone is set to English, and you can switch any time under *Settings → Language*. Pi's Garden, the coding mini-game, is in English too.
+
 <p align="center"><img src="docs/img/screen-home.png" alt="홈 화면: 리아 교수, 오늘의 퀘스트, 학습 길" width="220"> <img src="docs/img/screen-write.png" alt="직접 작성 문제: 과제, 기대 출력, 코드 입력창과 실행·제출 버튼" width="220"> <img src="docs/img/screen-done.png" alt="레슨 완료 화면: 얻은 XP·바이트와 리아 교수" width="220"></p>
 
 **배우는 것** — 1장 첫 코드 · 2장 변수와 표현식 · 3장 조건문 · 4장 함수 · 5장 반복문 · 6장 문자열 다루기 · 7장 리스트 · 8장 딕셔너리 · 9장 튜플과 집합 · 10장 예외 처리 · 11장 파일 · 12장 정규표현식 · 13장 네트워크 기초 · 14장 웹 API와 JSON · 15장 객체지향 · 16장 데이터베이스와 SQL · 17장 데이터 시각화
 
-- 판: **v0.13.6** (게임 안 버전 표시, `LOG.md`의 판 번호와 같음)
+- 판: **v0.14.0** (게임 안 버전 표시, `LOG.md`의 판 번호와 같음)
 - 내용: 17장 · 레슨 85개 · 심화 레슨 51개 · 문제 1025개 · 일일 퀘스트 7종 · 배지 15개 · 리아 교수 의상 10벌 · 표정 8가지
 - 서버 없음: Python 실행은 브라우저 안의 **Pyodide**(브라우저에서 돌아가는 Python) `314.0.7`이 맡고, 진도는 휴대폰 안(`localStorage`, 브라우저 저장 칸)에 저장돼요.
 - 이 게임은 듀오링고의 학습 방식(연속 기록, 짧은 레슨, 퀘스트)만 참고했고, 듀오링고의 이름·로고·캐릭터는 쓰지 않아요.
@@ -405,7 +407,7 @@
 - 심화 채점의 남은 빈틈: SQL 문제는 JOIN·HAVING 낱말이 SQL 글자 안에 있는지만 보고(16-A1~A3), 15-A1은 starter 아래쪽을 지우고 직접 찍으면 통과하며, 14-A2는 다시 읽은 값을 꼭 쓰지 않아도, 13-A1은 정해진 답 표로도 통과해요. 일부러 꾀를 내야 하는 빈틈이라 그대로 두었어요.
 - 레슨 중간 진행은 24시간 동안만 이어서 할 수 있어요. 다른 휴대폰이나 브라우저로는 이어지지 않아요.
 - PC에서도 열리지만 휴대폰 폭 그대로 가운데에 놓여요.
-- 영어판(English)을 만드는 중이에요(v0.13.0~). 공개(v0.14.0) 전에는 개발자 모드에서만 시작 화면·설정의 「한국어 / English」로 고를 수 있고, 화면 문구, 레슨 17장(본 과정·심화·매일 도전), 텃밭(노드가 만드는 코드·쪽지·주문)과 파이썬 실행 안내(텃밭·차트·연습 서버 오류)까지 모두 영어예요(v0.13.5). 영어 텃밭은 carrot·up·orders.txt 같은 영어 이름을 쓰고, 저장은 언어와 상관없이 같아요. 영어 장 파일은 처음 열 때 받아 저장해요.
+- 영어판(English, v0.14.0 공개): 휴대폰 언어가 한국어가 아니면 영어로 시작하고, 누구나 시작 화면·설정의 「한국어 / English」로 바꿀 수 있어요. 화면 문구, 레슨 17장(본 과정·심화·매일 도전), 텃밭(노드가 만드는 코드·쪽지·주문)과 파이썬 실행 안내까지 모두 영어예요. 영어 텃밭은 carrot·up·orders.txt 같은 영어 이름을 쓰고, 저장은 언어와 상관없이 같아요. 영어로 배우면 영어 장 파일을 미리 받아 두어 오프라인에서도 돼요.
 - 안드로이드(갤럭시) 삼성 키보드에서 코드 입력창의 엔터가 안 먹는다는 제보가 있어요. 키보드와 상관없이 쓸 수 있게 기호 줄 맨 앞에 「↵ 줄 바꿈」 단추를 두었고, 처음 주어지는 코드는 정답 줄 수만큼 빈 줄이 미리 있어요(v0.12.2). 입력 방식 자체를 바꾸는 시도는 글자 입력을 망가뜨려 되돌렸어요(v0.12.3). 자동 시험은 Chromium에 갤럭시 화면을 입혀서 하므로 진짜 삼성 키보드의 동작은 실기기로만 확인할 수 있어요.
 
 개발 과정과 결정 기록은 `LOG.md`, 설계는 `docs/specs/`, 작업 계획과 판정 기록은 `docs/plans/`에 있어요.

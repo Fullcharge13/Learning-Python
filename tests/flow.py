@@ -165,9 +165,10 @@ def today(n=0):
 class App:
     """기기 하나 + 새 저장소의 앱 한 판."""
 
-    def __init__(self, device="iPhone 17", save=None, reduced=False, url=None):
+    def __init__(self, device="iPhone 17", save=None, reduced=False, url=None, locale=None, init_js=None):
         e = env()
         opts = device_opts(device)
+        opts["locale"] = locale or "ko-KR"   # v0.14.0: 처음 언어는 휴대폰 언어를 따른다 → 기본은 한국어 휴대폰
         if reduced:
             opts["reduced_motion"] = "reduce"
         # sw.js가 옛 빌드를 저장해 두지 않도록 서비스 작업자는 막는다(오프라인은 build_test.py가 시험)
@@ -181,6 +182,8 @@ class App:
             self.page.add_init_script(
                 "if (!sessionStorage.getItem('flow-seeded')) { localStorage.setItem(%s, %s); sessionStorage.setItem('flow-seeded', '1'); }"
                 % (json.dumps(SAVE_KEY), json.dumps(json.dumps(save))))
+        if init_js:
+            self.page.add_init_script(init_js)
         self.page.goto(url or e["url"])
         self.page.wait_for_selector(".screen.splash #go", timeout=20_000)
 
@@ -336,6 +339,8 @@ class App:
                 wrong_left.discard(idx)
                 self.answer_touch(it, correct=not bad)
                 self.page.wait_for_selector("#result:not([hidden])")
+                if hook:
+                    hook("result-wrong" if bad else "result", self)   # v0.14.0: 맞음·틀림 설명 화면도 보게
             ok = self.cont()
             assert ok == (not bad), "item %d (%s) judged ok=%s, expected %s" % (idx, it["type"], ok, not bad)
         self.page.wait_for_selector(".screen.done", timeout=10_000)
@@ -3142,17 +3147,17 @@ def _lessons_lang(a):
 
 
 def test_language_switch():
-    """v0.13.0: 「한국어 / English」 — 공개 전에는 개발자 모드에서만. 영어로 바꾸면 화면 문구가 영어(레슨 내용 빼고),
+    """v0.13.0: 「한국어 / English」. v0.14.0부터 일반 모드에서도 시작 화면·설정에 보인다. 영어로 바꾸면 화면이 영어,
     다시 한국어로 바꿔도 진도·바이트 그대로."""
     fails = []
     with App("iPhone 17") as a:
-        if a.page.query_selector(".lang-pick"):
-            fails.append("picker on splash in normal mode")
+        if not a.page.query_selector(".screen.splash .lang-pick"):
+            fails.append("no picker on splash in normal mode (v0.14.0 public)")
         a.start()
         a.page.click('.tabbar [data-go="settings"]')
         a.page.wait_for_selector(".screen.settings")
-        if a.page.query_selector(".lang-pick"):
-            fails.append("picker in settings in normal mode")
+        if not a.page.query_selector(".lang-pick"):
+            fails.append("no picker in settings in normal mode (v0.14.0 public)")
     seed = dict(_garden_seed(1, xp=40), dev_mode=True)
     for dev in ("Galaxy S24", "iPhone 17"):
         with App(dev) as a:
@@ -3226,8 +3231,8 @@ def test_language_switch():
                 pass
             if _lessons_lang(a) != {"data": "ko", "title": "ko", "lesson": "ko"}:
                 fails.append("%s lessons not Korean after dev off %r" % (dev, _lessons_lang(a)))
-            if "설정" not in a.page.inner_text(".tabbar") or a.page.query_selector(".lang-pick"):
-                fails.append("%s dev off: not Korean / picker still shown" % dev)
+            if "설정" not in a.page.inner_text(".tabbar") or not a.page.query_selector(".lang-pick"):
+                fails.append("%s dev off: not Korean / picker missing (v0.14.0 public)" % dev)
             if _ls(a, SAVE_KEY) and json.loads(_ls(a, SAVE_KEY))["settings"].get("lang", "ko") != "ko":
                 fails.append("%s learning save got lang en" % dev)
             if a.errors:
@@ -3399,6 +3404,160 @@ def test_garden_sheet_once():
         a.page.wait_for_timeout(300)
         assert a.js("() => document.querySelectorAll('.modal.g-sheet').length") == 1
         assert not a.errors, a.errors
+
+
+def test_first_language_follows_phone():
+    """v0.14.0: 처음 여는 사람은 휴대폰 언어를 따른다 — 영어 휴대폰이면 영어로 시작(한글 없음), 한국어 휴대폰이면 한국어.
+    이미 저장이 있는 사람은 휴대폰 언어와 상관없이 저장의 언어 그대로. 앱 이름(홈 화면에 추가)도 언어별."""
+    fails = []
+    with App("iPhone 17", locale="en-US") as a:
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=20_000)
+        a.page.wait_for_selector(".screen.splash #go")
+        left = _hangul_left(a, ["한국어"])
+        if left:
+            fails.append("English phone splash: %r" % left)
+        if a.save().get("settings", {}).get("lang") != "en":
+            fails.append("first-run English choice not saved: %r" % a.save().get("settings"))
+        man = a.js("() => document.querySelector('link[rel=manifest]').getAttribute('href')")
+        title = a.js("() => (document.querySelector('meta[name=apple-mobile-web-app-title]') || {}).content")
+        if not man.endswith("manifest.en.webmanifest") or title != "Ria & Python":
+            fails.append("app name not English: %r %r" % (man, title))
+        a.start()
+        left = _hangul_left(a, ["한국어"])
+        if left:
+            fails.append("English phone home: %r" % left)
+        a.shot("en-first-run-home.png")
+    with App("iPhone 17", locale="ko-KR") as a:
+        a.page.wait_for_selector(".screen.splash #go")
+        if a.js("() => document.documentElement.lang") != "ko":
+            fails.append("Korean phone did not start in Korean")
+        man = a.js("() => document.querySelector('link[rel=manifest]').getAttribute('href')")
+        if not man.endswith("manifest.webmanifest") or man.endswith(".en.webmanifest"):
+            fails.append("Korean manifest wrong: %r" % man)
+    with App("iPhone 17", locale="en-US", save=_garden_seed(1, xp=40)) as a:
+        a.page.wait_for_selector(".screen.splash #go")
+        if a.js("() => document.documentElement.lang") != "ko":
+            fails.append("existing Korean save switched to English on an English phone")
+    assert not fails, "\n".join(fails)
+
+
+def test_english_daily_review():
+    """v0.14.0(v0.13.4 검토 M9): 영어로 배우는 사람(일반 모드) — 틀린 답 설명, 매일 도전(문제·완료), 복습 화면에도 한글이 없다."""
+    done12 = ["%d-%d" % (c, k) for c in (1, 2) for k in range(1, 6)]
+    seed = {"saveVer": 2, "completed_lessons": done12, "current_chapter": 3, "current_lesson": "3-1",
+            "review_queue": ["slice", "int"], "settings": {"sound": False, "dailyGoal": 10, "name": "", "lang": "en"}}
+    fails = []
+    with App("iPhone 17", save=seed) as a:
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=20_000)
+        a.start()
+
+        def check(name, app=a):
+            left = _hangul_left(app)
+            if left:
+                fails.append("%s: %r" % (name, left))
+        check("home")
+        # 틀린 답 설명(3-1, 첫 터치 문제를 한 번 틀림)
+        a.page.click('[data-lesson="3-1"]')
+        a.page.wait_for_selector(".card-view, article.item", timeout=20_000)
+        a.play("3-1", wrong=(0, 1), hook=lambda name, app: check("3-1 " + name, app))
+        a.dismiss()
+        check("3-1 done")
+        a.page.click("#home")
+        a.page.wait_for_selector(".screen.home")
+        a.dismiss()
+        # 매일 도전
+        a.wait_py()
+        a.page.click("#daily")
+        for i in range(3):
+            a.page.wait_for_selector("article.item", timeout=PY_READY_MS)
+            check("daily item %d" % i)
+            _daily_answer_one(a, {})
+        a.page.wait_for_selector(".screen.done", timeout=10_000)
+        a.page.wait_for_timeout(300)
+        check("daily done")
+        a.shot("en-daily-done.png")
+        a.page.click("#home")
+        a.page.wait_for_selector(".screen.home")
+        # 복습
+        if a.page.query_selector("#review"):
+            a.page.click("#review")
+            a.page.wait_for_selector("article.item", timeout=20_000)
+            check("review item")
+            a.shot("en-review.png")
+        else:
+            fails.append("no review button with a review queue")
+        if a.errors:
+            fails.append("errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+BOOT_TEXT_JS = """(() => { const grab = () => { const p = document.querySelector('#app .boot');
+  if (p) { window.__bootText = p.textContent; window.__bootLang = document.documentElement.lang; } };   // 사라지기 전 마지막 모습
+  document.addEventListener('DOMContentLoaded', grab);
+  new MutationObserver(grab).observe(document, { childList: true, subtree: true, characterData: true }); })();"""
+
+
+def test_boot_text_language():
+    """v0.14.0 검토 I2: 앱이 뜨기 전 「여는 중」 글도 그 사람의 언어 — 영어 휴대폰 처음·영어 저장이면 영어, 한국어면 한국어."""
+    fails = []
+    with App("iPhone 17", locale="en-US", init_js=BOOT_TEXT_JS) as a:
+        t, l = a.js("() => [window.__bootText, window.__bootLang]")
+        if not t or re.search(r"[가-힣]", t) or l != "en":
+            fails.append("English phone boot text: %r lang %r" % (t, l))
+    seed = dict(_garden_seed(1, xp=40), settings={"sound": False, "dailyGoal": 10, "name": "", "lang": "en"})
+    with App("iPhone 17", locale="ko-KR", save=seed, init_js=BOOT_TEXT_JS) as a:
+        t, l = a.js("() => [window.__bootText, window.__bootLang]")
+        if not t or re.search(r"[가-힣]", t):
+            fails.append("English save on Korean phone boot text: %r" % t)
+    with App("iPhone 17", locale="ko-KR", init_js=BOOT_TEXT_JS) as a:
+        t, l = a.js("() => [window.__bootText, window.__bootLang]")
+        if not t or not re.search(r"[가-힣]", t) or l != "ko":
+            fails.append("Korean phone boot text: %r lang %r" % (t, l))
+    assert not fails, "\n".join(fails)
+
+
+BROKEN_WORDS_JS = r"""(sel) => {
+  // 낱말 하나가 두 줄로 쪼개졌는지: 낱말마다 Range를 만들어 줄(사각형)이 둘 이상인지 본다
+  const out = [];
+  for (const el of document.querySelectorAll(sel)) {
+    if (el.closest('[hidden]') || !el.offsetParent) continue;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const re = /[A-Za-z][A-Za-z'’-]{2,}/g;
+      let m;
+      while ((m = re.exec(n.data))) {
+        const r = document.createRange();
+        r.setStart(n, m.index); r.setEnd(n, m.index + m[0].length);
+        const tops = new Set([...r.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top)));
+        if (tops.size > 1) out.push(m[0]);
+      }
+    }
+  }
+  return out;
+}"""
+
+
+def test_english_no_broken_words():
+    """v0.14.0 QA H1: 좁은 휴대폰(iPhone SE 320px, Galaxy S24 360px)에서 영어 낱말이 중간에서 끊기지 않는다
+    (「Setting/s」, 「Gro/w」, 장 이름 「Expressio/ns」)."""
+    seed = dict(_garden_seed(2, xp=40), settings={"sound": False, "dailyGoal": 10, "name": "", "lang": "en"})
+    fails = []
+    for dev in ("iPhone SE", "Galaxy S24"):
+        with App(dev, locale="en-US", save=seed) as a:
+            a.start()
+            for name, go in (("home", None), ("settings", "settings"), ("badges", "badges"), ("garden", "garden")):
+                if go:
+                    a.page.click('.tabbar [data-go="%s"]' % go)
+                    a.page.wait_for_timeout(400)
+                broken = a.js(BROKEN_WORDS_JS, "#app, .tabbar")
+                if broken:
+                    fails.append("%s %s: %r" % (dev, name, sorted(set(broken))[:12]))
+                m = measure(a, "en-narrow-%s-%s" % (slug(dev), name))
+                over = m["problems"]
+                if over:
+                    fails.append("%s %s layout: %r" % (dev, name, over[:5]))
+            a.shot("en-narrow-%s-garden.png" % slug(dev))
+    assert not fails, "\n".join(fails)
 
 
 if __name__ == "__main__":

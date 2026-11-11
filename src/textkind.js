@@ -2,5 +2,6 @@
 // 여러 줄 출력(예: "3\n2\n1")도 코드로 본다. 그래야 줄바꿈이 한 줄로 뭉개지지 않는다.
 export function isCodey(s) {
   const t = String(s ?? "");
-  return t.includes("\n") || /[()"'=+*<>#]|print/.test(t);
+  // v0.14.0 QA H2: 대괄호·연속 공백도 코드 모양 — 아니면 「[   Tea]」의 공백이 하나로 줄어 정답이 실제 출력과 달라 보임
+  return t.includes("\n") || /[()"'=+*<>#[\]{}]|print| {2}/.test(t);
 }

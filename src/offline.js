@@ -4,6 +4,7 @@
 
 export const PYODIDE_CACHE_PREFIX = "ria-pyodide-";
 export const GAME_CACHE_PREFIX = "ria-game-";
+export const LANG_CACHE_PREFIX = "ria-lang-";   // v0.14.0(판정 C81): 판과 상관없는 영어 장 저장소
 // v0.5: 16장 sqlite3는 따로 받을 꾸러미가 없다(Pyodide 314.0.7은 _sqlite3를 pyodide.asm.wasm에, sqlite3 모듈을
 // python_stdlib.zip에 넣어 둠). 그래서 이 네 파일이 있으면 sqlite3도 오프라인에서 돈다(tests/build_test.py가 지킴).
 export const PYODIDE_REQUIRED = ["pyodide.asm.wasm", "python_stdlib.zip", "pyodide.mjs", "pyodide.asm.mjs"];
@@ -34,7 +35,7 @@ export function offlineStatus({ controlled, cacheNames, urlsByCache, chapterFile
   for (const name of cacheNames) {
     const n = String(name);
     if (n.startsWith(PYODIDE_CACHE_PREFIX)) for (const url of urlsByCache[name] || []) have.add(fileName(url));
-    if (n.startsWith(GAME_CACHE_PREFIX)) gameUrls.push(...(urlsByCache[name] || []));
+    if (n.startsWith(GAME_CACHE_PREFIX) || n.startsWith(LANG_CACHE_PREFIX)) gameUrls.push(...(urlsByCache[name] || []));
   }
   const missingPy = PYODIDE_REQUIRED.filter((f) => !have.has(f));
   const missingCh = chapterFiles.filter((rel) => !gameUrls.some((u) => endsWithFile(u, rel)));
@@ -48,7 +49,7 @@ export async function collectOfflineStatus(chapterFiles = []) {
   const controlled = !!(typeof navigator !== "undefined" && navigator.serviceWorker && navigator.serviceWorker.controller);
   if (typeof caches === "undefined") return offlineStatus({ controlled, cacheNames: null, urlsByCache: null, chapterFiles });
   try {
-    const cacheNames = (await caches.keys()).filter((n) => n.startsWith(PYODIDE_CACHE_PREFIX) || n.startsWith(GAME_CACHE_PREFIX));
+    const cacheNames = (await caches.keys()).filter((n) => n.startsWith(PYODIDE_CACHE_PREFIX) || n.startsWith(GAME_CACHE_PREFIX) || n.startsWith(LANG_CACHE_PREFIX));
     const urlsByCache = {};
     for (const name of cacheNames) {
       const c = await caches.open(name);

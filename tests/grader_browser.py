@@ -88,7 +88,7 @@ def _session():
     pw = sync_playwright().start()
     browser = pw.chromium.launch()
     device = {k: v for k, v in pw.devices["iPhone 17"].items() if k != "default_browser_type"}
-    context = browser.new_context(**device)
+    context = browser.new_context(locale="ko-KR", **device)  # v0.14.0: 처음 언어는 휴대폰 언어
     page = context.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))

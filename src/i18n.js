@@ -8,7 +8,7 @@
 
 export const LANGS = Object.freeze(["ko", "en"]);
 // 공개 전(v0.13.x)에는 「한국어 / English」 고르기가 개발자 모드에서만 보인다. v0.14.0에서 true.
-export const EN_PUBLIC = false;
+export const EN_PUBLIC = true;   // v0.14.0 공개(누구나 고를 수 있고, 처음 언어는 휴대폰 언어)
 
 let cur = "ko";
 const packs = { en: null };

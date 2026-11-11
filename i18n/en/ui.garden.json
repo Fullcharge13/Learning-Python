@@ -151,7 +151,7 @@
  "읽기만 하는 쪽지 (PermissionError)": "Read-only note (PermissionError)",
  "작물": "Crop",
  "작물 값 오류 (ValueError)": "Crop value error (ValueError)",
- "작물이 더 빨리 자라요(당근 6, 감자 9)": "Crops grow faster (carrot 6, potato 9)",
+ "작물이 더 빨리 자라요(당근 6, 감자 9)": "Crops grow faster (carrots ripen in 6 actions, potatoes in 9)",
  "재생 속도 {}배, 누르면 {}배": "Playback speed {}×, tap for {}×",
  "정하기": "Set",
  "조건": "Condition",

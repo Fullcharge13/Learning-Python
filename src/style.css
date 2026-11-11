@@ -48,6 +48,9 @@ body {
   overflow-wrap: anywhere;
   -webkit-tap-highlight-color: transparent;
 }
+/* v0.14.0 QA H1: 영어에서 anywhere는 칸의 최소 폭 계산에 낱말 중간 끊기를 넣어 좁은 휴대폰에서 「Setting/s」처럼 쪼갠다.
+   break-word는 한 줄에 다 안 들어가는 긴 낱말(긴 주소 등)만 끊고 칸 폭 계산은 낱말 단위 그대로 */
+html:lang(en) body { overflow-wrap: break-word; }
 /* 개발자 모드(검수용, v0.11.1) 띠: 화면 맨 위에 고정. 켜 있으면 --sat에 띠 높이를 더해
    위쪽 여백을 --sat로 잡는 모든 화면(상태 줄·레슨 위·텃밭 위·완료·시작·알림)이 띠만큼 내려간다 */
 :root.dev-on { --dev-h: 22px; --sat: calc(env(safe-area-inset-top, 0px) + var(--dev-h)); }
@@ -517,6 +520,8 @@ body.kbd-open .lesson-foot.has-dock { padding-bottom: 8px; }
 .stat-grid div { background: var(--paper); border-radius: 12px; padding: 8px 10px; }
 .stat-grid dt { font-size: .8rem; color: var(--ink-2); }
 .stat-grid dd { margin: 0; font-weight: 800; font-size: 1.2rem; }
+/* v0.14.0 QA M5: 영어 단위(days 등)는 숫자와 띄운다(「0days」). 「/17」 같은 분수는 붙임 */
+html:lang(en) .stat-grid dd small.unit { margin-left: .25em; }
 .weak { margin: 0; padding-left: 1.3em; }
 
 /* ---------- 의상실 ---------- */

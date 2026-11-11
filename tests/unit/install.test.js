@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isIOSSafari, isInAppBrowser, installHintKind, shouldShowInstallHint } from "../../src/install.js";
+import { isIOSSafari, isInAppBrowser, installHintKind, shouldShowInstallHint, installPlatform } from "../../src/install.js";
 
 const IOS = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko)";
 const SAFARI = IOS + " Version/26.6 Mobile/15E148 Safari/604.1";
@@ -60,4 +60,13 @@ test("install_hint_show: 예전 이름도 같은 판정", () => {
 import { INSTALL_AFTER_TEXT } from "../../src/install.js";
 test("install_after_text: 추가한 뒤 인터넷이 될 때 한 번 열기 안내 (C32)", () => {
   assert.equal(INSTALL_AFTER_TEXT, "추가한 뒤, 인터넷이 될 때 아이콘으로 한 번 열어 주세요. 그래야 비행기 모드에서도 열려요.");
+});
+
+test("installPlatform: 안내 창에서 먼저 보일 갈래 — 안드로이드면 android, 그 밖(아이폰·아이패드·PC)은 ios (v0.14.1)", () => {
+  assert.equal(installPlatform(ANDROID), "android");
+  assert.equal(installPlatform(ANDROID_KAKAO), "android");
+  assert.equal(installPlatform(SAFARI), "ios");
+  assert.equal(installPlatform(MAC, 5), "ios");
+  assert.equal(installPlatform(MAC, 0), "ios");
+  assert.equal(installPlatform(""), "ios");
 });

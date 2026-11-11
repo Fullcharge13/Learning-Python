@@ -3560,5 +3560,50 @@ def test_english_no_broken_words():
     assert not fails, "\n".join(fails)
 
 
+def test_install_sheet_platforms():
+    """v0.14.1: 설정 「홈 화면에 추가 방법」 — 아이폰(사파리) / 안드로이드(크롬) 두 갈래. 쓰는 휴대폰 쪽이 먼저 열리고,
+    다른 쪽 탭을 누르면 그 안내로 바뀐다. 영어도 같고 한글이 없다. 넘침 없음."""
+    fails = []
+    cases = (("Galaxy S24", "ko-KR", "android"), ("iPhone 17", "ko-KR", "ios"), ("Galaxy S24", "en-US", "android"),
+             ("iPhone SE", "en-US", "ios"))
+    for dev, loc, first in cases:
+        with App(dev, locale=loc) as a:
+            a.start()
+            a.page.click('.tabbar [data-go="settings"]')
+            a.page.wait_for_selector(".screen.settings")
+            a.page.click("#install")
+            a.page.wait_for_selector(".modal.install")
+            sel = a.js("() => (document.querySelector('.ins-tabs [aria-selected=true]') || {}).dataset?.p")
+            if sel != first:
+                fails.append("%s %s: first tab %r, want %r" % (dev, loc, sel, first))
+            vis = a.js("() => [...document.querySelectorAll('.ins-panel')].filter(p => !p.hidden).map(p => p.dataset.p)")
+            if vis != [first]:
+                fails.append("%s %s: visible panels %r" % (dev, loc, vis))
+            steps = a.js("() => [...document.querySelectorAll('.ins-panel:not([hidden]) .ins-steps li')].length")
+            if steps != 3:
+                fails.append("%s %s: %d steps" % (dev, loc, steps))
+            if first == "android" and "⋮" not in a.page.inner_text(".ins-panel:not([hidden])"):
+                fails.append("%s %s: android steps lack the ⋮ menu" % (dev, loc))
+            if loc == "en-US":
+                left = _hangul_left(a, ["한국어"])
+                if left:
+                    fails.append("%s en: %r" % (dev, left))
+            tops = a.js("() => [...document.querySelectorAll('.ins-tabs [role=tab]')].map(b => Math.round(b.getBoundingClientRect().top))")
+            if len(set(tops)) != 1:
+                fails.append("%s %s: tabs not side by side %r" % (dev, loc, tops))
+            m = measure(a, "install-%s-%s-%s" % (slug(dev), loc, first))
+            if m["problems"]:
+                fails.append("%s %s layout: %r" % (dev, loc, m["problems"][:4]))
+            other = "ios" if first == "android" else "android"
+            a.page.click('.ins-tabs [data-p="%s"]' % other)
+            vis = a.js("() => [...document.querySelectorAll('.ins-panel')].filter(p => !p.hidden).map(p => p.dataset.p)")
+            if vis != [other]:
+                fails.append("%s %s: after tab click visible %r" % (dev, loc, vis))
+            a.shot("install-%s-%s-%s.png" % (slug(dev), loc, other))
+            a.page.click("#ins-ok")
+            a.page.wait_for_selector(".modal.install", state="detached")
+    assert not fails, "\n".join(fails)
+
+
 if __name__ == "__main__":
     sys.exit(main())

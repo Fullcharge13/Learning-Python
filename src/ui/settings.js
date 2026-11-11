@@ -100,7 +100,7 @@ export function render(root, ctx) {
       </section>
       <section class="panel">
         <h2>${t`홈 화면에 추가`}</h2>
-        <p class="muted">${t`아이폰 사파리에서는 홈 화면에 추가해 두면 앱처럼 열리고 기록도 더 안전해요.`}</p>
+        <p class="muted">${t`아이폰 사파리나 안드로이드 크롬에서 홈 화면에 추가해 두면 앱처럼 바로 열려요. 아이폰은 기록도 더 안전해요.`}</p>
         <button class="btn ghost wide" id="install">${t`홈 화면에 추가 방법`}</button>
       </section>
       ${ctx.langPicker ? `<section class="panel" aria-labelledby="lang-title">

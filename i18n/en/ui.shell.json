@@ -117,7 +117,6 @@
  "심화 {}/{} · 장 평가 뒤 열림": "Deep Dive {}/{} · opens after the checkpoint",
  "심화 모두 완료": "All Deep Dives done",
  "심화(선택) {}개 중 {}개 완료": "Deep Dives (optional): {1} of {0} done",
- "아이폰 사파리에서는 홈 화면에 추가해 두면 앱처럼 열리고 기록도 더 안전해요.": "In Safari on iPhone, adding the app to your Home Screen makes it open like an app and keeps your progress safer.",
  "아직 없어요. 틀린 문제가 생기면 여기에 모여요.": "Nothing yet. Questions you miss will show up here.",
  "아직 준비 중이에요 — 인터넷이 될 때 앱을 한 번 다시 열면 레슨을 모두 받아 둬요": "Not ready yet — reopen the app once while online to download all lessons",
  "아직 준비 중이에요 — 인터넷이 될 때 직접 작성 문제를 한 번 실행하면 준비돼요": "Not ready yet — run a write-code question once while online to finish setup",
@@ -227,5 +226,14 @@
  "홈 화면에 추가하기": "Add to Home Screen",
  "화면 이동": "Navigation",
  "화면의 … 메뉴 → 「다른 브라우저로 열기」 또는 「Safari로 열기」를 눌러요": "Tap the … menu → “Open in another browser” or “Open in Safari”",
- "힌트 없이 통과": "Passed without hints"
+ "힌트 없이 통과": "Passed without hints",
+ "아이폰 사파리나 안드로이드 크롬에서 홈 화면에 추가해 두면 앱처럼 바로 열려요. 아이폰은 기록도 더 안전해요.": "Add it to your Home Screen in iPhone Safari or Android Chrome and it opens like an app. On iPhone, your progress is safer too.",
+ "설치": "Install",
+ "크롬 오른쪽 위 ⋮ 메뉴를 눌러요": "Tap the ⋮ menu at the top right of Chrome",
+ "「홈 화면에 추가」 또는 「앱 설치」를 골라요": "Choose “Add to Home screen” or “Install app”",
+ "「설치」 또는 「추가」를 눌러요": "Tap “Install” or “Add”",
+ "홈 화면 아이콘으로 앱처럼 바로 열리고, 주소창 없이 화면을 넓게 써요.": "It opens like an app from your Home Screen, with no address bar and more room on screen.",
+ "휴대폰 종류": "Phone type",
+ "아이폰 (사파리)": "iPhone (Safari)",
+ "안드로이드 (크롬)": "Android (Chrome)"
 }

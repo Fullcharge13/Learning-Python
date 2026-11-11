@@ -22,7 +22,7 @@ import { loadDevChapters } from "./lessondev.js";
 import { createSound } from "./sound.js";
 import { toast } from "./ui/dom.js";
 import { statusBar } from "./ui/nav.js";
-import { installHintKind, isIOS, isInAppBrowser, INSTALL_HINT_KEY } from "./install.js";
+import { installHintKind, isIOS, isInAppBrowser, INSTALL_HINT_KEY, installPlatform } from "./install.js";
 import { openInstallSheet } from "./ui/installsheet.js";
 import * as splash from "./ui/splash.js";
 import * as home from "./ui/home.js";
@@ -33,7 +33,7 @@ import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 import * as garden from "./ui/garden.js";
 
-export const VERSION = "v0.14.0";
+export const VERSION = "v0.14.1";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -251,7 +251,7 @@ function isStandalone() {
 function showInstallSheet(kind) {
   const ua = navigator.userAgent;
   const k = kind || (isIOS(ua, navigator.maxTouchPoints) && isInAppBrowser(ua) ? "inapp" : "safari");
-  return openInstallSheet({ outfit: app.save.outfit, kind: k });
+  return openInstallSheet({ outfit: app.save.outfit, kind: k, platform: installPlatform(ua) });
 }
 /** 첫 레슨 완료 화면이 끝난 뒤 한 번만 */
 async function afterDone() {

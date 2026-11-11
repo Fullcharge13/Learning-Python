@@ -608,6 +608,9 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .ins-steps { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 10px; }
 .ins-steps li { display: grid; grid-template-columns: 26px 48px 1fr; align-items: center; gap: 10px; font-weight: 700; }
 .ins-no { width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-size: .85rem; }
+/* v0.14.1 아이폰 / 안드로이드 갈래 */
+.ins-tabs { display: flex; gap: 8px; margin: 0 0 12px; }
+.ins-tabs .lang-btn { min-width: 0; flex: 1 1 0; padding: 6px 8px; font-size: .9rem; line-height: 1.25; }
 .ins-why { font-size: .9rem; color: var(--ink-2); background: var(--sun-soft); border-radius: 12px; padding: 10px 12px; }
 .ins-menu { display: grid; grid-template-columns: 48px 1fr; gap: 10px; align-items: center; font-weight: 700; }
 .ins-dots { width: 48px; height: 48px; border-radius: 10px; border: 2.5px solid var(--ink); background: #fff; display: grid; place-items: center; font-size: 1.4rem; font-weight: 900; line-height: 1; }

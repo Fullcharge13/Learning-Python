@@ -35,6 +35,11 @@ export function installHintKind({ ua, maxTouchPoints = 0, standalone, shown }) {
   return isIOSSafari(ua, maxTouchPoints) ? "safari" : null;
 }
 
+/** v0.14.1: 안내 창에서 먼저 보일 갈래. 안드로이드(크롬)면 "android", 그 밖(아이폰·아이패드·PC)은 "ios" */
+export function installPlatform(ua) {
+  return /Android/i.test(String(ua || "")) ? "android" : "ios";
+}
+
 /** 예전 이름: 안내를 보일지(종류와 관계없이) */
 export function shouldShowInstallHint(o) {
   return installHintKind(o) !== null;

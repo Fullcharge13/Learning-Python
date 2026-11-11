@@ -25,9 +25,13 @@ import runner  # noqa: E402
 HELPER = os.path.join(ROOT, "tests", "garden_orders_helper.mjs")
 
 
+LANG = "ko"   # v0.13.5: main()이 한국어·영어로 한 번씩 돈다
+
+
 def node(mode, payload=None):
     p = subprocess.run(["node", HELPER, mode], cwd=ROOT, input=None if payload is None else json.dumps(payload),
-                       capture_output=True, text=True, encoding="utf-8", timeout=60)
+                       capture_output=True, text=True, encoding="utf-8", timeout=60,
+                       env={**os.environ, "GARDEN_LANG": LANG})
     if p.returncode != 0:
         print(p.stderr)
         raise SystemExit("도우미 실패: " + mode)
@@ -56,12 +60,23 @@ def goal_text(g):
 
 
 def main():
+    global LANG
+    fails = 0
+    for LANG in ("ko", "en"):
+        print("== %s" % ("한국어" if LANG == "ko" else "English (영어 코드·영어 쪽지·runner lang=en)"))
+        fails += check_lang(LANG == "ko")
+    return 1 if fails else 0
+
+
+def check_lang(first):
     fails = 0
     ok, js, want, ups = crops_match()
-    if not ok:
+    if not first:
+        ok = True
+    elif not ok:
         fails += 1
         print(f"FAIL 작물·성장 이름이 runner와 다름: data {js} / runner {want} / 성장 {ups}")
-    else:
+    elif first:
         print("ok   작물 성장 시간·성장 이름이 runner와 같음")
 
     orders = node("prepare")
@@ -69,7 +84,7 @@ def main():
     for o in orders:
         if o["errors"] or not o["hasRun"]:
             continue
-        results[o["id"]] = runner.run(o["code"], "", [], files=o["files"], farm=o["setup"])
+        results[o["id"]] = runner.run(o["code"], "", [], files=o["files"], farm=o["setup"], lang=LANG)
     verdicts = {v["id"]: v for v in node("judge", {"results": results})}
 
     passed = 0
@@ -84,15 +99,15 @@ def main():
 
     # 판정 C71 C2: 씨앗 0·밭에 토마토 없음 → 「토마토 씨앗 5개」를 사면 o_hand를 다시 해낼 수 있음(실제 엔진)
     st = node("stuck")
-    r0 = runner.run(st["code"], "", [], files=st["files0"], farm=st["setup0"])
-    r1 = runner.run(st["code"], "", [], files=st["files"], farm=st["setup"])
+    r0 = runner.run(st["code"], "", [], files=st["files0"], farm=st["setup0"], lang=LANG)
+    r1 = runner.run(st["code"], "", [], files=st["files"], farm=st["setup"], lang=LANG)
     v = node("stuck_judge", {"result0": r0, "result": r1})
     good = (v["ok"] and st["before"]["seeds"] == 0 and st["before"]["tomatoes"] == 0 and st["before"]["can"]
             and st["after"]["seeds"] == 5 and st["after"]["error"] is None)
     fails += not good
     print(f"{'ok  ' if good else 'FAIL'} 막힌 손글씨 주문 → 씨앗 5개 사기 — 씨앗 {st['before']['seeds']}→{st['after']['seeds']}, "
           f"당근 {st['after']['store']['당근']} · {v['detail']}")
-    return 1 if fails else 0
+    return fails
 
 
 if __name__ == "__main__":

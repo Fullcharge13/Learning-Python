@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gardenExplain, nearCommand, FARM_COMMANDS } from "../../src/garden/errors.js";
+import { setLang, usePack } from "../../src/i18n.js";
 
 const E = (type, msg, line = 1) => ({ type, line, msg });
 const LOCALS = "_make_farm.<locals>.";
@@ -179,4 +180,16 @@ test("C71 I1 ValueError 토마토 잠김: 10장을 끝내면 심을 수 있어�
   const r = gardenExplain(E("ValueError", "토마토는 10장을 끝내면 심을 수 있어요"));
   assert.ok(r);
   assert.match(r.text, /10장/);
+});
+
+test("KeyError: 창고 열쇠는 지금 언어 이름만 맞음 — 다른 언어 이름이면 설명(v0.13.5 검토 I2)", () => {
+  setLang("ko");
+  assert.ok(gardenExplain(E("KeyError", "'carrot'"), 'store()["carrot"]'), "한국어 실행에 영어 이름");
+  assert.equal(gardenExplain(E("KeyError", "'당근'"), 'store()["당근"]'), null);
+  usePack("en", { ui: {}, data: {} });
+  setLang("en");
+  try {
+    assert.ok(gardenExplain(E("KeyError", "'당근'"), 'store()["당근"]'), "영어 실행에 한국어 이름");
+    assert.equal(gardenExplain(E("KeyError", "'carrot'"), 'store()["carrot"]'), null);
+  } finally { setLang("ko"); }
 });

@@ -12,10 +12,16 @@
 // v0.12.1: pendingDone [주문 id…] — XP는 줬지만 「주문 완료!」 창을 아직 못 보여 준 주문(재생 중 떠남·새로 고침).
 //   다음에 텃밭을 열 때 창을 띄우고 닫으면 뺀다(없으면 []).
 //
+// v0.13.5 영어판(설계 docs/specs/2026-11-11-영어판-설계.md §5-1): 저장·엔진 상태·판정은 안쪽 열쇠(한국어) 그대로.
+//   runFiles(garden, lang)는 쪽지 글만 실행 언어로(열쇠는 안쪽 파일 이름 — runner가 파이썬용 이름으로 바꿈),
+//   noteCounts(text, parse, lang)는 영어 쪽지 모양도 읽어 안쪽 작물 이름으로 센다. 화면 글(MSG 등)은 읽을 때 번역.
+//
 // 주문 판정은 지금 주문(order.idx) 하나만 본다. 그 주문의 장(need)을 통과하지 않았으면 기다림(판정·넘김 없음).
 // passed(통과한 장 번호 Set)를 넘기지 않으면 아무 장도 통과하지 않은 것으로 본다.
 import { CROPS, UPGRADES, ORDERS, DAILY_NOTES, farmSetup, START_ROWS, SEED_PACK } from "../../data/garden.js";
-import { NODES, defaultProgram, kindsUsed, cleanList, PATTERNS, LOG_FILE, TOMATO } from "./nodes.js";
+import { NODES, defaultProgram, kindsUsed, cleanList, patternInfo, LOG_FILE, TOMATO, codegen } from "./nodes.js";
+import { t, tx, lang, packOf } from "../i18n.js";
+import { cropName, fromPyName } from "./lang.js";
 import { earnXp } from "../rules.js";
 import { ensureQuests, tick } from "../quests.js";
 import { checkBadges } from "../badges.js";
@@ -38,22 +44,23 @@ export const SEEDS_MAX = 20;
 const SEEDS_PER_HARVEST = 2;
 export const JOURNAL_MAX = 2000;
 
+// 화면 글: 읽을 때 지금 언어(getter·함수)
 export const MSG = {
-  timeout: "시간이 너무 오래 걸려서 멈췄어요. 끝나지 않는 반복이 있는지 봐요",
-  tired: "파이가 지쳤어요. 한 번 실행에 행동은 500번까지예요",
-  waited: "파이가 기다리다 지쳤어요 — 텃밭의 시간은 파이가 움직일 때만 흘러요.",
-  tampered: "파이가 텃밭 규칙에 맞지 않는 결과를 받았어요. 코드는 텃밭 명령으로만 움직여요.",
-  stopped: "파이가 중간에 멈췄어요",
-  error: "오류가 나서 그 줄에서 멈췄어요",
-  none: "이번 실행에는 거둔 작물이 없어요",
-  noDeliver: "지금은 보낼 주문이 없어요",
-  waiting: (need) => `${need}장을 끝내면 이어져요`,
-  short: (list) => `${list}가 모자라요`,
-  owned: "이미 가지고 있어요",
-  needs: (label) => `먼저 「${label}」 성장이 필요해요`,
-  unknown: "없는 성장이에요",
-  seedLocked: (ch) => `${ch}장을 끝내면 살 수 있어요`,
-  seedsFull: "씨앗 봉투가 가득 찼어요",
+  get timeout() { return t`시간이 너무 오래 걸려서 멈췄어요. 끝나지 않는 반복이 있는지 봐요`; },
+  get tired() { return t`파이가 지쳤어요. 한 번 실행에 행동은 500번까지예요`; },
+  get waited() { return t`파이가 기다리다 지쳤어요 — 텃밭의 시간은 파이가 움직일 때만 흘러요.`; },
+  get tampered() { return t`파이가 텃밭 규칙에 맞지 않는 결과를 받았어요. 코드는 텃밭 명령으로만 움직여요.`; },
+  get stopped() { return t`파이가 중간에 멈췄어요`; },
+  get error() { return t`오류가 나서 그 줄에서 멈췄어요`; },
+  get none() { return t`이번 실행에는 거둔 작물이 없어요`; },
+  get noDeliver() { return t`지금은 보낼 주문이 없어요`; },
+  waiting: (need) => t`${need}장을 끝내면 이어져요`,
+  short: (list) => t`${list}가 모자라요`,
+  get owned() { return t`이미 가지고 있어요`; },
+  needs: (label) => t`먼저 「${label}」 성장이 필요해요`,
+  get unknown() { return t`없는 성장이에요`; },
+  seedLocked: (ch) => t`${ch}장을 끝내면 살 수 있어요`,
+  get seedsFull() { return t`씨앗 봉투가 가득 찼어요`; },
 };
 
 // ---- 작은 도구 ----
@@ -61,7 +68,13 @@ const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const isInt = (v) => Number.isInteger(v);
 const nonNeg = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
 const toSet = (v) => (v instanceof Set ? v : new Set(Array.isArray(v) ? v : []));
-const amounts = (obj) => Object.entries(obj).map(([crop, n]) => `${crop} ${n}개`).join(", ");
+// 작물 개수 글: 한국어 「당근 2개」, 영어 「2 carrots」(1이면 단수)
+const EN_PLURAL = { carrot: "carrots", potato: "potatoes", tomato: "tomatoes" };
+const cropCount = (crop, n) => {
+  const name = lang() === "en" && n !== 1 ? EN_PLURAL[cropName(crop)] ?? cropName(crop) : cropName(crop);
+  return t`${name} ${n}개`;
+};
+const amounts = (obj) => Object.entries(obj).map(([crop, n]) => cropCount(crop, n)).join(", ");
 const cpLen = (s) => [...s].length;                                   // 파이썬 글자 수(코드 포인트)
 const lastChars = (s, n) => { const a = [...s]; return a.length > n ? a.slice(-n).join("") : s; };
 /** 씨앗 수 다듬기(runner _farm_state와 같음): 수가 아니면 기본 5, 소수는 버림, 0..20 */
@@ -242,8 +255,9 @@ export function runInput(garden, passed) {
 
 // ---- 조사(v0.12.1) ----
 // 숫자를 읽었을 때 끝소리(0 영·1 일·2 이·3 삼·4 사·5 오·6 육·7 칠·8 팔·9 구): 받침 있음 true, ㄹ 받침 "ㄹ"
-const DIGIT_END = { 0: true, 1: "ㄹ", 2: false, 3: true, 4: false, 5: false, 6: true, 7: "ㄹ", 8: "ㄹ", 9: false };
-const JOSA = { 이에요: ["이에요", "예요"], 으로: ["으로", "로"], 을: ["을", "를"], 이: ["이", "가"], 은: ["은", "는"], 과: ["과", "와"] };
+// 한국어 조사 규칙(데이터, 화면 문구 아님)
+const DIGIT_END = { 0: true, 1: "ㄹ", 2: false, 3: true, 4: false, 5: false, 6: true, 7: "ㄹ", 8: "ㄹ", 9: false }; // I18N_SKIP 받침 표지
+const JOSA = { 이에요: ["이에요", "예요"], 으로: ["으로", "로"], 을: ["을", "를"], 이: ["이", "가"], 은: ["은", "는"], 과: ["과", "와"] }; // I18N_SKIP 조사 표
 /**
  * 앞말(word) 끝소리에 맞는 조사. kind: "이에요"|"으로"|"을"|"이"|"은"|"과" (받침 있을 때 꼴로 부름).
  * 으로는 ㄹ 받침이면 「로」. 한글이 아닌 끝 글자는 숫자만 읽어 보고 나머지(영어 등)는 받침 없음으로 본다.
@@ -255,30 +269,33 @@ export function josa(word, kind) {
   let end = false;
   if (code >= 0xac00 && code <= 0xd7a3) {
     const jong = (code - 0xac00) % 28;
-    end = jong === 0 ? false : jong === 8 ? "ㄹ" : true;
+    end = jong === 0 ? false : jong === 8 ? "ㄹ" : true; // I18N_SKIP 받침 표지
   } else if (/[0-9]/.test(last)) end = DIGIT_END[last];
-  if (kind === "으로") return end === true ? yes : no;
+  if (kind === "으로") return end === true ? yes : no; // I18N_SKIP 조사 이름
   return end ? yes : no;
 }
 
 // ---- 쪽지함(v0.12) ----
-const NOTE_RE = { crop_num: () => new RegExp(PATTERNS.crop_num.re, "g") };
-
 /**
- * 쪽지 글에서 작물별 개수. parse 없음: 줄마다 「작물 개수」(파이썬 crop, n = line.split()과 같은 읽기, 모르는 줄은 건너뜀),
- * "crop_num": 패턴 찾기 작물+숫자(nodes.PATTERNS.crop_num, 파이썬 re.findall과 같은 패턴). 같은 작물은 더한다.
+ * 쪽지 글에서 작물별 개수(열쇠는 안쪽 작물 이름). parse 없음: 줄마다 「작물 개수」(파이썬 crop, n = line.split()과 같은
+ * 읽기, 모르는 줄은 건너뜀), "crop_num": 패턴 찾기 작물+숫자(nodes.patternInfo("crop_num", lang), 파이썬 re.findall과
+ * 같은 패턴 — 영어는 「숫자 작물」, 「carrots」 같은 복수형도). 같은 작물은 더한다. lang: 쪽지 글의 언어(기본 ko).
  */
-export function noteCounts(text, parse) {
+export function noteCounts(text, parse, l = "ko") {
   const out = {};
   const add = (crop, n) => {
-    if (!Object.hasOwn(CROPS, crop) || !/^\d+$/.test(n)) return;
-    out[crop] = (out[crop] || 0) + Number(n);
+    const c = l === "en" ? fromPyName("crop", crop) : crop;
+    if (!Object.hasOwn(CROPS, c) || !/^\d+$/.test(n)) return;
+    out[c] = (out[c] || 0) + Number(n);
   };
-  const t = typeof text === "string" ? text : "";
+  const s = typeof text === "string" ? text : "";
   if (parse === "crop_num") {
-    for (const m of t.matchAll(NOTE_RE.crop_num())) add(m[1], m[2]);
+    const p = patternInfo("crop_num", l);
+    const ci = p.vars.indexOf("crop") + 1;
+    const ni = p.vars.indexOf("n") + 1;
+    for (const m of s.matchAll(new RegExp(p.re, "g"))) add(m[ci], m[ni]);
   } else {
-    for (const line of t.split("\n")) {
+    for (const line of s.split("\n")) {
       const w = line.trim().split(/\s+/);
       if (w.length === 2) add(w[0], w[1]);
     }
@@ -286,17 +303,24 @@ export function noteCounts(text, parse) {
   return out;
 }
 
+// 데이터 표 번역을 지정한 언어로(지금 언어와 다를 수 있음 — 실행 언어). 꾸러미에 없으면 한국어 원문
+const txIn = (l, key, ko) => (l === "ko" ? ko : l === lang() ? tx(key, ko) : packOf(l)?.data?.[key] ?? ko);
+
 /**
  * 이번 실행의 쪽지함(runner run(…, files=)): 받는 쪽지 주문서.txt·손글씨주문.txt(읽기 전용) + 농장일지.txt(저장에서).
  * 받는 쪽지는 지금 주문에 그 파일의 note가 있으면 그 글, 없으면 오늘의 쪽지 DAILY_NOTES[파일][runs % 4].
  * 받는 쪽지 두 개가 늘 있으므로 검사를 통과한 쪽지 읽기는 FileNotFoundError 없이 돈다.
+ * (v0.13.5) lang(기본 지금 언어): 열쇠는 늘 안쪽 파일 이름, 받는 쪽지 글만 그 언어(data.json garden.order.<id>.note,
+ * garden.note.<파일>.<번호>). 영어 쪽지는 한국어 쪽지와 작물별 개수가 같다. 농장일지는 학습자가 쓴 글 그대로.
  */
-export function runFiles(garden) {
+export function runFiles(garden, l = lang()) {
   const order = ORDERS[garden?.order?.idx] ?? null;
   const k = nonNeg(garden?.runs);
   const out = {};
   for (const [file, list] of Object.entries(DAILY_NOTES)) {
-    out[file] = order?.note?.file === file ? order.note.text : list[k % list.length];
+    const i = k % list.length;
+    out[file] = order?.note?.file === file ? txIn(l, `garden.order.${order.id}.note`, order.note.text)
+      : txIn(l, `garden.note.${file}.${i}`, list[i]);
   }
   out[LOG_FILE] = cleanFiles(garden?.files)[LOG_FILE];
   return out;
@@ -306,8 +330,8 @@ const cloneGarden = (g) => structuredClone(g);
 
 // 작물별 개수 → 「당근 2 · 감자 1」(작물 표 순서, 0은 뺌)
 const countLine = (counts) => {
-  const parts = CROP_LIST.filter((c) => (counts[c] || 0) > 0).map((c) => `${c} ${counts[c]}`);
-  return parts.length ? parts.join(" · ") : "없음";
+  const parts = CROP_LIST.filter((c) => (counts[c] || 0) > 0).map((c) => `${cropName(c)} ${counts[c]}`);
+  return parts.length ? parts.join(" · ") : t`없음`;
 };
 
 /**
@@ -324,10 +348,10 @@ export function orderShortfall(order, result) {
   const got = {};
   for (const e of farm.events) if (isObj(e) && e.t === "plant" && CROP_LIST.includes(e.crop)) got[e.crop] = (got[e.crop] || 0) + 1;
   if (CROP_LIST.every((c) => (got[c] || 0) === (want[c] || 0))) return null;
-  const lines = [`쪽지: ${countLine(want)}`, `이번에 심은 것: ${countLine(got)}`];
+  const lines = [t`쪽지: ${countLine(want)}`, t`이번에 심은 것: ${countLine(got)}`];
   const failed = (reason) => farm.events.some((e) => isObj(e) && e.t === "plant_fail" && e.reason === reason);
-  if (failed("occupied")) lines.push("빈 칸이 모자랐어요 — 먼저 거둬요");
-  if (failed("no_tomato_seed")) lines.push("토마토 씨앗이 떨어졌어요 — 성장에서 씨앗을 사요");
+  if (failed("occupied")) lines.push(t`빈 칸이 모자랐어요 — 먼저 거둬요`);
+  if (failed("no_tomato_seed")) lines.push(t`토마토 씨앗이 떨어졌어요 — 성장에서 씨앗을 사요`);
   return { lines };
 }
 
@@ -393,7 +417,7 @@ function runMessage(result, farm, harvested) {
   if (farm.stopped === "waited") return MSG.waited;
   if (farm.stopped) return MSG.stopped;
   const got = Object.fromEntries(Object.entries(harvested).filter(([, n]) => n > 0));
-  const head = Object.keys(got).length ? `${amounts(got)}를 거뒀어요` : MSG.none;
+  const head = Object.keys(got).length ? t`${amounts(got)}를 거뒀어요` : MSG.none;
   return result && result.error ? `${MSG.error} · ${head}` : head;
 }
 
@@ -675,4 +699,19 @@ export function passedChapters(save, chapters) {
   if (isDev(save)) return new Set((chapters || []).map((c) => c.id));
   const completed = (save && save.completed_lessons) || [];
   return new Set((chapters || []).filter((c) => advancedOpen(c, completed)).map((c) => c.id));
+}
+
+// ---- v0.13.5 검토 I1: 코드 모드와 언어 ----
+// 코드 모드의 코드가 노드가 만든 코드 그대로(어느 언어든)인가 — 「고친 것이 사라져요」를 물을지 정함
+export function codeMatchesNodes(program, code) {
+  const c = String(code || "").trimEnd();
+  return ["ko", "en"].some((l) => codegen(program, { lang: l }).code.trimEnd() === c);
+}
+// 언어를 바꾼 뒤 코드 모드: 노드가 만든 코드를 고치지 않았으면 지금 언어 코드로 바꾼 텃밭을, 아니면 그대로(같은 객체)
+export function codeForLang(garden, l) {
+  if (!garden || garden.mode !== "code") return garden;
+  const want = codegen(garden.program, { lang: l }).code;
+  const have = String(garden.code || "");
+  if (have.trimEnd() === want.trimEnd() || !codeMatchesNodes(garden.program, have)) return garden;
+  return { ...garden, code: want };
 }

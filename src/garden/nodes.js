@@ -20,12 +20,18 @@
 //   더하기·비교에 못 쓴다(TypeError 막기, noteN). 내 노드 안에 n을 덮는 노드가 있으면 그 안에서 바깥 n도 못 읽는다(지역 값).
 //   쪽지 crop과 작물 목록 변수가 겹치지 않게, 쪽지 읽기 안에 있거나 안에 crop을 정하는 노드가 있는 작물 목록은 crop2부터 쓴다.
 //   그래서 { loopVar } 와 { noteVar: "crop" } 는 늘 다른 이름이고 둘 다 함께 쓸 수 있다.
+// v0.13.5 영어판(설계 docs/specs/2026-11-11-영어판-설계.md §5-1): 노드 값(작물·방향·쪽지·패턴 id)은 안쪽 열쇠(한국어) 그대로.
+//   codegen(program, { lang })만 언어별 파이썬 이름(src/garden/lang.js pyName)으로 코드를 만든다. 화면 이름(노드·조건·목록·패턴
+//   이름, MSG)은 쓸 때 번역하는 getter라 import 때가 아니라 읽을 때 지금 언어를 따른다. 새 노드 기본 글자도 언어별.
+
+import { t, lang } from "../i18n.js";
+import { pyName } from "./lang.js";
 
 export const MAX_NODES = 60;
 export const MAX_DEPTH = 4; // 안쪽 깊이(들여쓰기 단 수) 4까지
-export const DIRS = ["위", "아래", "왼쪽", "오른쪽"];
+export const DIRS = ["위", "아래", "왼쪽", "오른쪽"]; // I18N_SKIP 안쪽 열쇠
 // 토마토는 10장을 끝내야 고를 수 있다(잠금 표지 "crop:토마토" — 심기·작물 목록·창고 조건 모두)
-export const CROP_NAMES = ["당근", "감자", "토마토"];
+export const CROP_NAMES = ["당근", "감자", "토마토"]; // I18N_SKIP 안쪽 열쇠
 export const VAR_NAMES = ["count", "n", "total"];
 export const FUNC_NAMES = ["go_row", "plant_row", "harvest_row", "tend"];
 export const OPS = ["<", ">", "=="];
@@ -36,122 +42,156 @@ export const POS_NAMES = ["x", "y"];
 const VALUE_NAMES = [...VAR_NAMES, ...POS_NAMES];
 export const LIST_TYPES = ["crop", "dir"];
 export const LIST_ITEMS = { crop: CROP_NAMES, dir: DIRS };
-export const LIST_LABELS = { crop: "작물 목록", dir: "방향 목록" };
+export const LIST_LABELS = {
+  get crop() { return t`작물 목록`; },
+  get dir() { return t`방향 목록`; },
+};
 const LIST_VAR = { crop: "crop", dir: "way" };
 export const LIST_MAX = 6;
 // 종류마다 새 목록의 기본 칸(노드 더하기·저장 정리·목록 편집 창이 같이 씀)
-export const LIST_DEFAULTS = { crop: ["당근", "감자"], dir: ["오른쪽", "아래"] };
+export const LIST_DEFAULTS = { crop: ["당근", "감자"], dir: ["오른쪽", "아래"] }; // I18N_SKIP 안쪽 열쇠
 export const SAYVAL_MAX = 10;
 // 노드가 아닌 조건 잠금 표지 → 장
 export const COND_LOCKS = { "cond:store": 8 };
 // 노드가 아닌 잠금 표지 전부 → 장(unlockedKinds가 넣음)
-export const TOMATO = "토마토";
+export const TOMATO = "토마토"; // I18N_SKIP 안쪽 열쇠
+const EMPTY = "빈칸"; // I18N_SKIP 안쪽 열쇠(what_here() 빈칸)
 export const MARK_LOCKS = { ...COND_LOCKS, [`crop:${TOMATO}`]: 10 };
 // v0.12 쪽지함(받는 쪽지 두 개 + 남는 농장일지)
-export const NOTE_FILES = ["주문서.txt", "손글씨주문.txt", "농장일지.txt"];
-export const LOG_FILE = "농장일지.txt";
+export const NOTE_FILES = ["주문서.txt", "손글씨주문.txt", "농장일지.txt"]; // I18N_SKIP 안쪽 열쇠
+export const LOG_FILE = "농장일지.txt"; // I18N_SKIP 안쪽 열쇠
 export const NOTE_VARS = ["line", "crop", "n"];
-// 패턴 찾기: re는 파이썬 r"…" 안에 그대로 들어가는 글자, vars는 for 뒤 이름(정해지는 쪽지 값)
-export const PATTERNS = {
-  crop_num: { label: "작물+숫자", re: "(당근|감자|토마토)\\s*(\\d+)", vars: ["crop", "n"] },
-  num: { label: "숫자만", re: "\\d+", vars: ["n"] },
-  crop: { label: "작물 이름만", re: "당근|감자|토마토", vars: ["crop"] },
-};
+// 패턴 찾기: re는 파이썬 r"…" 안에 그대로 들어가는 글자, vars는 for 뒤 이름(정해지는 쪽지 값).
+// (v0.13.5) 언어별: 한국어 「작물+숫자」 (당근|감자|토마토)\s*(\d+) → for crop, n,
+//   영어 「숫자+작물」 (\d+)\s*(carrot|potato|tomato) → for n, crop (「2 carrots」처럼 숫자가 앞, 복수형도 찾음).
+//   vars는 언어마다 순서만 다르고 같은 이름들(검사·범위는 집합으로만 씀).
+const cropAlt = (l) => CROP_NAMES.map((c) => pyName("crop", c, l)).join("|");
+/** 패턴 id의 { re, vars } (그 언어). 모르는 id면 null */
+export function patternInfo(id, l = lang()) {
+  switch (id) {
+    case "crop_num":
+      return l === "en" ? { re: `(\\d+)\\s*(${cropAlt(l)})`, vars: ["n", "crop"] } : { re: `(${cropAlt(l)})\\s*(\\d+)`, vars: ["crop", "n"] };
+    case "num": return { re: "\\d+", vars: ["n"] };
+    case "crop": return { re: cropAlt(l), vars: ["crop"] };
+    default: return null;
+  }
+}
+const PATTERN_LABELS = { crop_num: () => t`작물+숫자`, num: () => t`숫자만`, crop: () => t`작물 이름만` };
+// 화면·검사용: label·re·vars 모두 지금 언어(읽을 때)
+export const PATTERNS = Object.fromEntries(Object.keys(PATTERN_LABELS).map((id) => [id, Object.freeze({
+  get label() { return PATTERN_LABELS[id](); },
+  get re() { return patternInfo(id).re; },
+  get vars() { return patternInfo(id).vars; },
+})]));
 const SLOTS = ["body", "orelse", "handler"];
 
-export const COND = [
-  { id: "can_harvest", label: "다 자랐으면", code: "can_harvest()" },
-  { id: "not_can_harvest", label: "덜 자랐으면", code: "not can_harvest()" },
-  { id: "here_empty", label: "빈칸이면", code: 'what_here() == "빈칸"' },
-  { id: "here_carrot", label: "당근이면", code: 'what_here() == "당근"' },
-  { id: "here_potato", label: "감자면", code: 'what_here() == "감자"' },
-];
-const COND_CODE = Object.fromEntries(COND.map((c) => [c.id, c.code]));
+// 조건: label·code는 지금 언어(읽을 때). 코드 글자는 condCode(id, lang)가 언어별로 만든다.
+const COND_DEF = {
+  can_harvest: { label: () => t`다 자랐으면`, code: () => "can_harvest()" },
+  not_can_harvest: { label: () => t`덜 자랐으면`, code: () => "not can_harvest()" },
+  here_empty: { label: () => t`빈칸이면`, code: (l) => `what_here() == ${pyStr(pyName("empty", EMPTY, l))}` },
+  here_carrot: { label: () => t`당근이면`, code: (l) => `what_here() == ${pyStr(pyName("crop", CROP_NAMES[0], l))}` },
+  here_potato: { label: () => t`감자면`, code: (l) => `what_here() == ${pyStr(pyName("crop", CROP_NAMES[1], l))}` },
+};
+export const COND = Object.keys(COND_DEF).map((id) => Object.freeze({
+  id,
+  get label() { return COND_DEF[id].label(); },
+  get code() { return COND_DEF[id].code(lang()); },
+}));
 
 const choice = (choices, def, loopType) => ({ type: "choice", choices, default: def, ...(loopType ? { loopType } : {}) });
 const int = (min, max, def) => ({ type: "int", min, max, default: def });
 const cond = (def) => ({ type: "cond", default: def });
+// (v0.13.5) 새 노드의 기본 글자: 학습자가 고쳐 쓰는 노드 값(저장되는 데이터)이라 언어마다 표로 둔다. 노드를 만들 때 지금 언어.
+// 영어 기본은 검사 규칙(글자 수)을 그대로 지킨다. valueTextReset은 두 언어 기본을 모두 알아본다.
+const TEXT_DEFAULTS = {
+  ko: { say: { text: "안녕!" }, sayval: { pre: "당근 ", post: "개" }, writelog: { pre: "수확 ", post: "개" } }, // I18N_SKIP 노드 값(데이터)
+  en: { say: { text: "Hi!" }, sayval: { pre: "carrots: ", post: "" }, writelog: { pre: "harvest ", post: "" } },
+};
+const textDefault = (kind, field, l = lang()) => (TEXT_DEFAULTS[l] ?? TEXT_DEFAULTS.ko)[kind][field];
+const text = (kind, field, spec) => ({ type: "text", ...spec, get default() { return textDefault(kind, field); } });
 
 export const NODES = {
-  move: { chapter: 1, label: "이동", body: false, orelse: false, args: { dir: choice(DIRS, "오른쪽", "dir") } },
-  harvest: { chapter: 1, label: "수확", body: false, orelse: false, args: {} },
-  plant: { chapter: 1, label: "심기", body: false, orelse: false, args: { crop: { ...choice(CROP_NAMES, "당근", "crop"), noteVar: "crop" } } },
-  say: { chapter: 1, label: "말하기", body: false, orelse: false, args: { text: { type: "text", max: 20, default: "안녕!" } } },
+  move: { chapter: 1, get label() { return t`이동`; }, body: false, orelse: false, args: { dir: choice(DIRS, DIRS[3], "dir") } },
+  harvest: { chapter: 1, get label() { return t`수확`; }, body: false, orelse: false, args: {} },
+  plant: { chapter: 1, get label() { return t`심기`; }, body: false, orelse: false, args: { crop: { ...choice(CROP_NAMES, CROP_NAMES[0], "crop"), noteVar: "crop" } } },
+  say: { chapter: 1, get label() { return t`말하기`; }, body: false, orelse: false, args: { text: text("say", "text", { max: 20 }) } },
   setvar: {
-    chapter: 2, label: "값 기억하기", body: false, orelse: false,
+    chapter: 2, get label() { return t`값 기억하기`; }, body: false, orelse: false,
     args: { name: choice(VAR_NAMES, "count"), value: int(VALUE_RANGE.min, VALUE_RANGE.max, 0) },
   },
   addvar: {
-    chapter: 2, label: "값 더하기", body: false, orelse: false,
+    chapter: 2, get label() { return t`값 더하기`; }, body: false, orelse: false,
     // 1부터(검토 C62 I4): 0을 더하면 값이 그대로라 「~하는 동안」이 끝나지 않는다
     args: { name: choice(VAR_NAMES, "count"), value: int(1, VALUE_RANGE.max, 1) },
   },
-  if: { chapter: 3, label: "만약", body: true, orelse: true, args: { cond: cond("can_harvest") } },
-  def: { chapter: 4, label: "내 노드 만들기", body: true, orelse: false, args: { name: choice(FUNC_NAMES, "go_row") } },
-  call: { chapter: 4, label: "내 노드 부르기", body: false, orelse: false, args: { name: choice(FUNC_NAMES, "go_row") } },
+  if: { chapter: 3, get label() { return t`만약`; }, body: true, orelse: true, args: { cond: cond("can_harvest") } },
+  def: { chapter: 4, get label() { return t`내 노드 만들기`; }, body: true, orelse: false, args: { name: choice(FUNC_NAMES, "go_row") } },
+  call: { chapter: 4, get label() { return t`내 노드 부르기`; }, body: false, orelse: false, args: { name: choice(FUNC_NAMES, "go_row") } },
   // 횟수는 수 또는 { value: "n" }(11장: 쪽지 n → range(int(n)))
-  repeat: { chapter: 5, label: "반복", body: true, orelse: false, args: { n: { ...int(1, 25, 3), noteValue: "n" } } },
-  while: { chapter: 5, label: "~하는 동안", body: true, orelse: false, args: { cond: cond("can_harvest") } },
+  repeat: { chapter: 5, get label() { return t`반복`; }, body: true, orelse: false, args: { n: { ...int(1, 25, 3), noteValue: "n" } } },
+  while: { chapter: 5, get label() { return t`~하는 동안`; }, body: true, orelse: false, args: { cond: cond("can_harvest") } },
   sayval: {
-    chapter: 6, label: "값 넣어 말하기", body: false, orelse: false,
+    chapter: 6, get label() { return t`값 넣어 말하기`; }, body: false, orelse: false,
     args: {
-      pre: { type: "text", min: 0, max: SAYVAL_MAX, default: "당근 " },
+      pre: text("sayval", "pre", { min: 0, max: SAYVAL_MAX }),
       var: { type: "value", default: "count" },
-      post: { type: "text", min: 0, max: SAYVAL_MAX, default: "개" },
+      post: text("sayval", "post", { min: 0, max: SAYVAL_MAX }),
     },
   },
   foreach: {
-    chapter: 7, label: "목록에서 하나씩", body: true, orelse: false,
+    chapter: 7, get label() { return t`목록에서 하나씩`; }, body: true, orelse: false,
     args: { list: { type: "list", min: 1, max: LIST_MAX, default: { type: "crop", items: LIST_DEFAULTS.crop } } },
   },
-  where: { chapter: 9, label: "위치 알기", body: false, orelse: false, args: {} },
+  where: { chapter: 9, get label() { return t`위치 알기`; }, body: false, orelse: false, args: {} },
   // v0.12
-  try: { chapter: 10, label: "시도하기", body: true, orelse: false, handler: true, args: {} },
-  readnote: { chapter: 11, label: "쪽지 읽기", body: true, orelse: false, args: { file: choice(NOTE_FILES, "주문서.txt") } },
-  splitline: { chapter: 11, label: "줄 나누기", body: false, orelse: false, args: {} },
+  try: { chapter: 10, get label() { return t`시도하기`; }, body: true, orelse: false, handler: true, args: {} },
+  readnote: { chapter: 11, get label() { return t`쪽지 읽기`; }, body: true, orelse: false, args: { file: choice(NOTE_FILES, NOTE_FILES[0]) } },
+  splitline: { chapter: 11, get label() { return t`줄 나누기`; }, body: false, orelse: false, args: {} },
   writelog: {
-    chapter: 11, label: "일지 쓰기", body: false, orelse: false,
+    chapter: 11, get label() { return t`일지 쓰기`; }, body: false, orelse: false,
     // var가 null이면 글자만 쓴다(그때는 앞·뒤 글자 중 하나는 있어야 함)
     args: {
-      pre: { type: "text", min: 0, max: SAYVAL_MAX, default: "수확 " },
+      pre: text("writelog", "pre", { min: 0, max: SAYVAL_MAX }),
       var: { type: "value", optional: true, default: "count" },
-      post: { type: "text", min: 0, max: SAYVAL_MAX, default: "개" },
+      post: text("writelog", "post", { min: 0, max: SAYVAL_MAX }),
     },
   },
-  findall: { chapter: 12, label: "패턴 찾기", body: true, orelse: false, args: { pattern: choice(Object.keys(PATTERNS), "crop_num") } },
+  findall: { chapter: 12, get label() { return t`패턴 찾기`; }, body: true, orelse: false, args: { pattern: choice(Object.keys(PATTERNS), "crop_num") } },
 };
 
 const VAR_COND_CHAPTER = NODES.setvar.chapter;
 
+// 검사 글: 읽을 때 지금 언어(getter·함수)
 export const MSG = {
-  empty: "안에 노드를 하나 넣어요",
-  locked: (ch) => `${ch}장을 끝내면 열려요`,
-  defTop: "내 노드 만들기는 맨 바깥에 둬요",
-  depth: `안쪽으로는 ${MAX_DEPTH}단까지 넣어요`,
-  tooMany: `노드는 ${MAX_NODES}개까지예요`,
-  noVar: (name) => `${name} 값을 먼저 기억해요`,
-  badArgs: "고를 수 없는 값이에요",
-  unknown: "모르는 노드예요",
-  noDef: "그 이름의 내 노드가 없어요",
-  defLater: "내 노드를 먼저 만들어요",
-  selfCall: "자기 자신은 부를 수 없어요",
-  dupDef: "같은 이름의 내 노드가 이미 있어요",
-  defVar: "내 노드 안에서는 값을 바꿀 수 없어요 — 바깥에서 바꿔요",
-  whileInDef: "내 노드 안의 ~하는 동안은 끝나지 않아요",
-  whileNoChange: (name) => `반복 안에서 ${name} 값을 바꿔요`,
-  noLoopVar: "목록에서 하나씩 노드 안에서만 고를 수 있어요",
-  noPos: "위치 알기를 먼저 해요",
-  defPos: "내 노드 안에서는 그 안에서 위치 알기를 해요",
-  whileNoMove: "반복 안에서 파이가 움직여야 해요",
+  get empty() { return t`안에 노드를 하나 넣어요`; },
+  locked: (ch) => t`${ch}장을 끝내면 열려요`,
+  get defTop() { return t`내 노드 만들기는 맨 바깥에 둬요`; },
+  get depth() { return t`안쪽으로는 ${MAX_DEPTH}단까지 넣어요`; },
+  get tooMany() { return t`노드는 ${MAX_NODES}개까지예요`; },
+  noVar: (name) => t`${name} 값을 먼저 기억해요`,
+  get badArgs() { return t`고를 수 없는 값이에요`; },
+  get unknown() { return t`모르는 노드예요`; },
+  get noDef() { return t`그 이름의 내 노드가 없어요`; },
+  get defLater() { return t`내 노드를 먼저 만들어요`; },
+  get selfCall() { return t`자기 자신은 부를 수 없어요`; },
+  get dupDef() { return t`같은 이름의 내 노드가 이미 있어요`; },
+  get defVar() { return t`내 노드 안에서는 값을 바꿀 수 없어요 — 바깥에서 바꿔요`; },
+  get whileInDef() { return t`내 노드 안의 ~하는 동안은 끝나지 않아요`; },
+  whileNoChange: (name) => t`반복 안에서 ${name} 값을 바꿔요`,
+  get noLoopVar() { return t`목록에서 하나씩 노드 안에서만 고를 수 있어요`; },
+  get noPos() { return t`위치 알기를 먼저 해요`; },
+  get defPos() { return t`내 노드 안에서는 그 안에서 위치 알기를 해요`; },
+  get whileNoMove() { return t`반복 안에서 파이가 움직여야 해요`; },
   // v0.12
-  emptyHandler: "안 되면 칸에 노드를 하나 넣어요",
-  noteOnly: "쪽지 읽기 안에서만 써요",
-  noNote: (name) => `${name} 값은 줄 나누기·패턴 찾기 뒤에서만 써요`,
+  get emptyHandler() { return t`안 되면 칸에 노드를 하나 넣어요`; },
+  get noteOnly() { return t`쪽지 읽기 안에서만 써요`; },
+  noNote: (name) => t`${name} 값은 줄 나누기·패턴 찾기 뒤에서만 써요`,
   // v0.12.1: 패턴 찾기 안인데 그 패턴이 그 값을 만들지 않음(예: 숫자만 + 심기 crop)
-  patternLacks: (label, name, other) => `${label} 패턴에서는 ${name}이 생기지 않아요 — ${other} 패턴을 골라요`,
-  noteN: "n은 쪽지에서 읽은 글자예요 — 숫자는 count·total에 기억해요",
-  logReading: "농장일지를 읽는 동안에는 일지에 쓸 수 없어요",
-  repeatNoAct: "쪽지 값만큼 반복할 때는 안에서 파이가 움직이거나 심거나 거둬야 해요",
+  patternLacks: (label, name, other) => t`${label} 패턴에서는 ${name}이 생기지 않아요 — ${other} 패턴을 골라요`,
+  get noteN() { return t`n은 쪽지에서 읽은 글자예요 — 숫자는 count·total에 기억해요`; },
+  get logReading() { return t`농장일지를 읽는 동안에는 일지에 쓸 수 없어요`; },
+  get repeatNoAct() { return t`쪽지 값만큼 반복할 때는 안에서 파이가 움직이거나 심거나 거둬야 해요`; },
 };
 
 // ---- 열린 노드 ----
@@ -172,10 +212,11 @@ const isNoteVar = (v) => isObj(v) && typeof v.noteVar === "string";
 const isNoteCount = (v) => isObj(v) && Object.hasOwn(v, "value");
 const numOk = (n) => Number.isInteger(n) && n >= VALUE_RANGE.min && n <= VALUE_RANGE.max;
 
-export function condCode(c) {
-  if (isStoreCond(c)) return `store()[${pyStr(c.store?.crop)}] ${c.store?.op} ${c.store?.num}`;
+/** 조건 → 파이썬 글자(그 언어의 이름). 모르는 조건은 "False" */
+export function condCode(c, l = lang()) {
+  if (isStoreCond(c)) return `store()[${pyStr(pyName("crop", c.store?.crop, l))}] ${c.store?.op} ${c.store?.num}`;
   if (isVarCond(c)) return `${c.var} ${c.op} ${c.num}`;
-  return COND_CODE[c] ?? "False";
+  return typeof c === "string" && Object.hasOwn(COND_DEF, c) ? COND_DEF[c].code(l) : "False";
 }
 
 const charLen = (s) => [...s].length;
@@ -206,7 +247,7 @@ function argOk(spec, v) {
         return isObj(st) && CROP_NAMES.includes(st.crop) && OPS.includes(st.op) && numOk(st.num);
       }
       if (isVarCond(v)) return VALUE_NAMES.includes(v.var) && OPS.includes(v.op) && numOk(v.num);
-      return Object.hasOwn(COND_CODE, v);
+      return typeof v === "string" && Object.hasOwn(COND_DEF, v);
     default: return false;
   }
 }
@@ -301,7 +342,7 @@ function actsIn(list) {
 // 그 노드가 정하는 쪽지 값 이름(줄 나누기: crop·n, 패턴 찾기: 패턴의 vars)
 function noteBinds(n) {
   if (n.kind === "splitline") return ["crop", "n"];
-  if (n.kind === "findall") return PATTERNS[n.args?.pattern]?.vars ?? [];
+  if (n.kind === "findall") return patternInfo(n.args?.pattern)?.vars ?? [];
   return [];
 }
 // 목록 안(내 노드 만들기 안은 빼고, 노드 자신 포함) 어디든 쪽지 값을 정하는 노드가 정하는 이름들
@@ -537,7 +578,9 @@ export function validate(program, unlocked) {
 
 // ---- 코드 생성 ----
 // 패턴 찾기가 하나라도 있으면 맨 위에 import re 한 줄(줄 표에서는 프로그램 순서로 첫 패턴 찾기 노드).
-export function codegen(program) {
+// (v0.13.5) lang: 파이썬이 보는 이름의 언어(기본 지금 언어). 작물·방향·빈칸·쪽지 파일 이름과 패턴만 바뀌고
+//   줄 수·줄 표(lineMap)·검사 결과는 언어와 무관하다. 학습자가 쓴 글자(말하기·일지 글)는 그대로.
+export function codegen(program, { lang: l = lang() } = {}) {
   const lines = [];
   const lineMap = {};
   const emit = (indent, text, id) => {
@@ -552,7 +595,7 @@ export function codegen(program) {
   // 목록 변수 값은 가장 안쪽 같은 종류 목록의 이름(틀린 자리면 미리보기용 기본 이름 — 오류는 따로 알림)
   const lv = (lists, type) => innermost(lists, type)?.name ?? LIST_VAR[type] ?? "None";
   const nv = (v) => (NOTE_VARS.includes(v.noteVar) ? v.noteVar : "None");
-  const val = (v, lists, type) => (isLoopVar(v) ? lv(lists, type ?? v.type) : isNoteVar(v) ? nv(v) : pyStr(v));
+  const val = (v, lists, type) => (isLoopVar(v) ? lv(lists, type ?? v.type) : isNoteVar(v) ? nv(v) : pyStr(pyName(type, v, l)));
   const valName = (v, lists) => (isLoopVar(v) ? lv(lists, v.type) : isNoteVar(v) ? nv(v) : String(v));
   // 말하기·일지에 넣는 값 글자: 쪽지 line은 줄 끝 줄바꿈을 떼어(line.strip()) 쓰고, 나머지는 str(값)
   const valText = (v, lists) => (isNoteVar(v) && v.noteVar === "line" ? "line.strip()" : `str(${valName(v, lists)})`);
@@ -576,7 +619,7 @@ export function codegen(program) {
         const L = isObj(a.list) ? a.list : {};
         const type = LIST_TYPES.includes(L.type) ? L.type : "crop";
         const name = listVarName(type, lists, ctx.reading, n.body);
-        const items = Array.isArray(L.items) ? L.items.map(pyStr).join(", ") : "";
+        const items = Array.isArray(L.items) ? L.items.map((it) => pyStr(pyName(type, it, l))).join(", ") : "";
         emit(indent, `for ${name} in [${items}]:`, n.id);
         block(n.body, indent + 1, { ...ctx, lists: [...lists, { type, name }] }, n.id);
         break;
@@ -586,7 +629,7 @@ export function codegen(program) {
       case "addvar": emit(indent, `${a.name} = ${a.name} + ${a.value}`, n.id); break;
       case "call": emit(indent, `${a.name}()`, n.id); break;
       case "if":
-        emit(indent, `if ${condCode(a.cond)}:`, n.id);
+        emit(indent, `if ${condCode(a.cond, l)}:`, n.id);
         block(n.body, indent + 1, ctx, n.id);
         if (Array.isArray(n.orelse)) {
           emit(indent, "else:", n.id);
@@ -594,7 +637,7 @@ export function codegen(program) {
         }
         break;
       case "while":
-        emit(indent, `while ${condCode(a.cond)}:`, n.id);
+        emit(indent, `while ${condCode(a.cond, l)}:`, n.id);
         block(n.body, indent + 1, ctx, n.id);
         break;
       case "repeat": {
@@ -614,13 +657,13 @@ export function codegen(program) {
         block(n.handler, indent + 1, ctx, n.id);
         break;
       case "readnote":
-        emit(indent, `with open(${pyStr(a.file)}) as f:`, n.id);
+        emit(indent, `with open(${pyStr(pyName("file", a.file, l))}) as f:`, n.id);
         emit(indent + 1, "for line in f:", n.id);
         block(n.body, indent + 2, { ...ctx, reading: ctx.reading + 1 }, n.id);
         break;
       case "splitline": emit(indent, "crop, n = line.split()", n.id); break;
       case "findall": {
-        const pat = PATTERNS[a.pattern] ?? PATTERNS.crop_num;
+        const pat = patternInfo(a.pattern, l) ?? patternInfo("crop_num", l);
         emit(indent, `for ${pat.vars.join(", ")} in re.findall(r"${pat.re}", line):`, n.id);
         block(n.body, indent + 1, ctx, n.id);
         break;
@@ -631,7 +674,7 @@ export function codegen(program) {
         let text;
         if (a.var === null || a.var === undefined) text = pyStr(`${pre}${post}\n`);
         else text = [...(pre !== "" ? [pyStr(pre)] : []), valText(a.var, lists), pyStr(`${post}\n`)].join(" + ");
-        emit(indent, `with open(${pyStr(LOG_FILE)}, "a") as f:`, n.id);
+        emit(indent, `with open(${pyStr(pyName("file", LOG_FILE, l))}, "a") as f:`, n.id);
         emit(indent + 1, `f.write(${text})`, n.id);
         break;
       }
@@ -653,7 +696,7 @@ export function codegen(program) {
 // ---- 새 노드·시작 프로그램 ----
 export function newNode(kind, nextId) {
   const spec = NODES[kind];
-  if (!spec) throw new Error(`모르는 노드 종류: ${kind}`);
+  if (!spec) throw new Error(t`모르는 노드 종류: ${kind}`);
   const id = typeof nextId === "function" ? nextId() : nextId;
   // 목록 같은 객체 기본값은 노드마다 새로(공유하지 않음)
   const args = Object.fromEntries(Object.entries(spec.args).map(([k, s]) => [k, isObj(s.default) ? structuredClone(s.default) : s.default]));
@@ -727,7 +770,7 @@ export function kindsUsed(program) {
     }
     if (n.kind === "findall" && typeof a.pattern === "string") {
       s.add(`findall:${a.pattern}`);
-      const vars = Object.hasOwn(PATTERNS, a.pattern) ? PATTERNS[a.pattern].vars : [];
+      const vars = patternInfo(a.pattern)?.vars ?? [];
       if (readsNote(n.body, vars, false)) s.add(`findall:${a.pattern}:used`);
     }
   });
@@ -737,13 +780,18 @@ export function kindsUsed(program) {
 // ---- 화면 도우미(v0.11) ----
 /**
  * (v0.12.1) 값 넣어 말하기·일지 쓰기에서 값을 고를 때: 기억한 값(source "var")이 아니면 — 쪽지 값(line·crop·n)·
- * 위치(x·y)·목록 값 — 기본 앞·뒤 글자(「당근 」·「개」, 「수확 」·「개」)는 맞지 않으므로 비울 칸 { pre?: "", post?: "" }.
+ * 위치(x·y)·목록 값 — 기본 앞·뒤 글자(「당근 」·「개」, 「수확 」·「개」, 영어 「carrots: 」·「harvest 」)는 맞지 않으므로
+ * 비울 칸 { pre?: "", post?: "" }.
  * 기본값과 다른(학습자가 고친) 글자는 두고, 다른 노드면 {}. 화면은 이번에 고친 글자인지도 따로 본다.
  */
 export function valueTextReset(kind, args, source) {
   if ((kind !== "sayval" && kind !== "writelog") || source === "var") return {};
   const out = {};
-  for (const k of ["pre", "post"]) if ((args?.[k] ?? "") === NODES[kind].args[k].default) out[k] = "";
+  // 두 언어의 기본 글자를 모두 알아본다(언어를 바꾸기 전에 만든 노드도)
+  for (const k of ["pre", "post"]) {
+    const v = args?.[k] ?? "";
+    if (Object.keys(TEXT_DEFAULTS).some((l) => v === textDefault(kind, k, l))) out[k] = "";
+  }
   return out;
 }
 
@@ -834,7 +882,7 @@ function replaceSiblings(list, id, fn) {
 }
 
 const must = (r, id) => {
-  if (!r) throw new Error(`노드를 찾을 수 없어요: ${id}`);
+  if (!r) throw new Error(t`노드를 찾을 수 없어요: ${id}`);
   return r;
 };
 
@@ -848,7 +896,7 @@ export function insertNode(program, parentId, slot, index, node) {
   return must(replaceNode(program, parentId, (p) => {
     const spec = NODES[p.kind];
     const allowed = slot === "orelse" ? spec?.orelse : slot === "handler" ? spec?.handler : spec?.body;
-    if (!allowed || !SLOTS.includes(slot)) throw new Error(`${p.kind}에는 ${slot}이 없어요`);
+    if (!allowed || !SLOTS.includes(slot)) throw new Error(t`${p.kind}에는 ${slot}이 없어요`);
     return { ...p, [slot]: spliceIn(Array.isArray(p[slot]) ? p[slot] : [], index, node) };
   }), parentId);
 }
@@ -875,7 +923,7 @@ export function updateArgs(program, id, args) {
 // 「만약」의 아니면 켜기(빈 orelse)·끄기(orelse 지움)
 export function setElse(program, id, on) {
   return must(replaceNode(program, id, (n) => {
-    if (!NODES[n.kind]?.orelse) throw new Error(`${n.kind}에는 아니면이 없어요`);
+    if (!NODES[n.kind]?.orelse) throw new Error(t`${n.kind}에는 아니면이 없어요`);
     if (on) return Array.isArray(n.orelse) ? n : { ...n, orelse: [] };
     const { orelse, ...rest } = n;
     return rest;

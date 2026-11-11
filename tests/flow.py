@@ -3290,5 +3290,93 @@ def test_english_lesson():
     assert not fails, "\n".join(fails)
 
 
+def test_english_garden():
+    """v0.13.5: 개발자 모드 영어 텃밭 — 화면·노드 코드·쪽지함·실행 결과·노드 고르기에 한글이 없고, 노드가 만든 영어 코드
+    (open("handwritten.txt"), 숫자+작물 정규식)가 영어 쪽지를 읽어 그대로 심는다. 저장은 안쪽 열쇠(한국어) 그대로."""
+    prog = [_nd(1, "readnote", file="손글씨주문.txt",
+                body=[_nd(2, "findall", pattern="crop_num",
+                          body=[_nd(3, "repeat", n={"value": "n"},
+                                    body=[_nd(4, "plant", crop={"noteVar": "crop"}), _nd(5, "move", dir="오른쪽")])])])]
+    seed = dict(_garden_seed(12, _garden12(28, program=prog)), dev_mode=True,
+                settings={"sound": False, "dailyGoal": 20, "name": "", "lang": "en"})
+    fails = []
+    with App("iPhone 17", reduced=True) as a:
+        a.js("([k1, k2, v]) => { localStorage.setItem(k1, '1'); localStorage.setItem(k2, v); }",
+             [DEV_FLAG_KEY, DEV_SAVE_KEY, json.dumps(seed)])
+        a.page.reload()
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=20_000)
+        _open_garden(a)
+        left = _hangul_left(a)
+        if left:
+            fails.append("garden screen: %r" % left)
+        code = _code_preview(a)
+        for want in ('with open("handwritten.txt") as f:', 'for n, crop in re.findall(r"(\\d+)\\s*(carrot|potato|tomato)", line):',
+                     "plant(crop)", 'move("right")'):
+            if want not in code:
+                fails.append("code preview lacks %r:\n%s" % (want, code))
+        if re.search(r"[가-힣]", code):
+            fails.append("code preview has Hangul:\n%s" % code)
+        a.shot("en-garden.png")
+        _notes_open(a)
+        left = _hangul_left(a)
+        if left:
+            fails.append("mailbox: %r" % left)
+        note = _note_text(a, "손글씨주문.txt")
+        if not note or re.search(r"[가-힣]", note):
+            fails.append("handwritten note not English: %r" % note)
+        a.shot("en-garden-notes.png")
+        a.page.click(".gs-close")
+        a.page.wait_for_selector(".modal.g-sheet", state="detached")
+        dev_save = lambda: json.loads(a.js("(k) => localStorage.getItem(k)", DEV_SAVE_KEY))  # noqa: E731 개발자 모드 저장 칸
+        before = dev_save()["garden"]
+        a.wait_py()
+        a.page.click("#g-run")
+        a.page.wait_for_function("(n) => { const s = JSON.parse(localStorage.getItem(%r) || '{}'); "
+                                 "return ((s.garden || {}).runs || 0) > n; }" % DEV_SAVE_KEY, arg=before.get("runs", 0),
+                                 timeout=30_000)
+        a.page.wait_for_selector(".screen.garden[data-state=idle]", timeout=30_000)
+        g = dev_save()["garden"]
+        planted = sum(1 for c in g["cells"] if c) - sum(1 for c in before["cells"] if c)
+        if planted <= 0:
+            fails.append("nothing planted from the English note: %r" % g["cells"])
+        if set(g["store"]) - {"당근", "감자", "토마토"}:
+            fails.append("save store keys not internal: %r" % g["store"])
+        a.page.wait_for_timeout(300)
+        left = _hangul_left(a)
+        if left:
+            fails.append("after run: %r" % left)
+        a.shot("en-garden-after-run.png")
+        a.page.click('.g-add[data-parent=""][data-slot=body]')
+        a.page.wait_for_selector(".modal.g-sheet")
+        left = _hangul_left(a)
+        if left:
+            fails.append("add-node sheet: %r" % left)
+        a.shot("en-garden-add.png")
+        if a.errors:
+            fails.append("errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+def test_english_garden_code_mode_switch():
+    """v0.13.5 검토 I1: 한국어 코드 모드에서 노드가 만든 코드를 고치지 않은 채 영어로 바꾸면 영어 코드가 보이고,
+    노드로 돌아갈 때 「고친 것이 사라져요」를 묻지 않는다."""
+    g = _garden(order_idx=0, mode="code", code='move("오른쪽")\nharvest()\n')
+    seed = dict(_garden_seed(1, g, xp=40), dev_mode=True, settings={"sound": False, "dailyGoal": 20, "name": "", "lang": "en"})
+    with App("iPhone 17", reduced=True) as a:
+        a.js("([k1, k2, v]) => { localStorage.setItem(k1, '1'); localStorage.setItem(k2, v); }",
+             [DEV_FLAG_KEY, DEV_SAVE_KEY, json.dumps(seed)])
+        a.page.reload()
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=20_000)
+        _open_garden(a)
+        a.page.wait_for_selector(".cm-content")
+        got = a.js("() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent).join('\\n')")
+        assert got.strip() == 'move("right")\nharvest()', got
+        a.page.click("#to-nodes")
+        a.page.wait_for_timeout(GUARD_WAIT)
+        assert not a.page.query_selector(".modal"), "no 'edits will be lost' dialog"
+        assert json.loads(a.js("(k) => localStorage.getItem(k)", DEV_SAVE_KEY))["garden"]["mode"] == "nodes"
+        assert not a.errors, a.errors
+
+
 if __name__ == "__main__":
     sys.exit(main())

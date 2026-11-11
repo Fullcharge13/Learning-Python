@@ -9,6 +9,22 @@
 import { ORDERS } from "../data/garden.js";
 import { codegen, validate, unlockedKinds } from "../src/garden/nodes.js";
 import { newGarden, cleanGarden, runInput, runFiles, applyRun, deliver, buy, canBuy } from "../src/garden/state.js";
+import { usePack, setLang } from "../src/i18n.js";
+import fs from "node:fs";
+
+// v0.13.5: GARDEN_LANG=en이면 영어 꾸러미를 쓰고 영어 코드·영어 쪽지로 만든다(판정은 언어와 상관없이 같은 규칙)
+const LANG = process.env.GARDEN_LANG === "en" ? "en" : "ko";
+if (LANG === "en") {
+  const dir = new URL("../i18n/en/", import.meta.url);
+  const pack = { ui: {}, data: {} };
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith(".json")) continue;
+    const part = JSON.parse(fs.readFileSync(new URL(f, dir), "utf8"));
+    if (f === "data.json") Object.assign(pack.data, part); else if (f.startsWith("ui")) Object.assign(pack.ui, part);
+  }
+  usePack("en", pack);
+  setLang("en");
+}
 
 const upTo = (n) => new Set(Array.from({ length: n }, (_, i) => i + 1));
 
@@ -24,14 +40,14 @@ function gardenFor(i) {
 
 function prepare() {
   return ORDERS.map((o, i) => {
-    const gen = codegen(o.solution);
+    const gen = codegen(o.solution, { lang: LANG });
     const errors = [...validate(o.solution, unlockedKinds(upTo(o.need))), ...gen.errors].map((e) => e.msg);
     const { g, same } = gardenFor(i);
     if (!same) errors.push("setup이 저장 정리(cleanGarden)에서 바뀜 — 크기·성장·칸 모양 확인");
     // 그 장까지 통과한 학습자: 토마토 잠금(tomato_ok)·쪽지함(11장부터만 넘김)도 앱과 같게(판정 C71 I1)
     const passed = upTo(o.need);
     return { id: o.id, need: o.need, title: o.title, goal: o.goal, code: gen.code, errors,
-      setup: runInput(g, passed), files: passed.has(11) ? runFiles(g) : null, hasRun: o.solution.length > 0 };
+      setup: runInput(g, passed), files: passed.has(11) ? runFiles(g, LANG) : null, hasRun: o.solution.length > 0 };
   });
 }
 
@@ -78,9 +94,9 @@ function stuck() {
   const { o, g, passed } = stuckGarden();
   const can = canBuy(g, "seedpack", passed);
   const b = buy(g, "seedpack", passed);
-  return { code: codegen(o.solution).code, before: { seeds: g.seeds, tomatoes: g.cells.filter((c) => c?.crop === "토마토").length, can: can.ok },
-    setup0: runInput(g, passed), files0: runFiles(g),
-    setup: runInput(b.garden, passed), files: runFiles(b.garden), after: { seeds: b.garden.seeds, store: b.garden.store, error: b.error } };
+  return { code: codegen(o.solution, { lang: LANG }).code, before: { seeds: g.seeds, tomatoes: g.cells.filter((c) => c?.crop === "토마토").length, can: can.ok },
+    setup0: runInput(g, passed), files0: runFiles(g, LANG),
+    setup: runInput(b.garden, passed), files: runFiles(b.garden, LANG), after: { seeds: b.garden.seeds, store: b.garden.store, error: b.error } };
 }
 function stuckJudge({ result0, result }) {
   const { o, g, passed } = stuckGarden();

@@ -9,7 +9,7 @@
 // 주고받는 말:
 //   받음 { type: "init", indexURL, runnerSource }
 //   보냄 { type: "ready", loadMs } | { type: "init-error", name, msg }
-//   받음 { type: "run", id, code, stdin, require, files?, server?, farm? }
+//   받음 { type: "run", id, code, stdin, require, files?, server?, farm?, lang? }   (lang v0.13.5: "ko"|"en")
 //        files: { 이름: 글자 } (가상 파일, v0.4 E1), server: { 주소: { status, body, type? } } (연습 서버, E2)
 //        farm: { size, cells, pie:{x,y}, clock, store, upgrades, seeds? } (파이의 텃밭 상태, v0.10·v0.12)
 //        셋 다 JSON 글자로 바꿔 Python의 json.loads로 dict를 만든다(toPy의 객체 변환 차이를 피함).
@@ -85,7 +85,8 @@ function run(msg) {
       if (msg.files && typeof msg.files === "object") filesPy = loadsFn(JSON.stringify(msg.files));
       if (msg.server && typeof msg.server === "object") serverPy = loadsFn(JSON.stringify(msg.server));
       if (msg.farm && typeof msg.farm === "object") farmPy = loadsFn(JSON.stringify(msg.farm));
-      out = runFn(String(msg.code == null ? "" : msg.code), stdinPy, reqPy, filesPy, serverPy, farmPy);
+      out = runFn.callKwargs(String(msg.code == null ? "" : msg.code), stdinPy, reqPy, filesPy, serverPy, farmPy,
+        { lang: msg.lang === "en" ? "en" : "ko" });
       result = out.toJs({ dict_converter: Object.fromEntries });
       delete result.farm;
       if (out.has("farm")) {

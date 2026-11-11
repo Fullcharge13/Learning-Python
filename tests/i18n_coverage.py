@@ -2,7 +2,7 @@
 
     python3 tests/i18n_coverage.py
 
-1. 코드에 t``/tk 없이 남은 한글 화면 문구가 없다(tools/i18n_scan.mjs). 텃밭 파일은 v0.13.5까지 뺌(LATER).
+1. 코드에 t``/tk 없이 남은 한글 화면 문구가 없다(tools/i18n_scan.mjs). 텃밭 파일도 v0.13.5부터 검사한다.
 2. 코드가 쓰는 모든 열쇠가 영어 표(i18n/en/ui*.json)에 있고, 영어 표에 쓰이지 않는 열쇠가 없다.
 3. 데이터 표(대사·배지·의상·퀘스트·개념·오류)의 모든 칸이 i18n/en/data.json에 있고 남는 열쇠가 없다.
 4. 영어 문구에 한글이 없다.
@@ -17,7 +17,6 @@ import sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 EN = os.path.join(ROOT, "i18n", "en")
 HANGUL = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]")
-LATER = ("src/garden/", "src/ui/garden.js")  # v0.13.5에서 뺀다
 
 NODE_DATA_KEYS = r"""
 const imp = (p) => import("file://" + process.cwd() + "/" + p);
@@ -35,6 +34,16 @@ const { CONCEPTS } = await imp("data/concepts.js");
 for (const c of CONCEPTS) out[`concept.${c.id}.name`] = c.name;
 const { ERRORS } = await imp("data/errors.js");
 for (const [k, e] of Object.entries(ERRORS)) for (const f of ["title", "body", "detective"]) if (typeof e[f] === "string") out[`error.${k}.${f}`] = e[f];
+// v0.13.5 텃밭: 주문 제목·글·쪽지, 성장 이름, 씨앗 봉투, 오늘의 쪽지(파일 이름은 안쪽 이름)
+const G = await imp("data/garden.js");
+for (const o of G.ORDERS) {
+  out[`garden.order.${o.id}.title`] = o.title;
+  out[`garden.order.${o.id}.text`] = o.text;
+  if (o.note) out[`garden.order.${o.id}.note`] = o.note.text;
+}
+for (const u of G.UPGRADES) out[`garden.upgrade.${u.id}.label`] = u.label;
+out["garden.seedpack.label"] = G.SEED_PACK.label;
+for (const [f, list] of Object.entries(G.DAILY_NOTES)) list.forEach((s, i) => { out[`garden.note.${f}.${i}`] = s; });
 console.log(JSON.stringify(out));
 """
 
@@ -67,7 +76,7 @@ def slots(s):
 
 
 def test_no_raw_korean_in_code():
-    raw = [x for x in scan()["raw"] if not x["file"].startswith(LATER)]
+    raw = scan()["raw"]
     assert not raw, "\n".join("%s:%s %s" % (x["file"], x["line"], x["text"][:60]) for x in raw[:30])
 
 

@@ -127,6 +127,96 @@ _io_open = io.open
 
 NO_SUCH_URL = "연습 서버에 없는 주소예요"
 
+# ---- v0.13.5 영어판(설계서 영어판 §5·§5-1): 학습자가 보는 문구를 실행 언어로 ----
+# 한국어 문구(틀) → 영어 문구(같은 %s·%d 자리). 고칠 수 없게 MappingProxyType(학습자 코드가 안을 바꿔도 실행마다 같음).
+import types as _types
+_EN = _types.MappingProxyType({
+    "연습 서버에 없는 주소예요": "That address isn't on the practice server",
+    # 차트
+    "%s은 글자나 숫자로 줘요(지금 %s)": "%s must be text or a number (got %s)",
+    "%s은 %d글자까지 쓸 수 있어요": "%s can be at most %d characters",
+    "%s은 리스트로 줘요(예: [1, 2, 3])": "%s must be a list (e.g. [1, 2, 3])",
+    "값은 숫자여야 해요(지금 %s)": "Values must be numbers (got %s)",
+    "값에 nan이나 inf는 쓸 수 없어요": "Values can't be nan or inf",
+    "chart.%s()에는 %s= 같은 이름 붙은 인자를 쓰지 않아요. 값만 차례로 써요(%s)":
+        "chart.%s() doesn't take named arguments like %s=. Just give the values in order (%s)",
+    "chart.%s()에는 값을 %d개 줘요(%s)": "chart.%s() takes %d values (%s)",
+    "chart.%s()에는 아무것도 넣지 않아요(%s)": "chart.%s() takes nothing (%s)",
+    "그림 하나에는 막대 그래프 하나만 그려요. 먼저 chart.show()를 불러요":
+        "One picture holds one bar chart. Call chart.show() first",
+    "막대와 꺾은선은 한 그림에 섞지 않아요. 먼저 chart.show()를 불러요":
+        "Don't mix bars and lines in one picture. Call chart.show() first",
+    "꺾은선은 한 그림에 %d개까지 겹칠 수 있어요": "One picture can hold up to %d lines",
+    "이름들": "Labels", "값들": "Values", "이름": "A label", "제목": "The title",
+    "가로축 이름": "The x-axis label", "세로축 이름": "The y-axis label",
+    "선 이름들": "Line names", "선 이름": "A line name",
+    "이름과 값의 개수가 달라요": "Labels and values have different lengths",
+    "그릴 값이 하나도 없어요": "There are no values to draw",
+    "그래프 하나에 값은 %d개까지 그릴 수 있어요": "This app's chart can draw up to %d values",
+    "선마다 이름(가로축)이 같아야 해요": "Every line needs the same labels (x-axis)",
+    "chart.bar(이름들, 값들)": "chart.bar(labels, values)",
+    "chart.line(이름들, 값들)": "chart.line(labels, values)",
+    'chart.title("제목")': 'chart.title("title")',
+    'chart.xlabel("가로축 이름")': 'chart.xlabel("x-axis label")',
+    'chart.ylabel("세로축 이름")': 'chart.ylabel("y-axis label")',
+    'chart.legend(["선 이름", "선 이름"])': 'chart.legend(["line name", "line name"])',
+    "선 이름이 하나도 없어요": "There are no line names",
+    "선 이름은 %d개까지 줄 수 있어요(꺾은선이 %d개까지라서)": "Give at most %d line names (a picture holds up to %d lines)",
+    "그릴 그래프가 없어요. chart.bar()나 chart.line()을 먼저 불러요":
+        "There's nothing to draw. Call chart.bar() or chart.line() first",
+    "chart.legend()는 꺾은선 그래프에만 써요": "chart.legend() is only for line charts",
+    "선 이름(legend)의 개수가 선 개수와 달라요(선 %d개, 이름 %d개)":
+        "The number of line names (legend) doesn't match the lines (%d lines, %d names)",
+    "그림은 한 번 실행에 %d개까지 보여 줄 수 있어요": "One run can show up to %d pictures",
+    # 텃밭
+    "방향은 위·아래·왼쪽·오른쪽 중 하나예요": "Direction must be up, down, left or right",
+    "작물은 당근·감자·토마토 중 하나예요": "Crop must be carrot, potato or tomato",
+    "토마토 씨앗이 떨어졌어요": "Out of tomato seeds",
+    "토마토는 10장을 끝내면 심을 수 있어요": "Tomatoes can be planted after you finish Chapter 10",
+    "받은 쪽지는 읽기만 해요": "Notes you received are read-only",
+    "파이가 멈췄어요": "Pi stopped",
+})
+_EN_DOC = _types.MappingProxyType({
+    "chart": "Ria & Python! chart: bar, line, title, xlabel, ylabel, legend, show "
+             "(almost the same names as matplotlib.pyplot; line is pyplot's plot)",
+    "chart.bar": 'Bar chart: chart.bar(["apple", "pear"], [3, 5])',
+    "chart.line": 'Line chart: chart.line(["Mon", "Tue"], [12, 15]). Call again with the same labels to add a line (up to 3)',
+    "chart.title": "Picture title", "chart.xlabel": "x-axis label", "chart.ylabel": "y-axis label",
+    "chart.legend": 'Line names: chart.legend(["Minji", "Jun"]) — in the order the lines were drawn',
+    "chart.show": "Shows what you've drawn so far and starts a new picture",
+    "farm": "Ria & Python! Pi's Garden: move(direction), plant(crop), harvest(), "
+            "can_harvest(), what_here(), store(), where(), seeds()",
+    "farm.move": 'Moves Pi one square: move("up"), "down", "left", "right". At the edge Pi wraps to the other side',
+    "farm.plant": 'Plants on this square: plant("carrot"), plant("potato"), plant("tomato"). A tomato uses one seed from the seed bag',
+    "farm.harvest": "Harvests the crop on this square. If it isn't grown yet, the crop is lost",
+    "farm.can_harvest": "True if this square has a fully grown crop (takes no time)",
+    "farm.what_here": 'This square: "carrot", "potato", "tomato" or "empty" (takes no time)',
+    "farm.store": 'A copy of storage {"carrot": n, "potato": n, "tomato": n} (takes no time). Changing the copy leaves real storage alone',
+    "farm.where": "Pi's position (x, y) (takes no time)",
+    "farm.seeds": "Tomato seeds left (takes no time)",
+})
+# 텃밭 이름 표(안쪽 열쇠 → 영어). src/garden/lang.js GARDEN_EN과 같아야 한다(tests/py/test_runner_lang.py).
+_FARM_EN_RULES = (   # 엔진이 쓰는 원본(바꿀 수 없음)
+    ("crop", (("당근", "carrot"), ("감자", "potato"), ("토마토", "tomato"))),
+    ("dir", (("위", "up"), ("아래", "down"), ("왼쪽", "left"), ("오른쪽", "right"))),
+    ("empty", (("빈칸", "empty"),)),
+    ("file", (("주문서.txt", "orders.txt"), ("손글씨주문.txt", "handwritten.txt"), ("농장일지.txt", "farm_log.txt"))),
+)
+# 시험·문서가 읽는 읽기 전용 사본(학습자 코드가 안을 바꿀 수 없음)
+FARM_EN = _types.MappingProxyType({k: _types.MappingProxyType(dict(v)) for k, v in _FARM_EN_RULES})
+
+
+def _norm_lang(v):
+    return "en" if v == "en" else "ko"
+
+
+def _tr_for(lang):
+    """그 언어의 문구 바꾸기 함수(한국어면 그대로)."""
+    en = _EN
+    if lang != "en":
+        return lambda s: s
+    return lambda s: en.get(s, s)
+
 
 class InputMissing(BaseException):
     """input()이 stdin 값보다 많이 불렸을 때.
@@ -379,7 +469,7 @@ def _make_run_dir(files):
     return root
 
 
-def _make_urlopen(server):
+def _make_urlopen(server, lang="ko"):
     """연습 서버 표로 답하는 가짜 urlopen. 진짜 네트워크(소켓)는 쓰지 않는다."""
     import email.message
     import http
@@ -400,6 +490,7 @@ def _make_urlopen(server):
         except ValueError:
             return ""
 
+    no_such = _tr_for(lang)(NO_SUCH_URL)
     table = {}
     for url, resp in (server or {}).items():
         resp = resp or {}
@@ -415,7 +506,7 @@ def _make_urlopen(server):
         full = _getattr(url, "full_url", url)
         full = _str(full)
         if full not in table:
-            raise urllib.error.URLError(NO_SUCH_URL)
+            raise urllib.error.URLError(no_such)
         status, body, ctype = table[full]
         headers = email.message.Message()
         headers["Content-Type"] = ctype
@@ -443,9 +534,10 @@ _enumerate = enumerate
 _INT_SAFE = 2 ** 53
 
 
-def _make_chart(charts):
-    """실행 하나에 쓰는 새 chart 모듈. 그린 그림은 charts 목록에 쌓인다."""
+def _make_chart(charts, lang="ko"):
+    """실행 하나에 쓰는 새 chart 모듈. 그린 그림은 charts 목록에 쌓인다. 문구는 lang(v0.13.5)."""
     import types
+    tr = _tr_for(lang)
 
     mod = types.ModuleType("chart")
     mod.__doc__ = ("리아와 파이썬! 차트: bar, line, title, xlabel, ylabel, legend, show "
@@ -455,56 +547,56 @@ def _make_chart(charts):
 
     def _text(v, what):
         if _isinstance(v, _bool) or not _isinstance(v, (_str, _int, _float)):
-            raise _TypeError("%s은 글자나 숫자로 줘요(지금 %s)" % (what, _type(v).__name__))
+            raise _TypeError(tr("%s은 글자나 숫자로 줘요(지금 %s)") % (tr(what), _type(v).__name__))
         s = _str(v)
         if _len(s) > CHART_TEXT_MAX:
-            raise _ValueError("%s은 %d글자까지 쓸 수 있어요" % (what, CHART_TEXT_MAX))
+            raise _ValueError(tr("%s은 %d글자까지 쓸 수 있어요") % (tr(what), CHART_TEXT_MAX))
         return s
 
     def _seq(v, what):
         if not _isinstance(v, (_list, _tuple)):
-            raise _TypeError("%s은 리스트로 줘요(예: [1, 2, 3])" % what)
+            raise _TypeError(tr("%s은 리스트로 줘요(예: [1, 2, 3])") % tr(what))
         return _list(v)
 
     def _num(v):
         if _isinstance(v, _bool) or not _isinstance(v, (_int, _float)):
-            raise _TypeError("값은 숫자여야 해요(지금 %s)" % _type(v).__name__)
+            raise _TypeError(tr("값은 숫자여야 해요(지금 %s)") % _type(v).__name__)
         if _isinstance(v, _int):
             return v if -_INT_SAFE <= v <= _INT_SAFE else _float(v)
         if v != v or v in (_float("inf"), _float("-inf")):
-            raise _ValueError("값에 nan이나 inf는 쓸 수 없어요")
+            raise _ValueError(tr("값에 nan이나 inf는 쓸 수 없어요"))
         return v
 
     def _args(name, args, kw, n, shape):
         """인자 검사: 이름 붙은 인자 없이 정확히 n개. 틀리면 한국어 TypeError"""
         if kw:
-            raise _TypeError("chart.%s()에는 %s= 같은 이름 붙은 인자를 쓰지 않아요. 값만 차례로 써요(%s)"
-                             % (name, _list(kw)[0], shape))
+            raise _TypeError(tr("chart.%s()에는 %s= 같은 이름 붙은 인자를 쓰지 않아요. 값만 차례로 써요(%s)")
+                             % (name, _list(kw)[0], tr(shape)))
         if _len(args) != n:
-            raise _TypeError("chart.%s()에는 값을 %d개 줘요(%s)" % (name, n, shape) if n
-                             else "chart.%s()에는 아무것도 넣지 않아요(%s)" % (name, shape))
+            raise _TypeError(tr("chart.%s()에는 값을 %d개 줘요(%s)") % (name, n, tr(shape)) if n
+                             else tr("chart.%s()에는 아무것도 넣지 않아요(%s)") % (name, tr(shape)))
         return args
 
     def _plot(kind, labels, values):
         if fig.get("kind") == "bar" and kind == "bar":
-            raise _ValueError("그림 하나에는 막대 그래프 하나만 그려요. 먼저 chart.show()를 불러요")
+            raise _ValueError(tr("그림 하나에는 막대 그래프 하나만 그려요. 먼저 chart.show()를 불러요"))
         if fig.get("kind") and fig["kind"] != kind:
-            raise _ValueError("막대와 꺾은선은 한 그림에 섞지 않아요. 먼저 chart.show()를 불러요")
+            raise _ValueError(tr("막대와 꺾은선은 한 그림에 섞지 않아요. 먼저 chart.show()를 불러요"))
         if fig.get("kind") == "line" and _len(fig["lines"]) >= CHART_LINES_MAX:
-            raise _ValueError("꺾은선은 한 그림에 %d개까지 겹칠 수 있어요" % CHART_LINES_MAX)
+            raise _ValueError(tr("꺾은선은 한 그림에 %d개까지 겹칠 수 있어요") % CHART_LINES_MAX)
         labels = _seq(labels, "이름들")
         values = _seq(values, "값들")
         if _len(labels) != _len(values):
-            raise _ValueError("이름과 값의 개수가 달라요")
+            raise _ValueError(tr("이름과 값의 개수가 달라요"))
         if not labels:
-            raise _ValueError("그릴 값이 하나도 없어요")
+            raise _ValueError(tr("그릴 값이 하나도 없어요"))
         if _len(labels) > CHART_POINTS_MAX:
-            raise _ValueError("그래프 하나에 값은 %d개까지 그릴 수 있어요" % CHART_POINTS_MAX)
+            raise _ValueError(tr("그래프 하나에 값은 %d개까지 그릴 수 있어요") % CHART_POINTS_MAX)
         labels = [_text(x, "이름") for x in labels]
         values = [_num(x) for x in values]
         if fig.get("kind"):
             if labels != fig["labels"]:
-                raise _ValueError("선마다 이름(가로축)이 같아야 해요")
+                raise _ValueError(tr("선마다 이름(가로축)이 같아야 해요"))
             fig["lines"].append(values)
             return
         fig["labels"] = labels
@@ -541,9 +633,9 @@ def _make_chart(charts):
         names, = _args("legend", args, kw, 1, 'chart.legend(["선 이름", "선 이름"])')
         names = _seq(names, "선 이름들")
         if not names:
-            raise _ValueError("선 이름이 하나도 없어요")
+            raise _ValueError(tr("선 이름이 하나도 없어요"))
         if _len(names) > CHART_LINES_MAX:
-            raise _ValueError("선 이름은 %d개까지 줄 수 있어요(꺾은선이 %d개까지라서)"
+            raise _ValueError(tr("선 이름은 %d개까지 줄 수 있어요(꺾은선이 %d개까지라서)")
                               % (CHART_LINES_MAX, CHART_LINES_MAX))
         fig["legend"] = [_text(x, "선 이름") for x in names]
 
@@ -551,15 +643,15 @@ def _make_chart(charts):
         """지금까지 그린 그림을 화면에 보여 주고 새 그림을 시작한다"""
         _args("show", args, kw, 0, "chart.show()")
         if not fig.get("kind"):
-            raise _ValueError("그릴 그래프가 없어요. chart.bar()나 chart.line()을 먼저 불러요")
+            raise _ValueError(tr("그릴 그래프가 없어요. chart.bar()나 chart.line()을 먼저 불러요"))
         names = fig.get("legend")
         if names is not None and fig["kind"] != "line":
-            raise _ValueError("chart.legend()는 꺾은선 그래프에만 써요")
+            raise _ValueError(tr("chart.legend()는 꺾은선 그래프에만 써요"))
         if names is not None and _len(names) != _len(fig["lines"]):
-            raise _ValueError("선 이름(legend)의 개수가 선 개수와 달라요(선 %d개, 이름 %d개)"
+            raise _ValueError(tr("선 이름(legend)의 개수가 선 개수와 달라요(선 %d개, 이름 %d개)")
                               % (_len(fig["lines"]), _len(names)))
         if _len(charts) >= CHART_MAX:
-            raise _ValueError("그림은 한 번 실행에 %d개까지 보여 줄 수 있어요" % CHART_MAX)
+            raise _ValueError(tr("그림은 한 번 실행에 %d개까지 보여 줄 수 있어요") % CHART_MAX)
         c = {"kind": fig["kind"], "labels": fig["labels"]}
         if _len(fig["lines"]) == 1 and names is None:
             c["values"] = fig["lines"][0]   # 예전 모양 그대로(v0.5 레슨·시험)
@@ -574,7 +666,11 @@ def _make_chart(charts):
 
     for f in (bar, line, title, xlabel, ylabel, legend, show):
         f.__module__ = "chart"
+        if lang == "en":
+            f.__doc__ = _EN_DOC["chart." + f.__name__]
         setattr(mod, f.__name__, f)
+    if lang == "en":
+        mod.__doc__ = _EN_DOC["chart"]
     return mod
 
 
@@ -741,11 +837,11 @@ def _farm_result(fs, journal=None):
     return res
 
 
-def _read_journal(root):
+def _read_journal(root, name=FARM_JOURNAL):
     """실행 폴더의 농장일지.txt 끝 FARM_JOURNAL_MAX자(없거나·폴더거나·못 읽으면 "").
     파일이 아무리 커도 끝 4×FARM_JOURNAL_MAX+4 바이트만 읽는다(UTF-8 한 글자 ≤ 4바이트 → 앞쪽 깨진 글자는
     잘려 나가는 부분에만 있음). 깨진 바이트는 U+FFFD로 바꾼다."""
-    path = os.path.join(root, FARM_JOURNAL)
+    path = os.path.join(root, name)
     try:
         # 바로가기(symlink)는 따라가지 않는다(판정 C71): 학습자가 일지 자리에 다른 파일을 가리키게 해도 일지 없음
         if os.path.islink(path) or not os.path.isfile(path):
@@ -761,7 +857,7 @@ def _read_journal(root):
         return ""
 
 
-def _make_note_guard(readonly, real_open, journal=None, on_journal_write=None):
+def _make_note_guard(readonly, real_open, journal=None, on_journal_write=None, lang="ko"):
     """받는 쪽지(readonly: 실제 경로들)를 쓰기로 열면 PermissionError를 내는 open(v0.12 쪽지함).
     builtins.open과 io.open 자리에 끼운다(pathlib.Path.write_text 등 io.open을 쓰는 것도 막힘).
     os.open·_io.open을 직접 쓰는 것까지 막지는 않는다(받는 쪽지는 실행마다 새로 놓이니 남지 않음).
@@ -774,7 +870,7 @@ def _make_note_guard(readonly, real_open, journal=None, on_journal_write=None):
     str_t = _str
     int_t = _int
     perm = PermissionError
-    msg = FARM_NOTE_READONLY_MSG
+    msg = _tr_for(lang)(FARM_NOTE_READONLY_MSG)
 
     def open(file, mode="r", *args, **kw):  # noqa: A001 — open 이름 그대로(오류 원문·help가 자연스럽게)
         if isinst(mode, str_t) and ("w" in mode or "a" in mode or "x" in mode or "+" in mode) \
@@ -821,8 +917,19 @@ def _make_farm(fs, out):
     tomato_locked_msg = FARM_TOMATO_LOCKED_MSG
     tomato_ok = fs.get("tomato_ok", True) is not False
     fertilizer = FARM_FERTILIZER
-    dir_msg = FARM_DIR_MSG
-    crop_msg = FARM_CROP_MSG
+    # v0.13.5 영어판: 이름은 두 언어 다 받고(안쪽 열쇠로 바꿈), 돌려주는 이름·문구는 실행 언어로
+    lang = fs.get("lang", "ko")
+    tr = _tr_for(lang)
+    en = {k: _dict(v) for k, v in _FARM_EN_RULES}
+    crop_in = {e: k for k, e in en["crop"].items()}
+    dir_in = {e: k for k, e in en["dir"].items()}
+    crop_out = en["crop"] if lang == "en" else {}
+    empty_out = en["empty"]["빈칸"] if lang == "en" else "빈칸"
+    no_tomato_msg = tr(no_tomato_msg)
+    tomato_locked_msg = tr(tomato_locked_msg)
+    dir_msg = tr(FARM_DIR_MSG)
+    crop_msg = tr(FARM_CROP_MSG)
+    tired_msg = tr("파이가 멈췄어요")
     stop_exc = FarmTired
     user_file = USER_FILE
     caller_line = _caller_user_line
@@ -854,7 +961,7 @@ def _make_farm(fs, out):
         if frame.f_code.co_filename != user_file:
             return None
         if event == "line" or event == "call":
-            raise stop_exc("파이가 멈췄어요")
+            raise stop_exc(tired_msg)
         return _tired_tracer
 
     def _stop(why):
@@ -869,7 +976,7 @@ def _make_farm(fs, out):
                 if f.f_code.co_filename == user_file:
                     f.f_trace = _tired_tracer
                 f = f.f_back
-        raise stop_exc("파이가 멈췄어요")
+        raise stop_exc(tired_msg)
 
     def _spent():
         # 행동 상한에 드는 수: 시간 1짜리 행동 + 농장일지 쓰기 열기(판정 C71 C1)
@@ -900,6 +1007,8 @@ def _make_farm(fs, out):
 
     def move(direction):
         """파이를 한 칸 움직인다: move("위"), "아래", "왼쪽", "오른쪽". 끝에 닿으면 반대편으로"""
+        if isinst(direction, str_t) and direction in dir_in:
+            direction = dir_in[direction]
         if not isinst(direction, str_t) or direction not in dirs:
             raise value_error(dir_msg)
         _act()
@@ -911,6 +1020,8 @@ def _make_farm(fs, out):
 
     def plant(crop):
         """지금 칸에 심는다: plant("당근"), plant("감자"), plant("토마토"). 토마토는 씨앗 봉투에서 하나 씀"""
+        if isinst(crop, str_t) and crop in crop_in:
+            crop = crop_in[crop]
         if not isinst(crop, str_t) or crop not in crops:
             raise value_error(crop_msg)
         now = _act()
@@ -973,13 +1084,13 @@ def _make_farm(fs, out):
         """지금 칸: "당근", "감자", "토마토", "빈칸"(시간이 들지 않음)"""
         _check()
         cell = st["cells"][_here()]
-        return "빈칸" if cell is None else cell["crop"]
+        return empty_out if cell is None else crop_out.get(cell["crop"], cell["crop"])
 
     def store():
         """창고 사본 {"당근": n, "감자": n, "토마토": n}(시간이 들지 않음). 사본을 바꿔도 진짜 창고는 그대로"""
         _check()
         have = st["store"]
-        return {c: have.get(c, 0) for c in crops}
+        return {crop_out.get(c, c): have.get(c, 0) for c in crops}
 
     def where():
         """파이의 지금 자리 (x, y)(시간이 들지 않음)"""
@@ -1024,10 +1135,14 @@ def _make_farm(fs, out):
     mod = types.ModuleType("farm")
     mod.__doc__ = ("리아와 파이썬! 파이의 텃밭: move(방향), plant(작물), harvest(), "
                    "can_harvest(), what_here(), store(), where(), seeds()")
+    if lang == "en":
+        mod.__doc__ = _EN_DOC["farm"]
     mod.__all__ = list(FARM_NAMES)
     cmds = {}
     for f in (move, plant, harvest, can_harvest, what_here, store, where, seeds):
         f.__module__ = "farm"
+        if lang == "en":
+            f.__doc__ = _EN_DOC["farm." + f.__name__]
         setattr(mod, f.__name__, f)
         cmds[f.__name__] = f
     return mod, cmds, say_print, journal_write
@@ -1039,7 +1154,11 @@ def _restore_farm_tables():
     FARM_CROPS, FARM_GROW, FARM_GROW_FERTILIZED, FARM_DIRS = _farm_tables()
 
 
-def run(code, stdin=None, require=None, files=None, server=None, farm=None):
+def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang=None):
+    # v0.13.5: 학습자가 보는 문구의 언어. 주지 않으면 텃밭 상태의 "lang", 그것도 없으면 한국어
+    if lang is None and _type(farm) is _dict:
+        lang = _dict.get(farm, "lang")
+    lang = _norm_lang(lang)
     code = "" if code is None else str(code)
     stdin = _split_stdin(stdin)
     require = list(require or [])
@@ -1056,7 +1175,8 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
         fs = {"state": _farm_state(farm), "events": [], "actions": 0, "checks": 0, "says": 0, "stopped": None,
               "trace_on": False, "writes": 0,
               # 토마토 잠금(판정 C71 I1): 앱이 10장 전이면 False로 보냄. 없거나 다른 값이면 열림(예전 호출 그대로)
-              "tomato_ok": not (_type(farm) is _dict and _dict.get(farm, "tomato_ok", True) is False)}
+              "tomato_ok": not (_type(farm) is _dict and _dict.get(farm, "tomato_ok", True) is False),
+              "lang": lang}
         result["farm"] = {"events": fs["events"], "state": None, "stopped": None, "actions": 0}
     # 쪽지함(v0.12): 텃밭 실행에 files가 오면 농장일지.txt만 쓸 수 있고, 끝난 뒤 일지를 결과로 돌려준다.
     farm_notes = fs is not None and files is not None
@@ -1097,12 +1217,19 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
     if server is not None:
         import urllib.request as urlreq
         real_urlopen = urlreq.urlopen
-        fake_urlopen = _make_urlopen(server)
+        fake_urlopen = _make_urlopen(server, lang)
 
     old_cwd = _getcwd()
+    # 영어 텃밭 실행: 쪽지는 영어 이름으로 놓는다(결과 files는 안쪽 이름 농장일지.txt로 돌려줌, 설계서 영어판 §5-1)
+    journal_name = FARM_JOURNAL
+    if farm_notes and lang == "en" and _type(files) is _dict:
+        names = _dict(_FARM_EN_RULES)["file"]
+        names = _dict(names)
+        files = {names.get(_str(k), k): v for k, v in files.items()}
+        journal_name = names[FARM_JOURNAL]
     run_dir = _make_run_dir(files)
     note_guard = None
-    journal_path = os.path.realpath(os.path.join(run_dir, FARM_JOURNAL)) if farm_notes else None
+    journal_path = os.path.realpath(os.path.join(run_dir, journal_name)) if farm_notes else None
 
     old_out, old_err = sys.stdout, sys.stderr
     old_builtins = dict(builtins.__dict__)
@@ -1116,13 +1243,13 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
     # 알려진 한계: 함수 객체의 __code__·클래스 속성처럼 이름이 아닌 객체 안을 바꾼 것은 되돌리지 않는다.
     mod_globals = globals()
     saved_globals = dict(mod_globals)
-    sys.modules["chart"] = _make_chart(charts)  # 목록 뒤에 넣어 실행이 끝나면 지워지게
+    sys.modules["chart"] = _make_chart(charts, lang)  # 목록 뒤에 넣어 실행이 끝나면 지워지게
     user_globals = {"__name__": "__main__", "__builtins__": builtins}
     if fs is not None:
         farm_mod, farm_cmds, say_print, journal_write = _make_farm(fs, out)
         if farm_notes:
-            readonly = [os.path.realpath(os.path.join(run_dir, str(n))) for n in files if str(n) != FARM_JOURNAL]
-            note_guard = _make_note_guard(readonly, _io_open, journal_path, journal_write)
+            readonly = [os.path.realpath(os.path.join(run_dir, str(n))) for n in files if str(n) != journal_name]
+            note_guard = _make_note_guard(readonly, _io_open, journal_path, journal_write, lang)
         sys.modules["farm"] = farm_mod
         user_globals.update(farm_cmds)  # import 없이 move(…) 등을 바로 쓰게(레슨 코드처럼 짧게)
         builtins.print = say_print      # builtins는 끝나면 통째로 되돌린다
@@ -1159,7 +1286,7 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None):
             _chdir(old_cwd)
         except OSError:
             pass
-        journal_out = _read_journal(run_dir) if farm_notes else None
+        journal_out = _read_journal(run_dir, journal_name) if farm_notes else None
         _rmtree(run_dir, ignore_errors=True)
 
     tired = fs is not None and fs["stopped"] is not None

@@ -13,6 +13,7 @@ import atexit
 import functools
 import http.server
 import os
+import re
 import socketserver
 import sys
 import threading
@@ -586,13 +587,36 @@ def test_idle_worker_error_event():
     assert res["status"] == "ready", res
 
 
+def test_lang_in_pyodide():
+    # v0.13.5: 실행 언어 — opts.lang을 주면 그 언어, 없으면 앱의 지금 언어(i18n lang()). 차트·텃밭 문구가 따른다.
+    res = _page().evaluate("""async () => {
+        const code = "import chart\\nchart.bar([1], [1, 2])\\n";
+        const en = await window.runner.run(code, "", [], { lang: "en" });
+        const ko = await window.runner.run(code, "", [], {});
+        const farm = { size: 3, cells: Array(9).fill(null), pie: { x: 0, y: 0 }, clock: 0,
+                       store: { "당근": 0, "감자": 0, "토마토": 0 }, upgrades: [], seeds: 5 };
+        const f = await window.runner.run('plant("carrot")\\nprint(what_here())\\n', "", [], { farm, lang: "en" });
+        const i18n = await import("/src/i18n.js");
+        const before = i18n.packOf("en");
+        i18n.usePack("en", before || { ui: {}, data: {} });
+        i18n.setLang("en");
+        let d;
+        try { d = await window.runner.run(code, "", [], {}); } finally { i18n.setLang("ko"); i18n.usePack("en", before); }
+        return { en: en.error.msg, ko: ko.error.msg, f: f.stdout, fe: f.error, d: d.error.msg };
+    }""")
+    hangul = re.compile(r"[가-힣]")
+    assert not hangul.search(res["en"]) and hangul.search(res["ko"]), res
+    assert res["fe"] is None and res["f"] == "carrot\n", res
+    assert not hangul.search(res["d"]), res
+
+
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,
          test_require_comment_elif_else_in_pyodide, test_require_selfcall_formatspec_triplestr_in_pyodide,
          test_require_namedgroup_listcomp_lambda_in_pyodide, test_require_reraise_in_pyodide,
          test_require_def_sql_in_pyodide, test_multiline_chart_in_pyodide,
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
          test_practice_server_in_pyodide, test_chart_in_pyodide, test_farm_in_pyodide,
-         test_sqlite3_in_pyodide, test_queue, test_timeout_then_ok,
+         test_sqlite3_in_pyodide, test_lang_in_pyodide, test_queue, test_timeout_then_ok,
          test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,
          test_load_error_resolves, test_cdn_constant, test_fetch_retry, test_worker_ctor_throws,
          test_load_timeout_retry, test_idle_worker_killed_silently, test_idle_worker_error_event]

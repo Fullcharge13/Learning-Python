@@ -11,10 +11,11 @@
 import { CROPS } from "../../data/garden.js";
 import { cleanSeeds, SEEDS_MAX } from "./state.js";
 import { snake } from "../snake.js";
+import { t } from "../i18n.js";
 
 export const CELL = 64;   // 칸 한 변(SVG 단위)
 const PAD = 8;            // 밭 바깥 여백
-const FERT = "비료";
+const FERT = "비료"; // I18N_SKIP 성장 id(안쪽 열쇠)
 
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -47,7 +48,7 @@ function copyState(s) {
     seeds: cleanSeeds(s.seeds),
   };
 }
-const TOMATO = "토마토";
+const TOMATO = "토마토"; // I18N_SKIP 작물 열쇠
 const SEEDS_PER_HARVEST = 2;   // runner FARM_SEEDS_PER_HARVEST
 
 const TIMED = new Set(["move", "plant", "plant_fail", "harvest", "harvest_young", "harvest_empty"]);
@@ -56,7 +57,7 @@ const TIMED = new Set(["move", "plant", "plant_fail", "harvest", "harvest_young"
  * 사건마다 그 사건 뒤의 텃밭 한 장면. 시작 상태는 고치지 않는다.
  * @returns [{ event, line, state, facing, say: 글|null, fx: {t,x,y,crop?,reason?}|null }]
  */
-export function replayFrames(start, events, facing = "오른쪽") {
+export function replayFrames(start, events, facing = "오른쪽") { // I18N_SKIP 방향 열쇠
   if (!Array.isArray(events) || events.length === 0) return [];
   let st = copyState(start);
   let face = facing;
@@ -159,7 +160,7 @@ function tomatoSVG(st, cx, cy) {
 
 function cropSVG(cell, st, cx, cy) {
   if (cell.crop === TOMATO) return tomatoSVG(st, cx, cy);
-  const potato = cell.crop === "감자";
+  const potato = cell.crop === "감자"; // I18N_SKIP 작물 열쇠
   const leaf = potato ? COL.potLeaf : COL.leaf;
   let s = "";
   if (st === "seed") {
@@ -208,7 +209,7 @@ function facingMark(face, x0, y0) {
 function pieSVG(pie, face, onCrop) {
   const x0 = PAD + pie.x * CELL;
   const y0 = PAD + pie.y * CELL;
-  const flip = face === "왼쪽" ? -1 : 1;
+  const flip = face === "왼쪽" ? -1 : 1; // I18N_SKIP 방향 열쇠
   // snake(0,0)은 똬리 가운데 바닥이 (0,0), 머리가 위로 약 70. 칸 아래쪽에 바닥을 둔다.
   // 작물이 있는 칸이면 작게 왼쪽 아래 구석에 앉아 작물이 가려지지 않게 한다
   const k = onCrop ? 0.4 : 0.6;
@@ -299,7 +300,7 @@ function fxSVG(fx, size) {
       break;
     case "harvest_young":
       body = `<rect x="${bx - 17}" y="${by - 11}" width="30" height="22" rx="11" fill="${COL.coralInk}" stroke="${COL.ol}" stroke-width="2"/>
-        <text x="${bx - 2}" y="${by + 5}" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">앗</text>`;
+        <text x="${bx - 2}" y="${by + 5}" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">${t`앗`}</text>`;
       break;
     case "harvest_empty":
       body = `<circle cx="${bx}" cy="${by}" r="10" fill="${COL.card}" stroke="${COL.gray}" stroke-width="2" stroke-dasharray="3 2"/>
@@ -313,9 +314,9 @@ function fxSVG(fx, size) {
 
 function label(state, overlay, counts) {
   const p = state.pie;
-  let s = `텃밭 ${state.size}×${state.size}. 파이는 위에서 ${p.y + 1}번째 줄, 왼쪽에서 ${p.x + 1}번째 칸에 있어요.`;
-  s += ` 다 자란 작물 ${counts.ripe}개, 자라는 작물 ${counts.young}개, 빈칸 ${counts.empty}개.`;
-  if (overlay.say) s += ` 파이의 말: ${overlay.say}`;
+  let s = t`텃밭 ${state.size}×${state.size}. 파이는 위에서 ${p.y + 1}번째 줄, 왼쪽에서 ${p.x + 1}번째 칸에 있어요.`;
+  s += t` 다 자란 작물 ${counts.ripe}개, 자라는 작물 ${counts.young}개, 빈칸 ${counts.empty}개.`;
+  if (overlay.say) s += t` 파이의 말: ${overlay.say}`;
   return s;
 }
 
@@ -349,7 +350,7 @@ export function render(state, overlay = {}) {
       if (cell) crops += `<g class="g-crop">${cropSVG(cell, st, x0 + CELL / 2, y0 + CELL / 2 - 6)}</g>`;
     }
   }
-  const face = overlay.facing || "오른쪽";
+  const face = overlay.facing || "오른쪽"; // I18N_SKIP 방향 열쇠
   const pie = pieSVG(state.pie, face, !!state.cells[state.pie.y * size + state.pie.x]);
   const fx = fxSVG(overlay.fx, size);
   const bubble = overlay.say ? bubbleSVG(overlay.say, state.pie, W, H) : "";

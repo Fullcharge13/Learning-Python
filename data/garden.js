@@ -24,6 +24,13 @@
 //   solution: 그 장까지 열린 노드만으로 만든 정답 프로그램(노드 목록).
 //   setup: 정답을 확인할 때 시작하는 텃밭(그 주문 차례에 학습자가 있을 법한 상태). tests/garden_orders.py가
 //          setup에서 solution을 실제 엔진으로 돌리고(deliver·grid는 그 뒤 보내기·사기까지) 주문이 끝나는지 본다.
+//
+// v0.13.5 영어판(설계 docs/specs/2026-11-11-영어판-설계.md §5-1): 주문 title·text, 성장 label, 씨앗 봉투 label은 읽을 때
+//   지금 언어(i18n/en/data.json garden.order.<id>.title|text, garden.upgrade.<id>.label, garden.seedpack.label).
+//   받는 쪽지 글(DAILY_NOTES·note.text)은 한국어 그대로 두고(주문 판정이 씀) 실행 때 state.runFiles가 실행 언어로 바꾼다
+//   (garden.note.<파일>.<번호>, garden.order.<id>.note — 영어도 작물별 개수가 같다).
+
+import { tx } from "../src/i18n.js";
 
 export const CROPS = {
   당근: { grow: 8, fert: 6 },
@@ -426,3 +433,15 @@ export const ORDERS = [
     setup: farmSetup(["....", "....", "....", "...."], { clock: 480, store: { 당근: 74, 감자: 6, 토마토: 1 }, upgrades: [...SEED, ...G4], seeds: 2 }),
   },
 ];
+
+// ---- 화면 글은 읽을 때 지금 언어(v0.13.5) ----
+function translated(obj, field, key) {
+  const ko = obj[field];
+  Object.defineProperty(obj, field, { get: () => tx(key, ko), enumerable: true, configurable: true });
+}
+for (const o of ORDERS) {
+  translated(o, "title", `garden.order.${o.id}.title`);
+  translated(o, "text", `garden.order.${o.id}.text`);
+}
+for (const u of UPGRADES) translated(u, "label", `garden.upgrade.${u.id}.label`);
+translated(SEED_PACK, "label", "garden.seedpack.label");

@@ -30,6 +30,7 @@
 //   제한 시간도 보낸 때부터 잰다(앞 실행의 시간 초과·재시작 기다림은 들지 않음).
 
 import { cleanCharts } from "./chart.js";
+import { lang as appLang } from "./i18n.js";
 
 export const PYODIDE_VERSION = "314.0.7";
 // 배포용 고정 주소(npm 패키지를 jsDelivr로 받음, 판정 C19). 시험·개발은 "/node_modules/pyodide/"를 쓴다.
@@ -127,7 +128,9 @@ export class PyRun {
   run(code, stdin = "", require = [], opts = DEFAULT_TIMEOUT_MS) {
     const o = typeof opts === "number" ? { timeoutMs: opts } : (opts || {});
     const timeoutMs = typeof o.timeoutMs === "number" ? o.timeoutMs : DEFAULT_TIMEOUT_MS;
-    const env = { files: plainObj(o.files), server: plainObj(o.server), farm: plainObj(o.farm) };
+    // v0.13.5: 학습자가 보는 문구(텃밭·차트·연습 서버)의 언어 — opts.lang, 없으면 앱의 지금 언어
+    const env = { files: plainObj(o.files), server: plainObj(o.server), farm: plainObj(o.farm),
+      lang: o.lang === "en" || o.lang === "ko" ? o.lang : appLang() };
     const job = this._queue.then(() => this._runOne(code, stdin, require, timeoutMs, env));
     this._queue = job.then(() => {}, () => {});
     return job;
@@ -291,7 +294,7 @@ export class PyRun {
           code: code == null ? "" : String(code),
           stdin: Array.isArray(stdin) ? stdin.map(String) : (stdin == null ? "" : String(stdin)),
           require: Array.from(require || [], String),
-          files: env.files, server: env.server, farm: env.farm,
+          files: env.files, server: env.server, farm: env.farm, lang: env.lang,
         });
       } catch (e) {
         finish(failResult("WorkerError", errMsg(e)));

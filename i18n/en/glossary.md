@@ -85,6 +85,11 @@
 | 쪽지함 / 쪽지 | mailbox / note |
 | 농장일지 | farm log |
 | 씨앗 봉투 | seed bag |
+| 성장(살 수 있는 것) | Grow |
+| 안 되면(시도하기의 칸) | If it fails |
+| 빈칸(what_here) | empty |
+| 위·아래·왼쪽·오른쪽 | up · down · left · right |
+| 주문서.txt · 손글씨주문.txt · 농장일지.txt | orders.txt · handwritten.txt · farm_log.txt |
 
 ## 문체
 

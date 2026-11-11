@@ -5,18 +5,19 @@
 //   저장본은 설치 때만 채운다(받은 새 판을 옛 저장본에 섞지 않음 → 오프라인은 언제나 한 판이 통째로).
 // - Pyodide 파일(주소가 PYODIDE_PREFIX로 시작): 저장본 먼저 → 없으면 받아서 저장. 버전 고정 주소라 바뀌지 않음.
 // - 장 파일(lessons/chN-<지문8자>.json, v0.3 작업 1): 설치 때 모두 미리 받음(하나가 실패해도 설치는 계속, 처음 열 때 받음).
+//   영어 장(lessons/en/, v0.13.4)은 미리 받지 않고 처음 열 때 받아 저장한다.
 //   이름에 내용 지문이 있어 바뀌지 않으므로 저장본 먼저. 게임 저장본에 함께 들어 있어 새 판 활성화 때 함께 지워진다.
 // - GET이 아닌 요청, 다른 주소의 요청은 건드리지 않는다.
 // - 게임 저장본 이름에 판 번호와 내용 지문이 들어 있어, 새 판을 올리면 활성화 때 옛 저장본을 지운다.
 //   Pyodide 저장본은 Pyodide 버전으로만 이름이 바뀐다(판을 올려도 10MB를 다시 받지 않게).
 
-const VERSION = "v0.12.6";
-const GAME_CACHE = "ria-game-v0.12.6-2ddd51205c";
+const VERSION = "v0.13.4";
+const GAME_CACHE = "ria-game-v0.13.4-e2ed15456e";
 const PY_CACHE = "ria-pyodide-314.0.7";
 const PYODIDE_PREFIX = new URL("https://cdn.jsdelivr.net/npm/pyodide@314.0.7/", self.location.href).href;
 const GAME_FILES = ["./", "index.html", "manifest.webmanifest", "licenses.txt", "icons/apple-touch-icon.png", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
-const CHAPTER_FILES = ["lessons/ch1-335d9e46.json", "lessons/ch2-2a29036a.json", "lessons/ch3-fac11f77.json", "lessons/ch4-a480e773.json", "lessons/ch5-498b449b.json", "lessons/ch6-48d983da.json", "lessons/ch7-1f10650b.json", "lessons/ch8-9aab032c.json", "lessons/ch9-4b400353.json", "lessons/ch10-60f18768.json", "lessons/ch11-fcb52ebe.json", "lessons/ch12-f90cf7ba.json", "lessons/ch13-f4c72264.json", "lessons/ch14-866d0050.json", "lessons/ch15-6402771e.json", "lessons/ch16-dc387c35.json", "lessons/ch17-d5458614.json"];
-const CHAPTER_RE = /\/lessons\/ch[1-9]\d*-[0-9a-f]{8}\.json$/;
+const CHAPTER_FILES = ["lessons/ch1-335d9e46.json", "lessons/ch2-89b60a90.json", "lessons/ch3-a4e6ec46.json", "lessons/ch4-a480e773.json", "lessons/ch5-cb9026b3.json", "lessons/ch6-ba5538f0.json", "lessons/ch7-6a49b6c8.json", "lessons/ch8-364dbb0d.json", "lessons/ch9-4b400353.json", "lessons/ch10-6c525f3e.json", "lessons/ch11-fcb52ebe.json", "lessons/ch12-f90cf7ba.json", "lessons/ch13-b92a0458.json", "lessons/ch14-b306b667.json", "lessons/ch15-eb9bff22.json", "lessons/ch16-dc387c35.json", "lessons/ch17-d4d588a5.json", "lang/en-de2f0b82.json"];
+const CHAPTER_RE = /\/(lessons\/(en\/)?ch[1-9]\d*|lang\/[a-z]{2})-[0-9a-f]{8}\.json$/; // 장 파일·언어 꾸러미(v0.13.0): 이름에 지문이 있어 저장본 먼저
 const NETWORK_TIMEOUT_MS = 4000; // 게임 파일: 이보다 느리면 저장본을 먼저 보여 줌
 // 처음 설치 때 미리 받아 두는 Pyodide 핵심 파일(실패해도 설치는 계속, 쓸 때 다시 받음)
 // sqlite3(16장)도 여기에 들어 있다: _sqlite3는 pyodide.asm.wasm에, sqlite3 모듈은 python_stdlib.zip에(Pyodide 314.0.7)

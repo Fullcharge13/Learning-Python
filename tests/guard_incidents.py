@@ -6,7 +6,8 @@
   ③ 오답 보기를 하나씩 넣은 코드는 해결에 실패
   ④ 「전부 막기」·「전부 들이기」 코드는 해결에 실패
   ⑤ solution이 그 장까지 배운 문법(AST 마디·부르는 이름)만 씀
-  ⑥ 시도 1~20개, block·allow 각 1개 이상  ⑦ 사건 id 순서 G1~G6, need 3,3,4,5,5,6
+  ⑥ 시도 1~20개, block·allow 각 1개 이상  ⑦ 사건 id 순서(장 순서), need 오름차순
+  ⑧ 있는 장마다 사건이 정확히 3개
 영어 실행은 시도 값을 value_en ?? value 로 만든다.
 
 실행: python3 tests/guard_incidents.py   (하나라도 실패하면 종료 코드 1)
@@ -29,25 +30,45 @@ ENGINE_CMDS = {"block", "allow", "has_try", "next_try"}
 COMMON = {"Module", "Expr", "Assign", "Name", "Constant", "Call", "BinOp"}
 OPS_CTX = {"Eq", "NotEq", "Lt", "LtE", "Gt", "GtE", "In", "NotIn", "Is", "IsNot", "And", "Or", "Not", "Add", "Sub",
            "Mult", "Div", "FloorDiv", "Mod", "Pow", "USub", "UAdd", "Load", "Store", "arguments", "arg"}
+# 장별 허용 문법(설계서 docs/specs/2026-11-13-경비실-사건-12개-설계.md §5-6, 누적)
 NODES_BY_CH = {3: {"Compare", "BoolOp", "UnaryOp", "If"}, 4: {"FunctionDef", "Return"},
-               5: {"While", "For", "AugAssign", "Break", "Continue"}, 6: {"Subscript", "Slice", "Attribute"}}
-CALLS_BY_CH = {4: {"len"}, 5: {"range"}}
+               5: {"While", "For", "AugAssign", "Break", "Continue"}, 6: {"Subscript", "Slice", "Attribute"},
+               7: {"List", "Subscript", "Slice"},
+               8: {"Dict"},
+               9: {"Tuple", "Set", "BitAnd", "BitOr"},
+               10: {"Try", "ExceptHandler", "Raise"},
+               11: {"With", "withitem", "Import", "alias"},
+               12: {"Import", "alias"},
+               13: {"ImportFrom", "alias"},
+               14: {"Import", "ImportFrom", "alias"},
+               15: {"ClassDef", "Pass"}}
+CALLS_BY_CH = {4: {"len"}, 5: {"range"},
+               7: {"sorted", "min", "max", "sum"},
+               9: {"set"},
+               10: {"int", "float"},
+               11: {"open"}}
 METHODS = {"lower", "upper", "strip", "split", "replace", "find", "count", "startswith", "endswith"}
-WANT_IDS = ["G1", "G2", "G3", "G4", "G5", "G6"]
-WANT_NEED = [3, 3, 4, 5, 5, 6]
+METHODS_BY_CH = {7: {"append", "remove", "sort"}, 8: {"get", "keys", "values", "items"}, 9: {"add"},
+                 11: {"reader", "readlines", "read"},
+                 12: {"search", "fullmatch", "findall", "sub"},
+                 13: {"urlparse"}, 14: {"loads", "parse_qs"}}
+WANT_IDS = ["G1", "G2", "G7", "G3", "G8", "G9", "G4", "G5", "G10", "G6", "G11", "G12"]
+WANT_CHAPTERS = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6]
 
 
 def allowed(need):
     nodes = set(COMMON) | OPS_CTX
     calls = set(ENGINE_CMDS)
+    methods = set(METHODS)
     for ch in range(3, need + 1):
         nodes |= NODES_BY_CH.get(ch, set())
         calls |= CALLS_BY_CH.get(ch, set())
-    return nodes, calls
+        methods |= METHODS_BY_CH.get(ch, set())
+    return nodes, calls, methods
 
 
 def grammar_problems(code, need):
-    nodes, calls = allowed(need)
+    nodes, calls, methods = allowed(need)
     bad = []
     for n in ast.walk(ast.parse(code)):
         name = type(n).__name__
@@ -59,7 +80,7 @@ def grammar_problems(code, need):
                 if f.id not in calls:
                     bad.append("부르는 이름 " + f.id)
             elif isinstance(f, ast.Attribute):
-                if f.attr not in METHODS:
+                if f.attr not in methods:
                     bad.append("메서드 " + f.attr)
             else:
                 bad.append("부르는 대상 " + name)
@@ -88,7 +109,10 @@ def solved(inc, code, lang):
     guard = {"mode": inc["mode"], "tries": tries}
     if inc.get("password") is not None:
         guard["password"] = inc["password"]
-    r = runner.run(code, lang=lang, guard=guard)
+    if inc.get("files"):
+        r = runner.run(code, lang=lang, guard=guard, files=inc["files"])
+    else:
+        r = runner.run(code, lang=lang, guard=guard)
     g = r.get("guard") or {}
     return bool(g.get("solved")), r.get("error"), g
 
@@ -104,7 +128,11 @@ def main():
             fails += 1
         print("%s %s%s" % ("ok  " if ok else "FAIL", label, (" — " + extra) if extra else ""))
 
-    check([i["id"] for i in incs] == WANT_IDS and [i["need"] for i in incs] == WANT_NEED, "⑦ 사건 id 순서·장 번호")
+    check([i["id"] for i in incs] == WANT_IDS and [i["need"] for i in incs] == WANT_CHAPTERS, "⑦ 사건 id 순서·장 번호")
+    per = {}
+    for i in incs:
+        per[i["need"]] = per.get(i["need"], 0) + 1
+    check(len(incs) == 12 and all(n == 3 for n in per.values()), "⑧ 있는 장마다 정확히 3개", str(per))
     check(data["xp"] == 5, "GUARD_XP = 5")
     for inc in incs:
         n = len(inc["tries"])
@@ -115,8 +143,8 @@ def main():
         for key in ("title", "brief", "ria", "concept", "crowIntro", "crowLose"):
             check(bool(inc.get(key)), "   %s.%s 글 있음" % (inc["id"], key)) if not inc.get(key) else None
         check(all(t.get("why") for t in inc["tries"]), "   %s 시도마다 why" % inc["id"])
-        if inc["id"] == "G5":
-            check(all(t.get("value_en") and t["value_en"] != t["value"] for t in inc["tries"]), "   G5 value_en")
+        if inc["id"] in ("G5", "G12"):
+            check(all(t.get("value_en") and t["value_en"] != t["value"] for t in inc["tries"]), "   %s value_en" % inc["id"])
 
     for lang in ("ko", "en"):
         print("== %s" % ("한국어" if lang == "ko" else "English (value_en ?? value, runner lang=en)"))

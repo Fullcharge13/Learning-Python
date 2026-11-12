@@ -48,7 +48,7 @@ test("newGuard 모양", () => {
 });
 
 test("cleanGuard: 망가진 값", () => {
-  const g = cleanGuard({ solved: "yes", blanks: { G1: [99, "x", 1], G9: [0] }, seen: [1, "G9", "G2"], attempts: { G1: -3 } });
+  const g = cleanGuard({ solved: "yes", blanks: { G1: [99, "x", 1], G99: [0] }, seen: [1, "G99", "G2"], attempts: { G1: -3 } });
   assert.deepEqual(g.solved, {});
   assert.deepEqual(g.blanks, { G1: [null, null, 1] });
   assert.deepEqual(g.seen, ["G2"]);
@@ -56,7 +56,7 @@ test("cleanGuard: 망가진 값", () => {
 });
 
 test("cleanGuard: solved는 firstTry·how만, 모르는 id·이상한 how는 버림", () => {
-  const g = cleanGuard({ solved: { G1: { firstTry: true, how: "blank", extra: 1 }, G2: { firstTry: true, how: "x" }, G9: { firstTry: true, how: "code" } }, code: { G1: "print(1)", G9: "x", G2: 5 } });
+  const g = cleanGuard({ solved: { G1: { firstTry: true, how: "blank", extra: 1 }, G2: { firstTry: true, how: "x" }, G99: { firstTry: true, how: "code" } }, code: { G1: "print(1)", G99: "x", G2: 5 } });
   assert.deepEqual(g.solved, { G1: { firstTry: true, how: "blank" } });
   assert.deepEqual(g.code, { G1: "print(1)" });
 });
@@ -165,7 +165,7 @@ test("applyGuardRun: 대조 실패 결과 → 저장 변화 없음(attempts 포�
   assert.equal(out.outcome.solved, false);
   assert.equal(out.outcome.xp, 0);
   assert.deepEqual(out.save, before);
-  const unknown = applyGuardRun(save, { ...G("G1"), id: "G9" }, perfectResult(inp), "blank", NOW);
+  const unknown = applyGuardRun(save, { ...G("G1"), id: "G99" }, perfectResult(inp), "blank", NOW);
   assert.deepEqual(unknown.save, before);
   assert.deepEqual(save, before); // 입력 저장을 바꾸지 않음
 });
@@ -182,10 +182,12 @@ test("rankOf 경계", () => {
   const mk = (n) => ({ ...newGuard(), solved: Object.fromEntries(INCIDENTS.slice(0, n).map((i) => [i.id, { firstTry: true, how: "code" }])) });
   assert.equal(rankOf(mk(0)), "apprentice");
   assert.equal(rankOf(mk(1)), "apprentice");
-  assert.equal(rankOf(mk(2)), "keeper");
-  assert.equal(rankOf(mk(3)), "keeper");
-  assert.equal(rankOf(mk(4)), "captain");
-  assert.equal(rankOf(mk(6)), "sheriff");
+  assert.equal(rankOf(mk(3)), "apprentice");   // 사건 12개: 0·4·8·12
+  assert.equal(rankOf(mk(4)), "keeper");
+  assert.equal(rankOf(mk(7)), "keeper");
+  assert.equal(rankOf(mk(8)), "captain");
+  assert.equal(rankOf(mk(11)), "captain");
+  assert.equal(rankOf(mk(12)), "sheriff");
 });
 
 const INHERITED = ["toString", "valueOf", "constructor", "hasOwnProperty", "__proto__"];
@@ -269,7 +271,7 @@ test("색인 없이 부르면 분명한 오류(모든 id를 모른다고 보고 
 });
 
 test("색인을 바꾸면 등급·새 소식이 그 색인을 따름", () => {
-  const three = FULL.filter((e) => e.need === 3).concat(FULL.find((e) => e.id === "G3"));
+  const three = ["G1", "G2", "G3"].map((id) => FULL.find((e) => e.id === id));
   setGuardIndex(three);
   try {
     assert.deepEqual(guardIndex().map((e) => e.id), ["G1", "G2", "G3"]);

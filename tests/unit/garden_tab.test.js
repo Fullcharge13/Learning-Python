@@ -67,7 +67,7 @@ test("garden_tab(nav): 텃밭이 open이어도 경비실 새 소식이면 news",
   const ctxFor = (guard) => ({ save: { ...save, guard }, chapters });
   assert.equal(gardenTab(save.garden, new Set([1, 2, 3])), "open");
   assert.equal(gardenTabOf(ctxFor(newGuard())), "news");
-  assert.equal(gardenTabOf(ctxFor({ ...newGuard(), seen: ["G1", "G2", "G3", "G4", "G5", "G6"] })), "open");
+  assert.equal(gardenTabOf(ctxFor({ ...newGuard(), seen: ["G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10", "G11", "G12"] })), "open");
   // 3장을 통과하지 못하면 경비실 소식 없음(텃밭만 본다)
   const early = { save: { ...newSave(), garden: { ...newGarden(), runs: 3 }, completed_lessons: [] }, chapters };
   assert.equal(gardenTabOf(early), "locked");

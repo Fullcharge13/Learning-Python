@@ -44,7 +44,7 @@ SRC = os.path.join(ROOT, "src")
 PYODIDE_VERSION = "314.0.7"
 PYODIDE_CDN = "https://cdn.jsdelivr.net/npm/pyodide@%s/" % PYODIDE_VERSION
 PYODIDE_DEV = "/node_modules/pyodide/"
-MAX_RAW = 820 * 1024  # 판정 C28 → C61(760) → C68(v0.12, 800KB) → C76(v0.13.0 영어판 문구 감싸기, 820KB)
+MAX_RAW = 850 * 1024  # 판정 C28 → C61(760) → C68(v0.12, 800KB) → C76(v0.13.0 영어판 문구 감싸기, 820KB) → 판정 G-C6 (v0.15 경비실, 850KB)
 TARGET = ["es2022", "safari16"]
 
 # esbuild를 JS API로 부른다(한 번에 세 묶음을 글자로 받기 위해).

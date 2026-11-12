@@ -56,6 +56,19 @@ export const ERRORS = {
     detective:
       "종이가 산더미처럼 쌓였어요! 출력이 너무 많아 수사를 멈췄어요. 사건은 {line}번째 줄의 출력에서 시작됐어요. 반복문이 생각보다 훨씬 많이, 어쩌면 끝없이 돈 게 아닐까요? 반복 횟수와 멈출 조건을 추적해 봐요.",
   },
+  // v0.15 경비실(src/py/guard.py): 명령을 사건에 맞지 않게 씀 / check가 True·False가 아닌 값을 돌려줌
+  GuardUsageError: {
+    title: "경비실 명령 쓰임 오류 ({type})",
+    body: "경비실 명령을 이 사건에 맞지 않게 썼어요. 단서는 {line}번째 줄에 있어요. 오류 이름 옆의 안내가 무엇이 어긋났는지 알려 줘요. 사건마다 쓰는 명령이 달라요. check 함수 사건이면 block()·allow() 대신 True나 False를 돌려주고, next_try()는 has_try()로 남은 시도를 먼저 확인한 뒤에 불러요. 사건의 「쓸 수 있는 것」을 다시 확인해 볼까요?",
+    detective:
+      "명령이 엉뚱한 사건에 쓰인 흔적이 있어요. 단서는 {line}번째 줄에 남아 있어요. 오류 이름 옆의 안내가 무엇이 어긋났는지 알려 줘요. check 함수 사건에서 block()·allow() 대신 True·False를 돌려주는지, next_try() 앞에서 has_try()로 남은 시도를 확인했는지 하나씩 대조해 봐요.",
+  },
+  GuardAnswerError: {
+    title: "check의 대답 오류 ({type})",
+    body: "check 함수가 True나 False가 아닌 값을 돌려줬어요. 단서는 {line}번째 줄의 check 함수에 있어요. return 없이 끝나는 길이 있으면 None을 돌려줘요. 모든 갈래의 끝에 return True나 return False가 있는지 확인해 볼까요?",
+    detective:
+      "check 함수가 애매하게 대답했어요. 단서는 {line}번째 줄의 check 함수에 있어요. 들일지 막을지 True·False로 딱 잘라 말해야 해요. return 없이 끝나는 갈래(그러면 None)가 숨어 있지 않은지 모든 길을 따라가 봐요.",
+  },
   _default: {
     title: "{type}",
     body: "처음 보는 오류예요. [[줄 번호부터 볼까요? ]]{line}번째 줄에서 멈췄어요. 위에 나온 영어 원문의 마지막 줄이 무엇이 문제인지 알려 주는 단서예요.",

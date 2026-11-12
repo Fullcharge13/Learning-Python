@@ -30,6 +30,7 @@ import { errorPanel } from "./write.js";
 import { SYMBOL_ORDER } from "../kbd.js";
 import { t, tp, tx, lang } from "../i18n.js";
 import { cropName, dirName, fileName, pyName } from "../garden/lang.js";
+import { guardOpen, guardNews } from "../guard/state.js";
 
 const SYSTEM_ERRORS = new Set(["LoadError", "WorkerError", "NotReady"]);
 const CODE_SAVE_MS = 500;
@@ -238,6 +239,9 @@ export function render(root, ctx, params = {}) {
   const unlocked = unlockedKinds(passed);
   const tomatoOpen = unlocked.has(TOMATO_LOCK);
   const notesOpen = unlocked.has("readnote");
+  // v0.15 경비실 입구: 3장 전에는 자물쇠(누르면 알림), 새 사건이면 빨간 점
+  const guardIn = guardOpen(passed);
+  const guardDot = guardIn && guardNews(ctx.save.guard, passed);
   const S = {
     // v0.13.5 검토 I1: 언어를 바꾼 뒤 코드 모드 — 노드가 만든 코드를 고치지 않았으면 지금 언어 코드로(저장은 다음 save 때)
     garden: codeForLang(fillGarden(ctx.save).garden, lang()),
@@ -266,9 +270,11 @@ export function render(root, ctx, params = {}) {
       <section class="g-board" aria-label="${t`텃밭`}">
         <div id="board" class="g-board-svg"></div>
         <p class="g-now mono" id="g-now" hidden></p>
-        <div class="g-tools" id="g-tools"${tomatoOpen || notesOpen ? "" : " hidden"}>
+        <div class="g-tools" id="g-tools">
           ${tomatoOpen ? `<p class="g-seeds" id="g-seeds"></p>` : ""}
           ${notesOpen ? `<button class="btn ghost small g-notes-btn" id="g-notes" aria-haspopup="dialog">${icon("book")}<span>${t`쪽지함`}</span></button>` : ""}
+          <button class="btn ghost small g-notes-btn" id="g-guard"${guardIn ? (guardDot ? ` aria-label="${esc(t`경비실, 새 소식 있음`)}"` : "")
+            : ` data-locked="1" aria-label="${esc(t`경비실, 잠김, ${3}장을 끝내면 열려요`)}"`}>${icon(guardIn ? "shield" : "lock")}<span>${t`경비실`}</span>${guardDot ? '<span class="gd-dot" aria-hidden="true"></span>' : ""}</button>
         </div>
       </section>
       <div id="g-result" class="g-result" role="status" aria-live="polite"></div>
@@ -573,6 +579,7 @@ export function render(root, ctx, params = {}) {
     root.querySelector("#g-grow").disabled = st !== "idle";
     const nb = root.querySelector("#g-notes");
     if (nb) nb.disabled = st !== "idle";
+    root.querySelector("#g-guard").disabled = st !== "idle";
     orderEl.inert = st !== "idle";
     paintPy();
   }
@@ -1419,6 +1426,11 @@ export function render(root, ctx, params = {}) {
   runBtn.addEventListener("click", doRun);
   root.querySelector("#g-grow").addEventListener("click", whenFree(openGrow));
   root.querySelector("#g-notes")?.addEventListener("click", whenFree(openNotes));
+  root.querySelector("#g-guard").addEventListener("click", whenFree(() => {
+    if (S.state !== "idle") return;
+    if (guardIn) ctx.show("guard", { from: backTo });
+    else toast(t`${3}장을 끝내면 열려요`);
+  }));
   root.querySelector("#g-skip").addEventListener("click", () => { S.skip = true; if (S.wake) S.wake(); });
   const speedBtn = root.querySelector("#g-speed");
   speedBtn.addEventListener("click", () => {
@@ -1452,4 +1464,4 @@ export function render(root, ctx, params = {}) {
   };
 }
 
-export { argChips, goalText, condLabel };
+export { argChips, goalText, condLabel, sheet };

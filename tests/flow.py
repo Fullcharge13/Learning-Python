@@ -52,6 +52,12 @@
                  「켜기」 → 모든 화면 위 띠(상태 줄을 가리지 않음) · 새 개발자 저장에서 17-3·13-A1 열림 · 오늘의 도전 ·
                  텃밭 입구·9장 노드(위치 알기) 열림 → 새로고침해도 켜짐 → 끄기(확인 없음) → 학습 기록 원문 그대로·17-3 잠김.
                  설정 켬/끔 넘침·터치 44px. 캡처: dev-*.png (iPhone 17)
+- test_guard_room_*: 경비실(v0.15 작업 7, 설계서 2026-11-12). 2장 저장은 텃밭의 경비실 단추가 잠김·「3장을 끝내면 열려요」 /
+                 3장 통과 → 하단 텃밭 칸·단추 새 소식 점 → G1 카드(크로우 그림) → 빈칸 하나만 고르면 실행 막고 흔듦 →
+                 오답 실행(재생 중 「실행」 막힘, ❌/⚠️ 칸, 칸을 누르면 「왜?」) → 정답 실행 「사건 해결」 XP +5·firstTry false·
+                 바이트 그대로(XP 퀘스트 없는 저장, 판정 G-C2) → 직접 쓰기(처음 내용은 빈칸 비운 시작 코드) 해결, how는 처음 값 /
+                 재생 중 사건 목록에서 G2로 바꾸면 결과 비움 / 영어 화면에 한글 없음(시도 값 포함) / 움직임 줄이기는 재생 없음.
+                 넘침·터치 44px·콘솔 오류 0. 캡처: guard-*.png, docs/img/guard-g1.png·guard-replay.png (iPhone 17)
 """
 
 import atexit
@@ -1030,7 +1036,7 @@ def test_advanced_branch():
         # 배지: 15개
         a.page.click('[data-go="badges"]')
         a.page.wait_for_selector(".screen.badges")
-        assert "/15" in a.page.inner_text(".page-title"), a.page.inner_text(".page-title")
+        assert "/17" in a.page.inner_text(".page-title"), a.page.inner_text(".page-title")
         assert "끝낸 심화" in a.page.inner_text(".stat-grid")
         a.shot("adv-badges.png", full=True)
         m = measure(a, "badges-adv")
@@ -3675,6 +3681,294 @@ def test_install_sheet_platforms():
             a.page.click("#ins-ok")
             a.page.wait_for_selector(".modal.install", state="detached")
     assert not fails, "\n".join(fails)
+
+
+# ---------------------------------------------------------------- 경비실 (v0.15 작업 7)
+
+G1_START = 'if attempt {0} password:\n    {1}\nelse:\n    {2}\n'
+G1_SOLUTION = 'if attempt == password:\n    allow()\nelse:\n    block()\n'
+DOCS_IMG = os.path.join(ROOT, "docs", "img")
+
+
+def _guard_seed(chapters, guard=None, en=False):
+    """경비실 시험 저장. 텃밭은 새 소식이 없는 상태(주문 2), 바이트 17.
+    판정 G-C2: 오늘 퀘스트에 「XP 얻기」가 없고 연속 기록 이정표도 없어 경비실 XP로 바이트가 생길 길이 없다."""
+    s = _garden_seed(chapters, garden=_garden(order_idx=2), xp=40)
+    s["bytes"] = 17
+    s["quests"] = {"date": today(), "ids": ["q_lessons2", "q_hintfree", "q_garden"], "progress": {}, "done": [], "chest": False}
+    if en:
+        s["settings"] = {"sound": False, "dailyGoal": 10, "name": "", "lang": "en"}
+    if guard is not None:
+        s["guard"] = guard
+    return s
+
+
+def _guard_g(**kw):
+    g = {"v": 1, "solved": {}, "code": {}, "blanks": {}, "seen": [], "attempts": {}, "runs": 0}
+    g.update(kw)
+    return g
+
+
+def _open_guard(a):
+    _open_garden(a)
+    a.page.click("#g-guard")
+    a.page.wait_for_selector(".screen.guard")
+    a.page.wait_for_timeout(150)
+
+
+def _gd_state(a):
+    return a.js("() => document.querySelector('.screen.guard').dataset.state")
+
+
+def _gd_pick(a, n, v):
+    a.page.click('.gd-blank[data-n="%d"]' % n)
+    _sheet_pick(a, '[data-v="%d"]' % v)
+
+
+def _gd_run(a, skip=True):
+    """「실행」 → (재생이면 건너뛰기) → 끝날 때까지"""
+    a.wait_py()
+    a.page.click("#gd-run")
+    if skip:
+        a.page.wait_for_selector(".screen.guard[data-state=replay]", timeout=30_000)
+        a.page.click("#gd-skip")
+    a.page.wait_for_selector(".screen.guard[data-state=idle]", timeout=30_000)
+
+
+def _gd_check_layout(a, name, fails):
+    m = measure(a, name)
+    if m["problems"]:
+        fails.append("%s layout: %r" % (name, m["problems"][:5]))
+    if m["small"]:
+        fails.append("%s touch < 44: %r" % (name, m["small"][:5]))
+
+
+def test_guard_room_locked():
+    """2장까지 통과: 텃밭의 경비실 단추는 자물쇠, 누르면 「3장을 끝내면 열려요」 알림(화면은 그대로)."""
+    with App("iPhone 17", save=_guard_seed(2)) as a:
+        _open_garden(a)
+        b = a.page.query_selector("#g-guard")
+        assert b and b.is_visible(), "경비실 단추"
+        assert b.get_attribute("data-locked") == "1", "잠김 표시"
+        assert "3장을 끝내면 열려요" in (b.get_attribute("aria-label") or ""), b.get_attribute("aria-label")
+        assert not a.page.query_selector('.tabbar [data-go="garden"] .tab-dot'), "2장: 경비실 새 소식 없음"
+        b.click()
+        a.page.wait_for_selector(".toast")
+        assert "3장을 끝내면 열려요" in a.page.inner_text("#toasts")
+        assert a.page.query_selector(".screen.garden") and not a.page.query_selector(".screen.guard")
+        assert not a.errors, a.errors
+
+
+def test_guard_room_g1():
+    fails = []
+    with App("iPhone 17", save=_guard_seed(3)) as a:
+        a.start()
+        if not a.page.query_selector('.tabbar [data-go="garden"] .tab-dot'):
+            fails.append("no news dot on garden tab")
+        a.page.click('.tabbar [data-go="garden"]')
+        a.page.wait_for_selector(".screen.garden")
+        if not a.page.query_selector("#g-guard .gd-dot"):
+            fails.append("no news dot on guard button")
+        a.page.click("#g-guard")
+        a.page.wait_for_selector(".screen.guard")
+        a.page.wait_for_timeout(200)
+        if not a.page.query_selector("#gd-card svg[role=img]"):
+            fails.append("no crow svg in card")
+        head = a.page.inner_text(".gd-head")
+        for w in ("견습 문지기", "0/6 해결"):
+            if w not in head:
+                fails.append("head lacks %r: %r" % (w, head))
+        card = a.page.inner_text("#gd-card")
+        for w in ("창고 문 암호", "대응", "인증"):
+            if w not in card:
+                fails.append("card lacks %r" % w)
+        if "G1" not in (a.save().get("guard") or {}).get("seen", []):
+            fails.append("G1 not marked seen")
+        os.makedirs(DOCS_IMG, exist_ok=True)
+        a.page.screenshot(path=os.path.join(DOCS_IMG, "guard-g1.png"))
+        a.shot("guard-g1.png")
+        _gd_check_layout(a, "guard-open", fails)
+
+        # 빈칸 하나만 → 실행 막힘, 첫 빈 칸 흔들림
+        _gd_pick(a, 0, 0)
+        a.wait_py()
+        a.page.click("#gd-run")
+        a.page.wait_for_timeout(300)
+        if not a.page.query_selector('.gd-blank[data-n="1"].gd-shake'):
+            fails.append("first empty blank does not shake")
+        if _gd_state(a) != "idle" or (a.save().get("guard") or {}).get("attempts", {}).get("G1"):
+            fails.append("ran with an empty blank")
+
+        # 오답(!=) → 재생 중 실행 막힘, ❌/⚠️, 칸 눌러 왜?
+        _gd_pick(a, 0, 1)
+        _gd_pick(a, 1, 0)
+        _gd_pick(a, 2, 0)
+        a.page.click("#gd-run")
+        a.page.wait_for_selector(".screen.guard[data-state=replay]", timeout=30_000)
+        if not a.page.is_disabled("#gd-run"):
+            fails.append("run not disabled during replay")
+        a.page.wait_for_selector(".screen.guard[data-state=idle]", timeout=30_000)
+        bad = a.js("() => [...document.querySelectorAll('.gd-try')].map(e => e.textContent).filter(x => /❌|⚠️/.test(x)).length")
+        if not bad:
+            fails.append("no ❌/⚠️ cell after a wrong run")
+        res = a.page.inner_text("#gd-result")
+        if "막은 공격" not in res or "들인 손님" not in res:
+            fails.append("result line: %r" % res)
+        a.page.click(".gd-try.bad >> nth=0")
+        why = a.page.inner_text("#gd-why") if a.page.query_selector("#gd-why") else ""
+        if "암호와 똑같아서 들입니다." not in why:   # 첫 틀린 칸 = 맞는 암호를 잘못 막음(⚠️)
+            fails.append("why not shown: %r" % why)
+        a.page.screenshot(path=os.path.join(DOCS_IMG, "guard-replay.png"))
+        a.shot("guard-replay.png")
+        _gd_check_layout(a, "guard-after-wrong", fails)
+
+        # 정답 → 사건 해결, XP +5, firstTry false, 바이트 그대로
+        _gd_pick(a, 0, 0)
+        a.page.click("#gd-run")
+        a.page.wait_for_selector(".screen.guard[data-state=replay]", timeout=30_000)
+        a.page.click("#gd-skip")
+        a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
+        body = a.page.inner_text(".modal")
+        if "사건 해결" not in body or "XP +5" not in body:
+            fails.append("solved dialog: %r" % body)
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".modal .gd-done", state="detached")
+        s = a.save()
+        g = s.get("guard") or {}
+        if g.get("solved", {}).get("G1") != {"firstTry": False, "how": "blank"}:
+            fails.append("solved G1: %r" % g.get("solved"))
+        if s["bytes"] != 17:
+            fails.append("bytes changed: %r" % s["bytes"])
+        if s["xp"] != 45:
+            fails.append("xp: %r" % s["xp"])
+        if "q_xp20" in (s.get("quests") or {}).get("ids", []):
+            fails.append("seed should have no xp quest (G-C2)")
+        if "사건 해결" not in a.page.inner_text("#gd-result"):
+            fails.append("result lacks 사건 해결")
+        if "1/6 해결" not in a.page.inner_text(".gd-head"):
+            fails.append("count not 1/6")
+
+        # 직접 쓰기: 처음 내용은 빈칸을 비운 시작 코드 → 정답 코드 → 해결, how 그대로
+        a.page.click("#gd-mode")
+        a.page.wait_for_selector("#gd-ed .cm-content")
+        first = a.js("() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent).join('\\n')")
+        want = G1_START.replace("{0}", "___").replace("{1}", "___").replace("{2}", "___")
+        if first != want:
+            fails.append("code mode first content %r != %r" % (first, want))
+        _gd_check_layout(a, "guard-code", fails)
+        a.set_code(G1_SOLUTION)
+        _gd_run(a)
+        if "사건 해결" not in a.page.inner_text("#gd-result"):
+            fails.append("code mode not solved: %r" % a.page.inner_text("#gd-result"))
+        g = a.save().get("guard") or {}
+        if g.get("solved", {}).get("G1", {}).get("how") != "blank":
+            fails.append("how changed: %r" % g.get("solved"))
+        if g.get("code", {}).get("G1") != G1_SOLUTION:
+            fails.append("code not saved: %r" % g.get("code"))
+        if a.page.query_selector(".modal"):
+            fails.append("dialog again on a re-solve")
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_room_switch_during_replay():
+    """재생 중 사건 목록에서 G2로 바꾸면 재생이 멈추고 결과 영역이 비어 있다(Review Focus 5). 목록: 열림·✓·잠김."""
+    fails = []
+    guard = _guard_g(seen=["G1"], blanks={"G1": [1, 1, 1]})
+    with App("iPhone 17", save=_guard_seed(3, guard=guard)) as a:
+        _open_guard(a)
+        a.wait_py()
+        a.page.click("#gd-run")
+        a.page.wait_for_selector(".screen.guard[data-state=replay]", timeout=30_000)
+        a.page.click("#gd-list")
+        a.page.wait_for_selector(".modal.g-sheet")
+        txt = a.page.inner_text(".modal.g-sheet")
+        if "4장을 끝내면 열려요" not in txt:
+            fails.append("locked G3 note missing: %r" % txt)
+        if not a.page.is_disabled('.modal.g-sheet [data-g="G3"]'):
+            fails.append("G3 should be locked")
+        _gd_check_layout(a, "guard-list", fails)
+        _sheet_pick(a, '[data-v="G2"]')
+        a.page.wait_for_timeout(100)
+        if a.page.inner_text("#gd-result").strip():
+            fails.append("result not cleared: %r" % a.page.inner_text("#gd-result"))
+        if "한밤중의 손님" not in a.page.inner_text("#gd-card"):
+            fails.append("not on G2")
+        a.page.wait_for_timeout(3500)   # 옛 재생이 남아 있다면 이 사이 칸·결과를 그린다
+        if a.page.inner_text("#gd-result").strip() or a.js("() => document.querySelectorAll('.gd-try.ok, .gd-try.bad').length"):
+            fails.append("old replay kept painting")
+        if _gd_state(a) != "idle":
+            fails.append("state %r after switch" % _gd_state(a))
+        g = a.save().get("guard") or {}
+        if g.get("attempts", {}).get("G1") != 1 or "G2" not in g.get("seen", []):
+            fails.append("save: %r" % g)
+        a.page.click("#gd-back")
+        a.page.wait_for_selector(".screen.garden")
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_room_english():
+    """영어: 경비실 화면·시도 값·「왜?」·목록·해결 창에 한글이 없다(G5 시도 값 order n 포함)."""
+    fails = []
+    guard = _guard_g(blanks={"G1": [0, 0, 0], "G5": [0, 0]})
+    with App("iPhone 17", locale="en-US", save=_guard_seed(5, guard=guard, en=True)) as a:
+        _open_guard(a)
+        left = _hangul_left(a)
+        if left:
+            fails.append("open: %r" % left)
+        _gd_run(a)
+        a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
+        left = _hangul_left(a)
+        if left:
+            fails.append("solved dialog: %r" % left)
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".modal", state="detached")
+        a.page.click(".gd-try >> nth=0")
+        left = _hangul_left(a)
+        if left:
+            fails.append("after run: %r" % left)
+        a.page.click("#gd-list")
+        a.page.wait_for_selector(".modal.g-sheet")
+        left = _hangul_left(a)
+        if left:
+            fails.append("list: %r" % left)
+        _sheet_pick(a, '[data-v="G5"]')
+        _gd_run(a)
+        vals = a.js("() => [...document.querySelectorAll('.gd-try')].map(e => e.textContent).join(' ')")
+        if "order 1" not in vals:
+            fails.append("G5 English try values: %r" % vals)
+        left = _hangul_left(a)
+        if left:
+            fails.append("G5: %r" % left)
+        a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".modal", state="detached")
+        _gd_check_layout(a, "guard-en", fails)
+        a.shot("guard-en.png")
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_room_reduced_motion():
+    """움직임 줄이기: 재생 없이 바로 결과(상태가 replay가 되지 않음)."""
+    guard = _guard_g(seen=["G1"], blanks={"G1": [1, 0, 0]})
+    with App("iPhone 17", save=_guard_seed(3, guard=guard), reduced=True) as a:
+        _open_guard(a)
+        a.js("""() => { window.__gdStates = []; const s = document.querySelector('.screen.guard');
+            new MutationObserver(() => window.__gdStates.push(s.dataset.state)).observe(s, { attributes: true, attributeFilter: ['data-state'] }); }""")
+        _gd_run(a, skip=False)
+        states = a.js("() => window.__gdStates")
+        assert "replay" not in states, states
+        assert "막은 공격" in a.page.inner_text("#gd-result")
+        assert a.js("() => document.querySelectorAll('.gd-try.ok, .gd-try.bad').length") == 7
+        assert not a.errors, a.errors
 
 
 if __name__ == "__main__":

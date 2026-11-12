@@ -47,9 +47,9 @@ DIST = os.path.join(ROOT, "dist")
 OUT = os.path.join(ROOT, "tests", "out")
 DEV_OUT = os.path.join(OUT, "dist-dev")
 CDN = "https://cdn.jsdelivr.net/npm/pyodide@314.0.7/"
-MAX_RAW = 820 * 1024  # 판정 C28 → C61(760) → C68(v0.12, 800KB) → C76(820KB)
+MAX_RAW = 850 * 1024  # 판정 C28 → C61(760) → C68(v0.12, 800KB) → C76(820KB) → 판정 G-C6 (v0.15 경비실, 850KB)
 V02_RAW = 667397  # v0.2 dist/index.html (651.8 KB). v0.3~v0.9는 이보다 작아야 했음
-FIRST_FILE_MAX = 820 * 1024  # 판정 C61 → C68 → C76: 첫 파일 상한을 build.py와 같게
+FIRST_FILE_MAX = 850 * 1024  # 판정 C61 → C68 → C76 → 판정 G-C6 (v0.15 경비실): 첫 파일 상한을 build.py와 같게
 CHAPTER_FILE = re.compile(r"^ch(\d+)-([0-9a-f]{8})\.json$")
 ICON_SIZES = {"icons/icon-180.png": 180, "icons/icon-192.png": 192, "icons/icon-512.png": 512,
               "icons/icon-maskable-512.png": 512, "icons/apple-touch-icon.png": 180}
@@ -724,13 +724,13 @@ def test_runner_separate_file():
 
 
 def test_runner_has_guard():
-    """경비실: py/runner-*.py 한 개에 guard.py가 앞에 이어 붙어 있고, 첫 파일은 820KB 아래."""
+    """경비실: py/runner-*.py 한 개에 guard.py가 앞에 이어 붙어 있고, 첫 파일은 MAX_RAW(850KB) 아래."""
     _build()
     files = glob.glob(os.path.join(DIST, "py", "runner-*.py"))
     assert len(files) == 1, files
     body = _read(files[0])
     assert "def _guard_exec" in body, "guard.py must be joined into the runner file"
-    assert len(open(os.path.join(DIST, "index.html"), "rb").read()) < 820 * 1024
+    assert len(open(os.path.join(DIST, "index.html"), "rb").read()) < MAX_RAW
 
 
 def _flow_module():

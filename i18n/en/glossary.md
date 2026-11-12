@@ -97,3 +97,19 @@
 - Korean setting stays: won (₩), gimbap, tteokbokki, Seoul, Korean names in romanization (Minji, Jun). Explain a Korean food/thing briefly the first time in a lesson, e.g. "gimbap (Korean rice rolls)".
 - UI labels: Title Case for buttons/menu items (Start, Continue), sentence case for messages.
 - Keep it short: English is longer than Korean; button labels ≤ ~14 characters where possible.
+
+## 경비실 (Guard Room)
+
+| 한국어 | English |
+|---|---|
+| 경비실 | Guard Room |
+| 크로우 | Crow (the fictional hacker) |
+| 사건 | case |
+| 인증 | Authentication |
+| 접근 통제 | Access control |
+| 무차별 대입 | Brute force |
+| 계정 잠금 | Account lockout |
+| 요청 수 제한 | Rate limiting |
+| 서비스 거부 공격 | Denial of service |
+| 비밀번호 강도 | Password strength |
+| 오탐 | False positive |

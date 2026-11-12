@@ -44,6 +44,12 @@ for (const o of G.ORDERS) {
 for (const u of G.UPGRADES) out[`garden.upgrade.${u.id}.label`] = u.label;
 out["garden.seedpack.label"] = G.SEED_PACK.label;
 for (const [f, list] of Object.entries(G.DAILY_NOTES)) list.forEach((s, i) => { out[`garden.note.${f}.${i}`] = s; });
+// v0.15 경비실: 사건 글과 시도 「왜?」 설명
+const GD = await imp("data/guard.js");
+for (const g of GD.INCIDENTS) {
+  for (const f of ["title", "brief", "ria", "concept", "crowIntro", "crowLose"]) out[`guard.${g.id}.${f}`] = g[f];
+  g.tries.forEach((t, i) => { out[`guard.${g.id}.why.${i}`] = t.why; });
+}
 console.log(JSON.stringify(out));
 """
 

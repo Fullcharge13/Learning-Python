@@ -165,3 +165,18 @@ def test_lang_en_message():
 
 def test_farm_untouched():
     assert "guard" not in run("print(1)")
+
+
+def test_guard_survives_sys_tampering():
+    """앞 실행이 sys._getframe·settrace를 망가뜨려도, 삼킨 사용 오류가 다음 실행에서 끝난다(3초 시간 초과 아님)."""
+    import sys
+    saved = {k: getattr(sys, k) for k in ("_getframe", "settrace")}
+    try:
+        run("import sys\nsys._getframe = None\nsys.settrace = print\n")
+        code = "while True:\n    try:\n        next_try()\n    except:\n        pass\n"
+        r = run(code, guard=G("loop", T(("a", "block"))))
+        assert err_type(r) == "GuardUsageError", r["error"]
+        assert r["error"]["line"] == 3, r["error"]
+    finally:
+        for k, v in saved.items():
+            setattr(sys, k, v)

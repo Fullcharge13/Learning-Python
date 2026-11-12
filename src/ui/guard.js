@@ -35,6 +35,9 @@ const txt = (inc, f) => tx(`guard.${inc.id}.${f}`, inc[f]);
 // 사건마다 쓸 수 있는 이름
 const NAMES = { script: ["attempt", "allow()", "block()"], loop: ["has_try()", "next_try()", "allow()", "block()"], func: ["def check(attempt):", "return True", "return False"] };
 
+/** 보기 글자: 빈 보기("")는 이름표로(코드에는 빈 글자가 그대로 들어감) */
+const optLabel = (o) => (o === "" ? t`(비워 두기)` : o);
+
 /** 시작 코드를 빈칸 단추와 고정 글자로({{ }}는 글자 { }) */
 function startHTML(inc, picks) {
   return inc.start.split(/(\{\{|\}\}|\{\d+\})/).map((p) => {
@@ -44,7 +47,7 @@ function startHTML(inc, picks) {
     const n = +m[1];
     const opt = inc.blanks[n]?.options[picks[n]];
     const on = opt !== undefined;
-    return `<button class="gd-blank${on ? " on" : ""}" data-n="${n}" aria-label="${esc(t`빈칸 ${n + 1}: ${on ? opt : t`고르지 않음`}`)}">${on ? esc(opt) : "___"}</button>`;
+    return `<button class="gd-blank${on ? " on" : ""}" data-n="${n}" aria-label="${esc(t`빈칸 ${n + 1}: ${on ? optLabel(opt) : t`고르지 않음`}`)}">${on ? esc(optLabel(opt)) : "___"}</button>`;
   }).join("");
 }
 /** 직접 쓰기 처음 내용: 빈칸을 비운 시작 코드 */
@@ -155,7 +158,7 @@ export function render(root, ctx, params = {}) {
     const inc = S.inc;
     const v = await sheet({
       title: t`빈칸 ${n + 1} 고르기`,
-      html: `<ul class="g-pick">${b.options.map((o, k) => `<li><button class="g-pick-btn${S.picks[n] === k ? " on" : ""}" data-v="${k}"><code class="gd-opt">${esc(o)}</code></button></li>`).join("")}</ul>`,
+      html: `<ul class="g-pick">${b.options.map((o, k) => `<li><button class="g-pick-btn${S.picks[n] === k ? " on" : ""}" data-v="${k}" aria-label="${esc(optLabel(o))}"><code class="gd-opt">${esc(optLabel(o))}</code></button></li>`).join("")}</ul>`,
     });
     if (v == null || S.destroyed || S.inc !== inc || S.state !== "idle") return;
     S.picks = S.picks.map((p, i) => (i === n ? +v : p));

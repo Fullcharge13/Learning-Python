@@ -17,6 +17,11 @@
 import sys as _guard_sys
 import types as _guard_types
 
+# 학습자가 sys.settrace 같은 것을 바꿔도(실행 사이) 엔진은 처음 것을 쓴다
+_guard_getframe = _guard_sys._getframe
+_guard_settrace = _guard_sys.settrace
+_guard_gettrace = _guard_sys.gettrace
+
 GUARD_TRIES_MAX = 20
 _GUARD_USER_FILE = "<user>"
 _GUARD_MODES = ("script", "loop", "func")
@@ -95,7 +100,7 @@ def _guard_prepare(guard, lang):
 
 
 def _guard_caller_line():
-    f = _guard_sys._getframe(1)
+    f = _guard_getframe(1)
     while f is not None:
         if f.f_code.co_filename == _GUARD_USER_FILE:
             return f.f_lineno
@@ -110,7 +115,7 @@ def _guard_usage(gs, msg):
         gs["usage_error"] = text
         gs["usage_line"] = _guard_caller_line()
     user_file = _GUARD_USER_FILE
-    settrace = _guard_sys.settrace
+    settrace = _guard_settrace
 
     def tracer(frame, event, arg):
         if frame.f_code.co_filename != user_file:
@@ -122,7 +127,7 @@ def _guard_usage(gs, msg):
     if not gs["trace_on"]:
         gs["trace_on"] = True
         settrace(tracer)
-        f = _guard_sys._getframe(1)
+        f = _guard_getframe(1)
         while f is not None:
             if f.f_code.co_filename == user_file:
                 f.f_trace = tracer
@@ -201,7 +206,7 @@ def _guard_exec(gs, compiled, user_globals):
     mode = gs["mode"]
     tries = gs["tries"]
     run_code, nrange, nlen = _g_exec, _g_range, _g_len   # 학습자가 builtins를 지워도(시도 사이) 엔진은 돈다
-    old_trace = _guard_sys.gettrace()
+    old_trace = _guard_gettrace()
     try:
         if mode == "script":
             base = _g_dict(user_globals)
@@ -249,7 +254,7 @@ def _guard_exec(gs, compiled, user_globals):
         raise
     finally:
         if gs["trace_on"]:
-            _guard_sys.settrace(old_trace)
+            _guard_settrace(old_trace)
 
 
 def _guard_has_user_frame(tb):

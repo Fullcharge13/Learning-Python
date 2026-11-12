@@ -9,6 +9,7 @@
  "경비실 코드 입력창. 여기에 Python 코드를 써요": "Guard Room code editor. Write Python code here",
  "경비실, 새 소식 있음": "Guard Room, something new",
  "경비실, 잠김, {}장을 끝내면 열려요": "Guard Room, locked, opens after Chapter {}",
+ "(비워 두기)": "(leave empty)",
  "고르지 않음": "not chosen",
  "공격": "Attack",
  "대응": "Respond",

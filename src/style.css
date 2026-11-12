@@ -704,6 +704,7 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
   padding: calc(var(--sat) + 6px) calc(12px + var(--sar)) 6px calc(8px + var(--sal));
   background: rgba(251, 246, 234, 0.96); border-bottom: 2px solid var(--line);
 }
+.gd-head { background: var(--paper); }
 .g-top h1 { margin: 0; font-size: 1.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .g-store { display: flex; gap: 6px; margin: 0; }
 .g-crop-count { display: inline-flex; align-items: center; gap: 3px; padding: 3px 9px 3px 5px; border-radius: 999px; background: var(--card); border: 2px solid var(--line); font-size: .95rem; }

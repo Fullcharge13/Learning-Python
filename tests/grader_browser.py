@@ -638,14 +638,18 @@ def test_guard_three_modes():
             ["d", "allow"], ["e", "allow"], ["f", "block"]) });
         const f = await run(g3, { mode: "func", tries: T(["0000", "block"], ["1234", "block"], ["9999", "allow"]) });
         const bad = await run('def check(attempt):\\n    return "yes"\\n', { mode: "func", tries: T(["a", "allow"]) });
+        const sw = await run("while True:\\n    try:\\n        next_try()\\n    except:\\n        pass\\n",
+            { mode: "loop", tries: T(["a", "block"], ["b", "block"]) });
         const n = await run("print(1)\\n", undefined);
-        return { s, i, l, f, bad, n };
+        return { s, i, l, f, bad, sw, n };
     }""")
     assert res["s"]["error"] is None and res["s"]["guard"]["solved"] is True, res["s"]
     assert res["i"]["error"] is None and res["i"]["guard"]["solved"] is True, res["i"]
     assert res["l"]["error"] is None and res["l"]["guard"]["solved"] is True, res["l"]
     assert res["f"]["error"] is None and res["f"]["guard"]["solved"] is True, res["f"]
     assert res["bad"]["error"]["type"] == "GuardAnswerError", res["bad"]
+    assert res["sw"]["error"]["type"] == "GuardUsageError", res["sw"]   # 삼킨 사용 오류: 추적기 경로
+    assert len(res["sw"]["guard"]["events"]) == 2, res["sw"]
     assert res["n"].get("guard") is None, res["n"]
 
 

@@ -3956,6 +3956,28 @@ def test_guard_room_english():
     assert not fails, "\n".join(fails)
 
 
+def test_guard_room_empty_option_label():
+    """G6 빈칸 2의 빈 보기(.lower() 안 붙임): 시트·채운 빈칸 모두 이름표 글자가 보이고 aria-label도 있다. 코드에는 빈 글자가 들어간다."""
+    with App("iPhone 17", save=_guard_seed(6)) as a:
+        _open_guard(a)
+        a.page.click("#gd-list")
+        _sheet_pick(a, '[data-g="G6"]')
+        a.page.wait_for_selector('.gd-blank[data-n="1"]')
+        a.page.click('.gd-blank[data-n="1"]')
+        a.page.wait_for_selector(".modal.g-sheet .g-pick-btn")
+        opts = a.js("""() => [...document.querySelectorAll('.modal.g-sheet .g-pick-btn')].map(b => ({
+            text: b.textContent.trim(), aria: (b.getAttribute('aria-label') || '').trim() }))""")
+        assert len(opts) == 3, opts
+        for o in opts:
+            assert o["text"] and o["aria"], opts
+        assert opts[2]["text"] == "(비워 두기)" and opts[2]["aria"] == "(비워 두기)", opts
+        _sheet_pick(a, '[data-v="2"]')
+        b = a.page.query_selector('.gd-blank[data-n="1"]')
+        assert b.inner_text().strip() == "(비워 두기)", b.inner_text()
+        assert "(비워 두기)" in (b.get_attribute("aria-label") or ""), b.get_attribute("aria-label")
+        assert not a.errors, a.errors
+
+
 def test_guard_room_reduced_motion():
     """움직임 줄이기: 재생 없이 바로 결과(상태가 replay가 되지 않음)."""
     guard = _guard_g(seen=["G1"], blanks={"G1": [1, 0, 0]})

@@ -29,7 +29,7 @@ export function newSave() {
     quests: { date: null, ids: [], progress: {}, done: [], chest: false },
     badges: [], outfits: ["basic"], outfit: "basic",
     stats: { lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0 },
-    settings: { sound: true, dailyGoal: 20, name: "", lang: "ko" }, // lang: v0.13.0 영어판(ko|en)
+    settings: { sound: true, dailyGoal: 20, name: "", lang: "ko", langChosen: false }, // lang: v0.13.0 영어판(ko|en). langChosen: v0.14.3 언어 단추를 직접 눌렀는지(아니면 열 때마다 휴대폰 언어)
     pending_refund: 0, // saveVer 1→2에서 돌려준 바이트. 홈에서 한 번 알리고 0으로 (판정 C42)
     seen_updates: {},  // v0.7.1 「새 내용」 점: { 레슨 id: 끝까지 다시 본 판 "v0.7.1" }. saveVer 그대로, 없으면 {}
     daily: newDaily(), // v0.9 매일 도전 { date, picks, done, streak, best, last_done_date }. saveVer 그대로, 없으면 기본값
@@ -167,7 +167,12 @@ export function migrate(raw) {
   if (!isPlainObject(raw)) return newSave();
   const oldVer = raw.saveVer;
   const ver = typeof oldVer === "number" && Number.isFinite(oldVer) ? oldVer : 1; // saveVer 없음 = 첫 판(1)
+  // v0.14.3: langChosen 칸이 없던 저장(쓰던 사람)은 「고른 것」으로 친다 — 열었을 때 갑자기 언어가 바뀌지 않게.
+  // false로 저장된 것만 휴대폰 언어를 따른다(이상한 값도 「고른 것」).
+  const rawSet = isPlainObject(raw.settings) ? raw.settings : {};
+  const chosen = Object.hasOwn(rawSet, "langChosen") ? rawSet.langChosen !== false : true;
   const s = clampRanges(fill(newSave(), structuredClone(raw)));
+  s.settings.langChosen = chosen;
   migrateOutfits(s, ver < 2);
   s.saveVer = ver > SAVE_VER ? ver : SAVE_VER;
   return s;

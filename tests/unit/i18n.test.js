@@ -1,7 +1,7 @@
 // v0.13.0 영어판 기반: t``(한국어 원문이 열쇠) · tx(데이터 표) · 언어 고르기 · 처음 언어
 import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { t, tx, tp, keyOf, lang, setLang, usePack, pickStartLang, normLang, EN_PUBLIC, LANGS, missingKeys } from "../../src/i18n.js";
+import { t, tx, tp, keyOf, lang, setLang, usePack, pickStartLang, deviceLang, normLang, EN_PUBLIC, LANGS, missingKeys } from "../../src/i18n.js";
 
 beforeEach(() => { usePack("en", null); setLang("ko"); });
 
@@ -97,4 +97,13 @@ test("복수형: 영어 값의 {0|day|days}는 그 값이 1이면 앞, 아니면
   assert.equal(tp("unit-day", "일", 1), "day");
   setLang("ko");
   assert.equal(tp("unit-day", "일", 2), "일");
+});
+
+test("deviceLang(v0.14.3): 직접 고르지 않았으면 열 때마다 휴대폰 언어, 골랐으면 저장 언어", () => {
+  assert.equal(deviceLang({ lang: "ko", langChosen: false }, ["en-US"], true), "en");
+  assert.equal(deviceLang({ lang: "en", langChosen: false }, ["ko-KR", "en"], true), "ko");
+  assert.equal(deviceLang({ lang: "ko", langChosen: true }, ["en-US"], true), "ko");
+  assert.equal(deviceLang({ lang: "en", langChosen: true }, ["ko-KR"], true), "en");
+  assert.equal(deviceLang({ lang: "ko", langChosen: false }, [], true), "ko");
+  assert.equal(deviceLang({ lang: "en", langChosen: false }, ["en-US"], false), "ko", "not public: Korean");
 });

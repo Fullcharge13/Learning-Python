@@ -27,7 +27,7 @@ const LEDGER_SHAPE = {
   quests: { date: null, ids: [], progress: {}, done: [], chest: false },
   badges: [], outfits: ["basic"], outfit: "basic",
   stats: { lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0 },
-  settings: { sound: true, dailyGoal: 20, name: "", lang: "ko" },
+  settings: { sound: true, dailyGoal: 20, name: "", lang: "ko", langChosen: false },
   pending_refund: 0,
   seen_updates: {}, // v0.7.1: 「새 내용」 점 — 다시 본 판 { 레슨 id: "v0.7.1" } (saveVer 그대로)
   daily: { date: null, picks: [], done: [], streak: 0, best: 0, last_done_date: null }, // v0.9 매일 도전(saveVer 그대로)
@@ -80,7 +80,7 @@ test("migrate: fills missing nested fields, keeps existing values", () => {
   assert.equal(s.saveVer, 2);
   assert.deepEqual(s.completed_lessons, ["1-1"]);
   assert.deepEqual(s.streak, { days: 3, best: 0, lastGoalDate: "2026-10-28", todayDate: null, todayXp: 0 });
-  assert.deepEqual(s.settings, { sound: false, dailyGoal: 20, name: "", lang: "ko" });
+  assert.deepEqual(s.settings, { sound: false, dailyGoal: 20, name: "", lang: "ko", langChosen: true }); // 옛 저장 = 고른 것(v0.14.3)
   assert.deepEqual(s.stats, LEDGER_SHAPE.stats);
   assert.deepEqual(s.quests, LEDGER_SHAPE.quests);
 });
@@ -158,7 +158,7 @@ test("C2: wrong-typed fields fall back to defaults", () => {
     outfit: 5, settings_x: 1, freezes: Infinity,
   });
   assert.deepEqual(s.streak, LEDGER_SHAPE.streak);
-  assert.deepEqual(s.settings, LEDGER_SHAPE.settings);
+  assert.deepEqual(s.settings, { ...LEDGER_SHAPE.settings, langChosen: true }); // 옛 저장 = 고른 것(v0.14.3)
   assert.equal(s.xp, 30);
   assert.equal(s.bytes, 0);
   assert.deepEqual(s.completed_lessons, []);
@@ -473,4 +473,13 @@ test("v0.13.0 loadEx.fresh: 저장이 아예 없을 때만 true(처음 여는 �
   assert.equal(loadEx(mem(null)).fresh, true);
   assert.equal(loadEx(mem(JSON.stringify(newSave()))).fresh, false);
   assert.equal(loadEx(mem("{broken")).fresh, false);
+});
+
+test("settings.langChosen(v0.14.3): 새 저장은 false(휴대폰 언어를 따름), 이 칸이 없던 옛 저장은 true(쓰던 언어 그대로)", () => {
+  assert.equal(newSave().settings.langChosen, false);
+  assert.equal(migrate({ saveVer: 2, xp: 10, settings: { lang: "ko" } }).settings.langChosen, true);
+  assert.equal(migrate({ saveVer: 2, xp: 10 }).settings.langChosen, true);
+  assert.equal(migrate({ saveVer: 2, settings: { lang: "en", langChosen: false } }).settings.langChosen, false);
+  assert.equal(migrate({ saveVer: 2, settings: { lang: "en", langChosen: true } }).settings.langChosen, true);
+  assert.equal(migrate({ saveVer: 2, settings: { langChosen: "yes" } }).settings.langChosen, true, "odd value: keep the saved language");
 });

@@ -98,3 +98,12 @@ export function pickStartLang(navLangs, hasSave, pub = EN_PUBLIC) {
   if (!first) return "ko";
   return first.startsWith("ko") ? "ko" : "en";
 }
+
+/**
+ * v0.14.3: 이번에 열 때 쓸 언어. 언어 단추를 직접 누른 적이 있으면 저장 언어, 없으면 열 때마다 휴대폰 언어.
+ * @param {{lang?: string, langChosen?: boolean}} settings
+ */
+export function deviceLang(settings, navLangs, pub = EN_PUBLIC) {
+  if (settings?.langChosen) return normLang(settings.lang);
+  return pickStartLang(navLangs, false, pub);
+}

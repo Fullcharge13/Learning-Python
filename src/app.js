@@ -1,6 +1,6 @@
 // 리아와 파이썬! — 앱 입구. 상태는 app = { save, screen, modal } 하나, 화면 전환은 show() 하나.
 import { migrate, takeRefundNotice, refundNoticeText, takeBrokenNotice, brokenNoticeText } from "./save.js";
-import { t, tx, setLang, lang, EN_PUBLIC, pickStartLang, packOf } from "./i18n.js";
+import { t, tx, setLang, lang, EN_PUBLIC, deviceLang, packOf } from "./i18n.js";
 import { loadLangPack } from "./langload.js";
 import { warmLangFiles } from "./langwarm.js";
 import { latestOnly } from "./latest.js";
@@ -33,7 +33,7 @@ import * as closet from "./ui/closet.js";
 import * as settings from "./ui/settings.js";
 import * as garden from "./ui/garden.js";
 
-export const VERSION = "v0.14.2";
+export const VERSION = "v0.14.3";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
@@ -315,6 +315,14 @@ function warmLang(delayMs = 4000) {
     warmLangFiles(app.data.fileList().filter((f) => f.startsWith("lessons/en/"))).catch(() => {});
   }, delayMs);
 }
+/**
+ * v0.14.3: 언어 단추를 직접 누른 적이 없으면 열 때마다 휴대폰 언어를 따른다(저장 값만 맞춤, 화면은 뒤에서 그림).
+ * 직접 고른 사람·쓰던 사람(langChosen true)은 그대로.
+ */
+function followPhoneLang() {
+  const want = deviceLang(app.save.settings, navigator.languages || [navigator.language], EN_PUBLIC);
+  if (want !== app.save.settings.lang) commit({ ...app.save, settings: { ...app.save.settings, lang: want } });
+}
 /** 언어 바꾸기(시작 화면·설정). 바꾸면 지금 화면을 다시 그린다 */
 async function setLanguage(l) {
   if (l !== "ko" && l !== "en") return false;
@@ -324,7 +332,7 @@ async function setLanguage(l) {
     return false;
   }
   if (dev !== app.dev) return false; // 받는 동안 개발자 모드 칸이 바뀌었으면 다른 저장에 쓰지 않는다(검토 I4)
-  commit({ ...app.save, settings: { ...app.save.settings, lang: l } });
+  commit({ ...app.save, settings: { ...app.save.settings, lang: l, langChosen: true } }); // 직접 고름: 이제 휴대폰 언어를 따르지 않음(v0.14.3)
   applyLang(l);
   if (app.dataLang !== lang()) await reloadLessons();
   show(app.screen, app.params);
@@ -338,7 +346,8 @@ function setDev(on) {
   const { save, readFailed, brokenKey } = setDevMode(storage, on);
   app.dev = on;
   app.save = save;
-  if (brokenKey) commit({ ...save, broken_notice: brokenKey });   // 깨진 저장 안내(홈에서 한 번)
+  followPhoneLang();
+  if (brokenKey) commit({ ...app.save, broken_notice: brokenKey });   // 깨진 저장 안내(홈에서 한 번)
   app.storeFailedShown = false;
   app.greetOverride = null;
   if (readFailed) toast(t`저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.`, "warn");
@@ -415,15 +424,11 @@ async function boot() {
   const root = document.getElementById("app");
   app.dev = readDevFlag(storage);
   paintDev();
-  const { save, readFailed, brokenKey, fresh } = loadSlot(storage, app.dev);
+  const { save, readFailed, brokenKey } = loadSlot(storage, app.dev);
   app.save = save;
-  // 처음 여는 사람(저장 없음): 공개 뒤에는 휴대폰 언어(v0.13.0 §1). 쓰던 사람은 저장 값
-  if (fresh && pickStartLang(navigator.languages || [navigator.language], false, EN_PUBLIC) === "en") {
-    app.save = { ...save, settings: { ...save.settings, lang: "en" } };
-    commit(app.save);   // 고른 언어를 남겨 둔다(다음에 열 때도 영어, 설정에서 바꿀 수 있음)
-  }
+  followPhoneLang();
   // 깨진 저장(v0.12.1, QA 5): 새 저장에 남긴 칸 이름을 적어 바로 저장 → 홈에서 한 번 안내(새로고침해도 다시 .broken으로 남기지 않음)
-  if (brokenKey) commit({ ...save, broken_notice: brokenKey });
+  if (brokenKey) commit({ ...app.save, broken_notice: brokenKey });
   if (readFailed) toast(t`저장을 읽지 못해 새로 시작해요. 이 브라우저의 저장 공간 설정을 확인해 주세요.`, "warn");
   initPy();
   requestPersist();

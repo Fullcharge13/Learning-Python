@@ -18,13 +18,15 @@
 <div id="dev-banner" class="dev-banner" hidden>개발자 모드</div>
 <div id="app" aria-busy="true"><p class="boot">리아 교수가 강의실 문을 여는 중…</p></div>
 <script>
-/* v0.14.0 검토 I2: 앱이 뜨기 전 「여는 중」 글도 그 사람의 언어로 — 저장의 언어, 저장이 없으면 휴대폰 언어(app.js와 같은 규칙) */
+/* v0.14.0 검토 I2: 앱이 뜨기 전 「여는 중」 글도 그 사람의 언어로 — 직접 고른 언어, 고른 적 없으면 휴대폰 언어(app.js·i18n.deviceLang과 같은 규칙) */
 (function () {
   var en = false;
   try {
     var dev = localStorage.getItem("ria-python.dev") === "1";
     var raw = localStorage.getItem(dev ? "ria-python.dev.save" : "ria-python.save");
-    if (raw) en = ((JSON.parse(raw) || {}).settings || {}).lang === "en";
+    var set = raw ? ((JSON.parse(raw) || {}).settings || {}) : null;
+    // v0.14.3: 언어 단추를 직접 누른 적 없는 저장(langChosen false)도 휴대폰 언어. 칸이 없던 옛 저장은 저장 언어
+    if (set && set.langChosen !== false) en = set.lang === "en";
     else en = !/^ko\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || "ko");
   } catch (e) { /* 저장을 못 읽으면 한국어 */ }
   if (!en) return;

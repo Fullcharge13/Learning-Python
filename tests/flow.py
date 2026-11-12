@@ -3441,6 +3441,68 @@ def test_first_language_follows_phone():
     assert not fails, "\n".join(fails)
 
 
+def test_language_follows_phone_until_chosen():
+    """v0.14.3: 언어 단추를 직접 누르지 않은 사람은 열 때마다 휴대폰 언어(저장이 있어도), 누른 뒤에는 그 선택을 지킨다.
+    langChosen 칸이 없던 옛 저장은 「고른 것」 — 영어 휴대폰에서도 한국어 그대로(앞 시험의 마지막 경우)."""
+    fails = []
+
+    # 1) 한국어 휴대폰에서 처음 열고(아무것도 안 고름) → 저장에 langChosen false
+    with App("iPhone 17", locale="ko-KR") as a:
+        a.page.wait_for_selector(".screen.splash #go")
+        a.start()
+        saved = a.save()
+    if saved.get("settings", {}).get("langChosen") is not False:
+        fails.append("fresh save should not count as chosen: %r" % saved.get("settings"))
+    # 2) 같은 저장으로 영어 휴대폰에서 열면 영어(앱 안 글, 앱 이름, 여는 중 글)
+    boot = []
+    with App("iPhone 17", locale="en-US", save=saved, init_js=BOOT_TEXT_JS) as a:
+        boot.extend(a.js("() => [window.__bootText, window.__bootLang]"))
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=20_000)
+        a.page.wait_for_selector(".screen.home, .screen.splash")
+        if a.save().get("settings", {}).get("lang") != "en":
+            fails.append("not-chosen save on English phone did not switch: %r" % a.save().get("settings"))
+        man = a.js("() => document.querySelector('link[rel=manifest]').getAttribute('href')")
+        if not man.endswith("manifest.en.webmanifest"):
+            fails.append("app name not English: %r" % man)
+        left = _hangul_left(a, ["한국어"])
+        if left:
+            fails.append("English phone, not-chosen save: %r" % left)
+        again = a.save()
+    if len(boot) != 2 or not boot[0] or re.search(r"[가-힣]", boot[0]) or boot[1] != "en":
+        fails.append("boot text before the app starts should be English: %r" % boot)
+    # 3) 다시 한국어 휴대폰 → 한국어로 돌아옴
+    with App("iPhone 17", locale="ko-KR", save=again) as a:
+        a.page.wait_for_selector(".screen.home, .screen.splash")
+        if a.js("() => document.documentElement.lang") != "ko" or a.save()["settings"]["lang"] != "ko":
+            fails.append("not-chosen save on Korean phone did not come back to Korean")
+    # 4) 영어 휴대폰에서 「한국어」를 직접 고르면, 다음에 영어 휴대폰으로 열어도 한국어
+    with App("iPhone 17", locale="en-US") as a:
+        a.page.wait_for_selector(".screen.splash .lang-pick")
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=20_000)
+        a.page.click('.lang-pick [data-lang="ko"]')
+        a.page.wait_for_function("() => document.documentElement.lang === 'ko'")
+        picked = a.save()
+    if picked.get("settings", {}).get("langChosen") is not True:
+        fails.append("pressing a language button should mark it chosen: %r" % picked.get("settings"))
+    with App("iPhone 17", locale="en-US", save=picked) as a:
+        a.page.wait_for_selector(".screen.splash #go")
+        a.page.wait_for_timeout(500)
+        if a.js("() => document.documentElement.lang") != "ko":
+            fails.append("chosen Korean was overridden by the English phone")
+    # 5) 한국어 휴대폰에서 「English」를 고르면, 다음에 한국어 휴대폰으로 열어도 영어
+    with App("iPhone 17", locale="ko-KR") as a:
+        a.page.wait_for_selector(".screen.splash .lang-pick")
+        a.page.click('.lang-pick [data-lang="en"]')
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=20_000)
+        picked = a.save()
+    with App("iPhone 17", locale="ko-KR", save=picked) as a:
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=20_000)
+        a.page.wait_for_selector(".screen.splash #go")
+        if a.save()["settings"]["lang"] != "en":
+            fails.append("chosen English was overridden by the Korean phone")
+    assert not fails, "\n".join(fails)
+
+
 def test_english_daily_review():
     """v0.14.0(v0.13.4 검토 M9): 영어로 배우는 사람(일반 모드) — 틀린 답 설명, 매일 도전(문제·완료), 복습 화면에도 한글이 없다."""
     done12 = ["%d-%d" % (c, k) for c in (1, 2) for k in range(1, 6)]

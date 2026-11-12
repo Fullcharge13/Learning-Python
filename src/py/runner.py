@@ -86,7 +86,16 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
   규칙 표는 실행마다 바꿀 수 없는 원본에서 새로 만들고, 이 모듈의 전역 이름은 실행이 끝나면 되돌린다(검토 C62 I1).
   farm=None이면 result에 "farm"이 없다(예전 그대로).
 
-run(code, stdin, require, files=None, server=None, farm=None) -> {
+경비실(v0.15, 설계서 2026-11-12 경비실 §2): guard={"mode": "script"|"loop"|"func", "tries": [{"value": str|int,
+  "expect": "block"|"allow"}, …], "password"?: str}가 있으면 guard.py 규칙으로 실행한다(farm과 함께 오면 guard만 씀).
+  명령 block()·allow()·has_try()·next_try()(+ password)를 실행 전역에 넣는다. 판정 규칙은 guard.py 설명 글.
+  학습자가 삼킨 사용 오류(GuardUsageError)도 결과 오류로 알린다. check를 부르는 자리에서 난 오류(인자 수·bool 아님)는
+  def check 줄(판정 G-C1).
+  result["guard"] = {"events": [{"i", "verdict": "block"|"allow"|"none", "ok": bool, "twice"?: True}],
+                     "stats": {"attacks_blocked", "attacks_total", "guests_allowed", "guests_total"},
+                     "solved": bool, "stopped": None | "error"}   # events는 오류 전까지만, guard=None이면 열쇠 없음
+
+run(code, stdin, require, files=None, server=None, farm=None, lang=None, guard=None) -> {
     "stdout": str, "stderr": str,
     "error": None | {"type": str, "line": int | None, "msg": str},
     "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:/Def:/SQL:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr, NamedGroup·Reraise)
@@ -126,6 +135,14 @@ _BytesIO = io.BytesIO
 _io_open = io.open
 
 NO_SUCH_URL = "연습 서버에 없는 주소예요"
+
+# 경비실(v0.15): 배포 runner는 guard.py + runner.py를 이어 붙인 한 모듈(계획 R6)이라 이미 이름이 있다.
+# 따로 도는 시험(pytest)에서만 guard.py를 import한다.
+try:
+    _guard_prepare
+except NameError:
+    from guard import (GuardUsageError, GuardAnswerError,  # noqa: F401
+                       _guard_prepare, _guard_cmds, _guard_exec, _guard_result)
 
 # ---- v0.13.5 영어판(설계서 영어판 §5·§5-1): 학습자가 보는 문구를 실행 언어로 ----
 # 한국어 문구(틀) → 영어 문구(같은 %s·%d 자리). 고칠 수 없게 MappingProxyType(학습자 코드가 안을 바꿔도 실행마다 같음).
@@ -1154,10 +1171,14 @@ def _restore_farm_tables():
     FARM_CROPS, FARM_GROW, FARM_GROW_FERTILIZED, FARM_DIRS = _farm_tables()
 
 
-def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang=None):
-    # v0.13.5: 학습자가 보는 문구의 언어. 주지 않으면 텃밭 상태의 "lang", 그것도 없으면 한국어
+def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang=None, guard=None):
+    if guard is not None:
+        farm = None   # 경비실과 텃밭을 함께 주면 경비실만
+    # v0.13.5: 학습자가 보는 문구의 언어. 주지 않으면 텃밭(경비실) 입력의 "lang", 그것도 없으면 한국어
     if lang is None and _type(farm) is _dict:
         lang = _dict.get(farm, "lang")
+    if lang is None and _type(guard) is _dict:
+        lang = _dict.get(guard, "lang")
     lang = _norm_lang(lang)
     code = "" if code is None else str(code)
     stdin = _split_stdin(stdin)
@@ -1180,6 +1201,7 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         result["farm"] = {"events": fs["events"], "state": None, "stopped": None, "actions": 0}
     # 쪽지함(v0.12): 텃밭 실행에 files가 오면 농장일지.txt만 쓸 수 있고, 끝난 뒤 일지를 결과로 돌려준다.
     farm_notes = fs is not None and files is not None
+    gs = _guard_prepare(guard, lang) if guard is not None else None
     journal_in = None
     if farm_notes:
         journal_in = _dict.get(files, FARM_JOURNAL, "") if _type(files) is _dict else ""
@@ -1204,6 +1226,9 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         linecache.cache.pop(USER_FILE, None)
         if fs is not None:
             result["farm"] = _farm_result(fs, journal_in)
+        if gs is not None:
+            gs["error"] = True
+            result["guard"] = _guard_result(gs)
         return result
 
     try:
@@ -1253,6 +1278,8 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         sys.modules["farm"] = farm_mod
         user_globals.update(farm_cmds)  # import 없이 move(…) 등을 바로 쓰게(레슨 코드처럼 짧게)
         builtins.print = say_print      # builtins는 끝나면 통째로 되돌린다
+    if gs is not None:
+        user_globals.update(_guard_cmds(gs))  # block()·allow()·has_try()·next_try()(+ password)
     if note_guard is not None:
         builtins.open = note_guard      # 받는 쪽지 쓰기 금지(io.open은 finally에서 되돌림)
         io.open = note_guard
@@ -1263,7 +1290,10 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         _chdir(run_dir)
         if urlreq is not None:
             urlreq.urlopen = fake_urlopen
-        exec(compiled, user_globals)
+        if gs is not None:
+            _guard_exec(gs, compiled, user_globals)  # 방식별 실행(설계 §2-3), 추적 함수도 스스로 되돌림
+        else:
+            exec(compiled, user_globals)
     except _BaseException as e:  # noqa: BLE001 — 어떤 오류든 결과로 돌려준다. 분류는 builtins를 되돌린 뒤에.
         caught = e
     finally:
@@ -1326,6 +1356,18 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         result["error"] = {"type": "OutputLimit", "line": line,
                            "msg": "output is longer than %d characters" % OUTPUT_LIMIT}
         err.raw_write("OutputLimit (line %s): output is longer than %d characters\n" % (line, OUTPUT_LIMIT))
+    elif gs is not None and gs["usage_error"] is not None:
+        # 경비실 첫 사용 오류로 알린다(계획 R3). 학습자가 삼켰다가 다시 던져진 경우에도 처음 그 줄·글.
+        swallowed = (result["error"] or {}).get("type") != "GuardUsageError"
+        result["error"] = {"type": "GuardUsageError", "line": gs["usage_line"], "msg": gs["usage_error"]}
+        if swallowed:
+            err.raw_write("GuardUsageError (line %s): %s\n" % (gs["usage_line"], gs["usage_error"]))
+
+    if gs is not None:
+        if result["error"] is not None and result["error"]["line"] is None and gs["err_line"] is not None:
+            result["error"]["line"] = gs["err_line"]   # 판정 G-C1: check를 부르는 자리의 오류 → def check 줄
+        gs["error"] = result["error"] is not None
+        result["guard"] = _guard_result(gs)
 
     if fs is not None:
         result["farm"] = _farm_result(fs, journal_out)

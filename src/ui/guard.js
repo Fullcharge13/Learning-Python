@@ -68,7 +68,7 @@ export function render(root, ctx, params = {}) {
       <section class="panel gd-card" id="gd-card" aria-labelledby="gd-title"></section>
       <section class="panel gd-code" id="gd-code" aria-labelledby="gd-code-t"></section>
       <section class="panel gd-gate" aria-labelledby="gd-gate-t">
-        <h2 id="gd-gate-t">${icon("shield")}<span>${t`문과 시도`}</span></h2>
+        <h2 id="gd-gate-t">${icon("guard")}<span>${t`문과 시도`}</span></h2>
         <div class="gd-door"><div class="gd-crow2" id="gd-crow2"></div><p class="gd-at mono" id="gd-at" aria-hidden="true"></p><span class="gd-post" aria-hidden="true">${icon("shield")}</span></div>
         <ol class="gd-tries" id="gd-tries" aria-label="${t`시도 줄`}"></ol>
       </section>

@@ -140,6 +140,29 @@ def bundled_packages(inputs):
     return sorted(pkgs)
 
 
+BOOTSTRAP_ICONS_MIT = """The MIT License (MIT)
+
+Copyright (c) 2019-2024 The Bootstrap Authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE."""
+
+
 def third_party_notices(inputs, pyodide_url):
     """판정 C43: 묶어 넣은 꾸러미의 라이선스 전문 + CDN에서 받는 Pyodide 안내."""
     parts = ["리아와 파이썬! — 사용한 프로그램과 라이선스 (Third-party notices)", "",
@@ -154,6 +177,9 @@ def third_party_notices(inputs, pyodide_url):
         with open(lic, encoding="utf-8") as f:
             body = f.read().strip()
         parts += ["== %s %s (%s)" % (pkg, meta.get("version", ""), meta.get("license", "")), "", body, "", ""]
+    parts += ["== Bootstrap Icons — shield-check (MIT)", "",
+              "경비실 아이콘 하나(shield-check)의 그림 길을 앱 안에 넣었습니다. https://icons.getbootstrap.com",
+              BOOTSTRAP_ICONS_MIT, "", ""]
     parts += ["== pyodide %s (MPL-2.0)" % PYODIDE_VERSION, "",
               "Python 실행기 Pyodide는 앱에 묶지 않고 실행할 때 아래 주소에서 받습니다(고치지 않은 원본).",
               pyodide_url, "라이선스: Mozilla Public License 2.0 — https://www.mozilla.org/MPL/2.0/",

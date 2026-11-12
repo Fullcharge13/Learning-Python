@@ -274,7 +274,7 @@ export function render(root, ctx, params = {}) {
           ${tomatoOpen ? `<p class="g-seeds" id="g-seeds"></p>` : ""}
           ${notesOpen ? `<button class="btn ghost small g-notes-btn" id="g-notes" aria-haspopup="dialog">${icon("book")}<span>${t`쪽지함`}</span></button>` : ""}
           <button class="btn ghost small g-notes-btn" id="g-guard"${guardIn ? (guardDot ? ` aria-label="${esc(t`경비실, 새 소식 있음`)}"` : "")
-            : ` data-locked="1" aria-label="${esc(t`경비실, 잠김, ${3}장을 끝내면 열려요`)}"`}>${icon(guardIn ? "shield" : "lock")}<span>${t`경비실`}</span>${guardDot ? '<span class="gd-dot" aria-hidden="true"></span>' : ""}</button>
+            : ` data-locked="1" aria-label="${esc(t`경비실, 잠김, ${3}장을 끝내면 열려요`)}"`}>${icon(guardIn ? "guard" : "lock")}<span>${t`경비실`}</span>${guardDot ? '<span class="gd-dot" aria-hidden="true"></span>' : ""}</button>
         </div>
       </section>
       <div id="g-result" class="g-result" role="status" aria-live="polite"></div>

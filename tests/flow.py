@@ -3750,6 +3750,7 @@ def test_guard_room_locked():
         b = a.page.query_selector("#g-guard")
         assert b and b.is_visible(), "경비실 단추"
         assert b.get_attribute("data-locked") == "1", "잠김 표시"
+        assert not b.query_selector('svg path[d^="M5.338"]'), "잠겼을 때는 자물쇠 아이콘"
         assert "3장을 끝내면 열려요" in (b.get_attribute("aria-label") or ""), b.get_attribute("aria-label")
         assert not a.page.query_selector('.tabbar [data-go="garden"] .tab-dot'), "2장: 경비실 새 소식 없음"
         b.click()
@@ -3769,11 +3770,15 @@ def test_guard_room_g1():
         a.page.wait_for_selector(".screen.garden")
         if not a.page.query_selector("#g-guard .gd-dot"):
             fails.append("no news dot on guard button")
+        if not a.page.query_selector('#g-guard svg path[d^="M5.338"]'):
+            fails.append("guard button lacks shield-check icon")
         a.page.click("#g-guard")
         a.page.wait_for_selector(".screen.guard")
         a.page.wait_for_timeout(200)
         if not a.page.query_selector("#gd-card svg[role=img]"):
             fails.append("no crow svg in card")
+        if not a.page.query_selector('#gd-gate-t svg path[d^="M5.338"]'):
+            fails.append("gate heading lacks shield-check icon")
         head = a.page.inner_text(".gd-head")
         for w in ("견습 문지기", "0/6 해결"):
             if w not in head:

@@ -1198,6 +1198,8 @@ def test_third_party_notices():
     assert txt.count("Permission is hereby granted, free of charge") >= 8
     assert "pyodide" in txt.lower() and "MPL-2.0" in txt and "cdn.jsdelivr.net/npm/pyodide@" in txt
     assert "esbuild" not in txt, "build tool is not shipped, keep it out"
+    # v0.15.1: 경비실 아이콘(Bootstrap Icons shield-check, MIT)
+    assert "== Bootstrap Icons" in txt and "Copyright (c) 2019-2024 The Bootstrap Authors" in txt
     sw = _read(os.path.join(DIST, "sw.js"))
     assert '"licenses.txt"' in sw, "licenses.txt must be precached for offline"
     html = _read(os.path.join(DIST, "index.html"))

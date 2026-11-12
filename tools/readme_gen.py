@@ -339,7 +339,7 @@ def build(d):
     w("- **레슨 문장과 예제**는 모두 새로 썼어요. 아래 두 자료는 **장 순서와 예제 주제를 정하는 참고로만** 썼고, 문장을 옮기지 않았어요.")
     w("  - Python Tutorial 3.7 — Python Software Foundation (PSF)")
     w("  - Thomas Weise, 『Programming with Python』")
-    w("- 쓰는 도구: Pyodide (MPL-2.0), CodeMirror 6 (MIT), esbuild (MIT, 빌드 때만). 소리는 Web Audio로 합성해 음원 파일이 없어요.")
+    w("- 쓰는 도구: Pyodide (MPL-2.0), CodeMirror 6 (MIT), Bootstrap Icons의 경비실 방패 아이콘 하나 (MIT), esbuild (MIT, 빌드 때만). 소리는 Web Audio로 합성해 음원 파일이 없어요.")
     w("")
 
     # ---- 한계

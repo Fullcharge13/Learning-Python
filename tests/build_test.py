@@ -723,6 +723,64 @@ def test_runner_separate_file():
     assert "py\\/runner" in sw, "sw must serve the runner cache-first"
 
 
+GUARD_SRC = r"""
+const [dataUrl, libUrl] = process.argv.slice(1);
+const d = await import(dataUrl); const lib = await import(libUrl);
+process.stdout.write(JSON.stringify({ index: lib.buildGuardIndex(d.INCIDENTS), needs: [...new Set(d.INCIDENTS.map((i) => i.need))],
+  re: lib.GUARD_FILE_RE.source }));
+"""
+
+SW_CHAPTER_RE = r"""
+const [swPath, p] = process.argv.slice(1);
+const sw = (await import("node:fs")).readFileSync(swPath, "utf8");
+const m = sw.match(/const CHAPTER_RE = (\/.*\/);/);
+if (!m) { process.stdout.write("no CHAPTER_RE"); process.exit(0); }
+process.stdout.write(String((0, eval)(m[1]).test(p)));
+"""
+
+
+def test_guard_chapter_files():
+    """v0.16.0 작업 1: 경비실 사건을 장별 파일 guard/chN-<지문>.json으로 나눈다(정답 solution은 빼고).
+    첫 파일에는 색인(RIA_GUARD_INDEX)과 이름표(RIA_GUARD_FILES), 서비스 작업자가 장 파일을 미리 받고 저장본 먼저로 준다."""
+    _build()
+    r = subprocess.run(["node", "--input-type=module", "-e", GUARD_SRC,
+                        "file://" + os.path.join(ROOT, "data", "guard.js"),
+                        "file://" + os.path.join(ROOT, "src", "guard", "catalog.js")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    src = json.loads(r.stdout)
+    file_re = re.compile(src["re"])
+    d = os.path.join(DIST, "guard")
+    assert os.path.isdir(d), "dist/guard/ missing"
+    files = sorted("guard/" + f for f in os.listdir(d))
+    assert len(files) == len(src["needs"]), (files, src["needs"])
+    for rel in files:
+        m = file_re.match(rel)
+        assert m, rel
+        with open(os.path.join(DIST, rel), "rb") as fh:
+            body = fh.read()
+        assert hashlib.sha256(body).hexdigest()[:8] == m.group(2), rel
+        assert b'"solution"' not in body, rel + " must not hold solutions"
+        assert all(x["need"] == int(m.group(1)) for x in json.loads(body)), rel
+    html = _read(os.path.join(DIST, "index.html"))
+    mi = re.search(r"window\.RIA_GUARD_INDEX = (\[.*?\]);\n", html)
+    mf = re.search(r"window\.RIA_GUARD_FILES = (\{[^}]*\});", html)
+    assert mi and mf, "RIA_GUARD_INDEX / RIA_GUARD_FILES not in index.html"
+    assert json.loads(mi.group(1)) == src["index"]
+    table = json.loads(mf.group(1))
+    assert sorted(table.values()) == files and sorted(int(k) for k in table) == sorted(src["needs"]), table
+    for k, v in table.items():
+        assert file_re.match(v).group(1) == k, (k, v)
+    sw_path = os.path.join(DIST, "sw.js")
+    pre = json.loads(re.search(r"const CHAPTER_FILES = (\[.*?\]);", _read(sw_path)).group(1))
+    for rel in files:
+        assert rel in pre, "sw.js must precache " + rel
+    for p, want in (("/guard/ch3-0123abcd.json", "true"), ("/guard/ch3-0123abc.json", "false"),
+                    ("/guard/index.json", "false")):
+        r = subprocess.run(["node", "--input-type=module", "-e", SW_CHAPTER_RE, sw_path, p], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert r.stdout == want, (p, r.stdout)
+
+
 def test_runner_has_guard():
     """경비실: py/runner-*.py 한 개에 guard.py가 앞에 이어 붙어 있고, 첫 파일은 MAX_RAW(850KB) 아래."""
     _build()

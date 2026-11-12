@@ -9,9 +9,9 @@
 //          expect allow = 들여야 하는 시도(✅), block = 막아야 하는 시도(🛡). why는 「왜?」 설명.
 // 모든 사람·기관은 가상이다. 방어하는 쪽의 글만 쓴다.
 // 정답 코드는 그 장까지 배운 문법만 쓴다(tests/guard_incidents.py가 검사).
-// GUARD_XP: 사건을 처음 해결했을 때 받는 XP.
+// GUARD_XP: 사건을 처음 해결했을 때 받는 XP. 값은 src/guard/catalog.js에 있고 여기서 다시 내보낸다(판정 G2-C1).
 
-export const GUARD_XP = 5;
+export { GUARD_XP } from "../src/guard/catalog.js";
 
 export const INCIDENTS = [
   {

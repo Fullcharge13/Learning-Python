@@ -15,6 +15,7 @@
   lessons/chN-<지문>.json  장 하나의 레슨 전체(v0.3 작업 1). 지문 = 파일 내용 sha256 앞 8자
                           장 파일에 ADVANCED(심화 레슨, v0.7)가 있으면 함께 넣고, 목록에는 그 stub을 장의 advanced 칸에
                           매일 도전 틀 TEMPLATES(v0.9)도 있으면 함께 넣고, 목록에는 장의 templates 칸에 id·개념만
+  guard/chN-<지문>.json    경비실 그 장 사건들의 본문(solution 뺌, v0.16.0). 색인·이름표는 window.RIA_GUARD_INDEX·RIA_GUARD_FILES
   manifest.webmanifest    홈 화면 앱 설명
   sw.js                   서비스 작업자(판 번호·내용 지문·Pyodide 주소를 채움)
   icons/*.png             리아 얼굴 아이콘(tools/icon.py)
@@ -54,9 +55,14 @@ const esbuild = (await import(esbuildPath)).default;
 const a = JSON.parse(argsJson);
 const common = { bundle: true, minify: true, write: false, metafile: true, target: a.target, legalComments: "none", logLevel: "warning", charset: "utf8" };
 // 배포판에는 개발용 레슨 import(src/lessondev.js)를 빈 모듈로 (레슨 내용은 장 파일로 따로 나감)
+// 경비실 사건 원본 import(src/guard/guarddev.js, v0.16.0)도 같은 방법으로 (사건 본문은 guard/chN-<지문>.json으로)
+const STUBS = {
+  lessondev: "export async function loadDevChapters() { return []; }",
+  guarddev: "export async function loadDevIncidents() { return []; }",
+};
 const noDevLessons = { name: "ria-no-dev-lessons", setup(b) {
-  b.onResolve({ filter: /(^|\/)lessondev\.js$/ }, () => ({ path: "lessondev", namespace: "ria-stub" }));
-  b.onLoad({ filter: /.*/, namespace: "ria-stub" }, () => ({ contents: "export async function loadDevChapters() { return []; }", loader: "js" }));
+  b.onResolve({ filter: /(^|\/)(lessondev|guarddev)\.js$/ }, (args) => ({ path: args.path.match(/(lessondev|guarddev)\.js$/)[1], namespace: "ria-stub" }));
+  b.onLoad({ filter: /.*/, namespace: "ria-stub" }, (args) => ({ contents: STUBS[args.path], loader: "js" }));
 } };
 const app = await esbuild.build({ ...common, entryPoints: [a.app], format: "iife", plugins: [noDevLessons],
   define: { "import.meta.url": "location.href" } });
@@ -124,8 +130,27 @@ for (const m of mods) {
 process.stdout.write(JSON.stringify({ index, files, contents, tasks }));
 """
 
+# 경비실 장 파일 나누기(v0.16.0 작업 1): data/guard.js INCIDENTS → 색인 + guard/chN-<지문>.json (src/guard/catalog.js가 나눔)
+NODE_GUARD = r"""
+const [dataUrl, libUrl] = process.argv.slice(1);
+const crypto = await import("node:crypto");
+const d = await import(dataUrl); const lib = await import(libUrl);
+const { index, chapters } = lib.splitGuard(d.INCIDENTS);
+const files = {}, contents = {};
+for (const [n, list] of Object.entries(chapters)) {
+  const text = JSON.stringify(list);
+  const hash = crypto.createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex").slice(0, 8);
+  const name = `guard/ch${n}-${hash}.json`;
+  if (!lib.GUARD_FILE_RE.test(name)) throw new Error(`bad guard file name ${name}`);
+  files[n] = name;
+  contents[name] = text;
+}
+process.stdout.write(JSON.stringify({ index, files, contents }));
+"""
 
-OWNED = ("index.html", "manifest.webmanifest", "manifest.en.webmanifest", "sw.js", "icons", "lessons", "lang", "py", "licenses.txt")
+
+OWNED = ("index.html", "manifest.webmanifest", "manifest.en.webmanifest", "sw.js", "icons", "lessons", "guard", "lang", "py",
+         "licenses.txt")
 HOOKS = ("RIA_WORKER_URL", "RIA_RUNNER_URL")
 
 
@@ -246,6 +271,18 @@ def split_lessons(lessons_dir):
     return out
 
 
+def split_guard():
+    """경비실 사건 나누기 결과: {index: [색인 칸], files: {n: 이름}, contents: {이름: JSON 글자}} (solution은 빠짐)"""
+    r = subprocess.run(["node", "--input-type=module", "-e", NODE_GUARD,
+                        "file://" + os.path.join(ROOT, "data", "guard.js"),
+                        "file://" + os.path.join(SRC, "guard", "catalog.js")],
+                       cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr)
+        raise SystemExit("build: could not split data/guard.js")
+    return json.loads(r.stdout)
+
+
 def check_no_lesson_text(html, tasks):
     """index.html에 문제 문장이 남지 않았는지 (장 파일로만 나가야 함)"""
     leaked = [t for t in tasks if t and t in html]
@@ -318,6 +355,8 @@ window.RIA_PYODIDE_URL = {pyodide};
 window.RIA_RUNNER_URL = {runner_url};
 window.RIA_LESSON_INDEX = {lesson_index};
 window.RIA_CHAPTER_FILES = {chapter_files};
+window.RIA_GUARD_INDEX = {guard_index};
+window.RIA_GUARD_FILES = {guard_files};
 window.RIA_LANG_FILES = {lang_files};
 (function () {{
   try {{
@@ -378,6 +417,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
         en_split["files"] = {n: name.replace("lessons/", "lessons/en/", 1) for n, name in en_split["files"].items()}
         en_split["contents"] = {name.replace("lessons/", "lessons/en/", 1): body for name, body in en_split["contents"].items()}
     packs = lang_packs(en_split)
+    guard = split_guard()
     b = bundle()
     if not all(h in b["app"] for h in HOOKS):
         raise SystemExit("build: bundled app lost %s" % "/".join(HOOKS))
@@ -398,6 +438,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     config = CONFIG.format(version=js_string(version), pyodide=js_string(pyodide_url),
                            runner_url=js_string(runner_name), worker=js_string(b["worker"]),
                            lesson_index=js_value(split["index"]), chapter_files=js_value(split["files"]),
+                           guard_index=js_value(guard["index"]), guard_files=js_value(guard["files"]),
                            lang_files=js_value({k: v[0] for k, v in packs.items()}))
     if "<!-- RIA:CONFIG -->" not in html:
         raise SystemExit("build: marker CONFIG not found in src/index.html")
@@ -433,6 +474,19 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
             chapter_sizes.append((name, len(body)))
     # 영어 장(v0.13.4)은 미리 받지 않는다: 한국어 사용자가 판마다 영어 레슨을 더 받지 않게. 처음 열 때 sw가 받아 저장.
     chapter_files = [name for name, _ in chapter_sizes if not name.startswith("lessons/en/")]
+    # 경비실 장 파일(v0.16.0): 레슨 장 파일과 같이 미리 받음(오프라인에서 사건 열기)
+    os.makedirs(os.path.join(out, "guard"))
+    guard_sizes = []
+    for n, name in sorted(guard["files"].items(), key=lambda kv: int(kv[0])):
+        body = guard["contents"][name].encode("utf-8")
+        if hashlib.sha256(body).hexdigest()[:8] != re.search(r"-([0-9a-f]{8})\.json$", name).group(1):
+            raise SystemExit("build: guard file hash mismatch for " + name)
+        if b'"solution"' in body:
+            raise SystemExit("build: solution leaked into " + name)
+        with open(os.path.join(out, name), "wb") as f:
+            f.write(body)
+        guard_sizes.append((name, len(body)))
+    chapter_files += [name for name, _ in guard_sizes]
     lang_sizes = []
     if packs:
         os.makedirs(os.path.join(out, "lang"))
@@ -483,6 +537,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     print("lessons: %d chapter files, %.1f KB total" % (len(chapter_sizes), sum(sz for _, sz in chapter_sizes) / 1024))
     for name, sz in chapter_sizes:
         print("  %s %.1f KB" % (name, sz / 1024))
+    print("guard: %d chapter files, %.1f KB total" % (len(guard_sizes), sum(sz for _, sz in guard_sizes) / 1024))
     for name, sz in lang_sizes:
         print("lang: %s %.1f KB" % (name, sz / 1024))
     if raw > MAX_RAW:

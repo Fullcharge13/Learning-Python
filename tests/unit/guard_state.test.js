@@ -183,3 +183,37 @@ test("rankOf 경계", () => {
   assert.equal(rankOf(mk(4)), "captain");
   assert.equal(rankOf(mk(6)), "sheriff");
 });
+
+const INHERITED = ["toString", "valueOf", "constructor", "hasOwnProperty", "__proto__"];
+
+test("cleanGuard·migrate: 상속 이름 id는 모든 칸에서 버림(예외 없음)", async () => {
+  const { migrate } = await import("../../src/save.js");
+  const entry = { firstTry: true, how: "code" };
+  const raw = JSON.parse(JSON.stringify({ guard: { solved: {}, blanks: {}, attempts: {}, code: {}, seen: INHERITED } }));
+  for (const k of INHERITED) {
+    Object.defineProperty(raw.guard.solved, k, { value: entry, enumerable: true, configurable: true, writable: true });
+    Object.defineProperty(raw.guard.blanks, k, { value: [1], enumerable: true, configurable: true, writable: true });
+    Object.defineProperty(raw.guard.attempts, k, { value: 3, enumerable: true, configurable: true, writable: true });
+    Object.defineProperty(raw.guard.code, k, { value: "x", enumerable: true, configurable: true, writable: true });
+  }
+  for (const g of [cleanGuard(raw.guard), migrate(raw).guard]) {
+    assert.deepEqual(Object.keys(g.solved), []);
+    assert.deepEqual(Object.keys(g.blanks), []);
+    assert.deepEqual(Object.keys(g.attempts), []);
+    assert.deepEqual(Object.keys(g.code), []);
+    assert.deepEqual(g.seen, []);
+    assert.equal(rankOf(g), "apprentice");
+  }
+  assert.doesNotThrow(() => migrate(JSON.parse('{"guard":{"blanks":{"toString":[1]}}}')));
+  assert.deepEqual(cleanGuard(JSON.parse('{"solved":{"valueOf":{"firstTry":true,"how":"code"}},"seen":["toString"]}')), newGuard());
+});
+
+test("applyGuardRun·markSeen: 상속 이름 id는 저장 그대로", () => {
+  const inp = guardInput(G("G1"), "ko");
+  const save = quietSave();
+  const before = structuredClone(save);
+  for (const k of INHERITED) {
+    assert.deepEqual(applyGuardRun(save, k, perfectResult(inp), "code", NOW).save, before);
+    assert.deepEqual(markSeen(newGuard(), k).seen, []);
+  }
+});

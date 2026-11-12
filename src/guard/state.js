@@ -13,7 +13,8 @@ import { lang } from "../i18n.js";
 
 const GUARD_VER = 1;
 const CODE_MAX = 4000;
-const BY_ID = Object.fromEntries(INCIDENTS.map((i) => [i.id, i]));
+// 상속 이름(toString 등)이 id로 통과하지 않게 프로토타입 없는 객체로
+const BY_ID = Object.assign(Object.create(null), Object.fromEntries(INCIDENTS.map((i) => [i.id, i])));
 const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const nonNeg = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
 

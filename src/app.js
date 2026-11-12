@@ -19,6 +19,9 @@ import { createLessonData, chaptersForConcepts, mergeLangLessons } from "./lesso
 import { advancedIds } from "./advanced.js";
 import { lessonStateOf } from "./curriculum.js";
 import { loadDevChapters } from "./lessondev.js";
+import { createGuardData } from "./guard/catalog.js";
+import { loadDevIncidents } from "./guard/guarddev.js";
+import { setGuardIndex } from "./guard/state.js";
 import { createSound } from "./sound.js";
 import { toast } from "./ui/dom.js";
 import { statusBar } from "./ui/nav.js";
@@ -85,11 +88,28 @@ async function reloadLessons() {
   app.advanced = app.chapters.flatMap((c) => c.advanced || []);
 }
 
+// 경비실 사건(v0.16.0 작업 2). 배포판: build.py가 넣은 색인·장 파일 이름표 → 본문은 사건을 열 때 받음(곧바로, 기다림 없음).
+// 개발판: 둘 다 없음 → data/guard.js를 불러옴(guarddev.js, 배포판에서는 []를 돌려주는 빈 모듈).
+function prodGuardData() {
+  if (!window.RIA_GUARD_INDEX || !window.RIA_GUARD_FILES) return null;
+  return createGuardData({ index: window.RIA_GUARD_INDEX, files: window.RIA_GUARD_FILES, base: location.href });
+}
+/**
+ * 판정 G2-C3: 색인은 저장을 읽기(migrate → cleanGuard) 전에 넣어야 한다. 색인 없이 다듬으면 해결 기록을 지우게 되므로
+ * state.js는 색인이 없으면 던지고, 색인을 못 만들면(배포판인데 이름표가 없음 등) setGuardIndex가 던져 앱 시작이 멈춘다.
+ */
+async function initGuard() {
+  const data = prodGuardData() || createGuardData({ incidents: await loadDevIncidents() });
+  setGuardIndex(data.index);
+  app.guard = data;
+}
+
 const app = {
   save: null, screen: null, params: null, modal: null,
   chapters: [], lessons: [],   // 레슨 목록(문제·카드 없음). 전체는 ctx.getLesson / getChapter. lessons는 본 과정만
   advanced: [],                // 심화 레슨 목록(v0.7, 선택 레슨)
   data: null,
+  guard: null,           // 경비실 사건 { index, load(장) } (v0.16.0, src/guard/catalog.js createGuardData)
   dataLang: null,        // app.data(레슨 목록·장 파일)가 어느 언어로 불러온 것인지(v0.13.4)
   swChanged: false,      // 이 페이지를 다루던 서비스 작업자가 새 판으로 바뀜 → 장 파일 이름표가 옛것일 수 있음
   cleanup: null,
@@ -375,6 +395,7 @@ const ctx = {
   daily, dailyStep, finishDaily: finishDailyChallenge,
   get chapters() { return app.chapters; },
   get lessons() { return app.lessons; },
+  get guard() { return app.guard; },
   get advanced() { return app.advanced; },
   advancedIds: () => advancedIds(app.chapters),
   lessonById,
@@ -423,6 +444,7 @@ const ctx = {
 
 async function boot() {
   const root = document.getElementById("app");
+  await initGuard();   // 저장을 읽기 전에(판정 G2-C3)
   app.dev = readDevFlag(storage);
   paintDev();
   const { save, readFailed, brokenKey } = loadSlot(storage, app.dev);

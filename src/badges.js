@@ -1,7 +1,7 @@
 // 배지 판정 (설계서 5-5). 새로 얻은 id만 돌려줌
 import { BADGES } from "../data/badges.js";
 import { isAdvancedId } from "./advanced.js";
-import { INCIDENTS } from "../data/guard.js";
+import { guardIndex } from "./guard/state.js";
 
 const done = (s, id) => (s.completed_lessons || []).includes(id);
 const stat = (s, k) => (s.stats && s.stats[k]) || 0;
@@ -26,7 +26,8 @@ export const RULES = {
   advanced1: (s) => (s.completed_lessons || []).some(isAdvancedId),
   advancedAll: (s, ctx) => Array.isArray(ctx.advancedIds) && ctx.advancedIds.length > 0 && ctx.advancedIds.every((id) => done(s, id)),
   guard_first: (s) => Object.keys(s.guard?.solved ?? {}).length >= 1,
-  guard_perfect: (s) => INCIDENTS.every((i) => s.guard?.solved?.[i.id]?.firstTry === true),
+  // 「완벽한 문지기」: 색인의 모든 사건을 첫 실행에 해결(v0.16.0: 본문 대신 색인)
+  guard_perfect: (s) => guardIndex().every((i) => s.guard?.solved?.[i.id]?.firstTry === true),
 };
 
 export function checkBadges(save, ctx = {}) {

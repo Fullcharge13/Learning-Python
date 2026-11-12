@@ -1,4 +1,5 @@
 // v0.11.1 개발자 모드(검수용): 따로 저장 칸, 학습 기록은 그대로, 잠금 판정은 한 곳(isDev)으로
+import "./_guard_index.js";   // 판정 G2-C3: 저장을 읽기 전에 경비실 색인
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SAVE_KEY, newSave, loadEx } from "../../src/save.js";

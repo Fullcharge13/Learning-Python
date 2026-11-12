@@ -1,3 +1,4 @@
+import "./_guard_index.js";   // 판정 G2-C3: 저장을 읽기 전에 경비실 색인
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SAVE_KEY, SAVE_VER, newSave, migrate, load, loadEx, store, takeRefundNotice, refundNoticeText } from "../../src/save.js";

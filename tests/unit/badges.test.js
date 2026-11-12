@@ -2,6 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkBadges, RULES } from "../../src/badges.js";
 import { BADGES } from "../../data/badges.js";
+import { setGuardIndex, guardIndex } from "../../src/guard/state.js";
+import { buildGuardIndex } from "../../src/guard/catalog.js";
+import { INCIDENTS } from "../../data/guard.js";
+
+// 판정 G2-C3: 앱처럼 색인을 먼저 넣는다
+const FULL = buildGuardIndex(INCIDENTS);
+setGuardIndex(FULL);
 
 function mkSave(over = {}) {
   return {
@@ -119,12 +126,31 @@ test("badge_guard_first: 경비실 사건 하나 해결", () => {
   assert.deepEqual(checkBadges(mkSave({ guard: { solved: { G1: { firstTry: false, how: "code" } } } }), {}), ["guard_first"]);
 });
 
-test("badge_guard_perfect: 6개 모두 첫 실행(firstTry)일 때만", () => {
-  const ids = ["G1", "G2", "G3", "G4", "G5", "G6"];
+test("badge_guard_perfect: 색인의 사건 모두 첫 실행(firstTry)일 때만", () => {
+  const ids = guardIndex().map((e) => e.id);
+  const last = ids[ids.length - 1];
   const solved = Object.fromEntries(ids.map((id) => [id, { firstTry: true, how: "blank" }]));
   assert.deepEqual(checkBadges(mkSave({ guard: { solved } }), {}), ["guard_first", "guard_perfect"]);
-  solved.G6.firstTry = false;
+  solved[last].firstTry = false;
   assert.deepEqual(checkBadges(mkSave({ guard: { solved } }), {}), ["guard_first"]);
-  delete solved.G6;
+  delete solved[last];
   assert.ok(!checkBadges(mkSave({ guard: { solved } }), {}).includes("guard_perfect"));
+});
+
+test("badge_guard_perfect: 색인 3개짜리 — 셋 모두 firstTry면 받고, 하나 빠지면 아님, 이미 가진 배지는 그대로", () => {
+  setGuardIndex(FULL.slice(0, 3));
+  try {
+    const ids = FULL.slice(0, 3).map((e) => e.id);
+    const solved = Object.fromEntries(ids.map((id) => [id, { firstTry: true, how: "blank" }]));
+    assert.equal(RULES.guard_perfect(mkSave({ guard: { solved } })), true);
+    assert.ok(checkBadges(mkSave({ guard: { solved } }), {}).includes("guard_perfect"));
+    delete solved[ids[2]];
+    assert.equal(RULES.guard_perfect(mkSave({ guard: { solved } })), false);
+    // 이미 받은 배지는 다시 주지도 뺏지도 않음(checkBadges는 새 것만)
+    const had = mkSave({ guard: { solved }, badges: ["guard_first", "guard_perfect"] });
+    assert.deepEqual(checkBadges(had, {}), []);
+    assert.deepEqual(had.badges, ["guard_first", "guard_perfect"]);
+  } finally {
+    setGuardIndex(FULL);
+  }
 });

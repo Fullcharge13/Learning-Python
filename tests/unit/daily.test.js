@@ -1,4 +1,5 @@
 // v0.9 작업 2: 매일 도전 — 문제 고르기·진행 기록·보상·연속 기록 (판정 C53, C54)
+import "./_guard_index.js";   // 판정 G2-C3: 저장을 읽기 전에 경비실 색인
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

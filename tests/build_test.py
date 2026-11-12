@@ -791,6 +791,31 @@ def test_runner_has_guard():
     assert len(open(os.path.join(DIST, "index.html"), "rb").read()) < MAX_RAW
 
 
+GUARD_G1_SRC = r"""
+const m = await import(process.argv[1]);
+const g = m.INCIDENTS.find((i) => i.id === "G1");
+console.log(JSON.stringify({ why: g.tries[0].why, solution: g.solution }));
+"""
+FIRST_FILE_LIMIT = 844_631   # v0.16.0 작업 2: v0.15.0 첫 파일 크기. 사건 본문이 빠지므로 이보다 작아야 한다
+
+
+def test_guard_not_in_first_file():
+    """v0.16.0 작업 2: 사건 본문(「왜?」 글·정답)은 첫 파일에 없고(장 파일에서 받음), 첫 파일은 v0.15.0보다 작다."""
+    _build()
+    r = subprocess.run(["node", "--input-type=module", "-e", GUARD_G1_SRC,
+                        "file://" + os.path.join(ROOT, "data", "guard.js")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    g1 = json.loads(r.stdout)
+    assert g1["why"] == "암호와 똑같아서 들입니다.", g1["why"]
+    raw = open(os.path.join(DIST, "index.html"), "rb").read()
+    assert len(raw) < FIRST_FILE_LIMIT, len(raw)
+    html = raw.decode("utf-8")
+    assert g1["why"] not in html, "G1 why text must not be in the first file"
+    sol = g1["solution"]
+    for form in (sol, json.dumps(sol), json.dumps(sol, ensure_ascii=False)[1:-1], "allow()\\nelse:\\n    block()"):
+        assert form not in html, "G1 solution must not be in the first file: %r" % form
+
+
 def _flow_module():
     spec = importlib.util.spec_from_file_location("ria_flow", os.path.join(ROOT, "tests", "flow.py"))
     mod = importlib.util.module_from_spec(spec)

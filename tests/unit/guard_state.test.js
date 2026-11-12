@@ -2,13 +2,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   newGuard, cleanGuard, guardOpen, incidentOpen, guardNews, markSeen, guardInput, guardConsistent,
-  applyGuardRun, RANKS, rankOf,
+  applyGuardRun, RANK_IDS, rankOf, rankThresholds, setGuardIndex, guardIndex, clearGuardIndex,
 } from "../../src/guard/state.js";
 import { INCIDENTS, GUARD_XP } from "../../data/guard.js";
+import { buildGuardIndex } from "../../src/guard/catalog.js";
 import { newSave } from "../../src/save.js";
 import { localDate } from "../../src/today.js";
 
 const G = (id) => INCIDENTS.find((i) => i.id === id);
+// 판정 G2-C3: 앱처럼 저장을 읽기 전에 색인을 넣는다
+const FULL = buildGuardIndex(INCIDENTS);
+setGuardIndex(FULL);
 const NOW = new Date(2026, 10, 12, 12, 0, 0);
 
 // 입력에서 엔진 결과 모양을 만든다 (verdict는 expect를 그대로 따름 = 모두 정답)
@@ -100,7 +104,7 @@ test("guardConsistent: en 값으로 대조", () => {
 test("applyGuardRun: 첫 해결 → XP 5, firstTry, 바이트는 earnXp·tick이 보고한 것 외에 없음", () => {
   const inp = guardInput(G("G1"), "ko");
   const save = quietSave();
-  const { save: s, outcome } = applyGuardRun(save, "G1", perfectResult(inp), "blank", NOW);
+  const { save: s, outcome } = applyGuardRun(save, G("G1"), perfectResult(inp), "blank", NOW);
   assert.equal(outcome.solved, true);
   assert.equal(outcome.firstSolve, true);
   assert.equal(outcome.firstTry, true);
@@ -119,7 +123,7 @@ test("applyGuardRun: 첫 해결 → XP 5, firstTry, 바이트는 earnXp·tick이
 test("applyGuardRun: 바이트는 오직 earnXp 이정표·tick 퀘스트 보상으로만 (guard 자체는 주지 않음)", () => {
   const inp = guardInput(G("G1"), "ko");
   const save = newSave(); // 퀘스트·이정표가 낄 수 있는 새 저장
-  const { save: s, outcome } = applyGuardRun(save, "G1", perfectResult(inp), "code", NOW);
+  const { save: s, outcome } = applyGuardRun(save, G("G1"), perfectResult(inp), "code", NOW);
   const milestoneBytes = outcome.milestone ? outcome.milestone.bytes ?? 0 : 0;
   const questBytes = s.bytes - save.bytes - milestoneBytes;
   assert.ok(questBytes >= 0);
@@ -129,8 +133,8 @@ test("applyGuardRun: 바이트는 오직 earnXp 이정표·tick 퀘스트 보상
 
 test("applyGuardRun: 같은 사건 다시 → XP 0, solved 기록 그대로", () => {
   const inp = guardInput(G("G1"), "ko");
-  const a = applyGuardRun(quietSave(), "G1", perfectResult(inp), "blank", NOW);
-  const b = applyGuardRun(a.save, "G1", perfectResult(inp), "code", NOW);
+  const a = applyGuardRun(quietSave(), G("G1"), perfectResult(inp), "blank", NOW);
+  const b = applyGuardRun(a.save, G("G1"), perfectResult(inp), "code", NOW);
   assert.equal(b.outcome.solved, true);
   assert.equal(b.outcome.firstSolve, false);
   assert.equal(b.outcome.xp, 0);
@@ -141,12 +145,12 @@ test("applyGuardRun: 같은 사건 다시 → XP 0, solved 기록 그대로", ()
 
 test("applyGuardRun: 실패 뒤 해결 → firstTry false", () => {
   const inp = guardInput(G("G1"), "ko");
-  const a = applyGuardRun(quietSave(), "G1", failingResult(inp), "blank", NOW);
+  const a = applyGuardRun(quietSave(), G("G1"), failingResult(inp), "blank", NOW);
   assert.equal(a.outcome.solved, false);
   assert.equal(a.outcome.xp, 0);
   assert.equal(a.save.guard.attempts.G1, 1);
   assert.equal(a.save.guard.runs, 1);
-  const b = applyGuardRun(a.save, "G1", perfectResult(inp), "blank", NOW);
+  const b = applyGuardRun(a.save, G("G1"), perfectResult(inp), "blank", NOW);
   assert.equal(b.outcome.firstTry, false);
   assert.equal(b.outcome.xp, 5);
   assert.deepEqual(b.save.guard.solved.G1, { firstTry: false, how: "blank" });
@@ -157,11 +161,11 @@ test("applyGuardRun: 대조 실패 결과 → 저장 변화 없음(attempts 포�
   const res = perfectResult(inp); res.stats.attacks_blocked += 1;
   const save = quietSave();
   const before = structuredClone(save);
-  const out = applyGuardRun(save, "G1", res, "blank", NOW);
+  const out = applyGuardRun(save, G("G1"), res, "blank", NOW);
   assert.equal(out.outcome.solved, false);
   assert.equal(out.outcome.xp, 0);
   assert.deepEqual(out.save, before);
-  const unknown = applyGuardRun(save, "G9", perfectResult(inp), "blank", NOW);
+  const unknown = applyGuardRun(save, { ...G("G1"), id: "G9" }, perfectResult(inp), "blank", NOW);
   assert.deepEqual(unknown.save, before);
   assert.deepEqual(save, before); // 입력 저장을 바꾸지 않음
 });
@@ -170,11 +174,11 @@ test("applyGuardRun: 에러로 멈춘 결과는 해결 아님", () => {
   const inp = guardInput(G("G1"), "ko");
   const res = perfectResult(inp); res.solved = false; res.stopped = "error"; res.events = res.events.slice(0, 2);
   const r = resultOf(inp, res.events, "error");
-  assert.equal(applyGuardRun(quietSave(), "G1", r, "blank", NOW).outcome.solved, false);
+  assert.equal(applyGuardRun(quietSave(), G("G1"), r, "blank", NOW).outcome.solved, false);
 });
 
 test("rankOf 경계", () => {
-  assert.deepEqual(RANKS.map((r) => r.id), ["apprentice", "keeper", "captain", "sheriff"]);
+  assert.deepEqual(RANK_IDS, ["apprentice", "keeper", "captain", "sheriff"]);
   const mk = (n) => ({ ...newGuard(), solved: Object.fromEntries(INCIDENTS.slice(0, n).map((i) => [i.id, { firstTry: true, how: "code" }])) });
   assert.equal(rankOf(mk(0)), "apprentice");
   assert.equal(rankOf(mk(1)), "apprentice");
@@ -213,7 +217,73 @@ test("applyGuardRun·markSeen: 상속 이름 id는 저장 그대로", () => {
   const save = quietSave();
   const before = structuredClone(save);
   for (const k of INHERITED) {
-    assert.deepEqual(applyGuardRun(save, k, perfectResult(inp), "code", NOW).save, before);
+    assert.deepEqual(applyGuardRun(save, { ...G("G1"), id: k }, perfectResult(inp), "code", NOW).save, before);
     assert.deepEqual(markSeen(newGuard(), k).seen, []);
   }
+});
+
+// ---- v0.16.0 작업 2: 색인 ----
+
+test("rankThresholds: 사건 수 N에서 0·⌈N/3⌉·⌈2N/3⌉·N", () => {
+  assert.deepEqual(rankThresholds(12), { apprentice: 0, keeper: 4, captain: 8, sheriff: 12 });
+  assert.deepEqual(rankThresholds(45), { apprentice: 0, keeper: 15, captain: 30, sheriff: 45 });
+  assert.deepEqual(rankThresholds(6), { apprentice: 0, keeper: 2, captain: 4, sheriff: 6 });
+});
+
+test("guardIndex: 넣은 색인 그대로(장 순서·id·보기 수)", () => {
+  assert.deepEqual(guardIndex().map((e) => e.id), INCIDENTS.map((i) => i.id));
+  assert.deepEqual(guardIndex().find((e) => e.id === "G1").blanks, G("G1").blanks.map((b) => b.options.length));
+  assert.ok(guardIndex().every((e) => !("tries" in e) && !("solution" in e)));
+});
+
+test("cleanGuard는 색인 보기 수로 다듬고 옛 고르기를 지킴", () => {
+  const g = cleanGuard({ blanks: { G1: [0, 1, 2], G3: [0, 9, 1] } });
+  assert.deepEqual(g.blanks.G1, [0, 1, 2]);
+  assert.deepEqual(g.blanks.G3, [0, null, 1]);
+});
+
+test("guardInput: files가 있으면 그대로 넘김", () => {
+  const files = { "log.txt": "a\nb" };
+  const inc = { id: "GX", mode: "script", tries: [{ value: "a", expect: "allow" }], files };
+  assert.deepEqual(guardInput(inc, "ko"), { mode: "script", tries: [{ value: "a", expect: "allow" }], files });
+  assert.equal("files" in guardInput(G("G2"), "ko"), false);
+});
+
+test("색인 없이 부르면 분명한 오류(모든 id를 모른다고 보고 기록을 지우지 않음, 판정 G2-C3)", () => {
+  clearGuardIndex();
+  try {
+    const raw = { solved: { G1: { firstTry: true, how: "blank" } } };
+    assert.throws(() => cleanGuard(raw), /guard index/);
+    assert.throws(() => guardNews(newGuard(), new Set([3])), /guard index/);
+    assert.throws(() => rankOf(raw), /guard index/);
+    assert.throws(() => guardIndex(), /guard index/);
+    assert.throws(() => applyGuardRun(quietSave(), G("G1"), perfectResult(guardInput(G("G1"), "ko")), "blank", NOW), /guard index/);
+    assert.throws(() => markSeen(newGuard(), "G1"), /guard index/);
+    assert.throws(() => setGuardIndex([]), /setGuardIndex/);
+    assert.throws(() => setGuardIndex(null), /setGuardIndex/);
+    assert.throws(() => setGuardIndex([{ id: "G1" }]), /setGuardIndex/);
+  } finally {
+    setGuardIndex(FULL);
+  }
+  assert.deepEqual(cleanGuard({ solved: { G1: { firstTry: true, how: "blank" } } }).solved, { G1: { firstTry: true, how: "blank" } });
+});
+
+test("색인을 바꾸면 등급·새 소식이 그 색인을 따름", () => {
+  const three = FULL.filter((e) => e.need === 3).concat(FULL.find((e) => e.id === "G3"));
+  setGuardIndex(three);
+  try {
+    assert.deepEqual(guardIndex().map((e) => e.id), ["G1", "G2", "G3"]);
+    const solved = { G1: { firstTry: true, how: "blank" } };
+    assert.equal(rankOf({ solved }), "keeper");   // ⌈3/3⌉ = 1
+    assert.equal(guardNews({ seen: ["G1", "G2"] }, new Set([3, 4, 5])), true);   // G3
+    assert.equal(guardNews({ seen: ["G1", "G2", "G3"] }, new Set([3, 4, 5])), false); // G4는 색인에 없음
+    assert.deepEqual(cleanGuard({ seen: ["G1", "G4"] }).seen, ["G1"]);
+  } finally {
+    setGuardIndex(FULL);
+  }
+});
+
+test("applyGuardRun: 둘째 인자는 받은 사건 본문(시도 목록이 있어야 결과를 대조)", () => {
+  const inp = guardInput(G("G1"), "ko");
+  assert.throws(() => applyGuardRun(quietSave(), "G1", perfectResult(inp), "blank", NOW), TypeError);
 });

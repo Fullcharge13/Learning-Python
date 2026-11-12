@@ -1,4 +1,5 @@
 // v0.10 작업 3: 파이의 텃밭 상태·주문·성장·저장·보상 (설계서 §4)
+import "./_guard_index.js";   // 판정 G2-C3: 저장을 읽기 전에 경비실 색인
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {

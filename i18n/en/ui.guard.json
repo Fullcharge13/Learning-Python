@@ -25,6 +25,8 @@
  "빈칸을 모두 골라요": "Fill in every blank first",
  "사건 목록": "Cases",
  "사건 해결!": "Case Solved!",
+ "사건을 불러오는 중…": "Loading the case…",
+ "사건을 불러오지 못했어요": "Couldn't load the case",
  "손님": "Guest",
  "시도 {}: {}": "Try {}: {}",
  "시도 줄": "Tries",

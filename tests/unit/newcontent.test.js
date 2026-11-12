@@ -1,4 +1,5 @@
 // v0.7.1 「새 내용」 점 (설계 docs/specs/2026-11-01-기초-보강-1-6장-설계.md 3절)
+import "./_guard_index.js";   // 판정 G2-C3: 저장을 읽기 전에 경비실 색인
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { hasNewContent, lessonUpdated, markSeen } from "../../src/newcontent.js";

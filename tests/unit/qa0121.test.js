@@ -1,4 +1,5 @@
 // v0.12.1 앱 전체 QA 고침 — 저장 가져오기 검사, 하루 목표 바꾸기(내일부터), 깨진 저장 안내, migrate 타입 복구
+import "./_guard_index.js";   // 판정 G2-C3: 저장을 읽기 전에 경비실 색인
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { newSave, migrate, loadEx, SAVE_KEY, takeBrokenNotice, BROKEN_NOTICE_TEXT } from "../../src/save.js";

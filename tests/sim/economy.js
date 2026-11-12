@@ -35,6 +35,11 @@ import { finishDaily, newDaily } from "../../src/daily.js";
 import { gardenOrderOpen } from "../../src/quests.js";
 import { grantOrderXP } from "../../src/garden/state.js";
 import { ORDERS } from "../../data/garden.js";
+import { setGuardIndex } from "../../src/guard/state.js";
+import { buildGuardIndex } from "../../src/guard/catalog.js";
+import { INCIDENTS } from "../../data/guard.js";
+
+setGuardIndex(buildGuardIndex(INCIDENTS));   // 판정 G2-C3: 배지 판정(guard_perfect)이 색인을 쓴다
 
 const ADV_PLACEHOLDER_CHAPTERS = [1, 2, 3, 4, 5, 6];   // v0.7 계획: 1~6장 심화
 

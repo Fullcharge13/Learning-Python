@@ -1,4 +1,5 @@
 // v0.12.5: 하단 메뉴 「텃밭」 칸 — 잠김·새 소식 점·칸 순서
+import "./_guard_index.js";   // 판정 G2-C3: 저장을 읽기 전에 경비실 색인
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gardenTab, newGarden, addPendingDone } from "../../src/garden/state.js";

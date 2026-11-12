@@ -58,6 +58,9 @@
                  바이트 그대로(XP 퀘스트 없는 저장, 판정 G-C2) → 직접 쓰기(처음 내용은 빈칸 비운 시작 코드) 해결, how는 처음 값 /
                  재생 중 사건 목록에서 G2로 바꾸면 결과 비움 / 영어 화면에 한글 없음(시도 값 포함) / 움직임 줄이기는 재생 없음.
                  넘침·터치 44px·콘솔 오류 0. 캡처: guard-*.png, docs/img/guard-g1.png·guard-replay.png (iPhone 17)
+- test_guard_room_load_fail_retry / _switch_while_loading: v0.16.0 작업 2. 사건 본문은 장 파일(guard/chN-*.json)에서 받는다.
+                 장 파일을 막으면 「사건을 불러오지 못했어요」+「다시 시도」 → 풀고 다시 시도하면 카드 / 3장 파일이 늦는 동안
+                 4장 G3으로 바꾸면 늦게 온 G1 카드는 그리지 않는다. 캡처: guard-load-fail.png
 """
 
 import atexit
@@ -3709,10 +3712,12 @@ def _guard_g(**kw):
     return g
 
 
-def _open_guard(a):
+def _open_guard(a, loaded=True):
     _open_garden(a)
     a.page.click("#g-guard")
     a.page.wait_for_selector(".screen.guard")
+    if loaded:   # v0.16.0: 사건 본문은 장 파일에서 받는다(「불러오는 중」 → 카드)
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
     a.page.wait_for_timeout(150)
 
 
@@ -3942,6 +3947,10 @@ def test_guard_room_english():
         left = _hangul_left(a)
         if left:
             fails.append("list: %r" % left)
+        sheet_txt = a.page.inner_text(".modal.g-sheet") + " " + a.js(
+            "() => [...document.querySelectorAll('.modal.g-sheet [aria-label]')].map(e => e.getAttribute('aria-label')).join(' ')")
+        if re.search(r"[가-힣]", sheet_txt):
+            fails.append("list sheet has Hangul: %r" % sheet_txt)
         _sheet_pick(a, '[data-v="G5"]')
         _gd_run(a)
         vals = a.js("() => [...document.querySelectorAll('.gd-try')].map(e => e.textContent).join(' ')")
@@ -3996,6 +4005,86 @@ def test_guard_room_reduced_motion():
         assert "막은 공격" in a.page.inner_text("#gd-result")
         assert a.js("() => document.querySelectorAll('.gd-try.ok, .gd-try.bad').length") == 7
         assert not a.errors, a.errors
+
+
+GUARD_FILE_GLOB = re.compile(r"/guard/ch\d+-[0-9a-f]{8}\.json$")
+GUARD_CH3_GLOB = re.compile(r"/guard/ch3-[0-9a-f]{8}\.json$")
+
+
+def _app_errors(a):
+    """콘솔 오류 중 앱 오류만: 시험이 일부러 막은 요청을 브라우저가 적는 「Failed to load resource」 줄은 뺀다"""
+    return [e for e in a.errors if "Failed to load resource" not in e]
+
+
+def test_guard_room_load_fail_retry():
+    """v0.16.0 작업 2: 장 파일을 받지 못하면 「사건을 불러오지 못했어요」·「다시 시도」 → 막기를 풀고 다시 시도 → 사건 카드."""
+    fails = []
+    with App("iPhone 17", save=_guard_seed(3)) as a:
+        a.page.route(GUARD_FILE_GLOB, lambda route: route.abort())
+        _open_guard(a, loaded=False)
+        a.page.wait_for_selector("#gd-retry", timeout=15_000)
+        card = a.page.inner_text("#gd-card")
+        if "사건을 불러오지 못했어요" not in card or "다시 시도" not in card:
+            fails.append("fail card: %r" % card)
+        if a.page.query_selector("#gd-card svg[role=img]"):
+            fails.append("crow shown without a body")
+        if not a.page.is_disabled("#gd-run"):
+            fails.append("run enabled without a body")
+        if _gd_state(a) == "idle":
+            fails.append("state idle without a body")
+        if "G1" in (a.save().get("guard") or {}).get("seen", []):
+            fails.append("G1 marked seen before it loaded")
+        a.shot("guard-load-fail.png")
+        _gd_check_layout(a, "guard-load-fail", fails)
+        a.page.unroute(GUARD_FILE_GLOB)
+        a.page.click("#gd-retry")
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+        if "창고 문 암호" not in a.page.inner_text("#gd-card"):
+            fails.append("not on G1 after retry: %r" % a.page.inner_text("#gd-card"))
+        if "G1" not in (a.save().get("guard") or {}).get("seen", []):
+            fails.append("G1 not marked seen after load")
+        if not a.page.query_selector(".gd-blank") or not a.page.query_selector(".gd-try"):
+            fails.append("code / tries not painted")
+        errs = _app_errors(a)
+        if errs:
+            fails.append("console errors %r" % errs)
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_room_switch_while_loading():
+    """3장 파일이 늦게 오는 동안 목록에서 4장 G3을 고르면 끝에 화면은 G3이고, 늦게 온 G1 카드는 나타나지 않는다."""
+    fails = []
+    guard = _guard_g(seen=["G1", "G2"])
+
+    # 3장 파일만 1.5초 늦게(페이지의 fetch를 감싼다. Playwright route에서 기다리면 시험 쪽 동작도 멈춤)
+    slow = """(() => { const f = window.fetch.bind(window);
+        window.fetch = (u, o) => /\\/guard\\/ch3-[0-9a-f]{8}\\.json$/.test(String(u && u.url || u))
+          ? new Promise((res) => setTimeout(res, 1500)).then(() => f(u, o)) : f(u, o);
+        new MutationObserver(() => { const e = document.querySelector('#gd-card .gd-id');
+          if (e && e.textContent === 'G1') window.__gdG1 = true; }).observe(document, { childList: true, subtree: true }); })();"""
+
+    with App("iPhone 17", save=_guard_seed(4, guard=guard), init_js=slow) as a:
+        _open_guard(a, loaded=False)
+        a.page.wait_for_selector(".screen.guard[data-state=loading]", timeout=5_000)
+        if "사건을 불러오는 중" not in a.page.inner_text("#gd-card"):
+            fails.append("loading text: %r" % a.page.inner_text("#gd-card"))
+        a.page.click("#gd-list")
+        _sheet_pick(a, '[data-v="G3"]')
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+        a.page.wait_for_timeout(2500)   # 3장 응답이 이 사이에 온다
+        ids = a.js("() => document.querySelector('#gd-card .gd-id')?.textContent")
+        if ids != "G3":
+            fails.append("card id %r, want G3" % ids)
+        if a.js("() => window.__gdG1"):
+            fails.append("late G1 card was painted")
+        if _gd_state(a) != "idle":
+            fails.append("state %r" % _gd_state(a))
+        if "G3" not in (a.save().get("guard") or {}).get("seen", []):
+            fails.append("G3 not seen")
+        errs = _app_errors(a)
+        if errs:
+            fails.append("console errors %r" % errs)
+    assert not fails, "\n".join(fails)
 
 
 if __name__ == "__main__":

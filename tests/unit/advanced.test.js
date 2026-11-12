@@ -1,5 +1,6 @@
 // v0.7 작업 1: 심화 레슨 엔진 (설계 docs/specs/2026-10-31-심화학습-설계.md 1절)
 // 열림(장 평가 통과 즉시·선택), 진도·완주에서 제외, 보상, 배지, 복습, 옛 저장, 레슨 목록·장 파일
+import "./_guard_index.js";   // 판정 G2-C3: 저장을 읽기 전에 경비실 색인
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildLessonIndex, createLessonData, chaptersForConcepts, reviewPool } from "../../src/lessondata.js";

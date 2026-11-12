@@ -2,7 +2,8 @@
 // 설계: docs/specs/2026-11-12-경비실-설계.md §1 · 계획서 작업 7
 // 판정은 py/guard.py(실행), 저장·보상·등급은 src/guard/state.js, 빈칸은 src/guard/blanks.js. 이 화면은 잇고 그리기만 한다.
 // 실행 결과는 재생 전에 먼저 저장한다(재생 중 떠나도 남음). 경비실은 바이트를 직접 주지 않는다(XP만, state.js).
-import { INCIDENTS } from "../../data/guard.js";
+// v0.16.0 작업 2: 목록·등급은 색인(ctx.guard.index)으로. 사건 본문은 열 때 장 파일에서 받는다(ctx.guard.load(장)).
+//   받는 동안 「사건을 불러오는 중…」, 실패하면 「사건을 불러오지 못했어요」+「다시 시도」. 늦게 온 응답은 실행 토큰으로 버린다.
 import { BADGES } from "../../data/badges.js";
 import { crowSVG } from "../guard/crow.js";
 import { fillBlanks } from "../guard/blanks.js";
@@ -55,10 +56,12 @@ const blankedStart = (inc) => inc.start.replace(/\{\{|\}\}|\{\d+\}/g, (m) => (m.
 
 export function render(root, ctx, params = {}) {
   const passed = passedChapters(ctx.save, ctx.chapters);
-  const open = INCIDENTS.filter((i) => incidentOpen(i, passed));
+  const LIST = ctx.guard.index;   // 색인(본문 없음)
+  const open = LIST.filter((i) => incidentOpen(i, passed));
   const G = () => cleanGuard(ctx.save.guard);
-  const first = open.find((i) => i.id === params.id) || open.find((i) => !G().solved[i.id]) || open[0] || INCIDENTS[0];
-  const S = { inc: first, picks: [], mode: "blank", state: "idle", speed: 1, skip: false, wake: null, token: 0, ed: null, codeTimer: null, last: null, destroyed: false };
+  const first = open.find((i) => i.id === params.id) || open.find((i) => !G().solved[i.id]) || open[0] || LIST[0];
+  // entry: 지금 사건의 색인 칸, inc: 받은 본문(받기 전·실패면 null)
+  const S = { entry: first, inc: null, picks: [], mode: "blank", state: "idle", speed: 1, skip: false, wake: null, token: 0, ed: null, codeTimer: null, last: null, destroyed: false };
 
   root.innerHTML = `<div class="screen guard" data-state="idle"><header class="g-top gd-head"><button class="icon-btn" id="gd-back" aria-label="${t`돌아가기`}">${icon("back")}</button>
       <div class="gd-title"><h1>${t`경비실`}</h1><p class="gd-rank" id="gd-rank"></p></div>
@@ -106,7 +109,18 @@ export function render(root, ctx, params = {}) {
   // ---- 머리·카드 ----
   function paintHead() {
     const g = G();
-    $("#gd-rank").textContent = `${RANK[rankOf(g)]()} · ${t`${Object.keys(g.solved).length}/${INCIDENTS.length} 해결`}`;
+    $("#gd-rank").textContent = `${RANK[rankOf(g)]()} · ${t`${Object.keys(g.solved).length}/${LIST.length} 해결`}`;
+  }
+  /** 본문을 받는 동안·못 받았을 때의 카드(제목은 색인에서). 코드 칸·시도 줄은 비운다 */
+  function paintPending(failed) {
+    const e = S.entry;
+    cardEl.innerHTML = `<h2 id="gd-title">${esc(txt(e, "title"))}</h2>`
+      + (failed
+        ? `<div class="err-panel soft gd-loadfail"><p>${t`사건을 불러오지 못했어요`}</p><button class="btn primary" id="gd-retry">${t`다시 시도`}</button></div>`
+        : `<p class="g-msg gd-loading" role="status">${t`사건을 불러오는 중…`}</p>`);
+    codeEl.innerHTML = "";
+    codeEl.hidden = true;   // 본문이 없으면 코드 칸은 숨김(빈 판만 남지 않게)
+    triesEl.innerHTML = "";
   }
   function paintCard(lose = false) {
     const inc = S.inc;
@@ -221,21 +235,43 @@ export function render(root, ctx, params = {}) {
     if (S.wake) S.wake();
   }
 
-  /** 사건 열기: 재생·결과를 비우고 처음 본 사건이면 본 것으로 */
-  function openIncident(inc) {
+  /** 사건 열기: 재생·결과를 비우고 그 장 파일에서 본문을 받는다. 그사이 다른 사건을 열면(토큰이 바뀜) 늦은 응답은 버린다 */
+  function openIncident(entry) {
     cancelRun();
     dropEditor();
-    S.inc = inc;
+    const token = S.token;
+    S.entry = entry;
+    S.inc = null;
     S.mode = "blank";
     S.last = null;
-    const g = G();
-    S.picks = inc.blanks.map((_, k) => g.blanks[inc.id]?.[k] ?? null);
-    if (!g.seen.includes(inc.id)) saveG(markSeen(g, inc.id));
+    S.picks = [];
     resultEl.innerHTML = "";
     $("#gd-at").textContent = "";
     setCrow("wait");
-    setState("idle");
+    setState("loading");
     paintHead();
+    paintPending(false);
+    const mine = () => !S.destroyed && token === S.token;
+    ctx.guard.load(entry.need).then((list) => {
+      if (!mine()) return;
+      const inc = list.find((i) => i.id === entry.id);
+      if (inc) showIncident(inc);
+      else failed(new Error(`guard incident ${entry.id} is not in chapter ${entry.need}`));
+    }, (e) => { if (mine()) failed(e); });
+  }
+  function failed(e) {
+    console.warn(e);
+    setState("failed");
+    paintPending(true);
+  }
+  /** 받은 본문으로 카드·코드 칸·시도 줄을 그리고, 처음 본 사건이면 본 것으로 */
+  function showIncident(inc) {
+    S.inc = inc;
+    const g = G();
+    S.picks = inc.blanks.map((_, k) => g.blanks[inc.id]?.[k] ?? null);
+    if (!g.seen.includes(inc.id)) saveG(markSeen(g, inc.id));
+    setState("idle");
+    codeEl.hidden = false;
     paintCard();
     paintCode();
     paintTries();
@@ -320,7 +356,7 @@ export function render(root, ctx, params = {}) {
     }
     // 저장 먼저(재생 중 떠나도 남음). 결과 대조가 틀리면 applyGuardRun이 저장을 그대로 돌려준다
     const ok = !!r.guard && guardConsistent(input, r.guard);
-    const ap = applyGuardRun(ctx.save, inc.id, r.guard, how, new Date());
+    const ap = applyGuardRun(ctx.save, inc, r.guard, how, new Date());
     if (ap.save !== ctx.save) ctx.commit(ap.save);
     const out = ap.outcome;
     const solvedNote = () => { if (out.firstSolve) toast(t`「${txt(inc, "title")}」 사건 해결! XP +${out.xp}`); };
@@ -372,15 +408,16 @@ export function render(root, ctx, params = {}) {
     const g = G();
     const id = await sheet({
       title: t`사건 목록`,
-      html: `<ul class="g-pick">${INCIDENTS.map((i) => {
+      html: `<ul class="g-pick">${LIST.map((i) => {
         const on = incidentOpen(i, passed);
         const note = !on ? `${icon("lock")}${esc(t`${i.need}장을 끝내면 열려요`)}` : g.solved[i.id] ? `${icon("check")}${t`해결`}` : "";
-        return `<li><button class="g-pick-btn gd-item${i === S.inc ? " on" : ""}" data-g="${i.id}"${on ? ` data-v="${i.id}"` : " disabled"}>
+        return `<li><button class="g-pick-btn gd-item${i.id === S.entry.id ? " on" : ""}" data-g="${i.id}"${on ? ` data-v="${i.id}"` : " disabled"}>
           <span>${i.id} · ${esc(txt(i, "title"))}</span><small>${note}</small></button></li>`;
       }).join("")}</ul>`,
     });
     if (!id || S.destroyed) return;
-    openIncident(INCIDENTS.find((i) => i.id === id));
+    const e = LIST.find((i) => i.id === id);
+    if (e) openIncident(e);
     window.scrollTo({ top: 0 });
   }
 
@@ -388,6 +425,7 @@ export function render(root, ctx, params = {}) {
   const modalOpen = () => !!document.querySelector(".modal-back");
   root.addEventListener("click", (e) => {
     if (modalOpen()) return;
+    if (e.target.closest("#gd-retry") && S.state === "failed") { openIncident(S.entry); return; }
     const b = e.target.closest(".gd-blank");
     if (b && S.state === "idle") { pickBlank(+b.dataset.n); return; }
     const c = e.target.closest(".gd-try");

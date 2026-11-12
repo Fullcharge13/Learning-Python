@@ -4,7 +4,11 @@
 //   { v:1, solved:{ 사건id: { firstTry, how:"blank"|"code" } }, code:{ 사건id: 코드 }, blanks:{ 사건id: [고른 보기|null…] },
 //     seen:[본 사건 id…], attempts:{ 사건id: 실행 횟수 }, runs }
 // 보상: 경비실은 바이트를 직접 주지 않는다. 사건을 처음 해결하면 XP(GUARD_XP)만 earnXp·퀘스트("xp")로 흘려 보낸다.
-import { INCIDENTS, GUARD_XP } from "../../data/guard.js";
+// v0.16.0 작업 2: 사건 본문은 첫 파일에 없다. 이 파일은 색인(catalog.js의 guardIndexEntry 모양)만 쓴다.
+//   앱은 저장을 읽기(migrate) 전에 setGuardIndex로 한 번 넣는다(판정 G2-C3: 배포판 window.RIA_GUARD_INDEX, 개발판 guarddev.js).
+//   색인 없이 저장을 다듬으면 모든 id를 모른다고 보고 해결 기록을 지우게 되므로, 그때는 분명한 오류를 던진다.
+//   본문(시도 목록)이 필요한 guardInput·guardConsistent·applyGuardRun은 장 파일에서 받은 사건 본문으로 부른다.
+import { GUARD_XP } from "./catalog.js";
 import { earnXp } from "../rules.js";
 import { ensureQuests, tick } from "../quests.js";
 import { checkBadges } from "../badges.js";
@@ -13,17 +17,43 @@ import { lang } from "../i18n.js";
 
 const GUARD_VER = 1;
 const CODE_MAX = 4000;
-// 상속 이름(toString 등)이 id로 통과하지 않게 프로토타입 없는 객체로
-const BY_ID = Object.assign(Object.create(null), Object.fromEntries(INCIDENTS.map((i) => [i.id, i])));
+
+// ---- 색인 ----
+let INDEX = null;
+let BY_ID = null;   // 상속 이름(toString 등)이 id로 통과하지 않게 프로토타입 없는 객체로
+const okEntry = (e) => !!e && typeof e === "object" && typeof e.id === "string" && e.id !== "" && Number.isInteger(e.need)
+  && Array.isArray(e.blanks) && e.blanks.every((n) => Number.isInteger(n) && n >= 0);
+
+/** 사건 색인 넣기(앱 시작 때 한 번, 저장을 읽기 전). 비었거나 모양이 틀리면 던짐 */
+export function setGuardIndex(entries) {
+  if (!Array.isArray(entries) || entries.length === 0 || !entries.every(okEntry)) {
+    throw new Error("setGuardIndex: guard index must be a non-empty array of { id, need, blanks }");
+  }
+  INDEX = Object.freeze(entries.map((e) => Object.freeze({ ...e, blanks: Object.freeze([...e.blanks]) })));
+  BY_ID = Object.assign(Object.create(null), Object.fromEntries(INDEX.map((e) => [e.id, e])));
+}
+/** 시험 전용: 색인을 비운다 */
+export function clearGuardIndex() {
+  INDEX = null;
+  BY_ID = null;
+}
+function byId() {
+  if (!BY_ID) throw new Error("guard index is not set: call setGuardIndex() before reading or changing guard saves");
+  return BY_ID;
+}
+/** 색인 목록(장 순서) */
+export function guardIndex() {
+  byId();
+  return INDEX;
+}
 const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const nonNeg = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
 
-export const RANKS = [
-  { id: "apprentice", min: 0 },
-  { id: "keeper", min: 2 },
-  { id: "captain", min: 4 },
-  { id: "sheriff", min: 6 },
-];
+export const RANK_IDS = ["apprentice", "keeper", "captain", "sheriff"];
+/** 등급 기준(해결 수): 사건 총수 n에서 0·⌈n/3⌉·⌈2n/3⌉·n (설계 §5-3) */
+export function rankThresholds(n) {
+  return { apprentice: 0, keeper: Math.ceil(n / 3), captain: Math.ceil((2 * n) / 3), sheriff: n };
+}
 
 export function newGuard() {
   return { v: GUARD_VER, solved: {}, code: {}, blanks: {}, seen: [], attempts: {}, runs: 0 };
@@ -31,6 +61,7 @@ export function newGuard() {
 
 /** 저장의 guard 칸 하나를 모양·범위에 맞춘 새 객체로. 객체가 아니면 새 경비실 */
 export function cleanGuard(raw) {
+  const BY_ID = byId();
   if (!isObj(raw)) return newGuard();
   const g = newGuard();
   if (isObj(raw.solved)) {
@@ -49,7 +80,7 @@ export function cleanGuard(raw) {
     for (const [id, arr] of Object.entries(raw.blanks)) {
       const inc = BY_ID[id];
       if (!inc || !Array.isArray(arr)) continue;
-      g.blanks[id] = inc.blanks.map((b, k) => (Number.isInteger(arr[k]) && arr[k] >= 0 && arr[k] < b.options.length ? arr[k] : null));
+      g.blanks[id] = inc.blanks.map((n, k) => (Number.isInteger(arr[k]) && arr[k] >= 0 && arr[k] < n ? arr[k] : null));
     }
   }
   if (Array.isArray(raw.seen)) g.seen = [...new Set(raw.seen.filter((id) => typeof id === "string" && BY_ID[id]))];
@@ -63,27 +94,28 @@ export function cleanGuard(raw) {
 const toSet = (p) => (p instanceof Set ? p : new Set(p || []));
 /** 경비실이 열렸나(3장 통과) */
 export const guardOpen = (passed) => toSet(passed).has(3);
-/** 이 사건이 열렸나(필요한 장 통과) */
+/** 이 사건이 열렸나(필요한 장 통과). 색인 칸이나 본문 모두 need가 있다 */
 export const incidentOpen = (incident, passed) => toSet(passed).has(incident.need);
 
 /** 열린 사건 중 아직 본 적 없는 것이 있나(하단 메뉴 새 소식 점) */
 export function guardNews(guard, passed) {
   const p = toSet(passed);
   const seen = new Set(cleanGuard(guard).seen);
-  return INCIDENTS.some((i) => p.has(i.need) && !seen.has(i.id));
+  return guardIndex().some((i) => p.has(i.need) && !seen.has(i.id));
 }
 
 export function markSeen(guard, id) {
   const g = cleanGuard(guard);
-  if (!BY_ID[id] || g.seen.includes(id)) return g;
+  if (!byId()[id] || g.seen.includes(id)) return g;
   return { ...g, seen: [...g.seen, id] };
 }
 
-/** 엔진에 넘길 입력. 영어면 value_en ?? value */
+/** 엔진에 넘길 입력(받은 사건 본문으로). 영어면 value_en ?? value. password·files는 있으면 그대로 */
 export function guardInput(incident, l = lang()) {
   const tries = incident.tries.map((t) => ({ value: l === "en" ? (t.value_en ?? t.value) : t.value, expect: t.expect }));
   const input = { mode: incident.mode, tries };
   if (incident.password !== undefined) input.password = incident.password;
+  if (incident.files !== undefined) input.files = incident.files;
   return input;
 }
 
@@ -111,25 +143,32 @@ export function guardConsistent(input, r) {
   return r.solved === solved;
 }
 
-/** 해결한 사건 수로 등급 id */
+/** 해결한 사건 수로 등급 id(기준은 색인의 사건 수) */
 export function rankOf(guard) {
   const n = Object.keys(cleanGuard(guard).solved).length;
-  let id = RANKS[0].id;
-  for (const r of RANKS) if (n >= r.min) id = r.id;
+  const th = rankThresholds(guardIndex().length);
+  let id = RANK_IDS[0];
+  for (const r of RANK_IDS) if (n >= th[r]) id = r;
   return id;
 }
 
 /**
  * 실행 결과를 저장에 반영. 결과 대조(guardConsistent)가 틀리면 저장 그대로·solved:false.
+ * incident: 장 파일에서 받은 사건 본문(시도 목록으로 결과를 대조). id가 색인에 없으면 저장 그대로.
  * 첫 해결이면 XP(GUARD_XP): grantOrderXP와 같은 길(earnXp → 퀘스트 "xp"만 tick → 배지). 바이트는 직접 주지 않는다.
  * @returns { save, outcome: { solved, firstSolve, firstTry, xp, streakUp, streak, milestone, finished, chest, newBadges } }
  */
-export function applyGuardRun(save, id, result, how, now = new Date()) {
-  const inc = BY_ID[id];
+export function applyGuardRun(save, incident, result, how, now = new Date()) {
+  if (!isObj(incident) || !Array.isArray(incident.tries)) {
+    throw new TypeError("applyGuardRun: pass the loaded incident body (with tries), not an id");
+  }
+  const BY_ID = byId();
+  const id = incident.id;
+  const inc = typeof id === "string" ? BY_ID[id] : undefined;
   const g0 = cleanGuard(save?.guard);
   const none = { solved: false, firstSolve: false, firstTry: false, xp: 0, streakUp: false,
     streak: save?.streak?.days ?? 0, milestone: null, finished: [], chest: false, newBadges: [] };
-  if (!inc || !guardConsistent(guardInput(inc), result)) return { save, outcome: none };
+  if (!inc || !guardConsistent(guardInput(incident), result)) return { save, outcome: none };
 
   const solved = result.solved === true;
   const already = !!g0.solved[id];

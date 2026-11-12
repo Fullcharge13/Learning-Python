@@ -43,10 +43,12 @@ const { OUTFITS } = await imp("data/outfits.js");
 const ria = await imp("src/ria.js");
 const garden = await imp("data/garden.js");
 const gnodes = await imp("src/garden/nodes.js");
+const guard = await imp("data/guard.js");
+const GUARD = { xp: guard.GUARD_XP, incidents: guard.INCIDENTS.map((i) => ({ id: i.id, need: i.need, mode: i.mode, tag: i.tag, concept: i.concept, title: i.title })) };
 const GARDEN = { orders: garden.ORDERS.map((o) => ({ id: o.id, need: o.need, title: o.title, xp: o.xp })),
   upgrades: garden.UPGRADES.map((u) => ({ id: u.id, label: u.label || u.id, cost: u.cost })),
   nodes: Object.entries(gnodes.NODES).map(([k, v]) => ({ kind: k, chapter: v.chapter, label: v.label })) };
-console.log(JSON.stringify({ chapters, CONCEPTS, QUESTS, BADGES, OUTFITS, GARDEN,
+console.log(JSON.stringify({ chapters, CONCEPTS, QUESTS, BADGES, OUTFITS, GARDEN, GUARD,
   outfitKo: ria.OUTFIT_KO, faceKo: ria.FACE_KO, faces: ria.FACE_IDS }));
 """
 
@@ -232,6 +234,22 @@ def build(d):
         w(f"주문 {len(g['orders'])}개: " + " · ".join(f"{o['title']}({o['need']}장)" for o in g["orders"]))
         w("")
         w("성장: " + " · ".join(u["label"] + "(" + ", ".join(f"{k} {v}" for k, v in u["cost"].items()) + ")" for u in g["upgrades"]))
+    gd = d.get("GUARD")
+    if gd:
+        w("")
+        w("## 경비실 (v0.15)")
+        w("")
+        w("텃밭 화면 안의 「경비실」(사이버 보안 배우기 첫 판). 가상의 해커 크로우가 공격해 오면, 배운 파이썬으로 경비 코드를 짜서 막아요. "
+          "빈칸 채우기로 풀거나 코드로 직접 쓸 수 있고, 「실행」하면 크로우의 시도가 하나씩 다시 재생돼요(🛡 막음 / ✅ 들임 / ❌ 뚫림). "
+          "처음 해결하면 XP 5. 방어하는 쪽의 글만 있고, 사람·기관은 모두 가상이에요.")
+        w("")
+        w("| 사건 | 열리는 장 | 제목 | 개념 | 꼬리표 |")
+        w("|---|---|---|---|---|")
+        for i in gd["incidents"]:
+            tag = {"respond": "대응", "prevent": "예방"}.get(i["tag"], i["tag"])
+            w(f"| {i['id']} | {i['need']}장 | {cell(i['title'])} | {cell(i['concept'])} | {tag} |")
+        w("")
+        w(f"배지는 모두 {n_badges}개예요(경비실 배지 2개 포함).")
     w("")
     for ch in d["chapters"]:
         c = ch["chapter"]

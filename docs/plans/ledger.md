@@ -197,3 +197,21 @@
 - **C79** (v0.13.4) 영어 장 파일(`lessons/en/`)은 서비스 작업자가 설치 때 미리 받지 않는다 — 영어 공개 전에는 한국어 사용자가 판마다 약 780KB를 더 받게 되므로. 처음 열 때 받아 저장(`chapterFirst`). 영어 꾸러미(`lang/en-*.json`)는 계속 미리 받음. `tests/build_test.py test_sw_skips_english_chapters`가 지킴. v0.14.0 공개 때 영어 사용자의 오프라인을 다시 본다.
 - **C80** (v0.14.0) runner.py는 첫 파일(index.html)에 넣지 않고 `py/runner-<지문>.py`로 따로 둔다 — 첫 파일이 상한 820KB에 3KB 남아서(816.8KB → 776.1KB). 서비스 작업자가 설치 때 미리 받고 저장본 먼저로 주며(지문 이름), 오프라인 준비 판정에도 든다. `PyRun({ runnerURL })`. `tests/build_test.py test_runner_separate_file`·`test_browser_offline`이 지킴.
 - **C81** (v0.14.0, C79를 고쳐 씀) 영어 장 파일은 판과 상관없는 저장소 `ria-lang-en`에 둔다(지문 이름이라 새 판에도 그대로). 설치 때 미리 받지 않는 것(C79)은 그대로이고, 대신 **영어로 배우는 사람의 앱**이 켜질 때·영어로 바꿀 때·인터넷이 돌아올 때 영어 장을 조용히 미리 받는다(`src/langwarm.js`). 새 판이 켜지면 그 판 목록에 없는 옛 영어 장만 지운다. 설정의 「오프라인 준비」는 지금 언어의 장 + runner 기준. `test_lang_cache_survives_rotation`·`test_english_offline`이 지킴.
+
+## v0.15 경비실
+
+| # | 판정 |
+|---|---|
+| **R1** | G1 오답 보기 print(attempt) |
+| **R2** | save.guard.attempts 추가 |
+| **R3** | 사용 오류 BaseException + 삼켜도 보고 |
+| **R4** | guard.py 자체 _GUARD_EN |
+| **R5** | tools/runner_src.py 하나로 |
+| **R6** | guard.py가 앞 |
+| **G-C1** | check 호출 경계 오류 줄 = def 줄 |
+| **G-C2** | 직접 바이트 없음(XP 경로의 퀘스트·이정표 바이트는 텃밭과 같음) |
+| **G-C3** | 크로우 승인 전 화면 작업 금지(사용자 승인 2026-11-12, loot 한 입 베어 문 사과로 수정) |
+| **G-C4** | 작업 2 커밋 때 빌드 시험 일시 실패(작업 3에서 해결) |
+| **G-C5** | loop에서 첫 next_try() 전 block()/allow()는 무시 |
+| **G-C6** | 첫 파일 상한 820KB→850KB |
+| **G-C7** | 직접 쓰기 첫 내용 = 저장 코드, 없으면 빈칸 ___ 모양 |

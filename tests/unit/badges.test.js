@@ -21,10 +21,10 @@ function mkSave(over = {}) {
 }
 const stats = (o) => ({ lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0, ...o });
 
-test("BADGES table: 15 ids (ledger 12 + streak100 + v0.7 심화 2) with Korean name/desc", () => {
-  assert.equal(BADGES.length, 15);
+test("BADGES table: 17 ids (ledger 12 + streak100 + v0.7 심화 2 + v0.15 경비실 2) with Korean name/desc", () => {
+  assert.equal(BADGES.length, 17);
   assert.deepEqual(BADGES.map((b) => b.id), ["first_print", "ch1", "ch2", "ch3", "streak7", "streak30", "streak100",
-    "fixer", "hintfree10", "perfectionist", "reviewer", "collector", "night_owl", "advanced1", "advancedAll"]);
+    "fixer", "hintfree10", "perfectionist", "reviewer", "collector", "night_owl", "advanced1", "advancedAll", "guard_first", "guard_perfect"]);
   for (const b of BADGES) {
     assert.match(b.name, /[가-힣]/);
     assert.match(b.desc, /[가-힣]/);
@@ -112,4 +112,19 @@ test("every badge has its own art (no '?' fallback), incl. v0.7 심화 2개", as
     const svg = badgeArt(b.id, true);
     assert.ok(!/>\?<\/text>/.test(svg), `${b.id} uses fallback art`);
   }
+});
+
+test("badge_guard_first: 경비실 사건 하나 해결", () => {
+  assert.deepEqual(checkBadges(mkSave(), {}), []);
+  assert.deepEqual(checkBadges(mkSave({ guard: { solved: { G1: { firstTry: false, how: "code" } } } }), {}), ["guard_first"]);
+});
+
+test("badge_guard_perfect: 6개 모두 첫 실행(firstTry)일 때만", () => {
+  const ids = ["G1", "G2", "G3", "G4", "G5", "G6"];
+  const solved = Object.fromEntries(ids.map((id) => [id, { firstTry: true, how: "blank" }]));
+  assert.deepEqual(checkBadges(mkSave({ guard: { solved } }), {}), ["guard_first", "guard_perfect"]);
+  solved.G6.firstTry = false;
+  assert.deepEqual(checkBadges(mkSave({ guard: { solved } }), {}), ["guard_first"]);
+  delete solved.G6;
+  assert.ok(!checkBadges(mkSave({ guard: { solved } }), {}).includes("guard_perfect"));
 });

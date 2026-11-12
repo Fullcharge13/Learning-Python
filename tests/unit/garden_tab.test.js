@@ -3,7 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { gardenTab, newGarden, addPendingDone } from "../../src/garden/state.js";
 import { ORDERS } from "../../data/garden.js";
-import { tabBar } from "../../src/ui/nav.js";
+import { tabBar, gardenTabOf } from "../../src/ui/nav.js";
+import { newGuard } from "../../src/guard/state.js";
+import { newSave } from "../../src/save.js";
 
 const upTo = (n) => new Set(Array.from({ length: n }, (_, i) => i + 1));
 const SOUP = ORDERS.findIndex((o) => o.id === "o_soup");
@@ -56,4 +58,16 @@ test("tab_bar: 잠긴 텃밭 칸은 자물쇠·안내 이름표, 새 소식은 �
   assert.doesNotMatch(open, /tab-dot|data-locked/);
   // 상태를 안 주면(옛 호출) 열린 칸으로
   assert.doesNotMatch(tabBar("settings"), /tab-dot|data-locked/);
+});
+
+test("garden_tab(nav): 텃밭이 open이어도 경비실 새 소식이면 news", () => {
+  const chapters = [1, 2, 3].map((id) => ({ id, lessons: [] }));
+  const save = { ...newSave(), dev_mode: true, garden: { ...newGarden(), runs: 3 } }; // 개발자 모드 = 모든 장 통과
+  const ctxFor = (guard) => ({ save: { ...save, guard }, chapters });
+  assert.equal(gardenTab(save.garden, new Set([1, 2, 3])), "open");
+  assert.equal(gardenTabOf(ctxFor(newGuard())), "news");
+  assert.equal(gardenTabOf(ctxFor({ ...newGuard(), seen: ["G1", "G2", "G3", "G4", "G5", "G6"] })), "open");
+  // 3장을 통과하지 못하면 경비실 소식 없음(텃밭만 본다)
+  const early = { save: { ...newSave(), garden: { ...newGarden(), runs: 3 }, completed_lessons: [] }, chapters };
+  assert.equal(gardenTabOf(early), "locked");
 });

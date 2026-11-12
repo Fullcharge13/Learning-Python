@@ -2,6 +2,7 @@
 import { icon, esc, bar, toast } from "./dom.js";
 import { localDate } from "../today.js";
 import { gardenTab, passedChapters } from "../garden/state.js";
+import { guardNews } from "../guard/state.js";
 import { t, tp } from "../i18n.js";
 
 // v0.12.5: 「텃밭」 칸(학습과 배지 사이). 텃밭 화면 안에서는 탭 줄을 그리지 않는다(레슨처럼 몰입 화면)
@@ -16,7 +17,10 @@ const TABS = () => [
 
 /** 텃밭 칸 상태: "locked" | "news" | "open" */
 export function gardenTabOf(ctx) {
-  return gardenTab(ctx.save.garden, passedChapters(ctx.save, ctx.chapters));
+  const passed = passedChapters(ctx.save, ctx.chapters);
+  const tab = gardenTab(ctx.save.garden, passed);
+  // v0.15: 경비실 새 사건도 같은 칸의 점으로 알린다(잠김이면 그대로)
+  return tab === "open" && guardNews(ctx.save.guard, passed) ? "news" : tab;
 }
 
 export function tabBar(active, garden = "open") {

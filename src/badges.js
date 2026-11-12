@@ -1,6 +1,7 @@
 // 배지 판정 (설계서 5-5). 새로 얻은 id만 돌려줌
 import { BADGES } from "../data/badges.js";
 import { isAdvancedId } from "./advanced.js";
+import { INCIDENTS } from "../data/guard.js";
 
 const done = (s, id) => (s.completed_lessons || []).includes(id);
 const stat = (s, k) => (s.stats && s.stats[k]) || 0;
@@ -24,6 +25,8 @@ export const RULES = {
   night_owl: (s, ctx) => ctx.lessonDone === true && typeof ctx.hour === "number" && (ctx.hour >= 22 || ctx.hour < 4),
   advanced1: (s) => (s.completed_lessons || []).some(isAdvancedId),
   advancedAll: (s, ctx) => Array.isArray(ctx.advancedIds) && ctx.advancedIds.length > 0 && ctx.advancedIds.every((id) => done(s, id)),
+  guard_first: (s) => Object.keys(s.guard?.solved ?? {}).length >= 1,
+  guard_perfect: (s) => INCIDENTS.every((i) => s.guard?.solved?.[i.id]?.firstTry === true),
 };
 
 export function checkBadges(save, ctx = {}) {

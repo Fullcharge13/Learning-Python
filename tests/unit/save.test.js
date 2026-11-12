@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SAVE_KEY, SAVE_VER, newSave, migrate, load, loadEx, store, takeRefundNotice, refundNoticeText } from "../../src/save.js";
 import { newGarden } from "../../src/garden/state.js";
+import { newGuard } from "../../src/guard/state.js";
 
 function fakeStorage(initial = {}) {
   const data = { ...initial };
@@ -32,6 +33,7 @@ const LEDGER_SHAPE = {
   seen_updates: {}, // v0.7.1: 「새 내용」 점 — 다시 본 판 { 레슨 id: "v0.7.1" } (saveVer 그대로)
   daily: { date: null, picks: [], done: [], streak: 0, best: 0, last_done_date: null }, // v0.9 매일 도전(saveVer 그대로)
   garden: newGarden(), // v0.10 파이의 텃밭(saveVer 그대로, 없으면 기본값)
+  guard: newGuard(),   // v0.15 경비실(saveVer 그대로, 없으면 기본값)
   goal_pending: null,  // v0.12.1 하루 목표 예약(내일부터)
   broken_notice: null, // v0.12.1 깨진 저장 안내(한 번)
 };
@@ -482,4 +484,14 @@ test("settings.langChosen(v0.14.3): 새 저장은 false(휴대폰 언어를 따�
   assert.equal(migrate({ saveVer: 2, settings: { lang: "en", langChosen: false } }).settings.langChosen, false);
   assert.equal(migrate({ saveVer: 2, settings: { lang: "en", langChosen: true } }).settings.langChosen, true);
   assert.equal(migrate({ saveVer: 2, settings: { langChosen: "yes" } }).settings.langChosen, true, "odd value: keep the saved language");
+});
+
+test("guard: 새 저장에 guard, guard 없는 옛 저장은 migrate가 newGuard()로, saveVer 2 그대로", () => {
+  assert.deepEqual(newSave().guard, newGuard());
+  const old = newSave(); delete old.guard;
+  const m = migrate(JSON.parse(JSON.stringify(old)));
+  assert.deepEqual(m.guard, newGuard());
+  assert.equal(m.saveVer, 2);
+  const broken = migrate({ ...JSON.parse(JSON.stringify(newSave())), guard: { solved: "x", seen: [1] } });
+  assert.deepEqual(broken.guard, newGuard());
 });

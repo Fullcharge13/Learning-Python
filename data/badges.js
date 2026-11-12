@@ -1,4 +1,4 @@
-// 배지 15개 (설계서 5-5의 12개 + 5장 연속 기록의 100일 배지 + v0.7 심화 2개). desc = 얻기 전 회색 실루엣 아래에 보이는 조건 문구
+// 배지 17개 (설계서 5-5의 12개 + 5장 연속 기록의 100일 배지 + v0.7 심화 2개 + v0.15 경비실 2개). desc = 얻기 전 회색 실루엣 아래에 보이는 조건 문구
 export const BADGES = [
   { id: "first_print", name: "첫 출력", desc: "첫 레슨(1-1)을 끝내요" },
   { id: "ch1", name: "1장 완료", desc: "1장 마지막 레슨을 끝내요" },
@@ -15,4 +15,6 @@ export const BADGES = [
   { id: "night_owl", name: "밤 공부", desc: "밤 10시부터 새벽 4시 사이에 레슨을 끝내요" },
   { id: "advanced1", name: "심화 첫걸음", desc: "심화 레슨을 하나 끝내요" },
   { id: "advancedAll", name: "깊이 파는 사람", desc: "지금 있는 심화 레슨을 모두 끝내요" },
+  { id: "guard_first", name: "첫 방어", desc: "경비실 사건을 하나 해결해요" },
+  { id: "guard_perfect", name: "완벽한 문지기", desc: "경비실 사건 6개를 모두 첫 실행에 해결해요" },
 ];

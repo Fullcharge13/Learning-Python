@@ -12,6 +12,7 @@ const ART = {
   fixer: ["navy", "fix"], hintfree10: ["navy", "10"], perfectionist: ["sun", "★"],
   reviewer: ["navy", "30"], collector: ["sun", () => t`3벌`], night_owl: ["navy", "☾"],
   advanced1: ["teal", "A+"], advancedAll: ["sun", "A★"],   // v0.7 심화
+  guard_first: ["teal", "✓"], guard_perfect: ["sun", "6/6"],   // v0.15 경비실
 };
 const COL = { teal: ["#1F9E93", "#12756D"], coral: ["#F08A5D", "#C4512F"], navy: ["#3C5170", "#1F2B3D"], sun: ["#FFD43B", "#C99A00"] };
 

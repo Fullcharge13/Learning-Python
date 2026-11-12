@@ -213,8 +213,8 @@ test("adv_review_queue: 심화 개념도 틀리면 복습 목록에 들어감", 
 });
 
 // ---- 배지 ----
-test("adv_badges_table: 배지 15개, 새 배지 2개 이름", () => {
-  assert.equal(BADGES.length, 15);
+test("adv_badges_table: 배지 17개(경비실 2개 포함), 심화 배지 2개 이름", () => {
+  assert.equal(BADGES.length, 17);
   const b1 = BADGES.find((b) => b.id === "advanced1");
   const b2 = BADGES.find((b) => b.id === "advancedAll");
   assert.equal(b1.name, "심화 첫걸음");

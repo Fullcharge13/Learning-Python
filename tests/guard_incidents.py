@@ -38,20 +38,20 @@ NODES_BY_CH = {3: {"Compare", "BoolOp", "UnaryOp", "If"}, 4: {"FunctionDef", "Re
                9: {"Tuple", "Set", "BitAnd", "BitOr"},
                10: {"Try", "ExceptHandler", "Raise"},
                11: {"With", "withitem", "Import", "alias"},
-               12: {"Import", "alias"},
-               13: {"ImportFrom", "alias"},
-               14: {"Import", "ImportFrom", "alias"},
+               13: {"ImportFrom"},
                15: {"ClassDef", "Pass"}}
+# 장별로 import할 수 있는 모듈(누적)과 from-import로 가져올 이름
+IMPORTS_BY_CH = {11: {"csv"}, 12: {"re"}, 13: {"urllib.parse"}, 14: {"json"}}
+FROM_NAMES_BY_CH = {13: {"urlparse"}, 14: {"parse_qs"}}
 CALLS_BY_CH = {4: {"len"}, 5: {"range"},
                7: {"sorted", "min", "max", "sum"},
                9: {"set"},
                10: {"int", "float"},
-               11: {"open"}}
+               11: {"open"}, 13: {"urlparse"}, 14: {"parse_qs"}, 15: {"super"}}
 METHODS = {"lower", "upper", "strip", "split", "replace", "find", "count", "startswith", "endswith"}
 METHODS_BY_CH = {7: {"append", "remove", "sort"}, 8: {"get", "keys", "values", "items"}, 9: {"add"},
                  11: {"reader", "readlines", "read"},
-                 12: {"search", "fullmatch", "findall", "sub"},
-                 13: {"urlparse"}, 14: {"loads", "parse_qs"}}
+                 12: {"search", "fullmatch", "findall", "sub"}, 14: {"loads"}}
 WANT_IDS = ["G1", "G2", "G7", "G3", "G8", "G9", "G4", "G5", "G10", "G6", "G11", "G12"]
 WANT_CHAPTERS = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6]
 
@@ -64,26 +64,87 @@ def allowed(need):
         nodes |= NODES_BY_CH.get(ch, set())
         calls |= CALLS_BY_CH.get(ch, set())
         methods |= METHODS_BY_CH.get(ch, set())
-    return nodes, calls, methods
+    modules, from_names = set(), set()
+    for ch in range(3, need + 1):
+        modules |= IMPORTS_BY_CH.get(ch, set())
+        from_names |= FROM_NAMES_BY_CH.get(ch, set())
+    return nodes, calls, methods, modules, from_names
 
 
 def grammar_problems(code, need):
-    nodes, calls, methods = allowed(need)
+    nodes, calls, methods, modules, from_names = allowed(need)
+    tree = ast.parse(code)
+    # 정답이 스스로 정의한 함수·클래스·메서드 이름은 부를 수 있다(4장부터 함수, 15장부터 클래스)
+    defined = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
     bad = []
-    for n in ast.walk(ast.parse(code)):
+    for n in ast.walk(tree):
         name = type(n).__name__
         if name not in nodes:
             bad.append("마디 " + name)
+        if isinstance(n, ast.Import):
+            bad += ["모듈 " + a.name for a in n.names if a.name not in modules]
+        if isinstance(n, ast.ImportFrom):
+            if n.module != "urllib.parse" or n.module not in modules:
+                bad.append("모듈 " + str(n.module))
+            bad += ["가져오는 이름 " + a.name for a in n.names if a.name not in from_names]
         if isinstance(n, ast.Call):
             f = n.func
             if isinstance(f, ast.Name):
-                if f.id not in calls:
+                if f.id not in calls and f.id not in defined:
                     bad.append("부르는 이름 " + f.id)
             elif isinstance(f, ast.Attribute):
-                if f.attr not in methods:
+                if f.attr not in methods and f.attr not in defined:
                     bad.append("메서드 " + f.attr)
             else:
                 bad.append("부르는 대상 " + name)
+    return bad
+
+
+GATE = """class Gate:
+    def __init__(self, names):
+        self.names = names
+    def allows(self, x):
+        return x in self.names
+gate = Gate(["ria"])
+ok = gate.allows(attempt)
+"""
+SUB = """class Base:
+    def __init__(self, n):
+        self.n = n
+class Kid(Base):
+    def __init__(self, n):
+        super().__init__(n)
+k = Kid(1)
+"""
+
+
+def self_test():
+    """허용 문법 검사기 자체 시험(사건 시험 전에 돈다)."""
+    cases = [
+        (13, 'from urllib.parse import urlparse\nok = urlparse(attempt).hostname == "x"\n', True),
+        (14, 'from urllib.parse import parse_qs\nq = parse_qs(attempt)\n', True),
+        (14, 'import json\nd = json.loads(attempt)\n', True),
+        (15, GATE, True),
+        (15, SUB, True),
+        (14, GATE, False),
+        (12, "import os\n", False),
+        (14, "import os\n", False),
+        (12, "import csv\nimport re\nre.search(\"a\", attempt)\n", True),
+        (12, "import json\n", False),
+        (7, "class A:\n    pass\n", False),
+        (6, "x = [1, 2]\n", False),
+        (9, "s = set()\ns.add(attempt)\n", True),
+        (8, "s = set()\n", False),
+        (13, "from os import path\n", False),
+        (13, "from urllib.parse import parse_qs\n", False),
+    ]
+    bad = 0
+    for ch, code, want in cases:
+        got = not grammar_problems(code, ch)
+        if got != want:
+            bad += 1
+            print("FAIL 자체 시험 %d장 %r → %s (기대 %s)" % (ch, code[:40], got, want))
+    print("%s 허용 문법 검사기 자체 시험 %d개" % ("ok  " if not bad else "FAIL", len(cases)))
     return bad
 
 
@@ -120,7 +181,7 @@ def solved(inc, code, lang):
 def main():
     data = node_data()
     incs, filled = data["incidents"], data["filled"]
-    fails = 0
+    fails = self_test()
 
     def check(ok, label, extra=""):
         nonlocal fails

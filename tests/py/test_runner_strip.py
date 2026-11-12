@@ -67,3 +67,21 @@ def test_stripped_runner_behaves_the_same():
         for key in ("stdout", "error", "missing", "charts", "farm"):
             assert json.dumps(a.get(key), sort_keys=True, ensure_ascii=False) == \
                 json.dumps(b.get(key), sort_keys=True, ensure_ascii=False), (code, key)
+
+
+def test_strip_concat_same_behavior():
+    """경비실: guard.py + runner.py를 이어 붙인 글자도 뺀 뒤 원본과 똑같이 동작한다(import 없이)."""
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    from runner_src import runner_source
+    code = build.strip_runner(runner_source())
+    assert "def _guard_exec" in code and "from guard import" in code
+    mod = types.ModuleType("runner_joined")
+    sys.modules.pop("guard", None)
+    exec(compile(code, "runner_joined.py", "exec"), mod.__dict__)
+    g = {"mode": "script", "password": "sunflower77",
+         "tries": [{"value": "sunflower77", "expect": "allow"}, {"value": "123456", "expect": "block"}]}
+    src = "if attempt == password:\n    allow()\nelse:\n    block()\n"
+    a = runner.run(src, guard=g)
+    b = mod.run(src, guard=g)
+    assert a["guard"]["solved"] is True
+    assert json.dumps(a["guard"], sort_keys=True) == json.dumps(b["guard"], sort_keys=True)

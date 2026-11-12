@@ -7,13 +7,14 @@
 //   // r = { stdout, stderr, error: null | {type, line, msg}, missing: [], charts: [], timeout, ms }
 //   // charts: chart.show()로 그린 그림(v0.5 E3, src/chart.js가 모양을 다듬음)
 //   py.run(code, "", [], { files: { "memo.txt": "…" }, server: { "https://ria.example/a": { status: 200, body: "…" } } });
-//   // 넷째 인자는 제한 시간(ms) 숫자 또는 { timeoutMs?, files?, server?, farm? } (v0.4 E1·E2, v0.10)
+//   // 넷째 인자는 제한 시간(ms) 숫자 또는 { timeoutMs?, files?, server?, farm?, guard? } (v0.4 E1·E2, v0.10)
 //   const g = await py.run(code, "", [], { farm: { size, cells, pie, clock, store, upgrades } });
 //   // g.farm = { events: [{ t, line, … }], state: { size, cells, pie, clock, store, upgrades },
 //   //            stopped: null | "tired"(행동 500번) | "waited"(확인 2000번), actions }   (파이의 텃밭, 규칙은 py/runner.py의 farm 모듈)
 //   // v0.12: state에 seeds(토마토 씨앗), store에 "토마토". farm과 files를 함께 넘기면 농장일지.txt 말고는 읽기 전용이고
 //   //        g.farm.files = { "농장일지.txt": 끝 2000자 }가 붙는다(files를 안 넘기면 없음).
-//   // farm을 넘기지 않았거나 실행이 시간 초과·작업자 오류로 끝나면 결과에 farm이 없다.
+//   // 경비실: { guard: { mode, tries:[{value, expect}], password? } } → g.guard = { events, stats, solved, stopped } (py/guard.py)
+// farm을 넘기지 않았거나 실행이 시간 초과·작업자 오류로 끝나면 결과에 farm이 없다.
 //
 // - 실행은 한 번에 하나씩 차례로 돈다(대기열).
 // - 제한 시간(기본 3초)을 넘으면 작업자를 끝내고(terminate) 새로 띄운다. 그 실행은
@@ -65,6 +66,8 @@ function cleanResult(r) {
     charts: cleanCharts(r?.charts),
     timeout: false,
     ...(plainObj(r?.farm) ? { farm: cleanFarm(r.farm) } : {}),
+    // 경비실: 모양만 지킨다(events·stats·solved·stopped는 guard.py가 만든 대로 화면이 읽는다)
+    ...(plainObj(r?.guard) ? { guard: r.guard } : {}),
   };
 }
 
@@ -131,7 +134,7 @@ export class PyRun {
     const o = typeof opts === "number" ? { timeoutMs: opts } : (opts || {});
     const timeoutMs = typeof o.timeoutMs === "number" ? o.timeoutMs : DEFAULT_TIMEOUT_MS;
     // v0.13.5: 학습자가 보는 문구(텃밭·차트·연습 서버)의 언어 — opts.lang, 없으면 앱의 지금 언어
-    const env = { files: plainObj(o.files), server: plainObj(o.server), farm: plainObj(o.farm),
+    const env = { files: plainObj(o.files), server: plainObj(o.server), farm: plainObj(o.farm), guard: plainObj(o.guard),
       lang: o.lang === "en" || o.lang === "ko" ? o.lang : appLang() };
     const job = this._queue.then(() => this._runOne(code, stdin, require, timeoutMs, env));
     this._queue = job.then(() => {}, () => {});
@@ -296,7 +299,7 @@ export class PyRun {
           code: code == null ? "" : String(code),
           stdin: Array.isArray(stdin) ? stdin.map(String) : (stdin == null ? "" : String(stdin)),
           require: Array.from(require || [], String),
-          files: env.files, server: env.server, farm: env.farm, lang: env.lang,
+          files: env.files, server: env.server, farm: env.farm, guard: env.guard, lang: env.lang,
         });
       } catch (e) {
         finish(failResult("WorkerError", errMsg(e)));

@@ -22,6 +22,8 @@ import time
 from playwright.sync_api import sync_playwright
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+from runner_src import runner_source  # noqa: E402
 PAGE_PATH = "/tests/browser/grader_page.html"
 READY_TIMEOUT_MS = 60_000
 
@@ -44,6 +46,14 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
     # 끝에 404를 준다. 두 번째 요청부터는 node_modules/pyodide/<파일>을 그대로 준다.
     def do_GET(self):
         parts = self.path.split("?")[0].split("/")
+        if self.path.split("?")[0] == "/src/py/runner.py":   # 작업자는 guard.py를 이어 붙인 한 파일을 받는다
+            body = runner_source().encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if len(parts) >= 4 and parts[1] == "stall-once":
             token = parts[2]
             with _STALL_LOCK:
@@ -610,13 +620,42 @@ def test_lang_in_pyodide():
     assert not hangul.search(res["d"]), res
 
 
+def test_guard_three_modes():
+    # 경비실: 세 방식(script·loop·func)이 Pyodide 작업자에서 돈다. 정수 값·null이 JSON으로 건너가 int로 남는다.
+    res = _page().evaluate("""async () => {
+        const T = (...p) => p.map(([value, expect]) => ({ value, expect }));
+        const run = (code, guard) => window.runner.run(code, "", [], { guard });
+        const g1 = 'if attempt == password:\\n    allow()\\nelse:\\n    block()\\n';
+        const g2 = 'if attempt >= 9 and attempt < 18:\\n    allow()\\nelse:\\n    block()\\n';
+        const g3 = 'def check(attempt):\\n    if attempt == "0000" or attempt == "1234" or attempt == "1111":\\n'
+                 + '        return False\\n    return True\\n';
+        const g5 = 'count = 0\\nwhile has_try():\\n    next_try()\\n    if count < 5:\\n        allow()\\n'
+                 + '        count = count + 1\\n    else:\\n        block()\\n';
+        const s = await run(g1, { mode: "script", password: "sunflower77",
+            tries: T(["sunflower77", "allow"], ["123456", "block"]) });
+        const i = await run(g2, { mode: "script", tries: T([9, "allow"], [18, "block"], [5, "block"]) });
+        const l = await run(g5, { mode: "loop", tries: T(["a", "allow"], ["b", "allow"], ["c", "allow"],
+            ["d", "allow"], ["e", "allow"], ["f", "block"]) });
+        const f = await run(g3, { mode: "func", tries: T(["0000", "block"], ["1234", "block"], ["9999", "allow"]) });
+        const bad = await run('def check(attempt):\\n    return "yes"\\n', { mode: "func", tries: T(["a", "allow"]) });
+        const n = await run("print(1)\\n", undefined);
+        return { s, i, l, f, bad, n };
+    }""")
+    assert res["s"]["error"] is None and res["s"]["guard"]["solved"] is True, res["s"]
+    assert res["i"]["error"] is None and res["i"]["guard"]["solved"] is True, res["i"]
+    assert res["l"]["error"] is None and res["l"]["guard"]["solved"] is True, res["l"]
+    assert res["f"]["error"] is None and res["f"]["guard"]["solved"] is True, res["f"]
+    assert res["bad"]["error"]["type"] == "GuardAnswerError", res["bad"]
+    assert res["n"].get("guard") is None, res["n"]
+
+
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,
          test_require_comment_elif_else_in_pyodide, test_require_selfcall_formatspec_triplestr_in_pyodide,
          test_require_namedgroup_listcomp_lambda_in_pyodide, test_require_reraise_in_pyodide,
          test_require_def_sql_in_pyodide, test_multiline_chart_in_pyodide,
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
          test_practice_server_in_pyodide, test_chart_in_pyodide, test_farm_in_pyodide,
-         test_sqlite3_in_pyodide, test_lang_in_pyodide, test_queue, test_timeout_then_ok,
+         test_sqlite3_in_pyodide, test_lang_in_pyodide, test_guard_three_modes, test_queue, test_timeout_then_ok,
          test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,
          test_load_error_resolves, test_cdn_constant, test_fetch_retry, test_worker_ctor_throws,
          test_load_timeout_retry, test_idle_worker_killed_silently, test_idle_worker_error_event]

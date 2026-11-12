@@ -24,7 +24,7 @@
   레슨 내용이 index.html에 들어가지 않는다. 대신 레슨 목록(window.RIA_LESSON_INDEX)과 장 파일 이름표
   (window.RIA_CHAPTER_FILES)를 넣고, 앱은 레슨을 열 때 장 파일을 받는다. sw.js는 설치 때 장 파일을 모두 미리 받는다.
 - src/worker.js → 따로 묶고 줄여(ES 모듈) 글자로 넣고, 실행할 때 Blob 주소로 만든다(window.RIA_WORKER_URL).
-- src/py/runner.py → 글자 그대로 window.RIA_RUNNER_SRC로 넣는다.
+- src/py/guard.py + runner.py(tools/runner_src.py가 이어 붙임) → 글자 그대로 window.RIA_RUNNER_SRC로 넣는다.
 - Pyodide 주소: 배포는 jsDelivr(판정 C19), --dev-pyodide는 /node_modules/pyodide/.
 - app.js가 PyRun에 window.RIA_WORKER_URL·RIA_RUNNER_SRC를 넘기지 않으면 빌드를 멈춘다
   (한 장짜리 HTML에는 worker.js·runner.py 파일이 따로 없어서 Python이 돌지 않는다).
@@ -355,8 +355,9 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     b = bundle()
     if not all(h in b["app"] for h in HOOKS):
         raise SystemExit("build: bundled app lost %s" % "/".join(HOOKS))
-    with open(os.path.join(SRC, "py", "runner.py"), encoding="utf-8") as f:
-        runner = strip_runner(f.read())
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    from runner_src import runner_source   # 경비실: guard.py + runner.py 한 파일(판정 R6)
+    runner = strip_runner(runner_source())
     # v0.14.0(판정 C80): runner.py는 첫 파일 밖 py/runner-<지문>.py(서비스 작업자가 미리 받고 저장본 먼저)
     runner_body = runner.encode("utf-8")
     runner_name = "py/runner-%s.py" % hashlib.sha256(runner_body).hexdigest()[:8]

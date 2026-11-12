@@ -24,6 +24,7 @@
 """
 
 import functools
+import glob
 import gzip
 import hashlib
 import http.server
@@ -712,13 +713,24 @@ def test_runner_separate_file():
         body = f.read()
     assert hashlib.sha256(body).hexdigest()[:8] == h
     mod = _build_module()
-    with open(os.path.join(ROOT, "src", "py", "runner.py"), encoding="utf-8") as f:
-        assert body.decode("utf-8") == mod.strip_runner(f.read())
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    from runner_src import runner_source
+    assert body.decode("utf-8") == mod.strip_runner(runner_source())
     assert "def _make_farm" not in html and "RIA_RUNNER_SRC" not in html, "runner source must not be inlined"
     sw = _read(os.path.join(DIST, "sw.js"))
     pre = json.loads(re.search(r"const CHAPTER_FILES = (\[.*?\]);", sw).group(1))
     assert rel in pre, "sw must precache the runner file"
     assert "py\\/runner" in sw, "sw must serve the runner cache-first"
+
+
+def test_runner_has_guard():
+    """경비실: py/runner-*.py 한 개에 guard.py가 앞에 이어 붙어 있고, 첫 파일은 820KB 아래."""
+    _build()
+    files = glob.glob(os.path.join(DIST, "py", "runner-*.py"))
+    assert len(files) == 1, files
+    body = _read(files[0])
+    assert "def _guard_exec" in body, "guard.py must be joined into the runner file"
+    assert len(open(os.path.join(DIST, "index.html"), "rb").read()) < 820 * 1024
 
 
 def _flow_module():

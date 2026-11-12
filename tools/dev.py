@@ -37,7 +37,10 @@ def build():
         f.write(html)
     shutil.copy(os.path.join(SRC, "style.css"), os.path.join(DEV, "style.css"))
     shutil.copy(os.path.join(SRC, "worker.js"), os.path.join(DEV, "worker.js"))
-    shutil.copy(os.path.join(SRC, "py", "runner.py"), os.path.join(DEV, "py", "runner.py"))
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    from runner_src import runner_source   # 경비실: guard.py + runner.py 한 파일
+    with open(os.path.join(DEV, "py", "runner.py"), "w", encoding="utf-8") as f:
+        f.write(runner_source())
     size = os.path.getsize(os.path.join(DEV, "app.js"))
     print("묶음 dev/app.js %.1f KB" % (size / 1024))
 

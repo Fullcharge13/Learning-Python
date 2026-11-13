@@ -132,3 +132,10 @@
 | 허용 패턴 | Allow pattern |
 | 피싱 메시지 | Phishing message |
 | 비밀번호 정책 | Password policy |
+| 도메인 확인 | Domain check |
+| 포트 허용 목록 · 방화벽 | Port allowlist · Firewall |
+| 외부 링크 | Outside link |
+| 입력 검증 | Input validation |
+| 열린 리다이렉트 | Open redirect |
+| API 키 · 키 범위 | API key · Key scope |
+| 심층 방어 | Defense in depth |

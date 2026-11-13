@@ -11,7 +11,7 @@ import { cleanGuard, markSeen, guardInput, guardConsistent, rankOf, applyGuardRu
 import { passedChapters } from "../garden/state.js";
 import { sheet } from "./garden.js";
 import { esc, icon, dialog, toast, riaSays, celebrate } from "./dom.js";
-import { createEditor } from "./editor.js";
+import { mountEditor } from "./editorslot.js";
 import { errorPanel } from "./write.js";
 import { SYMBOL_ORDER } from "../kbd.js";
 import { t, tx } from "../i18n.js";
@@ -67,7 +67,7 @@ export function render(root, ctx, params = {}) {
   const G = () => cleanGuard(ctx.save.guard);
   const first = open.find((i) => i.id === params.id) || open.find((i) => !G().solved[i.id]) || open[0] || LIST[0];
   // entry: 지금 사건의 색인 칸, inc: 받은 본문(받기 전·실패면 null)
-  const S = { entry: first, inc: null, picks: [], mode: "blank", state: "idle", speed: 1, skip: false, wake: null, token: 0, ed: null, codeTimer: null, last: null, destroyed: false };
+  const S = { entry: first, inc: null, picks: [], mode: "blank", state: "idle", speed: 1, skip: false, wake: null, token: 0, ed: null, edWait: null, codeTimer: null, last: null, destroyed: false };
 
   root.innerHTML = `<div class="screen guard" data-state="idle"><header class="g-top gd-head"><button class="icon-btn" id="gd-back" aria-label="${t`돌아가기`}">${icon("back")}</button>
       <div class="gd-title"><h1>${t`경비실`}</h1><p class="gd-rank" id="gd-rank"></p></div>
@@ -150,6 +150,7 @@ export function render(root, ctx, params = {}) {
   }
   function dropEditor() {
     flushCode();
+    S.edWait = null;
     if (S.ed) { S.ed.destroy(); S.ed = null; }
   }
   function paintCode() {
@@ -164,7 +165,10 @@ export function render(root, ctx, params = {}) {
       ${code ? '<div class="editor-box gd-editor" id="gd-ed"></div>' : `<pre class="code gd-start">${startHTML(inc, S.picks)}</pre>`}`;
     $("#gd-syms").hidden = !code;
     if (code) {
-      S.ed = createEditor($("#gd-ed"), {
+      // v0.17.0: 편집기 묶음이 오기 전에는 시작 코드 글자 + 「준비 중」, 「실행」·기호 줄은 꺼 둠
+      const slot = $("#gd-ed");
+      S.edWait = slot;
+      mountEditor(slot, {
         doc: G().code[inc.id] ?? startCode(inc),
         label: t`경비실 코드 입력창. 여기에 Python 코드를 써요`,
         margins: () => ({ top: $(".g-top").getBoundingClientRect().bottom + 8, bottom: window.innerHeight - foot.getBoundingClientRect().top + 8 }),
@@ -173,8 +177,14 @@ export function render(root, ctx, params = {}) {
           if (S.codeTimer) clearTimeout(S.codeTimer);
           S.codeTimer = setTimeout(flushCode, CODE_SAVE_MS);
         },
+      }).then((ed) => {
+        if (S.destroyed || S.edWait !== slot) { ed.destroy(); return; }
+        S.edWait = null;
+        S.ed = ed;
+        paintPy();
       });
     }
+    paintPy();
   }
   async function pickBlank(n) {
     const b = S.inc.blanks[n];
@@ -226,7 +236,9 @@ export function render(root, ctx, params = {}) {
   // ---- 상태 ----
   function paintPy() {
     const { status, phase } = ctx.pyState();
-    runBtn.disabled = S.state !== "idle" || status !== "ready";
+    const noEd = S.mode === "code" && !S.ed;   // 직접 쓰기인데 편집기가 아직 안 옴(v0.17.0)
+    runBtn.disabled = S.state !== "idle" || status !== "ready" || noEd;
+    root.querySelectorAll("#gd-syms .sym").forEach((b) => { b.disabled = noEd; });
     const chip = $("#gd-py");
     chip.hidden = status === "ready";
     if (status === "ready") return;
@@ -332,6 +344,7 @@ export function render(root, ctx, params = {}) {
 
   async function doRun() {
     if (S.state !== "idle") return;
+    if (S.mode === "code" && !S.ed) return;   // 편집기를 기다리는 중
     if (ctx.pyState().status !== "ready") { paintPy(); return; }
     const inc = S.inc;
     let code;

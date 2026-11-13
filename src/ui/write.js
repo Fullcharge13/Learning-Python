@@ -2,7 +2,7 @@
 import { normalize, judge, explain } from "../grade.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, codeBlock, filesNote, chartNote } from "./dom.js";
-import { createEditor } from "./editor.js";
+import { mountEditor } from "./editorslot.js";
 import { missingMessage } from "../shuffle.js";
 import { keyboardOpen, nextBaseHeight, SYMBOL_ORDER, padStarter } from "../kbd.js";
 import { t, lang } from "../i18n.js";
@@ -48,7 +48,10 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     st.hadError = !!init.hadError;
   }
   let draftTimer = null;
-  const stateNow = () => ({ code: ed.getCode(), hintsShown: st.hintsShown, solutionSeen: st.solutionSeen, submits: st.submits, hadError: st.hadError });
+  // 편집기(v0.17.0 따로 받는 묶음)는 오기 전까지 null. 그동안 코드는 시작 코드 그대로(입력할 곳이 없음)
+  let ed = null;
+  const startDoc = init && typeof init.code === "string" ? init.code : padStarter(item.starter || "", item.solution);
+  const stateNow = () => ({ code: ed ? ed.getCode() : startDoc, hintsShown: st.hintsShown, solutionSeen: st.solutionSeen, submits: st.submits, hadError: st.hadError });
   function notify() {
     if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
     if (!onState || st.destroyed) return;
@@ -119,10 +122,6 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     const dockTop = foot.getBoundingClientRect().top;
     return { top: top + 8, bottom: Math.max(0, vh - dockTop) + 8 };
   };
-  const ed = createEditor(body.querySelector("#ed"), {
-    doc: init && typeof init.code === "string" ? init.code : padStarter(item.starter || "", item.solution),
-    label: t`코드 입력창. 여기에 Python 코드를 써요`, margins, onChange: draftChanged,
-  });
   const consoleEl = body.querySelector("#console");
   const runBtn = foot.querySelector("#run");
   const subBtn = foot.querySelector("#submit");
@@ -151,6 +150,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     b.addEventListener("mousedown", keep);
     b.addEventListener("pointerdown", keep);
     b.addEventListener("click", () => {
+      if (!ed) return;
       const sy = SYMBOL_ORDER[+b.dataset.s];
       if (sy.act === "newline") ed.newline();
       else if (sy.act === "indent") ed.indent();
@@ -195,26 +195,25 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       edBox.style.removeProperty("--edh");
     }
   }
+  const edFocused = () => !!ed && ed.hasFocus();
   function place() {
     const vh = vv ? vv.height : window.innerHeight;
-    if (!ed.hasFocus()) base = nextBaseHeight(base, Math.max(vh, window.innerHeight), window.innerWidth);
+    if (!edFocused()) base = nextBaseHeight(base, Math.max(vh, window.innerHeight), window.innerWidth);
     else if (base.width !== window.innerWidth) base = nextBaseHeight(base, window.innerHeight, window.innerWidth);
     const gap = vv ? Math.max(0, window.innerHeight - (vv.height + vv.offsetTop)) : 0;
     foot.style.transform = gap > 0 ? `translateY(${-gap}px)` : "";
     if (header) header.style.transform = vv && vv.offsetTop > 0 && compact ? `translateY(${vv.offsetTop}px)` : "";
-    const open = keyboardOpen({ focused: ed.hasFocus(), vvHeight: vh, innerHeight: window.innerHeight, baseHeight: base.base });
+    const open = keyboardOpen({ focused: edFocused(), vvHeight: vh, innerHeight: window.innerHeight, baseHeight: base.base });
     document.body.classList.toggle("kbd-open", open);
     setCompact(open, vh);
     paintMore();
-    if (ed.hasFocus()) requestAnimationFrame(() => { if (!st.destroyed) ed.revealCursor(); });
+    if (edFocused()) requestAnimationFrame(() => { if (!st.destroyed) ed.revealCursor(); });
   }
   if (vv) { vv.addEventListener("resize", place); vv.addEventListener("scroll", place); }
   window.addEventListener("resize", place);
   // 초점이 들어오고 나갈 때(키보드가 열리기 전후)도 다시 판정. 기호 줄·문제 보기 단추는 초점을 뺏지 않음
   const onFocus = () => place();
   const onBlur = () => setTimeout(() => { if (!st.destroyed) place(); }, 50);
-  ed.view.contentDOM.addEventListener("focus", onFocus);
-  ed.view.contentDOM.addEventListener("blur", onBlur);
   qtoggle.addEventListener("mousedown", keep);
   qtoggle.addEventListener("pointerdown", keep);
   qtoggle.addEventListener("click", () => {
@@ -224,8 +223,6 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     qtoggle.querySelector("span").textContent = show ? t`문제 접기` : t`문제 보기`;
     place();
   });
-  // 줄이 바뀔 때마다 커서 줄이 보이게
-  ed.view.dom.addEventListener("keyup", () => { if (compact) ed.revealCursor(); });
   place();
 
   // ---- 출력 ----
@@ -242,15 +239,16 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       <p>${t`인터넷 연결을 확인하고 잠시 뒤 다시 눌러 주세요. 이번 실행은 제출 횟수에 들어가지 않아요.`}</p>
       <p class="err-orig mono" lang="en">${esc(r.error.type)}: ${esc(r.error.msg || "")}</p></div>`;
   }
+  // 편집기가 오기 전에는 「실행」「제출」·기호 줄을 꺼 둔다(누를 곳이 없음)
   function setBusy(b) {
     st.busy = b;
-    runBtn.disabled = b;
-    subBtn.disabled = b;
+    runBtn.disabled = b || !ed;
+    subBtn.disabled = b || !ed;
     subBtn.setAttribute("aria-busy", String(b));
   }
 
   async function doRun() {
-    if (st.busy) return;
+    if (st.busy || !ed) return;
     setBusy(true);
     ed.markLine(null);
     showRunning();
@@ -271,7 +269,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
   }
 
   async function doSubmit() {
-    if (st.busy) return;
+    if (st.busy || !ed) return;
     setBusy(true);
     ed.markLine(null);
     showRunning();
@@ -381,7 +379,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       ${codeBlock(item.solution || "")}
       ${item.explain ? `<p>${esc(item.explain)}</p>` : ""}
       <button class="btn ghost small" id="usesol">${t`정답을 입력창에 넣기`}</button>`;
-    solEl.querySelector("#usesol").addEventListener("click", () => { ed.setCode(item.solution || ""); ed.focus(); });
+    solEl.querySelector("#usesol").addEventListener("click", () => { if (ed) { ed.setCode(item.solution || ""); ed.focus(); } });
     body.querySelector("#sol").disabled = true;
   }
   body.querySelector("#sol").addEventListener("click", () => revealSolution(false));
@@ -395,6 +393,26 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
 
   runBtn.addEventListener("click", doRun);
   subBtn.addEventListener("click", doSubmit);
+
+  // ---- 편집기 끼우기(v0.17.0): 오기 전에는 시작 코드 글자 + 「준비 중」, 단추·기호 줄은 꺼 둠 ----
+  const syms = [...foot.querySelectorAll(".sym")];
+  const setSyms = (on) => syms.forEach((b) => { b.disabled = !on; });
+  setSyms(false);
+  setBusy(false);
+  mountEditor(edBox, {
+    doc: startDoc, label: t`코드 입력창. 여기에 Python 코드를 써요`, margins, onChange: draftChanged,
+  }).then((e) => {
+    if (st.destroyed) { e.destroy(); return; }
+    ed = e;
+    // 초점이 들어오고 나갈 때(키보드가 열리기 전후)도 다시 판정
+    ed.view.contentDOM.addEventListener("focus", onFocus);
+    ed.view.contentDOM.addEventListener("blur", onBlur);
+    // 줄이 바뀔 때마다 커서 줄이 보이게
+    ed.view.dom.addEventListener("keyup", () => { if (compact) ed.revealCursor(); });
+    setSyms(true);
+    setBusy(st.busy);
+    place();
+  });
 
   return () => {
     st.destroyed = true;
@@ -411,6 +429,6 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     document.body.style.removeProperty("--peek-bottom");
     foot.classList.remove("has-dock");
     document.body.classList.remove("kbd-open");
-    ed.destroy();
+    if (ed) ed.destroy();
   };
 }

@@ -65,6 +65,9 @@
                  blocklist.txt)를 빈칸 정답으로 「사건 해결」(firstTry) / 14장 저장 → G34(주문 JSON) 해결 / 17장 저장 → 머리
                  「0/45 해결」, 목록 45개 장 순서·모두 열림 / 6장 저장 → 7장 사건 G13~G15 「7장을 끝내면 열려요」 잠김.
                  캡처: guard-file-case.png·guard-json-case.png·guard-list-45.png
+- test_editor_slot_slow / _fail: v0.17.0 작업 2. 편집기는 따로 받는 묶음(js/editor-<지문>.js). 늦으면 시작 코드 글자 +
+                 「코드 입력창 준비 중…」, 「실행」「제출」·기호 줄 꺼짐 → 오면 편집기(레슨·텃밭 코드·경비실 직접 쓰기) /
+                 연결 끊김 → 「다시 시도」로 열림, 404 → 「새로 고침」. 영어판 한글 없음. 캡처: editor-wait-*.png·editor-fail.png·editor-stale.png
 """
 
 import atexit
@@ -178,7 +181,7 @@ def today(n=0):
 class App:
     """기기 하나 + 새 저장소의 앱 한 판."""
 
-    def __init__(self, device="iPhone 17", save=None, reduced=False, url=None, locale=None, init_js=None):
+    def __init__(self, device="iPhone 17", save=None, reduced=False, url=None, locale=None, init_js=None, routes=()):
         e = env()
         opts = device_opts(device)
         opts["locale"] = locale or "ko-KR"   # v0.14.0: 처음 언어는 휴대폰 언어를 따른다 → 기본은 한국어 휴대폰
@@ -197,6 +200,8 @@ class App:
                 % (json.dumps(SAVE_KEY), json.dumps(json.dumps(save))))
         if init_js:
             self.page.add_init_script(init_js)
+        for pat, handler in routes:   # v0.17.0: 첫 화면 뒤 미리 받기(묶음 파일)까지 가로채려면 열기 전에
+            self.page.route(pat, handler)
         self.page.goto(url or e["url"])
         self.page.wait_for_selector(".screen.splash #go", timeout=20_000)
 
@@ -521,12 +526,12 @@ def test_first_lesson():
         assert not a.errors, a.errors
 
 
-def _to_write(a, lid="1-1"):
-    """lid 레슨을 직접 작성 문제까지 진행"""
+def _to_write(a, lid="1-1", ready=".item.write .cm-content"):
+    """lid 레슨을 직접 작성 문제까지 진행(ready: 다 왔다고 볼 표시. 편집기를 기다리는 시험은 ".item.write")"""
     items = a.lesson(lid)["items"]
     for _ in range(40):
         a.page.wait_for_timeout(80)
-        if a.page.query_selector(".item.write .cm-content"):
+        if a.page.query_selector(ready):
             return
         if a.page.query_selector(".card-view"):
             a.page.click("#act")
@@ -4424,6 +4429,195 @@ def test_guard_room_locked_chapters():
             fails.append("G16 note")
         if a.errors:
             fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+# ---------------------------------------------------------------- v0.17.0 편집기 따로 받기
+
+EDITOR_FILE_GLOB = re.compile(r"/js/editor-[0-9a-f]{8}\.js(\?.*)?$")
+WAIT_TEXT = {"ko": "코드 입력창 준비 중…", "en": "Getting the code editor ready…"}
+
+
+def _ed_text(a, sel=".cm-content"):
+    return a.js("(s) => [...document.querySelectorAll(s + ' .cm-line')].map(e => e.textContent).join('\\n')", sel)
+
+
+def _editor_wait_checks(a, slot, run, syms, lang_="ko"):
+    """편집기를 기다리는 동안: 「준비 중」 덮개 + 시작 코드 글자(읽기 전용), 「실행」·기호 줄 꺼짐, 누르면 아무 일 없음"""
+    fails = []
+    a.page.wait_for_selector(slot + " .ed-wait", timeout=10_000)
+    if a.page.query_selector(slot + " .cm-content"):
+        fails.append("editor already there (chunk not delayed?)")
+    wait = a.page.inner_text(slot + " .ed-wait")
+    if WAIT_TEXT[lang_] not in wait:
+        fails.append("wait text %r" % wait)
+    start = a.js("(s) => { const p = document.querySelector(s + ' .ed-pre'); return p ? p.textContent : null; }", slot)
+    if start is None:
+        fails.append("no read-only start code")
+    for b in run:
+        if not a.page.is_disabled(b):
+            fails.append("%s enabled before the editor" % b)
+    dis = a.js("(s) => [...document.querySelectorAll(s)].filter((b) => b.offsetParent).map((b) => b.disabled)", syms)
+    if not dis or not all(dis):
+        fails.append("symbol keys not disabled: %r" % dis)
+    a.js("(bs) => bs.forEach((b) => document.querySelector(b)?.click())", run)
+    return fails, start
+
+
+def _editor_slot_slow(lang_):
+    held = []
+    fails = []
+    locale = "en-US" if lang_ == "en" else "ko-KR"
+    with App("iPhone 17", locale=locale, routes=[(EDITOR_FILE_GLOB, lambda r: held.append(r))]) as a:
+        a.start()
+        a.page.click("#continue")
+        _to_write(a, ready=".item.write")
+        f, start = _editor_wait_checks(a, "#ed", ["#run", "#submit"], ".dock .sym", lang_)
+        fails += f
+        a.shot("editor-wait-%s.png" % lang_)
+        if lang_ == "en":
+            left = _hangul_left(a)
+            if left:
+                fails.append("hangul while waiting %r" % left)
+        a.page.wait_for_timeout(3000)
+        if a.page.query_selector("#ed .cm-content") or not a.page.query_selector("#ed .ed-wait"):
+            fails.append("editor appeared before the file came")
+        if not held:
+            fails.append("editor file was never requested")
+        for r in held:
+            r.continue_()
+        a.page.wait_for_selector("#ed .cm-content", timeout=10_000)
+        if a.page.query_selector("#ed .ed-wait"):
+            fails.append("wait cover left after the editor came")
+        got = _ed_text(a, "#ed")
+        if start is not None and got != start:
+            fails.append("start code changed %r -> %r" % (start, got))
+        if a.page.is_disabled("#run") or a.page.is_disabled("#submit"):
+            fails.append("run/submit still disabled after the editor came")
+        if a.js("() => [...document.querySelectorAll('.dock .sym')].some((b) => b.disabled)"):
+            fails.append("symbol keys still disabled")
+        label = a.js("() => document.querySelector('#ed .cm-content').getAttribute('aria-label')")
+        want = "Code editor. Write your Python code here" if lang_ == "en" else "코드 입력창. 여기에 Python 코드를 써요"
+        if label != want:
+            fails.append("editor label %r" % label)
+        if lang_ == "en":
+            left = _hangul_left(a)
+            if left:
+                fails.append("hangul after the editor %r" % left)
+        errs = _app_errors(a)
+        if errs:
+            fails.append("console errors %r" % errs)
+    return fails
+
+
+def test_editor_slot_slow():
+    """v0.17.0 작업 2: 편집기 파일(js/editor-*.js)이 늦게 오면 레슨 코드 쓰기 자리에 시작 코드 글자 + 「코드 입력창 준비 중…」,
+    「실행」「제출」·기호 줄은 꺼짐(눌러도 아무 일 없음) → 파일이 오면 편집기, 시작 코드 그대로, 단추 켜짐. 영어판은 한글 없음.
+    텃밭 코드 모드·경비실 직접 쓰기도 같은 자리. 캡처: editor-wait-ko.png·editor-wait-en.png"""
+    fails = _editor_slot_slow("ko") + ["en: " + f for f in _editor_slot_slow("en")]
+    # 텃밭 코드 모드
+    held = []
+    code = 'move("오른쪽")\nharvest()\n'
+    with App("iPhone 17", save=_garden_seed(1, _garden(order_idx=1, mode="code", code=code)), reduced=True,
+             routes=[(EDITOR_FILE_GLOB, lambda r: held.append(r))]) as a:
+        _open_garden(a)
+        a.wait_py()
+        f, start = _editor_wait_checks(a, "#g-prog", ["#g-run"], "#g-syms .sym")
+        fails += ["garden: " + x for x in f]
+        if start != code:
+            fails.append("garden start code %r" % start)
+        for r in held:
+            r.continue_()
+        a.page.wait_for_selector(".g-editor .cm-content", timeout=10_000)
+        if _ed_text(a, ".g-editor") != code.rstrip("\n") + "\n" and _ed_text(a, ".g-editor") != code:
+            fails.append("garden editor %r" % _ed_text(a, ".g-editor"))
+        if a.page.is_disabled("#g-run"):
+            fails.append("garden run disabled after the editor came")
+        errs = _app_errors(a)
+        if errs:
+            fails.append("garden console errors %r" % errs)
+    # 경비실 직접 쓰기
+    held = []
+    with App("iPhone 17", save=_guard_seed(3, guard=_guard_solved_g1()), routes=[(EDITOR_FILE_GLOB, lambda r: held.append(r))]) as a:
+        _open_guard(a)
+        a.wait_py()
+        _gd_open_g1(a)
+        a.page.click("#gd-mode")
+        f, start = _editor_wait_checks(a, "#gd-code", ["#gd-run"], "#gd-syms .sym")
+        fails += ["guard: " + x for x in f]
+        for r in held:
+            r.continue_()
+        a.page.wait_for_selector("#gd-ed .cm-content", timeout=10_000)
+        if start is not None and _ed_text(a, "#gd-ed") != start:
+            fails.append("guard start code changed %r -> %r" % (start, _ed_text(a, "#gd-ed")))
+        if a.page.is_disabled("#gd-run"):
+            fails.append("guard run disabled after the editor came")
+        errs = _app_errors(a)
+        if errs:
+            fails.append("guard console errors %r" % errs)
+    assert not fails, "\n".join(fails)
+
+
+def test_editor_slot_fail():
+    """v0.17.0 작업 2: 편집기 파일을 못 받으면(연결 끊김) 「코드 입력창을 불러오지 못했어요…」+「다시 시도」 → 연결이 돌아온 뒤
+    누르면 편집기. 404(새 판이 나와 옛 파일이 없음)면 「새 판이 나왔어요…」+「새로 고침」(누르면 앱을 다시 불러옴). 영어판 한글 없음.
+    캡처: editor-fail.png·editor-stale.png"""
+    fails = []
+    block = {"on": True}
+
+    def flaky(route):
+        if block["on"]:
+            route.abort()
+        else:
+            route.continue_()
+    with App("iPhone 17", routes=[(EDITOR_FILE_GLOB, flaky)]) as a:
+        a.start()
+        a.page.click("#continue")
+        _to_write(a, ready=".item.write")
+        a.page.wait_for_selector("#ed .ed-retry", timeout=15_000)
+        msg = a.page.inner_text("#ed .ed-wait")
+        if "코드 입력창을 불러오지 못했어요. 인터넷에 연결한 뒤 다시 열어 주세요" not in msg or "다시 시도" not in msg:
+            fails.append("fail text %r" % msg)
+        if not a.page.query_selector("#ed [role=alert]"):
+            fails.append("failure has no role=alert")
+        if not a.page.is_disabled("#run"):
+            fails.append("run enabled without an editor")
+        a.shot("editor-fail.png")
+        block["on"] = False
+        a.page.click("#ed .ed-retry")
+        a.page.wait_for_selector("#ed .cm-content", timeout=10_000)
+        if a.page.is_disabled("#run"):
+            fails.append("run disabled after retry")
+        errs = _app_errors(a)
+        if errs:
+            fails.append("console errors %r" % errs)
+    for lang_ in ("ko", "en"):
+        with App("iPhone 17", locale="en-US" if lang_ == "en" else "ko-KR",
+                 routes=[(EDITOR_FILE_GLOB, lambda route: route.fulfill(status=404, body="not found"))]) as a:
+            a.start()
+            a.page.click("#continue")
+            _to_write(a, ready=".item.write")
+            a.page.wait_for_selector("#ed .ed-refresh", timeout=15_000)
+            msg = a.page.inner_text("#ed .ed-wait")
+            want = ("새 판이 나왔어요. 새로 고침하면 열려요", "새로 고침") if lang_ == "ko" else ("A new version is out", "Refresh")
+            if not all(w in msg for w in want):
+                fails.append("%s stale text %r" % (lang_, msg))
+            if a.page.query_selector("#ed .ed-retry"):
+                fails.append("%s retry shown for a stale (404) file" % lang_)
+            if lang_ == "en":
+                left = _hangul_left(a)
+                if left:
+                    fails.append("en hangul %r" % left)
+            else:
+                a.shot("editor-stale.png")
+                a.js("() => { window.__beforeReload = 1; }")
+                with a.page.expect_navigation(timeout=15_000):
+                    a.page.click("#ed .ed-refresh")
+                if a.js("() => window.__beforeReload || 0"):
+                    fails.append("refresh did not reload the app")
+            errs = _app_errors(a)
+            if errs:
+                fails.append("%s console errors %r" % (lang_, errs))
     assert not fails, "\n".join(fails)
 
 

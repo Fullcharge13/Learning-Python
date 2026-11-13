@@ -25,7 +25,7 @@ import { BADGES } from "../../data/badges.js";
 import { render as farmSVG, replayFrames, thinFrames } from "../garden/view.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, el, dialog, toast, bar, riaSays, celebrate } from "./dom.js";
-import { createEditor } from "./editor.js";
+import { mountEditor } from "./editorslot.js";
 import { errorPanel } from "./write.js";
 import { SYMBOL_ORDER } from "../kbd.js";
 import { t, tp, tx, lang } from "../i18n.js";
@@ -254,6 +254,7 @@ export function render(root, ctx, params = {}) {
     runErr: null,        // 실행 오류가 난 노드 id(노드 모드)
     previewOpen: true,
     ed: null,
+    edWait: null,        // v0.17.0: 편집기 묶음을 기다리는 자리(.editor-box). 오면 ed로
     codeTimer: null,
     destroyed: false,
     lastHtml: "",        // 실행 결과 칸
@@ -478,12 +479,15 @@ export function render(root, ctx, params = {}) {
   function paintProg() {
     const code = S.garden.mode === "code";
     if (code) {
-      if (!S.ed) {
+      if (!S.ed && !(S.edWait && S.edWait.isConnected)) {
         progEl.innerHTML = `<div class="g-prog-head"><h2 id="g-prog-title">${icon("code")}<span>${t`파이썬 코드`}</span></h2>
           <button class="btn ghost small" id="to-nodes">${t`노드로 돌아가기`}</button></div>
           <p class="g-mode-note">${t`명령:`} <code>move("${esc(dirName(DIR_RIGHT))}")</code> <code>plant("${esc(cropName(CARROT))}")</code> <code>harvest()</code> <code>can_harvest()</code> <code>what_here()</code> <code>store()</code> <code>where()</code>${tomatoOpen ? " <code>seeds()</code>" : ""}${notesOpen ? " <code>open()</code>" : ""} <code>print()</code></p>
           <div class="editor-box g-editor" id="g-ed"></div>`;
-        S.ed = createEditor(progEl.querySelector("#g-ed"), {
+        // 편집기가 오기 전에는 코드 글자 + 「준비 중」, 「실행」·기호 줄은 꺼 둠(paintPy·paintSyms)
+        const slot = progEl.querySelector("#g-ed");
+        S.edWait = slot;
+        mountEditor(slot, {
           doc: S.garden.code || "",
           label: t`텃밭 코드 입력창. 여기에 Python 코드를 써요`,
           margins: () => ({ top: root.querySelector(".g-top").getBoundingClientRect().bottom + 8, bottom: window.innerHeight - foot.getBoundingClientRect().top + 8 }),
@@ -492,13 +496,22 @@ export function render(root, ctx, params = {}) {
             if (S.codeTimer) clearTimeout(S.codeTimer);
             S.codeTimer = setTimeout(flushCode, CODE_SAVE_MS);
           },
+        }).then((ed) => {
+          if (S.destroyed || S.edWait !== slot) { ed.destroy(); return; }
+          S.edWait = null;
+          S.ed = ed;
+          paintSyms();
+          paintPy();
         });
         progEl.querySelector("#to-nodes").addEventListener("click", toNodes);
       }
       codeEl.hidden = true;
       symWrap.hidden = false;
+      paintSyms();
+      paintPy();
       return;
     }
+    S.edWait = null;
     if (S.ed) { flushCode(); S.ed.destroy(); S.ed = null; }
     symWrap.hidden = true;
     codeEl.hidden = false;
@@ -514,6 +527,7 @@ export function render(root, ctx, params = {}) {
     progEl.querySelector("#to-code").addEventListener("click", toCode);
     progEl.querySelector("#g-clear").addEventListener("click", clearAll);
     paintPreview();
+    paintPy();   // 편집기를 기다리다 노드로 돌아왔으면 「실행」을 다시 켬(v0.17.0)
   }
 
   function paintPreview() {
@@ -553,10 +567,15 @@ export function render(root, ctx, params = {}) {
   }
 
   // ---- Python 준비 상태 ----
+  /** 코드 모드인데 편집기가 아직 안 왔으면 기호 줄을 꺼 둔다(v0.17.0) */
+  function paintSyms() {
+    const off = S.garden.mode === "code" && !S.ed;
+    symWrap.querySelectorAll(".sym").forEach((b) => { b.disabled = off; });
+  }
   function paintPy() {
     const { status, phase } = ctx.pyState();
     const busy = S.state !== "idle";
-    runBtn.disabled = busy || status !== "ready";
+    runBtn.disabled = busy || status !== "ready" || (S.garden.mode === "code" && !S.ed);
     if (status === "ready") { pyChip.hidden = true; return; }
     pyChip.hidden = false;
     if (status === "error") {
@@ -1149,6 +1168,7 @@ export function render(root, ctx, params = {}) {
 
   async function doRun() {
     if (S.state !== "idle") return;
+    if (S.garden.mode === "code" && !S.ed) return;   // 편집기를 기다리는 중(v0.17.0)
     if (ctx.pyState().status !== "ready") { paintPy(); return; }
     const mode = S.garden.mode;
     const program = S.garden.program;
@@ -1459,6 +1479,7 @@ export function render(root, ctx, params = {}) {
     flushCode();
     offPy();
     if (vv) { vv.removeEventListener("resize", place); vv.removeEventListener("scroll", place); }
+    S.edWait = null;
     if (S.ed) { S.ed.destroy(); S.ed = null; }
     document.querySelectorAll(".modal-back").forEach((m) => m.remove());
   };

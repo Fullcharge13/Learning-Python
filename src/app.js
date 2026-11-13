@@ -21,6 +21,7 @@ import { lessonStateOf } from "./curriculum.js";
 import { loadDevChapters } from "./lessondev.js";
 import { createGuardData } from "./guard/catalog.js";
 import { loadDevIncidents } from "./guard/guarddev.js";
+import { prefetchChunks } from "./chunks.js";
 import { setGuardIndex } from "./guard/state.js";
 import { createSound } from "./sound.js";
 import { toast } from "./ui/dom.js";
@@ -482,6 +483,9 @@ async function boot() {
     if (app.screen === "home" && (before !== after || app.greetOverride)) show("home");
   });
   root.removeAttribute("aria-busy");
+  // v0.17.0: 따로 나간 묶음(편집기·오류 안내)은 첫 화면을 그린 뒤 쉬는 틈에 미리 받는다(첫 그리기와 다투지 않게:
+  // 다음 그리기 직전 rAF → 그린 뒤 setTimeout → requestIdleCallback)
+  requestAnimationFrame(() => setTimeout(() => prefetchChunks(), 0));
   warmLang();
   window.addEventListener("online", () => warmLang(1000));
   // 처음 여는 사람: 서비스 작업자 설치(Pyodide 미리 받기)가 끝나 페이지를 다루기 시작할 때 다시(v0.14.0 검토 I1)

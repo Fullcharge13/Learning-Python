@@ -56,20 +56,27 @@ const a = JSON.parse(argsJson);
 const common = { bundle: true, minify: true, write: false, metafile: true, target: a.target, legalComments: "none", logLevel: "warning", charset: "utf8" };
 // 배포판에는 개발용 레슨 import(src/lessondev.js)를 빈 모듈로 (레슨 내용은 장 파일로 따로 나감)
 // 경비실 사건 원본 import(src/guard/guarddev.js, v0.16.0)도 같은 방법으로 (사건 본문은 guard/chN-<지문>.json으로)
+// v0.17.0: 따로 나간 묶음의 개발판 import(src/chunkdev.js)도 바꿔 끼운다. 편집기는 js/editor-<지문>.js로 나가므로 묶지 않고,
+// 오류 안내(data/errors.js)는 아직 첫 파일 안(작업 3에서 나눔)
 const STUBS = {
   lessondev: "export async function loadDevChapters() { return []; }",
   guarddev: "export async function loadDevIncidents() { return []; }",
+  chunkdev: "export function devChunk(name) { return name === \"errors\" ? import(\"../data/errors.js\") : Promise.reject(new Error(\"chunk \" + name + \" is not in this build\")); }",
 };
 const noDevLessons = { name: "ria-no-dev-lessons", setup(b) {
-  b.onResolve({ filter: /(^|\/)(lessondev|guarddev)\.js$/ }, (args) => ({ path: args.path.match(/(lessondev|guarddev)\.js$/)[1], namespace: "ria-stub" }));
-  b.onLoad({ filter: /.*/, namespace: "ria-stub" }, (args) => ({ contents: STUBS[args.path], loader: "js" }));
+  b.onResolve({ filter: /(^|\/)(lessondev|guarddev|chunkdev)\.js$/ }, (args) => ({ path: args.path.match(/(lessondev|guarddev|chunkdev)\.js$/)[1], namespace: "ria-stub" }));
+  b.onLoad({ filter: /.*/, namespace: "ria-stub" }, (args) => ({ contents: STUBS[args.path], loader: "js", resolveDir: a.src }));
 } };
 const app = await esbuild.build({ ...common, entryPoints: [a.app], format: "iife", plugins: [noDevLessons],
   define: { "import.meta.url": "location.href" } });
 const worker = await esbuild.build({ ...common, entryPoints: [a.worker], format: "esm" });
+// 편집기 묶음(v0.17.0): CodeMirror·Lezer 전부. 앱이 import(주소)로 받는 ES 모듈
+const editor = await esbuild.build({ ...common, entryPoints: [a.editor], format: "esm" });
 const css = await esbuild.build({ ...common, entryPoints: [a.css], loader: { ".css": "css" } });
-const inputs = [...Object.keys(app.metafile.inputs), ...Object.keys(worker.metafile.inputs), ...Object.keys(css.metafile.inputs)];
-process.stdout.write(JSON.stringify({ app: app.outputFiles[0].text, worker: worker.outputFiles[0].text, css: css.outputFiles[0].text, inputs }));
+const inputs = [...Object.keys(app.metafile.inputs), ...Object.keys(worker.metafile.inputs), ...Object.keys(css.metafile.inputs),
+  ...Object.keys(editor.metafile.inputs)];
+process.stdout.write(JSON.stringify({ app: app.outputFiles[0].text, worker: worker.outputFiles[0].text, css: css.outputFiles[0].text,
+  editor: editor.outputFiles[0].text, appInputs: Object.keys(app.metafile.inputs), editorInputs: Object.keys(editor.metafile.inputs), inputs }));
 """
 
 # 장 파일 나누기: data/lessons/chN.js → 레슨 목록 + lessons/chN-<지문>.json (목록·이름은 src/lessondata.js가 만듦)
@@ -150,7 +157,7 @@ process.stdout.write(JSON.stringify({ index, files, contents }));
 
 
 OWNED = ("index.html", "manifest.webmanifest", "manifest.en.webmanifest", "sw.js", "icons", "lessons", "guard", "lang", "py",
-         "licenses.txt")
+         "licenses.txt", "js")
 HOOKS = ("RIA_WORKER_URL", "RIA_RUNNER_URL")
 
 
@@ -245,7 +252,8 @@ def clean(out):
 
 def bundle():
     args = {"app": os.path.join(SRC, "app.js"), "worker": os.path.join(SRC, "worker.js"),
-            "css": os.path.join(SRC, "style.css"), "target": TARGET}
+            "css": os.path.join(SRC, "style.css"), "editor": os.path.join(SRC, "ui", "editor.js"), "src": SRC,
+            "target": TARGET}
     esb = os.path.join(ROOT, "node_modules", "esbuild", "lib", "main.js")
     r = subprocess.run(["node", "--input-type=module", "-e", NODE_BUNDLE, "file://" + esb, json.dumps(args)],
                        cwd=ROOT, capture_output=True, text=True)
@@ -358,6 +366,7 @@ window.RIA_CHAPTER_FILES = {chapter_files};
 window.RIA_GUARD_INDEX = {guard_index};
 window.RIA_GUARD_FILES = {guard_files};
 window.RIA_LANG_FILES = {lang_files};
+window.RIA_CHUNKS = {chunks};
 (function () {{
   try {{
     window.RIA_WORKER_URL = URL.createObjectURL(new Blob([{worker}], {{ type: "text/javascript" }}));
@@ -421,6 +430,16 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     b = bundle()
     if not all(h in b["app"] for h in HOOKS):
         raise SystemExit("build: bundled app lost %s" % "/".join(HOOKS))
+    # v0.17.0: 편집기(CodeMirror·Lezer)는 js/editor-<지문>.js로만. 첫 파일에 다시 묶이면 멈춘다
+    cm = [p for p in b["appInputs"] if re.search(r"node_modules/(@codemirror|@lezer|codemirror|style-mod|w3c-keyname|crelt)/", p)
+          or p.endswith("src/ui/editor.js")]
+    if cm:
+        raise SystemExit("build: editor code leaked into the app bundle (e.g. %s)" % cm[0])
+    if any(p.endswith("src/i18n.js") for p in b["editorInputs"]):
+        raise SystemExit("build: editor chunk must not bundle src/i18n.js (pass a translated label instead)")
+    editor_body = b["editor"].encode("utf-8")
+    editor_name = "js/editor-%s.js" % hashlib.sha256(editor_body).hexdigest()[:8]
+    chunks = {"editor": editor_name}
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     from runner_src import runner_source   # 경비실: guard.py + runner.py 한 파일(판정 R6)
     runner = strip_runner(runner_source())
@@ -439,7 +458,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
                            runner_url=js_string(runner_name), worker=js_string(b["worker"]),
                            lesson_index=js_value(split["index"]), chapter_files=js_value(split["files"]),
                            guard_index=js_value(guard["index"]), guard_files=js_value(guard["files"]),
-                           lang_files=js_value({k: v[0] for k, v in packs.items()}))
+                           lang_files=js_value({k: v[0] for k, v in packs.items()}), chunks=js_value(chunks))
     if "<!-- RIA:CONFIG -->" not in html:
         raise SystemExit("build: marker CONFIG not found in src/index.html")
     html = html.replace("<!-- RIA:CONFIG -->", config, 1)
@@ -495,10 +514,15 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
             f.write(body)
         lang_sizes.append((name, len(body)))
     chapter_files += [name for name, _ in lang_sizes]  # 서비스 작업자가 장 파일처럼 미리 받아 둠(오프라인 언어 바꾸기)
+    os.makedirs(os.path.join(out, "js"))
+    with open(os.path.join(out, editor_name), "wb") as f:
+        f.write(editor_body)
     os.makedirs(os.path.join(out, "py"))
     with open(os.path.join(out, runner_name), "wb") as f:
         f.write(runner_body)
     chapter_files.append(runner_name)  # Python 실행에 꼭 필요 → 미리 받음(오프라인)
+    # v0.17.0 작업 2(최소): 편집기 묶음도 설치 때 미리 받음(오프라인 코드 쓰기). sw.js 쪽 정리(GAME_FILES·지문 규칙)는 작업 4
+    chapter_files.append(editor_name)
 
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     import icon  # noqa: E402  (Playwright가 필요해서 쓸 때만 불러옴)
@@ -540,6 +564,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     print("guard: %d chapter files, %.1f KB total" % (len(guard_sizes), sum(sz for _, sz in guard_sizes) / 1024))
     for name, sz in lang_sizes:
         print("lang: %s %.1f KB" % (name, sz / 1024))
+    print("chunk: %s %.1f KB (%d B)" % (editor_name, len(editor_body) / 1024, len(editor_body)))
     if raw > MAX_RAW:
         raise SystemExit("build: index.html is over %d KB" % (MAX_RAW // 1024))
 

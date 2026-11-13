@@ -312,7 +312,10 @@ class _Browser:
         pg.wait_for_selector(".screen.splash #go", timeout=20_000)
         assert APP_VERSION in pg.inner_text(".screen.splash .ver")
         pg.click("#go")
-        pg.wait_for_selector("#app[data-screen=home]", timeout=10_000)
+        pg.wait_for_selector("#app[data-screen=home], #app[data-screen=tutorial]", timeout=10_000)
+        if pg.query_selector("#app[data-screen=tutorial]"):   # v0.18.0: 새 저장이면 튜토리얼이 먼저 → 건너뛰기
+            pg.click("#tut-skip")
+            pg.wait_for_selector("#app[data-screen=home]", timeout=10_000)
 
     def wait_controlled(self):
         self.page.wait_for_function("() => navigator.serviceWorker && navigator.serviceWorker.controller",

@@ -242,7 +242,12 @@ class App:
 
     def start(self):
         self.page.click("#go")
-        self.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        # v0.18.0: 새 저장이면 튜토리얼이 먼저 뜬다. 이 도우미는 홈까지 가는 길이므로 「건너뛰기」로 건넌다
+        # (튜토리얼 자체를 보는 시험은 _tut_open으로 따로 간다)
+        self.page.wait_for_selector("#app[data-screen=home] .screen.home, #app[data-screen=tutorial] .screen.tutorial")
+        if self.page.query_selector("#app[data-screen=tutorial]"):
+            self.page.click("#tut-skip")
+            self.page.wait_for_selector("#app[data-screen=home] .screen.home")
         self.page.wait_for_timeout(200)
         self.dismiss()
 
@@ -4911,6 +4916,191 @@ def test_editor_held_garden_toggle():
         if errs:
             fails.append("console errors %r" % errs)
     assert not fails, "\n".join(fails)
+
+
+# ---- v0.18.0 첫 사용 튜토리얼 ----
+TUT_ENGINE_GLOB = re.compile(r"/node_modules/pyodide/")
+
+
+def _tut_open(a):
+    a.page.click("#go")
+    a.page.wait_for_selector("#app[data-screen=tutorial] .screen.tutorial", timeout=10_000)
+
+
+def _tut_to_last(a):
+    for _ in range(3):
+        a.page.click("#tut-next")
+    a.page.wait_for_selector("#tut-input", state="attached")
+
+
+def _tut_run(a):
+    a.page.wait_for_function("() => document.querySelector('#tut-run') && !document.querySelector('#tut-run').disabled", timeout=PY_READY_MS)
+    a.page.click("#tut-run")
+
+
+def test_tutorial_flow_ko():
+    """새 저장 → 카드 1~4 → 기본값 실행 → 결과 → 홈으로 → tutorial == done, 다시 열면 바로 홈"""
+    with App("iPhone 17") as a:
+        _tut_open(a)
+        for i in range(1, 4):
+            assert "반가워요!" in a.page.inner_text(".tut-card") if i == 1 else True
+            assert a.page.get_attribute(".tut-dots", "aria-label") == "4장 중 %d장" % i, a.page.get_attribute(".tut-dots", "aria-label")
+            a.page.click("#tut-next")
+        assert a.page.get_attribute(".tut-dots", "aria-label") == "4장 중 4장"
+        assert a.page.input_value("#tut-input") == "안녕하세요!"
+        assert a.page.get_attribute("#tut-input", "maxlength") == "30"
+        assert a.save()["tutorial"] is None
+        _tut_run(a)
+        a.page.wait_for_selector("#tut-ok", timeout=20_000)
+        assert a.page.text_content("#tut-out") == "안녕하세요!", a.page.text_content("#tut-out")
+        assert "첫 코드 성공!" in a.page.inner_text("#tut-ok")
+        assert "1-1 시작하기" in a.page.inner_text("#tut-lesson") and "홈으로" in a.page.inner_text("#tut-home")
+        a.page.click("#tut-home")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert a.save()["tutorial"] == "done", a.save()["tutorial"]
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.page.click("#go")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert not _app_errors(a), a.errors
+
+
+def test_tutorial_to_lesson():
+    with App("iPhone 17") as a:
+        _tut_open(a)
+        _tut_to_last(a)
+        _tut_run(a)
+        a.page.wait_for_selector("#tut-lesson", timeout=20_000)
+        a.page.click("#tut-lesson")
+        a.page.wait_for_selector("#app[data-screen=lesson]")
+        assert a.save()["tutorial"] == "done"
+        assert a.js("() => window.__ria.app.params.id") == "1-1"
+
+
+def test_tutorial_input_is_inert():
+    """입력으로 코드를 끼워 넣을 수 없다: 글자 그대로 출력, 요소 없음, 한 줄"""
+    evil = '<b>x</b>"); print(1) #'
+    with App("iPhone 17") as a:
+        _tut_open(a)
+        _tut_to_last(a)
+        a.page.fill("#tut-input", evil)
+        _tut_run(a)
+        a.page.wait_for_selector("#tut-ok", timeout=20_000)
+        got = a.page.text_content("#tut-out")
+        assert got == evil, got
+        assert not a.page.query_selector("#tut-out b, #tut-out *"), "markup rendered"
+        assert "\n" not in got
+        for bad, want in (('a\\b"c', 'a\\b"c'), ("x" * 40, "x" * 30)):
+            a.page.fill("#tut-input", bad)
+            a.page.click("#tut-run")
+            a.page.wait_for_function("(w) => document.querySelector('#tut-out').textContent === w", arg=want, timeout=20_000)
+        assert not _app_errors(a), a.errors
+
+
+def test_tutorial_skip():
+    with App("iPhone 17") as a:
+        _tut_open(a)
+        a.page.click("#tut-next")
+        assert a.page.get_attribute(".tut-dots", "aria-label") == "4장 중 2장"
+        a.page.click("#tut-skip")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert a.save()["tutorial"] == "skipped"
+
+
+def test_tutorial_engine_slow_and_failed():
+    held, gate = [], {"open": False}
+    with App("iPhone 17", routes=[(TUT_ENGINE_GLOB, lambda r: r.continue_() if gate["open"] else held.append(r))]) as a:
+        _tut_open(a)
+        _tut_to_last(a)
+        assert a.page.is_visible(".tut-load .load-bar"), "no load bar"
+        assert "파이썬 준비 중" in a.page.inner_text(".tut-load"), a.page.inner_text(".tut-load")
+        assert not a.page.query_selector("#tut-run:not([hidden])") or a.page.is_disabled("#tut-run")
+        assert a.page.is_visible("#tut-skip")
+        a.page.wait_for_timeout(500)
+        gate["open"] = True
+        for r in list(held):
+            r.continue_()
+        _tut_run(a)
+        a.page.wait_for_selector("#tut-ok", timeout=PY_READY_MS)
+        assert a.page.text_content("#tut-out") == "안녕하세요!"
+    with App("iPhone 17", routes=[(TUT_ENGINE_GLOB, lambda r: r.abort())]) as a:
+        _tut_open(a)
+        _tut_to_last(a)
+        a.page.wait_for_selector("#tut-fail", timeout=PY_READY_MS)
+        assert "지금은 파이썬을 받지 못했어요. 1-1에서 바로 해 볼 수 있어요" in a.page.inner_text("#tut-fail")
+        assert not a.page.is_visible("#tut-run")
+        a.page.click("#tut-home")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert a.save()["tutorial"] == "done"
+
+
+def test_tutorial_english():
+    with App("iPhone 17", locale="en-US") as a:
+        _tut_open(a)
+        for i in range(1, 4):
+            left = _hangul_left(a, [])
+            assert not left, (i, left)
+            assert a.page.get_attribute(".tut-dots", "aria-label") == "Card %d of 4" % i
+            a.page.click("#tut-next")
+        assert a.page.input_value("#tut-input") == "Hello!"
+        assert not _hangul_left(a, [])
+        _tut_run(a)
+        a.page.wait_for_selector("#tut-ok", timeout=20_000)
+        assert a.page.text_content("#tut-out") == "Hello!"
+        assert not _hangul_left(a, []), _hangul_left(a, [])
+    held = []
+    with App("iPhone 17", locale="en-US", routes=[(TUT_ENGINE_GLOB, lambda r: r.abort())]) as a:
+        _tut_open(a)
+        _tut_to_last(a)
+        a.page.wait_for_selector("#tut-fail", timeout=PY_READY_MS)
+        assert not _hangul_left(a, []), _hangul_left(a, [])
+
+
+def test_tutorial_small_screen():
+    with App("iPhone SE") as a:
+        _tut_open(a)
+        q = "(s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [r.bottom, innerHeight, r.height, r.width]; }"
+        for i in range(3):
+            for sel in ("#tut-next", "#tut-skip"):
+                b, h, bh, bw = a.js(q, sel)
+                assert b <= h, (i, sel, b, h)
+                assert bh >= 44 - 0.5 and bw >= 44, (sel, bh, bw)
+            a.page.click("#tut-next")
+        a.page.wait_for_selector("#tut-run")
+        for sel in ("#tut-run", "#tut-skip"):
+            b, h, _, _ = a.js(q, sel)
+            assert b <= h, (sel, b, h)
+        a.shot("tutorial-se-4.png")
+
+
+def test_tutorial_reduced_motion():
+    q = """() => { const c = document.querySelector('.tut-card'); const s = getComputedStyle(c);
+        return { td: s.transitionDuration, an: s.animationName }; }"""
+    with App("iPhone 17", reduced=True) as a:
+        _tut_open(a)
+        a.page.click("#tut-next")
+        v = a.js(q)
+        assert v["an"] == "none" and all(float(x.rstrip("s")) == 0 for x in v["td"].split(",")), v
+    with App("iPhone 17") as a:
+        _tut_open(a)
+        v = a.js(q)
+        assert v["an"] != "none" or any(float(x.rstrip("s")) > 0 for x in v["td"].split(",")), v
+
+
+def test_tutorial_old_save_and_replay():
+    with App("iPhone 17", save={"saveVer": 2, "completed_lessons": ["1-1"], "xp": 10}) as a:
+        a.page.click("#go")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+    with App("iPhone 17", save={"saveVer": 2, "tutorial": "skipped"}) as a:
+        a.page.evaluate("() => window.__ria.ctx.show('tutorial', { replay: true })")
+        a.page.wait_for_selector(".screen.tutorial")
+        _tut_to_last(a)
+        _tut_run(a)
+        a.page.wait_for_selector("#tut-ok", timeout=20_000)
+        assert not a.page.query_selector("#tut-lesson"), "replay renders 1-1 button"
+        a.page.click("#tut-home")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert a.save()["tutorial"] == "skipped", a.save()["tutorial"]
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 // 개발판(tools/dev.py): 그 값이 없으면 원본 i18n/en/*.json을 직접 받아 합친다.
 import { usePack, hasPack } from "./i18n.js";
 
-const DEV_SOURCES = { en: ["i18n/en/ui.lesson.json", "i18n/en/ui.shell.json", "i18n/en/ui.garden.json", "i18n/en/ui.garden_nodes.json", "i18n/en/data.json"] };
+const DEV_SOURCES = { en: ["i18n/en/ui.lesson.json", "i18n/en/ui.shell.json", "i18n/en/ui.garden.json", "i18n/en/ui.garden_nodes.json", "i18n/en/ui.tutorial.json", "i18n/en/data.json"] };
 
 const TIMEOUT_MS = 4000; // 느린 첫 연결에서 시작 화면이 멈추지 않게(검토 I3). 넘으면 한국어로 시작
 

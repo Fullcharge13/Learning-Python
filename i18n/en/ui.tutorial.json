@@ -1,0 +1,18 @@
+{
+ "{}장 중 {}장": "Card {1} of {0}",
+ "건너뛰기": "Skip",
+ "다음": "Next",
+ "다시 실행해 볼까요?": "Want to run it again?",
+ "따옴표 안의 글자": "Text inside the quotes",
+ "레슨은 설명 카드를 읽고, 고르기·빈칸을 풀고, 마지막에 직접 코드를 써요. 틀려도 괜찮아요. 힌트가 있어요.": "In a lesson you read the cards, solve a few pick-one and fill-in questions, and write some code yourself at the end. It is okay to get things wrong. There are hints.",
+ "문제를 풀면 XP와 바이트가 쌓여요. 바이트로 제 옷을 고를 수 있고, 1장을 끝내면 「파이의 텃밭」과 경비실이 열려요.": "Solving questions earns you XP and Bytes. You can use Bytes to pick my outfit, and once you finish Chapter 1, Pi's Garden and the Guard Room open up.",
+ "반가워요! 하루 10분, 첫 코드부터 같이 해요.": "Nice to meet you! Ten minutes a day, starting with your very first code.",
+ "안녕하세요!": "Hello!",
+ "이제 진짜 코드를 실행해 볼까요? 따옴표 안의 글자를 바꿔도 돼요.": "Ready to run some real code? You can change the text inside the quotes.",
+ "지금은 파이썬을 받지 못했어요. 1-1에서 바로 해 볼 수 있어요": "Python could not be downloaded right now. You can try it right away in lesson 1-1.",
+ "첫 코드 성공! 🎉": "First code, done! 🎉",
+ "파이썬 준비 중…": "Getting Python ready…",
+ "홈으로": "Home",
+ "1-1 시작하기": "Start 1-1",
+ "▶ 실행": "▶ Run"
+}

@@ -1013,3 +1013,24 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .gd-actions .btn { flex: 1; min-height: 52px; padding: 10px 12px; }
 .gd-actions #gd-run { flex: 1.6; }
 .gd-done .gd-crow-row { justify-content: center; }
+
+/* ---------- 첫 사용 튜토리얼 (v0.18.0) ---------- */
+.tutorial { min-height: 100dvh; display: flex; flex-direction: column; gap: 12px;
+  padding: calc(var(--sat) + 12px) 20px calc(var(--sab) + 16px); }
+.tut-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tut-dots { display: flex; gap: 8px; }
+.tut-dots span { width: 12px; height: 12px; border-radius: 50%; background: var(--paper-2); border: 2px solid var(--line); }
+.tut-dots span.on { background: var(--teal-ink); border-color: var(--teal-ink); }
+.tut-card { flex: 1; display: flex; flex-direction: column; gap: 12px; animation: tut-in .25s ease; }
+@keyframes tut-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+.tut-card .ria-wrap { display: flex; justify-content: center; }
+.tut-line { display: flex; align-items: center; margin: 0; white-space: nowrap; overflow-x: auto; }
+.tut-line input { flex: 1; min-width: 4ch; min-height: 44px; margin: 0 2px; padding: 4px 8px; border: 2px solid var(--teal-ink);
+  border-radius: 8px; background: var(--card); font-family: var(--mono); font-size: 16px; }
+.tut-load, .tut-after { display: grid; gap: 10px; text-align: center; }
+.tut-out { margin: 0; min-height: 1.6em; white-space: pre-wrap; word-break: break-word; }
+.tut-success { margin: 0; font-weight: 900; text-align: center; color: var(--teal-ink); }
+.tut-card [hidden], .tut-after [hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .tut-card { animation: none !important; transition: none !important; }
+}

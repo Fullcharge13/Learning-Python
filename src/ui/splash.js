@@ -3,6 +3,7 @@ import { riaSVG } from "../ria.js";
 import { esc, langPick, bindLangPick } from "./dom.js";
 import { lang } from "../i18n.js";
 import { t } from "../i18n.js";
+import { shouldShowTutorial } from "../tutorial.js";
 
 export function render(root, ctx) {
   const line = ctx.say("greet");
@@ -31,7 +32,7 @@ export function render(root, ctx) {
   };
   paint(ctx.pyState().status);
   const off = ctx.onPy((s) => paint(s));
-  root.querySelector("#go").addEventListener("click", () => ctx.show("home"));
+  root.querySelector("#go").addEventListener("click", () => ctx.show(shouldShowTutorial(ctx.save, { dev: ctx.dev }) ? "tutorial" : "home"));
   bindLangPick(root, ctx);
   return off;
 }

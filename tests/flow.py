@@ -4943,7 +4943,8 @@ def test_tutorial_flow_ko():
     with App("iPhone 17") as a:
         _tut_open(a)
         for i in range(1, 4):
-            assert "반가워요!" in a.page.inner_text(".tut-card") if i == 1 else True
+            if i == 1:
+                assert "반가워요!" in a.page.inner_text(".tut-card")
             assert a.page.get_attribute(".tut-dots", "aria-label") == "4장 중 %d장" % i, a.page.get_attribute(".tut-dots", "aria-label")
             a.page.click("#tut-next")
         assert a.page.get_attribute(".tut-dots", "aria-label") == "4장 중 4장"
@@ -5016,6 +5017,7 @@ def test_tutorial_engine_slow_and_failed():
         assert "파이썬 준비 중" in a.page.inner_text(".tut-load"), a.page.inner_text(".tut-load")
         assert not a.page.query_selector("#tut-run:not([hidden])") or a.page.is_disabled("#tut-run")
         assert a.page.is_visible("#tut-skip")
+        assert a.page.is_visible("#tut-home"), "홈으로 must work while the engine is loading"
         a.page.wait_for_timeout(500)
         gate["open"] = True
         for r in list(held):
@@ -5023,6 +5025,13 @@ def test_tutorial_engine_slow_and_failed():
         _tut_run(a)
         a.page.wait_for_selector("#tut-ok", timeout=PY_READY_MS)
         assert a.page.text_content("#tut-out") == "안녕하세요!"
+    held2 = []
+    with App("iPhone 17", routes=[(TUT_ENGINE_GLOB, lambda r: held2.append(r))]) as a:
+        _tut_open(a)
+        _tut_to_last(a)
+        a.page.click("#tut-home")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert a.save()["tutorial"] == "done", a.save()["tutorial"]
     with App("iPhone 17", routes=[(TUT_ENGINE_GLOB, lambda r: r.abort())]) as a:
         _tut_open(a)
         _tut_to_last(a)
@@ -5048,7 +5057,6 @@ def test_tutorial_english():
         a.page.wait_for_selector("#tut-ok", timeout=20_000)
         assert a.page.text_content("#tut-out") == "Hello!"
         assert not _hangul_left(a, []), _hangul_left(a, [])
-    held = []
     with App("iPhone 17", locale="en-US", routes=[(TUT_ENGINE_GLOB, lambda r: r.abort())]) as a:
         _tut_open(a)
         _tut_to_last(a)
@@ -5071,6 +5079,14 @@ def test_tutorial_small_screen():
             b, h, _, _ = a.js(q, sel)
             assert b <= h, (sel, b, h)
         a.shot("tutorial-se-4.png")
+        a.wait_py()
+        a.page.click("#tut-run")
+        a.page.wait_for_selector("#tut-ok", timeout=20_000)
+        a.page.wait_for_timeout(300)
+        for sel in ("#tut-lesson", "#tut-home"):
+            r = a.js("(s) => { const e = document.querySelector(s); e.scrollIntoView({block: 'nearest'}); const b = e.getBoundingClientRect(); return [b.top, b.bottom, innerHeight]; }", sel)
+            assert r[0] >= 0 and r[1] <= r[2] + 0.5, (sel, r)
+        a.shot("tutorial-se-5.png")
 
 
 def test_tutorial_reduced_motion():
@@ -5087,13 +5103,38 @@ def test_tutorial_reduced_motion():
         assert v["an"] != "none" or any(float(x.rstrip("s")) > 0 for x in v["td"].split(",")), v
 
 
-def test_tutorial_old_save_and_replay():
+def test_tutorial_old_save_goes_home():
+    """기록 있는 옛 저장(tutorial 칸 없음) → 시작하기 → 바로 홈, 저장 정리 뒤 tutorial == done"""
     with App("iPhone 17", save={"saveVer": 2, "completed_lessons": ["1-1"], "xp": 10}) as a:
         a.page.click("#go")
         a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert not a.page.query_selector(".screen.tutorial")
+        assert a.save()["tutorial"] == "done", a.save().get("tutorial")
+
+
+def test_tutorial_dev_mode_goes_home():
+    """개발자 모드를 켠 새 저장 → 시작하기 → 바로 홈"""
+    with App("iPhone 17", init_js="localStorage.setItem('ria-python.dev', '1')") as a:
+        a.page.click("#go")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert not a.page.query_selector(".screen.tutorial")
+
+
+def test_tutorial_replay_from_settings():
+    """설정 「사용법 다시 보기」 → 끝까지 → 실행 성공 뒤 「홈으로」만(1-1 없음) → 홈, tutorial 값 그대로"""
     with App("iPhone 17", save={"saveVer": 2, "tutorial": "skipped"}) as a:
-        a.page.evaluate("() => window.__ria.ctx.show('tutorial', { replay: true })")
-        a.page.wait_for_selector(".screen.tutorial")
+        a.page.click("#go")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        a.dismiss()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        row = a.page.query_selector("#tut-replay")
+        assert row and "보기" in row.inner_text(), "no 보기 button"
+        assert "사용법 다시 보기" in a.page.inner_text(".screen.settings")
+        before = a.js("() => window.__ria.app.pyListeners.size")
+        a.page.click("#tut-replay")
+        a.page.wait_for_selector("#app[data-screen=tutorial] .screen.tutorial")
+        assert "반가워요!" in a.page.inner_text(".tut-card")
         _tut_to_last(a)
         _tut_run(a)
         a.page.wait_for_selector("#tut-ok", timeout=20_000)
@@ -5101,6 +5142,48 @@ def test_tutorial_old_save_and_replay():
         a.page.click("#tut-home")
         a.page.wait_for_selector("#app[data-screen=home] .screen.home")
         assert a.save()["tutorial"] == "skipped", a.save()["tutorial"]
+        assert a.js("() => window.__ria.app.pyListeners.size") == before
+
+
+def test_tutorial_replay_english():
+    with App("iPhone 17", locale="en-US") as a:
+        a.start()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        assert a.page.inner_text("#tut-replay") == "View", a.page.inner_text("#tut-replay")
+        assert "Replay the intro" in a.page.inner_text(".screen.settings")
+        assert not _hangul_left(a, ["한국어"]), _hangul_left(a, ["한국어"])
+        a.page.click("#tut-replay")
+        a.page.wait_for_selector(".screen.tutorial")
+        assert not _hangul_left(a, []), _hangul_left(a, [])
+
+
+def test_tutorial_run_error_and_cleanup():
+    """실행이 실패하면 「다시 실행해 볼까요?」, 다시 실행하면 성공. 떠난 뒤 onPy 듣는 쪽이 원래대로"""
+    with App("iPhone 17") as a:
+        a.start()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        before = a.js("() => window.__ria.app.pyListeners.size")
+        a.page.click("#tut-replay")
+        a.page.wait_for_selector(".screen.tutorial")
+        _tut_to_last(a)
+        a.wait_py()
+        assert a.js("() => window.__ria.app.pyListeners.size") == before + 1, (before, a.js("() => window.__ria.app.pyListeners.size"))
+        a.js("() => { const p = window.__ria.app.py; window.__ria._run = p.run; p.run = async () => ({ error: 'boom', stdout: '' }); }")
+        a.page.click("#tut-run")
+        a.page.wait_for_function("() => document.querySelector('#tut-out') && !document.querySelector('#tut-out').hidden", timeout=20_000)
+        assert a.page.text_content("#tut-out") == "다시 실행해 볼까요?", a.page.text_content("#tut-out")
+        assert not a.page.is_visible("#tut-ok")
+        assert not a.page.is_disabled("#tut-run"), "run must be retryable"
+        a.js("() => { window.__ria.app.py.run = window.__ria._run; }")
+        a.page.click("#tut-run")
+        a.page.wait_for_selector("#tut-ok", timeout=20_000)
+        assert a.page.text_content("#tut-out") == "안녕하세요!"
+        a.page.click("#tut-home")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        assert a.js("() => window.__ria.app.pyListeners.size") == before
+        assert not _app_errors(a), a.errors
 
 
 if __name__ == "__main__":

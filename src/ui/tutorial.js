@@ -40,7 +40,7 @@ export function render(root, ctx, params = {}) {
     card.querySelector(".tut-fail").hidden = !failed;
     card.querySelector("#tut-run").hidden = failed || waiting;
     card.querySelector("#tut-run").disabled = phase === "running" || status !== "ready";
-    card.querySelector(".tut-after").hidden = !(phase === "ok" || failed);
+    card.querySelector(".tut-after").hidden = !(phase === "ok" || failed || waiting); // 엔진을 기다리는 동안에도 「홈으로」(설계 §3-2)
     const les = card.querySelector("#tut-lesson");
     if (les) les.hidden = phase !== "ok";
     card.querySelector("#tut-ok").hidden = phase !== "ok";

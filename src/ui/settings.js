@@ -87,6 +87,10 @@ export function render(root, ctx) {
           <label for="name" class="row-label">${t`부를 이름`}<small>${t`리아 교수가 「○○님」이라고 불러요. 비워 둬도 돼요`}</small></label>
           <input id="name" type="text" maxlength="9" autocomplete="nickname" autocapitalize="off" value="${esc(s.settings.name || "")}" placeholder="${esc(t`예: 지민`)}">
         </div>
+        <div class="row">
+          <p class="row-label" id="tut-label">${t`사용법 다시 보기`}<small>${t`리아의 첫 인사 카드 네 장을 다시 봐요. 기록은 그대로예요.`}</small></p>
+          <button class="btn ghost small" id="tut-replay" aria-labelledby="tut-label tut-replay">${tp("replay", "보기")}</button>
+        </div>
       </section>
       <section class="panel">
         <h2>${t`저장`}${dev ? ` <small class="dev-tag">${t`(개발자 모드 저장)`}</small>` : ""}</h2>
@@ -188,6 +192,7 @@ export function render(root, ctx) {
     toast(v ? t`이제 「${v}님」이라고 부를게요.` : t`이름 없이 부를게요.`);
   });
 
+  root.querySelector("#tut-replay").addEventListener("click", () => ctx.show("tutorial", { replay: true }));
   root.querySelector("#install").addEventListener("click", () => ctx.showInstallSheet());
   bindLangPick(root, ctx);
   root.querySelector("#export").addEventListener("click", () => {

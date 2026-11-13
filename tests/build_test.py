@@ -796,11 +796,11 @@ const m = await import(process.argv[1]);
 const g = m.INCIDENTS.find((i) => i.id === "G1");
 console.log(JSON.stringify({ why: g.tries[0].why, solution: g.solution }));
 """
-FIRST_FILE_LIMIT = 844_631   # v0.16.0 작업 2: v0.15.0 첫 파일 크기. 사건 본문이 빠지므로 이보다 작아야 한다
+FIRST_FILE_LIMIT = 870_400   # 상한 850KB(판정 G-C6). v0.16.0엔 844,631(v0.15.0 크기)였으나 v0.16.1(오류 안내·시도 보강 글)이 커져 상한으로 되돌림(판정 G3-C12)
 
 
 def test_guard_not_in_first_file():
-    """v0.16.0 작업 2: 사건 본문(「왜?」 글·정답)은 첫 파일에 없고(장 파일에서 받음), 첫 파일은 v0.15.0보다 작다."""
+    """v0.16.0 작업 2: 사건 본문(「왜?」 글·정답)은 첫 파일에 없고(장 파일에서 받음), 첫 파일은 상한(850KB)보다 작다."""
     _build()
     r = subprocess.run(["node", "--input-type=module", "-e", GUARD_G1_SRC,
                         "file://" + os.path.join(ROOT, "data", "guard.js")], capture_output=True, text=True)

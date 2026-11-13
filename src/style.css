@@ -955,7 +955,8 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .gd-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--coral-ink); box-shadow: 0 0 0 2px var(--card); margin-left: -2px; align-self: flex-start; }
 .gd-title { min-width: 0; }
 .gd-title h1 { margin: 0; font-size: 1.15rem; }
-.gd-rank { margin: 0; font-size: .8rem; font-weight: 700; color: var(--teal-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gd-rank { margin: 0; font-size: .8rem; font-weight: 700; color: var(--teal-ink); line-height: 1.25; overflow-wrap: anywhere; }   /* 두 줄까지 보임 */
+#gd-result .err-panel { scroll-margin-top: calc(var(--sat, 0px) + 72px); scroll-margin-bottom: 120px; }
 .gd-crow-row { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 10px; }
 .gd-crow { flex: none; line-height: 0; }
 .gd-say { background: #2A2440; color: #F4EEDD; border-color: #15111F; font-size: .93rem; }

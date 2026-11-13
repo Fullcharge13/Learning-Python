@@ -57,6 +57,9 @@ function startHTML(inc, picks) {
 /** 직접 쓰기 처음 내용: 빈칸을 비운 시작 코드 */
 const blankedStart = (inc) => inc.start.replace(/\{\{|\}\}|\{\d+\}/g, (m) => (m.length === 2 ? m[0] : "___"));
 
+/** 직접 쓰기 처음 내용(판정 G-C7 바꿈): 빈칸 실행과 같은 fillBlanks로 고른 보기(데이터 번호)를 채운 코드, 덜 골랐으면 ___ 시작 코드 */
+const startCode = (inc, picks) => fillBlanks(inc.start, inc.blanks, picks).code ?? blankedStart(inc);
+
 export function render(root, ctx, params = {}) {
   const passed = passedChapters(ctx.save, ctx.chapters);
   const LIST = ctx.guard.index;   // 색인(본문 없음)
@@ -162,7 +165,7 @@ export function render(root, ctx, params = {}) {
     $("#gd-syms").hidden = !code;
     if (code) {
       S.ed = createEditor($("#gd-ed"), {
-        doc: G().code[inc.id] ?? blankedStart(inc),
+        doc: G().code[inc.id] ?? startCode(inc, S.picks),
         label: t`경비실 코드 입력창. 여기에 Python 코드를 써요`,
         margins: () => ({ top: $(".g-top").getBoundingClientRect().bottom + 8, bottom: window.innerHeight - foot.getBoundingClientRect().top + 8 }),
         onChange: () => {
@@ -397,7 +400,7 @@ export function render(root, ctx, params = {}) {
     ctx.sound.play(out.solved ? "correct" : "error");
     setState("idle");
     if (out.firstSolve) await solvedDialog(inc, out);
-    else if (!out.solved) resultEl.scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });
+    else if (!out.solved) (resultEl.querySelector(".err-panel") || resultEl).scrollIntoView({ block: err ? "start" : "nearest", behavior: reduced() ? "auto" : "smooth" });   // 오류 카드 위쪽이 보이게
   }
 
   /** 처음 해결: 텃밭 주문 완료와 같은 모양(창 → 이정표 축하 → 새 배지 알림) */

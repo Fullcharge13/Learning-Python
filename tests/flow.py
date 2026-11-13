@@ -3871,11 +3871,11 @@ def test_guard_room_g1():
         if "1/45 해결" not in a.page.inner_text(".gd-head"):
             fails.append("count not 1/45")
 
-        # 직접 쓰기: 처음 내용은 빈칸을 비운 시작 코드 → 정답 코드 → 해결, how 그대로
+        # 직접 쓰기: 처음 내용은 해결한 고르기로 채운 코드 → 정답 코드 → 해결, how 그대로
         a.page.click("#gd-mode")
         a.page.wait_for_selector("#gd-ed .cm-content")
         first = a.js("() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent).join('\\n')")
-        want = G1_START.replace("{0}", "___").replace("{1}", "___").replace("{2}", "___")
+        want = G1_SOLUTION   # v0.16.1: 해결한 고르기로 채운 코드(판정 G-C7 바꿈)
         if first != want:
             fails.append("code mode first content %r != %r" % (first, want))
         _gd_check_layout(a, "guard-code", fails)
@@ -3930,6 +3930,35 @@ def test_guard_room_no_decision():
         s = a.save()["guard"]
         assert s["solved"]["G1"] == {"firstTry": True, "how": "blank"}
         assert not a.errors, a.errors
+
+
+def test_guard_room_polish():
+    """v0.16.1 작업 7: 영어 머리 부제가 잘리지 않고, 오류 카드가 고정 줄에 가려지지 않고, 직접 쓰기 첫 내용에 ___ 가 없다."""
+    fails = []
+    with App("iPhone 17", locale="en-US", save=_guard_seed(3, guard=_guard_solved_g1(), en=True)) as a:
+        _open_guard(a)
+        h = a.js("""() => { const e = document.querySelector('#gd-rank'); const c = getComputedStyle(e);
+            return { sw: e.scrollWidth, cw: e.clientWidth, to: c.textOverflow, ws: c.whiteSpace, txt: e.textContent }; }""")
+        if h["sw"] > h["cw"] or h["to"] == "ellipsis" or h["ws"] == "nowrap":
+            fails.append("rank subtitle clipped: %r" % h)
+        _gd_open_g1(a)
+        a.page.click("#gd-mode")
+        a.page.wait_for_selector("#gd-ed .cm-content")
+        first = a.js("() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent).join('\\n')")
+        if "___" in first or "allow()" not in first:
+            fails.append("write-mode first content: %r" % first)
+        # 오류가 나는 코드 → 오류 카드 위쪽이 화면 안, 아래 고정 줄 위쪽보다 위
+        a.set_code("print(undefined_name)\n")
+        _gd_run(a, skip=False)
+        a.page.wait_for_selector("#gd-result .err-panel")
+        a.page.wait_for_timeout(900)   # 부드러운 스크롤이 끝나길
+        r = a.js("""() => ({ top: document.querySelector('#gd-result .err-panel').getBoundingClientRect().top,
+            foot: document.querySelector('.g-foot').getBoundingClientRect().top })""")
+        if not (0 <= r["top"] < r["foot"]):
+            fails.append("error card not visible: %r" % r)
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
 
 
 def test_guard_room_shuffled_blanks():

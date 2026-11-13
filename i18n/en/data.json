@@ -651,7 +651,7 @@
  "guard.G32.why.4": "Port 3306 is not open, so block it.",
  "guard.G32.why.5": "4430 looks like 443 but it is a different port, so block it.",
  "guard.G32.why.6": "Port 80 is not in the list, so block it.",
- "guard.G33.brief": "Find every href=\"...\" and src=\"...\" link in the note (HTML text). A link is fine only if its host is farm.pi.example, or it is a link inside the site (like /notes/7). A link inside the site has no scheme (the front part like https: or javascript:) and no host, starts with / but not //, and has no \\. Return False if there is even one link that is not fine, otherwise True. Look for links in both href and src attributes, with double quotes and single quotes.",
+ "guard.G33.brief": "Find every href=\"...\" and src=\"...\" link in the note (HTML text). A link is fine only if it is an http or https link whose host is farm.pi.example, or it is a link inside the site (like /notes/7). A link inside the site has no scheme (the front part like https: or javascript:) and no host, starts with / but not //, and has no \\. Return False if there is even one link that is not fine, otherwise True. Look for links in both href and src attributes, with double quotes and single quotes.",
  "guard.G33.concept": "Outside link check",
  "guard.G33.crowIntro": "If I hide my link in a corner of the note, nobody will notice~",
  "guard.G33.crowLose": "You opened every link? My hiding was for nothing!",

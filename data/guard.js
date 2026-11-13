@@ -875,7 +875,7 @@ export const INCIDENTS = [
     id: "G33", need: 13, mode: "func", tag: "prevent",
     concept: "외부 링크 점검",
     title: "쪽지 속 바깥 링크",
-    brief: "쪽지(HTML 글) 속 href=\"…\"·src=\"…\" 링크를 모두 찾으세요. 링크는 호스트가 farm.pi.example이거나, 사이트 안 링크(/notes/7 같은 것)일 때만 괜찮습니다. 사이트 안 링크는 scheme(https:, javascript: 같은 앞부분)도 호스트도 없고, /로 시작하되 //로 시작하지 않으며, \\ 가 없어야 해요. 괜찮지 않은 링크가 하나라도 있으면 False, 아니면 True입니다. 링크는 href와 src 속성에서, 큰따옴표와 작은따옴표 모두 찾으세요.",
+    brief: "쪽지(HTML 글) 속 href=\"…\"·src=\"…\" 링크를 모두 찾으세요. 링크는 http/https 링크이면서 호스트가 farm.pi.example이거나, 사이트 안 링크(/notes/7 같은 것)일 때만 괜찮습니다. 사이트 안 링크는 scheme(https:, javascript: 같은 앞부분)도 호스트도 없고, /로 시작하되 //로 시작하지 않으며, \\ 가 없어야 해요. 괜찮지 않은 링크가 하나라도 있으면 False, 아니면 True입니다. 링크는 href와 src 속성에서, 큰따옴표와 작은따옴표 모두 찾으세요.",
     ria: "findall로 링크를 전부 모은 뒤 urlparse로 호스트를 읽어요. 호스트가 없다고 다 안전한 건 아니에요. javascript: 링크는 누르는 순간 코드가 돌고, //evil.example 이나 /\\evil.example 은 브라우저가 바깥 호스트로 읽습니다. 그래서 '안전한 모양'만 골라 들여요. 따옴표 없이 쓴 href=/x 같은 속성까지 다 읽으려면 진짜 HTML 해석기가 필요해서, 여기서는 따옴표 있는 것만 다뤄요.",
     crowIntro: "쪽지 한구석에 내 링크를 숨겨 두면 아무도 모르겠지~",
     crowLose: "링크를 하나하나 열어 보다니, 숨긴 보람이 없네!",

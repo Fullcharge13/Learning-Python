@@ -6,7 +6,7 @@
 
 세 방식(§2-3):
 - script: 시도마다 학습자 코드를 새 이름공간에서 한 번씩(attempt만 바꿔서). 부른 block()/allow()가 판정,
-  아무것도 안 부르면 "none"(= 들임).
+  아무것도 안 부르면 "none"(판정 안 함, 어느 쪽으로도 ok가 아님).
 - loop: 학습자 코드를 한 번. next_try()로 꺼낸 시도마다 그 뒤 부른 block()/allow(). 꺼내지 않은 시도는 "none".
 - func: 학습자 코드를 한 번(정의) → 시도마다 check(attempt). True = 들임, False = 막음, 그 밖은 GuardAnswerError.
 공통: 한 시도에 두 번째 판정은 무시하고 twice. 잘못 쓴 명령은 GuardUsageError(BaseException, 계획 R3) —
@@ -270,7 +270,7 @@ def _guard_has_user_frame(tb):
 
 
 def _guard_leftover(gs):
-    """loop가 끝났을 때 꺼내지 않은 시도는 "none"(= 들임). 사용 오류가 있었으면 판정하지 않는다."""
+    """loop가 끝났을 때 꺼내지 않은 시도는 "none"(판정 안 함, ok가 아님). 사용 오류가 있었으면 판정하지 않는다."""
     gs["cur"] = None
     if gs["usage_error"] is not None:
         return

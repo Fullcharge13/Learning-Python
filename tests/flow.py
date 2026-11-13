@@ -3734,14 +3734,6 @@ def _gd_pick(a, n, v):
     _sheet_pick(a, '[data-v="%d"]' % v)
 
 
-def _gd_pick_text(a, n, text):
-    """화면에 보이는 보기 글자로 고른다(화면 자리가 아니라 글자로 찾는다)."""
-    a.page.click('.gd-blank[data-n="%d"]' % n)
-    a.page.wait_for_selector(".modal.g-sheet")
-    a.page.click('.modal.g-sheet .g-pick-btn:has-text("%s")' % text.replace('"', '\\"'))
-    a.page.wait_for_selector(".modal.g-sheet", state="detached")
-
-
 def _gd_run(a, skip=True):
     """「실행」 → (재생이면 건너뛰기) → 끝날 때까지"""
     a.wait_py()
@@ -3871,7 +3863,8 @@ def test_guard_room_g1():
         if "1/45 해결" not in a.page.inner_text(".gd-head"):
             fails.append("count not 1/45")
 
-        # 직접 쓰기: 처음 내용은 해결한 고르기로 채운 코드 → 정답 코드 → 해결, how 그대로
+        # 직접 쓰기: 처음 내용은 정답 보기로 채운 코드(고른 것이 틀려도 같음) → 정답 코드 → 해결, how 그대로
+        _gd_pick(a, 0, 1)   # 해결 뒤 틀린 보기를 골라 둠
         a.page.click("#gd-mode")
         a.page.wait_for_selector("#gd-ed .cm-content")
         first = a.js("() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent).join('\\n')")
@@ -3942,6 +3935,7 @@ def test_guard_room_polish():
         if h["sw"] > h["cw"] or h["to"] == "ellipsis" or h["ws"] == "nowrap":
             fails.append("rank subtitle clipped: %r" % h)
         _gd_open_g1(a)
+        _gd_pick(a, 0, 1)
         a.page.click("#gd-mode")
         a.page.wait_for_selector("#gd-ed .cm-content")
         first = a.js("() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent).join('\\n')")

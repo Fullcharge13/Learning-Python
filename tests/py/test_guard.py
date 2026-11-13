@@ -36,7 +36,7 @@ def test_script_basic():
     assert g["stopped"] is None
 
 
-def test_script_none_is_allow():
+def test_script_none_is_never_ok():
     r = run("pass\n", guard=G("script", T(("x", "block"))))
     e = r["guard"]["events"][0]
     assert e["verdict"] == "none"

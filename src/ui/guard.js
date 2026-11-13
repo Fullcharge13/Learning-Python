@@ -57,8 +57,8 @@ function startHTML(inc, picks) {
 /** 직접 쓰기 처음 내용: 빈칸을 비운 시작 코드 */
 const blankedStart = (inc) => inc.start.replace(/\{\{|\}\}|\{\d+\}/g, (m) => (m.length === 2 ? m[0] : "___"));
 
-/** 직접 쓰기 처음 내용(판정 G-C7 바꿈): 빈칸 실행과 같은 fillBlanks로 고른 보기(데이터 번호)를 채운 코드, 덜 골랐으면 ___ 시작 코드 */
-const startCode = (inc, picks) => fillBlanks(inc.start, inc.blanks, picks).code ?? blankedStart(inc);
+/** 직접 쓰기 처음 내용(판정 G3-C11): 정답 보기(데이터 번호 0)로 채운 코드, 안 되면 ___ 시작 코드 */
+const startCode = (inc) => fillBlanks(inc.start, inc.blanks, inc.blanks.map(() => 0)).code ?? blankedStart(inc);
 
 export function render(root, ctx, params = {}) {
   const passed = passedChapters(ctx.save, ctx.chapters);
@@ -165,7 +165,7 @@ export function render(root, ctx, params = {}) {
     $("#gd-syms").hidden = !code;
     if (code) {
       S.ed = createEditor($("#gd-ed"), {
-        doc: G().code[inc.id] ?? startCode(inc, S.picks),
+        doc: G().code[inc.id] ?? startCode(inc),
         label: t`경비실 코드 입력창. 여기에 Python 코드를 써요`,
         margins: () => ({ top: $(".g-top").getBoundingClientRect().bottom + 8, bottom: window.innerHeight - foot.getBoundingClientRect().top + 8 }),
         onChange: () => {

@@ -84,6 +84,8 @@ WRONG_SOLUTIONS = {
         "    if attempt.lower() in common or len(attempt) < 8:\n        return False\n    return True\n",
         'common = ["123456", "password", "qwerty", "letmein", "iloveyou"]\n\ndef check(attempt):\n'
         "    if attempt.lower() in common:\n        return False\n    return len(attempt) > 6\n",
+        'common = ["123456", "password", "qwerty", "letmein", "iloveyou"]\n\ndef check(attempt):\n'
+        "    if any(c.startswith(attempt.lower()) for c in common):\n        return False\n    return True\n",
     ],
     "G16": [
         'perms = {\n    "guest": ["read"],\n    "farmer": ["read", "write"],\n    "owner": ["read", "write", "delete"],\n}\n\n'

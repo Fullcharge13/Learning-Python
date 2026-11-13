@@ -362,6 +362,7 @@
  "guard.G13.why.5": "It is not on the list, so accept it.",
  "guard.G13.why.6": "It is a common password on the list, so reject it.",
  "guard.G13.why.7": "A short password that is not on the list is still accepted by this check. Length rules are a separate decision.",
+ "guard.G13.why.8": "It is only the beginning of password, and nothing on the list matches exactly, so accept it. Only passwords that appear on the list exactly are refused.",
  "guard.G14.brief": "This time, instead of writing down bad people, we wrote down who may enter. Return True only if the name is on the starter code's members list, and False for everyone else.",
  "guard.G14.concept": "Allowlist (safer than a blocklist)",
  "guard.G14.crowIntro": "If I keep changing my name, a blocklist can never keep up~",

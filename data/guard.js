@@ -359,6 +359,7 @@ export const INCIDENTS = [
       { value: "carrot2026", expect: "allow", why: "목록에 없는 비밀번호라 받습니다." },
       { value: "iloveyou", expect: "block", why: "목록에 있는 흔한 비밀번호라 막습니다." },
       { value: "sun42", expect: "allow", why: "짧아도 목록에 없는 비밀번호는 이 검사에서는 받습니다. 길이 규칙은 따로 정하는 일입니다." },
+      { value: "pass", expect: "allow", why: "password의 앞부분일 뿐 목록에 똑같은 것은 없어서 받습니다. 목록에 똑같이 있는 비밀번호만 막아요." },
     ],
   },
   {

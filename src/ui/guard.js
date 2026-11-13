@@ -217,6 +217,9 @@ export function render(root, ctx, params = {}) {
     w.innerHTML = notes.map((n) => `<span class="gd-why-note">${esc(n)}</span><br>`).join("") + `<b class="mono">${esc(shown(tr.value))}</b> · ${tr.expect === "block" ? t`공격` : t`손님`} · ${k ? `${VERD[k][0]} ${esc(VERD[k][1]())}` : t`판정하지 않았어요`}<br>${esc(tx(`guard.${inc.id}.why.${i}`, inc.tries[i].why))}`;
     triesEl.querySelectorAll(".gd-try.sel").forEach((b) => b.classList.remove("sel"));
     triesEl.querySelector(`[data-i="${i}"]`)?.classList.add("sel");
+    // 아래에 고정된 「실행」 줄(.g-foot)에 가리지 않게, 줄 높이만큼 아래 여백을 두고 보여 준다
+    const foot = $(".g-foot");
+    w.style.scrollMarginBottom = `${(foot ? foot.offsetHeight : 0) + 12}px`;
     w.scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });
   }
 

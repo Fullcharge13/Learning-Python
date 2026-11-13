@@ -3828,7 +3828,12 @@ def test_guard_room_g1():
         res = a.page.inner_text("#gd-result")
         if "막은 공격" not in res or "들인 손님" not in res:
             fails.append("result line: %r" % res)
+        a.page.evaluate("() => window.scrollTo(0, 0)")
         a.page.click(".gd-try.bad >> nth=0")
+        a.page.wait_for_timeout(900)   # 부드러운 스크롤이 끝나길 기다림
+        wy = a.js("() => { const w = document.querySelector('#gd-why').getBoundingClientRect(); const f = document.querySelector('.g-foot').getBoundingClientRect(); return { wb: w.bottom, wt: w.top, ft: f.top }; }")
+        if not (wy["wb"] <= wy["ft"] and wy["wt"] >= 0):   # 「왜?」 전체가 고정 「실행」 줄 위에 보여야 한다
+            fails.append("why hidden under the sticky bar: %r" % wy)
         why = a.page.inner_text("#gd-why") if a.page.query_selector("#gd-why") else ""
         if "암호와 똑같아서 들입니다." not in why:   # 첫 틀린 칸 = 맞는 암호를 잘못 막음(⚠️)
             fails.append("why not shown: %r" % why)
@@ -3922,6 +3927,34 @@ def test_guard_room_no_decision():
         assert "판정 안 함" in why, why
         s = a.save()["guard"]
         assert s["solved"]["G1"] == {"firstTry": True, "how": "blank"}
+        assert not a.errors, a.errors
+
+
+def test_guard_room_starter_names():
+    """v0.16.1 G3-C15: 「지워진 시작 코드」 안내는 직접 쓰기에서, 시작 코드가 만드는 이름일 때만. 빈칸 고르기 오답(G37 gate)은 보통 NameError 안내."""
+    g = _guard_g(solved={"G37": {"firstTry": True, "how": "blank"}}, blanks={"G37": [0, 0, 0]}, attempts={"G37": 1}, runs=1)
+    with App("iPhone 17", save=_guard_seed(17, guard=g)) as a:
+        _open_guard(a)
+        a.page.click("#gd-list")
+        _sheet_pick(a, '[data-g="G37"]')
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-mode")
+        _gd_pick(a, 0, 1)   # self 대신 gate
+        _gd_run(a, skip=False)
+        a.page.wait_for_selector("#gd-result .err-panel")
+        title = a.page.inner_text("#gd-result .err-panel h3")
+        assert "NameError" in title and "지워진 시작 코드" not in title, title
+        a.page.click("#gd-mode")
+        a.page.wait_for_selector("#gd-ed .cm-content")
+        a.set_code("def check(attempt):\n    return gate.allows(attempt)\n")   # gate = Gate(...) 줄을 지움
+        _gd_run(a, skip=False)
+        a.page.wait_for_selector("#gd-result .err-panel")
+        title = a.page.inner_text("#gd-result .err-panel h3")
+        assert "지워진 시작 코드" in title, title
+        a.set_code("def check(attempt):\n    return nobody.allows(attempt)\n")   # 시작 코드에 없는 이름
+        _gd_run(a, skip=False)
+        a.page.wait_for_selector("#gd-result .err-panel")
+        title = a.page.inner_text("#gd-result .err-panel h3")
+        assert "지워진 시작 코드" not in title, title
         assert not a.errors, a.errors
 
 

@@ -132,7 +132,7 @@ def test_error_variant_keys():
                        cwd=ROOT, capture_output=True, text=True, check=True)
     d = json.loads(r.stdout)
     en = load("data.json")
-    assert len(d["v"]) == 7, d["v"]
+    assert len(d["v"]) == 9, d["v"]
     for v in d["v"]:
         assert v["key"] in d["e"], v
         for f in ("title", "body", "detective"):

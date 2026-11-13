@@ -28,9 +28,9 @@ export const ERRORS = {
   },
   TypeError: {
     title: "자료형 오류 ({type})",
-    body: "서로 맞지 않는 종류의 값을 함께 썼어요. 단서는 {line}번째 줄에 있어요. 문자열과 숫자를 + 로 바로 붙이려고 할 때 자주 생겨요. 숫자로 계산하려면 int(), 문자열로 이어 붙이려면 str()로 종류를 맞춰 볼까요?",
+    body: "서로 맞지 않는 종류의 값을 함께 썼어요. 단서는 {line}번째 줄에 있어요. 하려는 계산이나 동작이 그 값의 종류와 맞지 않을 때 생겨요. 오류 문장에 적힌 종류(예: int, str, list)를 읽고, 각 값이 어떤 종류인지 확인해 볼까요?",
     detective:
-      "어울리지 않는 두 값이 한자리에 있었어요. 단서는 {line}번째 줄에 있어요. 문자열과 숫자를 그대로 섞은 게 의심스러워요. 각 값이 문자열인지 숫자인지 신원을 확인하고, int()나 str()로 종류를 맞춰 봐요.",
+      "어울리지 않는 값이 한자리에 있었어요. 단서는 {line}번째 줄에 있어요. 값의 종류가 하려는 동작과 맞지 않는 게 의심스러워요. 오류 문장에 적힌 종류를 단서 삼아 각 값의 신원을 확인해 봐요.",
   },
   ValueError: {
     title: "값 오류 ({type})",
@@ -98,9 +98,9 @@ export const ERRORS = {
   },
   ZeroDivisionError: {
     title: "0으로 나누기 오류 ({type})",
-    body: "0으로 나누려고 했어요. 단서는 {line}번째 줄에 있어요. 나누는 쪽 값이 0이면 계산할 수 없어요. 처음부터 0일 때도 있고, 계산하다가 0이 되었을 때도 있어요. 나누는 쪽 값이 지금 얼마인지 print()로 확인해 볼까요?",
+    body: "0으로 나누려고 했어요. 단서는 {line}번째 줄에 있어요. 나누는 쪽 값이 0이면 계산할 수 없어요. 처음부터 0일 때도 있고, 계산하다가 0이 되었을 때도 있어요. 나누기 전에 나누는 쪽 값이 0이 아닌지 확인해 볼까요?",
     detective:
-      "0으로 나누는 불가능한 계산이 일어났어요. 단서는 {line}번째 줄에 있어요. 나누는 쪽 값이 처음부터 0이었는지, 계산하는 중에 0이 되었는지가 수사의 핵심이에요. 그 값을 print()로 불러내 정체를 확인해 봐요.",
+      "0으로 나누는 불가능한 계산이 일어났어요. 단서는 {line}번째 줄에 있어요. 나누는 쪽 값이 처음부터 0이었는지, 계산하는 중에 0이 되었는지가 수사의 핵심이에요. 나누기 전에 그 값이 0이 아닌지 신원을 확인해 봐요.",
   },
   JSONDecodeError: {
     title: "JSON 읽기 오류 ({type})",
@@ -137,6 +137,18 @@ export const ERRORS = {
     body: "함수가 아닌 값을 함수처럼 괄호 ( )로 불렀어요. 단서는 {line}번째 줄에 있어요. 변수 이름 뒤에 괄호를 붙이면 Python은 그 값을 함수로 보고 실행하려 해요. 함수 이름을 변수 이름으로 덮어썼거나, 값 뒤에 괄호를 잘못 붙였을 때 생겨요. 괄호를 붙인 이름이 정말 함수인지 확인해 볼까요?",
     detective:
       "함수가 아닌 값에게 실행하라고 명령했어요. 단서는 {line}번째 줄에 있어요. 이름 뒤에 괄호를 붙이면 Python은 그것을 함수로 여겨요. 함수 이름을 변수가 덮어썼거나, 값 뒤에 괄호가 잘못 붙은 게 의심스러워요. 괄호를 붙인 이름의 정체가 정말 함수인지 대조해 봐요.",
+  },
+  TypeError_concat: {
+    title: "더할 수 없는 값 오류 ({type})",
+    body: "서로 맞지 않는 종류의 값을 + 같은 계산으로 합치려 했어요. 단서는 {line}번째 줄에 있어요. 문자열과 숫자를 + 로 바로 붙이려고 할 때 자주 생겨요. 숫자로 계산하려면 int(), 문자열로 이어 붙이려면 str()로 종류를 맞춰 볼까요?",
+    detective:
+      "어울리지 않는 두 값을 + 로 묶으려 했어요. 단서는 {line}번째 줄에 있어요. 문자열과 숫자를 그대로 섞은 게 의심스러워요. 각 값이 문자열인지 숫자인지 신원을 확인하고, int()나 str()로 종류를 맞춰 봐요.",
+  },
+  TypeError_subscript: {
+    title: "[ ]로 꺼낼 수 없는 값 오류 ({type})",
+    body: "목록·문자열·딕셔너리가 아닌 값에 [ ]를 붙여 안을 꺼내려 했어요. 단서는 {line}번째 줄에 있어요. 숫자나 None 같은 값에는 [ ]로 꺼낼 칸이 없어요. 오류 문장에 적힌 종류가 지금 그 변수에 든 값이에요. [ ]를 붙인 변수에 정말 목록이나 문자열이 들어 있는지 확인해 볼까요?",
+    detective:
+      "칸을 열 수 없는 값에 [ ]로 손을 넣었어요. 단서는 {line}번째 줄에 있어요. 숫자나 None에는 꺼낼 칸이 없어요. 오류 문장에 적힌 종류가 그 변수의 정체예요. [ ]를 붙인 변수가 목록·문자열·딕셔너리가 맞는지 대조해 봐요.",
   },
   NameError_import: {
     title: "가져오지 않은 이름 오류 ({type})",
@@ -175,7 +187,10 @@ export const ERROR_VARIANTS = [
   { type: "TypeError", pattern: "not supported between instances of", key: "TypeError_compare" },
   { type: "TypeError", pattern: "is not (iterable|a container)|argument of type 'NoneType'", key: "TypeError_container" },
   { type: "TypeError", pattern: "object is not callable", key: "TypeError_call" },
-  { type: "NameError", pattern: "name '(\\w+)' is not defined", key: "NameError_starter" },
+  { type: "TypeError", pattern: "can only concatenate|unsupported operand type", key: "TypeError_concat" },
+  { type: "TypeError", pattern: "object is not subscriptable", key: "TypeError_subscript" },
+  // import 이름이 먼저: import re 줄을 지운 것은 시작 코드 일반 안내보다 import 안내가 더 정확하다
   { type: "NameError", pattern: "name '(re|json|csv|urlparse|parse_qs)' is not defined", key: "NameError_import" },
+  { type: "NameError", pattern: "name '(\\w+)' is not defined", key: "NameError_starter" },
   { type: "SyntaxError", pattern: "Maybe you meant '=='", key: "SyntaxError_eq" },
 ];

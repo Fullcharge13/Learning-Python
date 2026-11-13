@@ -2,7 +2,7 @@
 // 대표 메시지는 실제 Pyodide 3.14 문구 — tests/grader_browser.py test_error_variants_real_engine가 같은 문구를 엔진에서 다시 뽑아 맞춘다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { explain, codeNames } from "../../src/grade.js";
+import { explain, definedNames } from "../../src/grade.js";
 import { readFileSync } from "node:fs";
 import { setLang, usePack } from "../../src/i18n.js";
 import { ERRORS, ERROR_VARIANTS } from "../../data/errors.js";
@@ -51,6 +51,11 @@ const CASES = [
   ["TypeError", "'NoneType' object is not iterable", "TypeError_container"],
   ["TypeError", "'int' object is not callable", "TypeError_call"],
   ["TypeError", "'str' object is not callable", "TypeError_call"],
+  ["TypeError", "can only concatenate str (not \"int\") to str", "TypeError_concat"],
+  ["TypeError", "unsupported operand type(s) for +: 'int' and 'str'", "TypeError_concat"],
+  ["TypeError", "unsupported operand type(s) for -: 'str' and 'int'", "TypeError_concat"],
+  ["TypeError", "'int' object is not subscriptable", "TypeError_subscript"],
+  ["TypeError", "'NoneType' object is not subscriptable", "TypeError_subscript"],
   ["NameError", "name 're' is not defined", "NameError_import"],
   ["NameError", "name 'json' is not defined", "NameError_import"],
   ["NameError", "name 'csv' is not defined", "NameError_import"],
@@ -60,11 +65,12 @@ const CASES = [
 ];
 
 test("variants_table: 모양과 열쇠", () => {
-  // 7개. NameError_starter는 NameError_import보다 앞(시작 코드에 있던 이름이면 import 안내보다 그쪽이 더 정확한 단서)
+  // 9개. NameError_import는 NameError_starter보다 앞(import re 줄을 지운 건 시작 코드 일반 안내보다 import 안내가 더 정확한 단서)
   assert.deepEqual(ERROR_VARIANTS.map((v) => v.key).sort(),
-    ["NameError_import", "NameError_starter", "SyntaxError_eq", "TypeError_call", "TypeError_compare", "TypeError_container", "TypeError_self"]);
+    ["NameError_import", "NameError_starter", "SyntaxError_eq", "TypeError_call", "TypeError_compare", "TypeError_concat",
+      "TypeError_container", "TypeError_self", "TypeError_subscript"]);
   const ks = ERROR_VARIANTS.map((v) => v.key);
-  assert.ok(ks.indexOf("NameError_starter") < ks.indexOf("NameError_import"));
+  assert.ok(ks.indexOf("NameError_import") < ks.indexOf("NameError_starter"));
   for (const v of ERROR_VARIANTS) {
     assert.equal(typeof v.type, "string");
     assert.equal(typeof v.pattern, "string");
@@ -90,7 +96,7 @@ test("variants_pick: 대표 메시지 → 그 변형, 첫 일치", () => {
 });
 
 test("variants_fallback: 무늬가 안 맞거나 메시지가 없으면 기본 항목", () => {
-  for (const [type, msg] of [["TypeError", "can only concatenate str (not \"int\") to str"], ["NameError", "name 'prin' is not defined"],
+  for (const [type, msg] of [["TypeError", "object of type 'int' has no len()"], ["TypeError", "can't multiply sequence by non-int of type 'str'"], ["NameError", "name 'prin' is not defined"],
     ["SyntaxError", "'(' was never closed"], ["TypeError", ""], ["NameError", undefined], ["SyntaxError", null]]) {
     const r = explain({ type, line: 2, msg }, "basic");
     assert.equal(r.body, ERRORS[type].body.replace(/\[\[|\]\]/g, "").replace(/\{line\}/g, "2"), String(msg));
@@ -125,20 +131,24 @@ test("name_starter: 시작 코드에 있던 이름이면 NameError_starter", () 
   assert.equal(explain(e, "basic", { starterNames: [] }).body, base);
   assert.equal(explain(e, "basic", { starterNames: ["other"] }).body, base);
   assert.equal(explain(e, "basic", { seconds: 3 }).body, base);
-  // 시작 코드 이름이 import 이름이어도(import re 줄을 지움) 시작 코드 안내가 먼저
+  // 시작 코드가 import로 가져온 이름(re 등)을 지워도 시작 코드 안내가 아니라 import 안내
   assert.equal(explain({ type: "NameError", line: 1, msg: "name 're' is not defined" }, "basic", { starterNames: ["re"] }).title,
-    ERRORS.NameError_starter.title.replace("{type}", "NameError"));
+    ERRORS.NameError_import.title.replace("{type}", "NameError"));
   // 이름이 없는 메시지·다른 종류는 영향 없음
   assert.equal(explain({ type: "TypeError", line: 4, msg: "name 'common' is not defined" }, "basic", { starterNames: ["common"] }).body,
     ERRORS.TypeError.body.replace(/\{line\}/g, "4"));
 });
 
-test("codeNames: 시작 코드에서 이름(식별자)만 뽑는다", () => {
-  const names = codeNames("import re\ncommon = [\"password\", 123456]  # secret\ndef check(attempt):\n    return {0}\nprint('hello world')");
-  for (const n of ["re", "common", "check", "attempt", "print"]) assert.ok(names.includes(n), n);
-  for (const n of ["password", "secret", "hello", "world", "0"]) assert.ok(!names.includes(n), n);
-  assert.deepEqual(codeNames(""), []);
-  assert.deepEqual(codeNames(null), []);
+test("definedNames: 시작 코드가 만드는 이름만(쓰기만 하는 이름·매개변수·글자·주석은 뺀다)", () => {
+  const start = "import re\nfrom urllib.parse import urlparse, parse_qs as pq\nimport os.path, json as j\n"
+    + "common = [\"password\", 123456]  # secret\nx, y = 1, 2\nfor item in common:\n    pass\nclass Box:\n    pass\n"
+    + "def check(attempt):\n    if attempt == {0}:\n        total += gate\n    return len(attempt) >= 3 != total\nprint('hello world')";
+  const names = definedNames(start);
+  for (const n of ["re", "urlparse", "pq", "os", "j", "common", "x", "y", "item", "Box", "check"]) assert.ok(names.includes(n), n);
+  for (const n of ["attempt", "total", "gate", "len", "print", "password", "secret", "hello", "world", "parse_qs", "json", "urllib", "0"])
+    assert.ok(!names.includes(n), n);
+  assert.deepEqual(definedNames(""), []);
+  assert.deepEqual(definedNames(null), []);
   assert.equal(new Set(names).size, names.length);
 });
 
@@ -161,4 +171,18 @@ test("english: 변형·새 종류도 영어 항목으로 나온다", () => {
     assert.equal(explain({ type: "NameError", line: 2, msg: "name 'c' is not defined" }, "basic", { starterNames: ["c"] }).title,
       EN["error.NameError_starter.title"].replace("{type}", "NameError"));
   } finally { setLang("ko"); }
+});
+
+test("typeerror_default_generic: 기본 TypeError는 +·[] 얘기가 없고, 변형이 각자 맡는다", () => {
+  for (const f of ["body", "detective"]) assert.doesNotMatch(ERRORS.TypeError[f], /\+|문자열과 숫자/, `TypeError.${f}`);
+  for (const f of ["body", "detective"]) {
+    assert.match(ERRORS.TypeError_concat[f], /\+/, `concat.${f}`);
+    assert.match(ERRORS.TypeError_subscript[f], /\[ \]/, `subscript.${f}`);
+    assert.match(ERRORS.TypeError_subscript[f], /단서/, `subscript.${f}`);
+    assert.doesNotMatch(ERRORS.TypeError_subscript[f], /=\s*\S|\bdef \w+\(/, `subscript.${f}`);
+  }
+});
+
+test("zerodiv_no_print: 경비실에서 쓸 수 없는 print()를 권하지 않는다", () => {
+  for (const f of ["body", "detective"]) assert.doesNotMatch(ERRORS.ZeroDivisionError[f], /print/, f);
 });

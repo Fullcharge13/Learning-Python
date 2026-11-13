@@ -95,12 +95,31 @@ export function explain(error, outfit, opts = {}) {
   return { title: fill(title, line, type, seconds), body: fill(body, line, type, seconds), line };
 }
 
-// 코드에서 이름(식별자)만 뽑는다: 글자 따옴표 안·# 주석·{0} 빈칸 자리는 뺀다. 중복 없음.
-export function codeNames(code) {
+// 시작 코드가 「만드는」 이름만 뽑는다(NameError_starter용): import한 이름(from x import y 포함)·def/class 이름·
+// 대입·for 대상. 쓰기만 하는 이름(예: 빈칸이 채워져야 생기는 것)과 함수 매개변수는 뺀다. 글자 따옴표 안·# 주석·{0} 자리는 무시. 중복 없음.
+export function definedNames(code) {
   if (typeof code !== "string") return [];
   const bare = code
     .replace(/("""|\'\'\')[\s\S]*?\1/g, " ")
     .replace(/(["'])(?:\\.|(?!\1)[^\n\\])*\1/g, " ")
     .replace(/#[^\n]*/g, " ");
-  return [...new Set(bare.match(/[A-Za-z_][A-Za-z0-9_]*/g) || [])];
+  const out = new Set();
+  const id = "[A-Za-z_]\\w*";
+  const ids = (text) => (text.match(new RegExp(id, "g")) || []);
+  const imports = (list, top) => {
+    for (const part of list.replace(/[()]/g, "").split(",")) {
+      const [a, b] = part.trim().split(/\s+as\s+/);
+      const n = (b || (top ? a.split(".")[0] : a) || "").trim();
+      if (new RegExp(`^${id}$`).test(n)) out.add(n);
+    }
+  };
+  for (const line of bare.split("\n")) {
+    let m;
+    if ((m = line.match(/^\s*import\s+(.+)/))) imports(m[1], true);
+    else if ((m = line.match(/^\s*from\s+\S+\s+import\s+(.+)/))) imports(m[1], false);
+    else if ((m = line.match(new RegExp(`^\\s*(?:def|class)\\s+(${id})`)))) out.add(m[1]);
+    else if ((m = line.match(/^\s*for\s+(.+?)\s+in\b/))) ids(m[1]).forEach((n) => out.add(n));
+    else if ((m = line.match(new RegExp(`^\\s*(${id}(?:\\s*,\\s*${id})*)\\s*=(?!=)`)))) ids(m[1]).forEach((n) => out.add(n));
+  }
+  return [...out];
 }

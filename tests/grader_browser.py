@@ -693,6 +693,11 @@ def test_error_variants_real_engine():
         ("container", "d = {}\nprint('a' in d.get('x'))\n", "TypeError", "TypeError_container"),
         ("iterable", "for x in None:\n    pass\n", "TypeError", "TypeError_container"),
         ("call", "x = 5\nx()\n", "TypeError", "TypeError_call"),
+        ("concat", "print('a' + 1)\n", "TypeError", "TypeError_concat"),
+        ("operand", "print(1 + 'a')\n", "TypeError", "TypeError_concat"),
+        ("subscript", "x = 5\nprint(x[0])\n", "TypeError", "TypeError_subscript"),
+        ("none_sub", "x = None\nprint(x[0])\n", "TypeError", "TypeError_subscript"),
+        ("plain_type", "len(5)\n", "TypeError", None),
         ("import", "print(re.match('a', 'a'))\n", "NameError", "NameError_import"),
         ("eq", "x = 1\nif x = 1:\n    pass\n", "SyntaxError", "SyntaxError_eq"),
         ("plain_name", "print(zzz)\n", "NameError", None),
@@ -718,7 +723,9 @@ def test_error_variants_real_engine():
         }
         const st = await window.runner.run("print(common)\\n", "", [], {});
         const sv = explain(st.error, "basic", { starterNames: ["common"] });
-        return { out, starter: sv.title, starterBase: explain(st.error, "basic").title };
+        const im = await window.runner.run("print(re.match('a', 'a'))\\n", "", [], {});
+        return { out, starter: sv.title, starterBase: explain(st.error, "basic").title,
+                 importTitle: explain(im.error, "basic", { starterNames: ["re"] }).title, importKey: ERRORS.NameError_import.title.replace("{type}", im.error.type) };
     }""", [[c[0], c[1]] for c in cases])
     for c, got in zip(cases, res["out"]):
         name, _code, typ, want = c
@@ -726,6 +733,7 @@ def test_error_variants_real_engine():
         assert got["type"] == typ, got
         assert (want is None and got["keys"] in ([typ], [])) or got["keys"][:1] == [want], (name, got)
     assert res["starter"] != res["starterBase"] and "NameError" in res["starter"], res
+    assert res["importTitle"] == res["importKey"], res   # import re 줄을 지워도 starterNames에 re가 있어도 import 안내
 
 
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,

@@ -10,7 +10,7 @@ test("errors_term_string: 「글자」 대신 「문자열」", () => {
       assert.doesNotMatch(text, /글자/, `${k}.${field}`);
     }
   }
-  assert.match(ERRORS.TypeError.body, /문자열/);
+  assert.match(ERRORS.TypeError_concat.body, /문자열/);
 });
 
 test("errors_particle: 「문자열(print(안녕)처럼)가」 같은 조사 오류 없음", () => {

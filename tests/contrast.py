@@ -13,6 +13,7 @@
 - 화면마다 「보이는 글자가 있는 요소」의 글자색과 실제 바탕색의 대비를 재어, 기준 미달을 목록으로 낸다.
   기준: 글자 4.5:1, 큰 글씨(24px 이상, 또는 굵기 700 이상이고 19px 이상) 3:1.
 - 같은 화면 목록의 스크린숏을 tests/out/contrast/<theme>/<화면>.png 로 저장한다(밝게 회귀 비교의 기준 사진).
+- `--compare 기준.json`: 보고서의 `digests`(화면별 선택자|글자색|바탕색 전부)를 견줘 다르면 1. 스크린숏은 animations=disabled·caret=hide.
 - 종료 코드: `--strict`이고 미달(또는 화면을 못 연 오류)이 있으면 1. 아니면 0. (밝게는 보고만, 어둡게는 실패시킴 — 부르는 쪽이 정함)
 
 바탕색 계산
@@ -20,13 +21,13 @@
   색(`Canvas` 시스템 색: color-scheme이 dark면 어두운 색). 조상의 `opacity`는 그 층의 알파와 글자 알파에 곱한다.
 - `background-image`(그라데이션·모눈)는 계산하지 않는다. 특히 `body`의 모눈 무늬(rgba 0.045 선)는 「페이지 색 = body `background-color`」로 본다.
   body·html 말고 배경 그림이 있는 요소는 결과에 `bgimg: true`를 달아 어림값임을 표시한다.
-- 입력칸은 값(없으면 `::placeholder`) 글자색, SVG `<text>`는 `fill`을 글자색으로, 그 뒤쪽에 먼저 그려진 같은 SVG의 도형 중 글자 중심을 덮는 것들의
+- 입력칸은 값(없으면 `::placeholder`, 그것도 없으면 빈 칸의 글자색을 글자 'x'로) 글자색, SVG `<text>`는 `fill`을 글자색으로, 그 뒤쪽에 먼저 그려진 같은 SVG의 도형 중 글자 중심을 덮는 것들의
   `fill`을 합성한 것을 바탕으로 본다(텃밭 말풍선).
 
 빼는 것(JSON `excluded`에 개수로 보고)
-- `aria-hidden="true"` 안(장식), `hidden`·`display:none`·`visibility:hidden`·`opacity:0`(화면에 안 보임), 크기가 2px 미만(.sr 등),
-  화면 가로 밖·문서 위 밖, 조상의 `overflow` 자름 영역 밖(가로 스크롤 줄에서 안 보이는 부분)
-- 글자 낱자(`\\p{L}`·`\\p{N}`)가 하나도 없는 글(이모지·기호만)
+- `hidden`·`display:none`·`visibility:hidden`·`opacity:0`(화면에 안 보임), 크기가 2px 미만(.sr 등),
+  화면 가로 밖·문서 위 밖, 조상이 가로로 자른 영역 밖(`clippedHoriz`). 세로 스크롤 안 접힌 아래쪽 글자는 잰다
+- 글자 낱자(`\\p{L}`·`\\p{N}`)가 하나도 없는 글(이모지·기호만 = 장식). `aria-hidden` 안이라도 낱자가 보이면 잰다(`info.ariaHiddenChecked`)
 - 비활성(`:disabled`, `aria-disabled="true"` 안) — WCAG 대비 기준 예외
 - `--skip-editor-tokens`일 때만: `.cm-content` 안 `.cm-line`의 자손 토큰 칸(문법 색)
 - SVG 그림 안의 캐릭터·작물은 글자가 없어 저절로 빠짐. 이모지 글자는 위 규칙으로 빠짐.
@@ -106,7 +107,8 @@ CHECK_JS = r"""(opts) => {
     return s;
   };
   const vw = window.innerWidth, vh = window.innerHeight;
-  const ex = { ariaHidden: 0, invisible: 0, tiny: 0, offscreen: 0, clipped: 0, nonWord: 0, disabled: 0, editorToken: 0 };
+  const ex = { noLetterSkipped: 0, invisible: 0, tiny: 0, offscreen: 0, clippedHoriz: 0, disabledSkipped: 0, editorToken: 0, svgSkipped: 0 };
+  const info = { ariaHiddenChecked: 0, bgimgChecked: 0 }; const digest = [];
   const fails = {}; let checked = 0, minRatio = 99;
   const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD', 'META', 'LINK', 'TITLE']);
   const word = /[\p{L}\p{N}]/u;
@@ -118,15 +120,16 @@ CHECK_JS = r"""(opts) => {
       if (t === 'hidden' || t === 'checkbox' || t === 'radio' || t === 'file' || t === 'range' || t === 'color') continue;
       text = el.value || ''; input = true;
       if (!text && el.placeholder) text = el.placeholder;
+      if (!text) text = 'x';      // 빈 입력칸도 입력할 때 쓰이는 글자색을 잰다(흰 바탕·상속된 밝은 글자 문제)
     } else if (tag === 'SELECT') {
-      text = el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : '';
+      text = (el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : '') || 'x';
     } else {
       for (const n of el.childNodes) if (n.nodeType === 3) text += n.nodeValue;
     }
     text = text.replace(/\s+/g, ' ').trim();
     if (!text) continue;
-    if (!word.test(text)) { ex.nonWord++; continue; }
-    if (el.closest('[aria-hidden="true"]')) { ex.ariaHidden++; continue; }
+    if (!word.test(text)) { ex.noLetterSkipped++; continue; }
+    const ariaHid = !!el.closest('[aria-hidden="true"]');   // 글자가 보이면(낱자 있음) 장식이 아니라 측정 대상
     const cs = getComputedStyle(el);
     if (cs.visibility === 'hidden' || cs.display === 'none' || el.closest('[hidden]') || cum(el) < 0.01 || !el.getClientRects().length) { ex.invisible++; continue; }
     const r = el.getBoundingClientRect();
@@ -138,13 +141,13 @@ CHECK_JS = r"""(opts) => {
     let clipped = false;
     for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) {
       const ps = getComputedStyle(p);
-      if (ps.overflowX !== 'visible' || ps.overflowY !== 'visible') {
+      if (ps.overflowX !== 'visible') {      // 가로로 잘린 것만 뺀다. 세로 스크롤 안(접힌 아래쪽)은 사용자가 내려서 보므로 잰다
         const b = p.getBoundingClientRect();
-        if (r.right <= b.left || r.left >= b.right || r.bottom <= b.top || r.top >= b.bottom) { clipped = true; break; }
+        if (r.right <= b.left || r.left >= b.right) { clipped = true; break; }
       }
     }
-    if (clipped) { ex.clipped++; continue; }
-    if (el.matches(':disabled') || el.closest('[aria-disabled="true"]')) { ex.disabled++; continue; }
+    if (clipped) { ex.clippedHoriz++; continue; }
+    if (el.matches(':disabled') || el.closest('[aria-disabled="true"]')) { ex.disabledSkipped++; continue; }
     if (opts.skipEditorTokens) {
       const cm = el.closest('.cm-content');
       if (cm && !el.classList.contains('cm-line') && el !== cm) { ex.editorToken++; continue; }
@@ -152,7 +155,7 @@ CHECK_JS = r"""(opts) => {
     const svg = el instanceof SVGElement ? el.closest('svg') : null;
     let fgc, bd;
     if (svg) {
-      const fs = cs.fill; if (!fs || fs === 'none' || fs.startsWith('url')) continue;
+      const fs = cs.fill; if (!fs || fs === 'none' || fs.startsWith('url')) { ex.svgSkipped++; continue; }
       const f = parse(fs); fgc = [f[0], f[1], f[2], f[3] * (parseFloat(cs.fillOpacity) || 0) * cum(el)];
       bd = svgBackdrop(el, svg);
     } else {
@@ -166,13 +169,16 @@ CHECK_JS = r"""(opts) => {
     const large = size >= 24 || (weight >= 700 && size >= 19);
     const need = large ? 3 : 4.5, rt = ratio(fg, bd.rgb);
     checked++; if (rt < minRatio) minRatio = rt;
+    if (ariaHid) info.ariaHiddenChecked++;
+    if (bd.bgimg) info.bgimgChecked++;
+    digest.push(sel(el) + '|' + hex(fg) + '|' + hex(bd.rgb));
     if (rt + 1e-9 >= need) continue;
     const key = sel(el) + '|' + hex(fg) + '|' + hex(bd.rgb);
     if (fails[key]) { fails[key].count++; continue; }
     fails[key] = { selector: sel(el), text: text.slice(0, 20), fg: hex(fg), bg: hex(bd.rgb), ratio: Math.round(rt * 100) / 100, need,
                    count: 1, ...(bd.bgimg ? { bgimg: true } : {}) };
   }
-  return { fails: Object.values(fails), checked, minRatio: Math.round(minRatio * 100) / 100, excluded: ex };
+  return { fails: Object.values(fails), checked, minRatio: Math.round(minRatio * 100) / 100, excluded: ex, info, digest: digest.sort() };
 }"""
 
 
@@ -188,12 +194,14 @@ SELF_HTML = """<!doctype html><html><body style="margin:0;background:#fff;backgr
 <div style="background:#1B2538"><p id="c" style="color:#222;margin:0;background:transparent">투명 바탕 위 어두운 글자</p></div>
 <p id="d" style="color:#888;font-size:16px;margin:0">작은 회색 글자</p>
 <p id="e" style="color:#888;font-size:26px;margin:0">큰 회색 글자</p>
-<p id="f" aria-hidden="true" style="color:#fff;margin:0">장식 빼기</p>
+<p id="f" aria-hidden="true" style="color:#fff;margin:0">보이는 글자는 aria-hidden이어도 잼</p>
+<span id="f2" aria-hidden="true" style="color:#fff">★</span>
+<input id="h" style="color:#fff;background:#fff">
 <p id="g" hidden style="color:#fff">숨김 빼기</p>
 </body></html>"""
 
-# 기대: 미달은 a(입력, 흰/흰), c(남색 위 #222), d(작은 회색 3.54:1)뿐
-SELF_EXPECT_FAIL = {"input#a", "p#c", "p#d"}
+# 기대: 미달은 a(입력, 흰/흰), h(빈 입력칸 흰/흰), c(남색 위 #222), d(작은 회색 3.54:1), f(aria-hidden이지만 글자가 보임). 낱자 없는 ★ 장식·hidden은 뺌
+SELF_EXPECT_FAIL = {"input#a", "p#c", "p#d", "p#f", "input#h"}
 
 
 def self_test():
@@ -210,7 +218,7 @@ def self_test():
     problems = []
     if got != SELF_EXPECT_FAIL:
         problems.append("fails %r != expected %r" % (sorted(got), sorted(SELF_EXPECT_FAIL)))
-    if res["excluded"]["ariaHidden"] != 1 or res["excluded"]["invisible"] != 1:
+    if res["excluded"]["noLetterSkipped"] != 1 or res["excluded"]["invisible"] != 1 or res["info"]["ariaHiddenChecked"] != 1:
         problems.append("excluded counts wrong: %r" % res["excluded"])
     first = next((f for f in res["fails"] if f["selector"] == "input#a"), None)
     if not first or first["ratio"] != 1.0 or first["need"] != 4.5:
@@ -246,7 +254,7 @@ class Runner:
         flow._settle_animations(a)
         applied = a.js("() => document.documentElement.dataset.theme")
         res = run_check(a.page, self.skip_tokens)
-        a.page.screenshot(path=os.path.join(self.dir, name + ".png"))
+        a.page.screenshot(path=os.path.join(self.dir, name + ".png"), animations="disabled", caret="hide")
         for f in res["fails"]:
             f["screen"] = name
         res.update(screen=name, theme_applied=applied)
@@ -299,8 +307,9 @@ def sc_fresh(r):
 
         def hook(name, app):
             if name == "write":
-                r.cap(app, "write")
                 app.wait_py()
+                app.page.wait_for_selector(".cm-editor")
+                r.cap(app, "write")
                 app.set_code("print(")
                 app.page.click("#run")
                 app.page.wait_for_selector(".err-panel", timeout=30_000)
@@ -389,6 +398,10 @@ def run_app(theme, skip_tokens):
 
 def summarize(r, theme, skip_tokens, secs):
     fails = [f for s in r.screens for f in s["fails"]]
+    info = {}
+    for s in r.screens:
+        for k, v in s["info"].items():
+            info[k] = info.get(k, 0) + v
     ex = {}
     for s in r.screens:
         for k, v in s["excluded"].items():
@@ -396,7 +409,27 @@ def summarize(r, theme, skip_tokens, secs):
     return {"theme": theme, "skip_editor_tokens": skip_tokens, "seconds": round(secs, 1),
             "screens": [{k: s[k] for k in ("screen", "checked", "minRatio", "theme_applied")} | {"fails": len(s["fails"])} for s in r.screens],
             "checked": sum(s["checked"] for s in r.screens), "fail_count": len(fails),
-            "fail_elements": sum(f["count"] for f in fails), "excluded": ex, "errors": r.errors, "failures": fails}
+            "fail_elements": sum(f["count"] for f in fails), "excluded": ex, "info": info, "errors": r.errors, "failures": fails,
+            "digests": {s["screen"]: s["digest"] for s in r.screens}}
+
+
+def compare(base_path, rep):
+    """기준 JSON의 화면별 (선택자|글자색|바탕색) 목록과 지금 것을 견줌. 다른 줄을 돌려준다(없으면 [])."""
+    with open(base_path, encoding="utf-8") as f:
+        base = json.load(f)["digests"]
+    diffs = []
+    for name, old in base.items():
+        new = rep["digests"].get(name)
+        if new is None:
+            diffs.append("%s: screen missing" % name)
+            continue
+        from collections import Counter
+        co, cn = Counter(old), Counter(new)
+        for k in sorted((co - cn)):
+            diffs.append("%s: - %s" % (name, k))
+        for k in sorted((cn - co)):
+            diffs.append("%s: + %s" % (name, k))
+    return diffs
 
 
 def main(argv=None):
@@ -405,6 +438,7 @@ def main(argv=None):
     ap.add_argument("--report", help="결과 JSON 경로")
     ap.add_argument("--strict", action="store_true", help="미달이 있으면 종료 코드 1")
     ap.add_argument("--skip-editor-tokens", action="store_true", help=".cm-content 안 문법 색 칸을 뺌")
+    ap.add_argument("--compare", metavar="BASELINE.json", help="기준 JSON과 화면별 글자색·바탕색이 하나라도 다르면 종료 코드 1(「밝게 그대로」 확인)")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
     sys.path.insert(0, HERE)
@@ -423,6 +457,13 @@ def main(argv=None):
           % (args.theme, len(rep["screens"]), rep["checked"], rep["fail_count"], rep["fail_elements"], len(rep["errors"]), rep["seconds"]))
     for f in sorted(rep["failures"], key=lambda f: f["ratio"])[:15]:
         print("  %-18s %-40s %s on %s  %.2f<%.1f  %r" % (f["screen"], f["selector"][:40], f["fg"], f["bg"], f["ratio"], f["need"], f["text"]))
+    if args.compare:
+        diffs = compare(args.compare, rep)
+        print("compare vs %s: %d differences" % (args.compare, len(diffs)))
+        for d in diffs[:30]:
+            print("  " + d)
+        if diffs:
+            return 1
     return 1 if args.strict and (rep["fail_count"] or rep["errors"]) else 0
 
 

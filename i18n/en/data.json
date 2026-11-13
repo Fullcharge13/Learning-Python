@@ -643,6 +643,8 @@
  "guard.G35.why.7": "There is no next, so block it.",
  "guard.G35.why.8": "Browsers read \\ as /, so it goes to the outside host //evil.example. Block it.",
  "guard.G35.why.9": "Browsers erase %09 (a tab), so it becomes //evil.example. Block it.",
+ "guard.G35.why.10": "Changing \\ to / turns this into ///evil.example, which browsers still read as an outside host. Block it. Check for // after you normalize.",
+ "guard.G35.why.11": "/\\/ also becomes ///evil.example once normalized, the same outside address. Normalize first, then check, and block it.",
  "guard.G36.brief": "A request is JSON text shaped like {\"key\": key, \"action\": action}. Look up what the key may do in the scopes dictionary from the start code, and return True only if the requested action is in it. An unknown key, broken JSON, or a missing item is False.",
  "guard.G36.concept": "API keys and scopes (least privilege)",
  "guard.G36.crowIntro": "Shall I press delete with a read-only key~",

@@ -923,13 +923,13 @@ export const INCIDENTS = [
     crowIntro: "로그인 뒤에 내 사이트로 보내 달라고 하면 되겠지~",
     crowLose: "사이트 안으로만 보내 주다니, 내 길은 막혔어!",
     crow: { intro: "wave", lose: "cry" },
-    start: 'from urllib.parse import urlparse, parse_qs\n\ndef check(attempt):\n    query = parse_qs(urlparse(attempt).{0})\n    if "next" not in query:\n        return False\n    target = query["next"][{1}]\n    if urlparse(target.replace("\\\\", "/")).netloc != "":\n        return False\n    return target.startswith("/") {2} not target.startswith("//")\n',
+    start: 'from urllib.parse import urlparse, parse_qs\n\ndef check(attempt):\n    query = parse_qs(urlparse(attempt).{0})\n    if "next" not in query:\n        return False\n    target = query["next"][{1}].replace("\\\\", "/")\n    if urlparse(target).netloc != "":\n        return False\n    return target.startswith("/") {2} not target.startswith("//")\n',
     blanks: [
       { options: ["query", "path", "netloc"], answer: 0 },
       { options: ["0", "1"], answer: 0 },
       { options: ["and", "or"], answer: 0 },
     ],
-    solution: 'from urllib.parse import urlparse, parse_qs\n\ndef check(attempt):\n    query = parse_qs(urlparse(attempt).query)\n    if "next" not in query:\n        return False\n    target = query["next"][0]\n    if urlparse(target.replace("\\\\", "/")).netloc != "":\n        return False\n    return target.startswith("/") and not target.startswith("//")\n',
+    solution: 'from urllib.parse import urlparse, parse_qs\n\ndef check(attempt):\n    query = parse_qs(urlparse(attempt).query)\n    if "next" not in query:\n        return False\n    target = query["next"][0].replace("\\\\", "/")\n    if urlparse(target).netloc != "":\n        return False\n    return target.startswith("/") and not target.startswith("//")\n',
     tries: [
       { value: "https://farm.pi.example/login?next=/orders", expect: "allow", why: "사이트 안 경로로 가라는 요청이라 들입니다." },
       { value: "https://farm.pi.example/login?next=/", expect: "allow", why: "/ 하나만 있어도 사이트 안 첫 화면이라 들입니다." },
@@ -941,6 +941,8 @@ export const INCIDENTS = [
       { value: "https://farm.pi.example/login", expect: "block", why: "next가 없어서 막습니다." },
       { value: "https://farm.pi.example/login?next=/\\evil.example", expect: "block", why: "브라우저는 \\ 를 /로 읽어 //evil.example 바깥 호스트로 가니 막습니다." },
       { value: "https://farm.pi.example/login?next=/%09/evil.example", expect: "block", why: "%09(탭)은 브라우저가 지워 버려서 //evil.example 이 되니 막습니다." },
+      { value: "https://farm.pi.example/login?next=/%5C%5Cevil.example", expect: "block", why: "\\ 를 /로 바꾸면 ///evil.example 이 되는데, 브라우저는 이것도 바깥 호스트로 읽어서 막습니다. 바꾼 뒤의 글자로 // 시작을 봐야 해요." },
+      { value: "https://farm.pi.example/login?next=/%5C/evil.example", expect: "block", why: "/\\/ 도 바꾸면 ///evil.example 이라 같은 바깥 주소입니다. 먼저 고쳐 읽고 나서 검사해서 막습니다." },
     ],
   },
   {

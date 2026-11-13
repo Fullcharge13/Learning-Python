@@ -19,6 +19,7 @@
 // - 실행은 한 번에 하나씩 차례로 돈다(대기열).
 // - 제한 시간(기본 3초)을 넘으면 작업자를 끝내고(terminate) 새로 띄운다. 그 실행은
 //   { timeout: true, error: { type: "Timeout" } }로 끝나고, 다음 실행은 새 작업자 준비를 기다린다.
+// - 치명 오류(EngineCrash, 결과의 fatal: true)가 나면 결과를 돌려준 뒤 같은 길(_restart)로 작업자를 새로 띄운다.
 // - 작업자는 실행을 받자마자 "started"를 보낸다. 제한 시간이 지나도 이 확인이 없었다면 작업자가
 //   이미 죽어 있던 것(예: iOS가 쉬는 작업자를 끝냄)이므로 "Timeout"이 아니라 "WorkerError"로 알린다.
 // - 작업자가 죽거나 runner가 예외를 내도 run()은 거부(reject)하거나 멈추지 않고 error로 끝난다.
@@ -65,6 +66,7 @@ function cleanResult(r) {
     missing: Array.isArray(r?.missing) ? r.missing.map(String) : [],
     charts: cleanCharts(r?.charts),
     timeout: false,
+    ...(r?.fatal === true ? { fatal: true } : {}),   // 치명 오류(EngineCrash): 돌려준 뒤 작업자를 새로 띄운다
     ...(plainObj(r?.farm) ? { farm: cleanFarm(r.farm) } : {}),
     // 경비실: 모양만 지킨다(events·stats·solved·stopped는 guard.py가 만든 대로 화면이 읽는다)
     ...(plainObj(r?.guard) ? { guard: r.guard } : {}),
@@ -214,7 +216,12 @@ export class PyRun {
       } else if (m.type === "started") {
         if (this._pending && this._pending.id === m.id) this._pending.started = true;
       } else if (m.type === "result") {
-        if (this._pending && this._pending.id === m.id) this._pending.finish(cleanResult(m.result));
+        if (this._pending && this._pending.id === m.id) {
+          const res = cleanResult(m.result);
+          this._pending.finish(res);
+          // Pyodide 치명 오류(v0.16.1): 이 작업자는 더 못 쓴다 → 시간 초과 때와 같은 길로 새로 띄운다
+          if (res.fatal) this._restart();
+        }
       }
     };
     const onCrash = (ev) => {

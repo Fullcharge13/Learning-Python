@@ -79,7 +79,7 @@ test("explain_detective: 탐정 말투는 탐험가 의상에서 (판정 C42)", 
 });
 
 test("errors_table_complete", () => {
-  for (const k of ["SyntaxError", "IndentationError", "NameError", "TypeError", "ValueError", "InputMissing", "Timeout", "OutputLimit", "_default"]) {
+  for (const k of ["SyntaxError", "IndentationError", "NameError", "TypeError", "ValueError", "InputMissing", "Timeout", "EngineCrash", "OutputLimit", "_default"]) {
     assert.ok(ERRORS[k], k);
     assert.ok(ERRORS[k].title && ERRORS[k].body && ERRORS[k].detective, k);
   }
@@ -110,7 +110,8 @@ test("explain_alias: TabError → 들여쓰기, UnboundLocalError → 이름", (
 });
 
 test("errors_clue_word: 기본 본문마다 「단서」", () => {
-  for (const [k, v] of Object.entries(ERRORS)) assert.match(v.body, /단서/, k);
+  // EngineCrash는 설계서 §2-1이 정한 문구 그대로(오류가 아니라 엔진 사정이라 「단서」 없음)
+  for (const [k, v] of Object.entries(ERRORS)) if (k !== "EngineCrash") assert.match(v.body, /단서/, k);
 });
 
 test("errors_name_quotes: NameError는 따옴표 없는 글자를 흔한 원인으로", () => {
@@ -156,7 +157,7 @@ test("grammar_all: 모든 오류 × 줄 있음/없음 × 기본/탐정 → 어�
           assert.doesNotMatch(text, /undefined|null|NaN/, where);
           assert.doesNotMatch(text, /  /, where);
         }
-        if (line === 3 && type !== "Timeout") assert.match(r.body, /3번째 줄/, where);
+        if (line === 3 && type !== "Timeout" && type !== "EngineCrash") assert.match(r.body, /3번째 줄/, where);
         if (line === null) assert.doesNotMatch(r.body, /줄 번호부터/, where);
       }
     }
@@ -171,4 +172,16 @@ test("default_with_line: 줄 번호가 있으면 설계서 문구 그대로", ()
 test("value_wording: 숫자 사이 빈칸이나 소수점", () => {
   assert.match(ERRORS.ValueError.body, /숫자 사이 빈칸이나 소수점\(3\.5\)/);
   assert.doesNotMatch(ERRORS.ValueError.body, /빈칸이 섞이지 않았는지/);
+});
+
+test("engine_crash: 치명 오류 안내(줄 번호 없음, 설계서 §2-1)", () => {
+  for (const outfit of ["basic", "explorer"]) {
+    const r = explain({ type: "EngineCrash", line: null, msg: "RangeError: Maximum call stack size exceeded" }, outfit);
+    assert.equal(r.line, null);
+    assert.match(r.body, /엔진이 멈춰서 다시 켰어요/);
+    assert.doesNotMatch(r.body, /[{}]|\[\[|\]\]|undefined|null/);
+    assert.doesNotMatch(r.body, /차례|오류가 났어요\. 줄 번호부터/);
+  }
+  assert.equal(explain({ type: "EngineCrash" }, "basic").body,
+    "파이썬 엔진이 멈춰서 다시 켰어요. 아주 깊게 겹친 자료나 끝없이 자기를 부르는 함수가 원인일 때가 많아요. 코드를 줄여서 다시 실행해 보세요.");
 });

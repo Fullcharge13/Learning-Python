@@ -1297,13 +1297,15 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
     except _BaseException as e:  # noqa: BLE001 — 어떤 오류든 결과로 돌려준다. 분류는 builtins를 되돌린 뒤에.
         caught = e
     finally:
+        # builtins를 가장 먼저 되돌린다(v0.16.1): 아래 정리 코드가 import 등 builtins에 기대므로,
+        # builtins.__import__ = None 같은 조작이 남은 채로는 정리 자체가 TypeError로 깨진다.
+        builtins.__dict__.clear()
+        builtins.__dict__.update(old_builtins)
         mod_globals.clear()
         mod_globals.update(saved_globals)
         _restore_farm_tables()
         if fs is not None and fs["trace_on"]:
             _settrace(old_trace)
-        builtins.__dict__.clear()
-        builtins.__dict__.update(old_builtins)
         sys.stdout, sys.stderr = old_out, old_err
         sys.setrecursionlimit(old_limit)
         for name in set(sys.modules) - old_modules:

@@ -744,3 +744,33 @@ def test_chart_series_survives_deleted_builtins():
     r = run(code, "", [])
     assert r["error"] is None, r
     assert [s["name"] for s in r["charts"][0]["series"]] == ["a", "b"]
+
+
+def test_builtins_restored():
+    # builtins.__import__ = None 같은 조작이 다음 실행에 남지 않는다(v0.16.1 §2-1)
+    first = run("import builtins\nbuiltins.__import__ = None\n")
+    assert first["error"] is None
+    second = run("import re\nprint(1)")
+    assert second["error"] is None
+    assert second["stdout"] == "1\n"
+
+
+def test_builtins_restored_after_error():
+    first = run("import builtins\nbuiltins.__import__ = None\nraise ValueError('x')\n")
+    assert first["error"]["type"] == "ValueError"
+    second = run("import re\nprint(2)")
+    assert second["error"] is None
+    assert second["stdout"] == "2\n"
+
+
+def test_builtins_new_name_removed():
+    run("import builtins\nbuiltins.zzz = 1")
+    r = run("print(zzz)")
+    assert r["error"]["type"] == "NameError"
+
+
+def test_builtins_changed_name_restored():
+    run("import builtins\nbuiltins.len = None\n")
+    r = run("print(len([1, 2]))")
+    assert r["error"] is None
+    assert r["stdout"] == "2\n"

@@ -14,6 +14,7 @@
 //        farm: { size, cells, pie:{x,y}, clock, store, upgrades, seeds? } (파이의 텃밭 상태, v0.10·v0.12)
 //        셋 다 JSON 글자로 바꿔 Python의 json.loads로 dict를 만든다(toPy의 객체 변환 차이를 피함).
 //   보냄 { type: "started", id }  (받자마자)
+//        치명 오류(v0.16.1)면 result = { …, error: { type: "EngineCrash", line: null, msg }, fatal: true }
 //   보냄 { type: "result", id, result: { stdout, stderr, error, missing, charts, farm?, guard? } }
 //        charts: chart.show()로 그린 그림 목록(v0.5 E3). 그대로 toJs → 화면 쪽 cleanCharts가 다듬음.
 //        farm(텃밭을 넘겼을 때만): { events:[{t,line,…}], state, stopped: null|"tired"|"waited", actions, files? }.
@@ -34,6 +35,16 @@ function errInfo(e) {
   const type = (e && (e.type || e.name)) || "WorkerError";
   const msg = String((e && e.message) || e);
   return { type: String(type), line: null, msg: msg.slice(0, 2000) };
+}
+
+// Pyodide 치명 오류(v0.16.1 §2-1): 스택 바닥(RangeError: Maximum call stack size exceeded)이 Pyodide 밖으로 나오거나
+// 한 번 치명 오류가 난 뒤의 "Pyodide already fatally failed and can no longer be used." 는 이 작업자를 더 쓸 수 없다.
+// 파이썬 예외(PythonError)는 학습자 코드가 낸 글이 들어 있으니 따지지 않는다(예: ValueError("fatal")).
+function isFatal(e) {
+  if (!e || e.name === "PythonError" || e.type) return false;
+  const name = String(e.name || "");
+  const msg = String(e.message || e);
+  return /fatal|already fatally failed/i.test(msg) || (name === "RangeError" && /Maximum call stack/i.test(msg));
 }
 
 async function init(msg) {
@@ -106,6 +117,11 @@ function run(msg) {
     } catch (e) {
       // runner.py 자체가 예외를 낸 경우(정상이라면 없음). 매달리지 않고 오류로 돌려준다.
       result = { stdout: "", stderr: "", error: errInfo(e), missing: [], charts: [] };
+      if (isFatal(e)) {
+        // 화면 쪽 PyRun이 이 결과를 돌려준 뒤 작업자를 새로 띄운다.
+        result.error = { type: "EngineCrash", line: null, msg: String((e && e.name) || "Error") + ": " + String((e && e.message) || e).slice(0, 1900) };
+        result.fatal = true;
+      }
     } finally {
       for (const p of [out, reqPy, stdinPy, filesPy, serverPy, farmPy, farmOut, guardPy, guardOut]) {
         if (p && typeof p.destroy === "function") {

@@ -427,6 +427,37 @@ def test_timeout_then_ok():
     assert res["status"] == "ready", res
 
 
+def test_engine_crash_restart():
+    # 치명 오류(스택 바닥) → error.type "EngineCrash"·fatal, 작업자를 다시 띄운 뒤 다음 실행은 정상(v0.16.1 §2-1).
+    # Pyodide가 치명 오류를 console.error로 남기므로(기대한 소음) 이 시험이 만든 것만 걸러낸다.
+    s = _session()
+    before = len(s["errors"])
+    res = _page().evaluate("""async () => {
+        const r = window.runner;
+        const log = [];
+        const prev = r.onstatus;
+        r.onstatus = (st, ph) => { log.push(st + ":" + ph); if (prev) prev(st, ph); };
+        const a = await r.run("x=[]\\nfor i in range(100000):\\n    x=[x]\\nprint(x)");
+        const mid = r.status;
+        const b = await r.run("print(2)");
+        r.onstatus = prev;
+        return { a, mid, b, log, status: r.status };
+    }""")
+    a, b = res["a"], res["b"]
+    print("    fatal result: %r" % (a["error"],))
+    assert a["error"]["type"] == "EngineCrash", a
+    assert a["fatal"] is True, a
+    assert a["timeout"] is False, a
+    assert res["mid"] == "loading", res          # 돌려준 직후 새 작업자를 띄우는 중
+    assert res["log"] == ["loading:restart", "ready:restart"], res["log"]
+    assert b["stdout"] == "2\n" and b["error"] is None, b
+    assert res["status"] == "ready", res
+    added = s["errors"][before:]
+    del s["errors"][before:]
+    assert added and all(re.search(r"fatal|RangeError|Maximum call stack|^console\.error: \s+at ", e, re.I | re.S)
+                         for e in added), added
+
+
 def test_status_phases():
     # 처음 불러오기와 시간 초과 뒤 다시 띄우기를 화면이 구별할 수 있어야 한다(「다시 준비 중」).
     log = _page().evaluate("() => window.statusLog")
@@ -660,7 +691,7 @@ TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, te
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
          test_practice_server_in_pyodide, test_chart_in_pyodide, test_farm_in_pyodide,
          test_sqlite3_in_pyodide, test_lang_in_pyodide, test_guard_three_modes, test_queue, test_timeout_then_ok,
-         test_status_phases, test_queued_own_clock, test_ui_alive, test_no_page_errors,
+         test_status_phases, test_engine_crash_restart, test_queued_own_clock, test_ui_alive, test_no_page_errors,
          test_load_error_resolves, test_cdn_constant, test_fetch_retry, test_worker_ctor_throws,
          test_load_timeout_retry, test_idle_worker_killed_silently, test_idle_worker_error_event]
 

@@ -4,6 +4,7 @@ import { CONCEPTS } from "../../data/concepts.js";
 import { esc } from "./dom.js";
 import { tabBar, bindTabs, gardenTabOf, statusBar } from "./nav.js";
 import { t, tx, tp } from "../i18n.js";
+import { guardIndex } from "../guard/state.js";
 
 // 글자가 말인 배지 그림은 함수(그릴 때 지금 언어로)
 const ART = {
@@ -12,7 +13,7 @@ const ART = {
   fixer: ["navy", "fix"], hintfree10: ["navy", "10"], perfectionist: ["sun", "★"],
   reviewer: ["navy", "30"], collector: ["sun", () => t`3벌`], night_owl: ["navy", "☾"],
   advanced1: ["teal", "A+"], advancedAll: ["sun", "A★"],   // v0.7 심화
-  guard_first: ["teal", "✓"], guard_perfect: ["sun", "6/6"],   // v0.15 경비실
+  guard_first: ["teal", "✓"], guard_perfect: ["sun", () => { const n = guardIndex().length; return `${n}/${n}`; }],   // v0.15 경비실(v0.16: 색인 수, 예 45/45)
 };
 const COL = { teal: ["#1F9E93", "#12756D"], coral: ["#F08A5D", "#C4512F"], navy: ["#3C5170", "#1F2B3D"], sun: ["#FFD43B", "#C99A00"] };
 
@@ -22,7 +23,7 @@ export function badgeArt(id, earned, size = 64) {
   const glyph = typeof g === "function" ? g() : g;
   const [fill, edge] = earned ? COL[c] : ["#E4DCCB", "#C9BEA6"];
   const ink = earned ? (c === "sun" ? "#3A2E00" : "#FFFFFF") : "#9A8F78";
-  const fs = glyph.length >= 3 ? 15 : glyph.length === 2 ? 17 : 22;
+  const fs = glyph.length >= 5 ? 12 : glyph.length >= 3 ? 15 : glyph.length === 2 ? 17 : 22;   // 「45/45」는 안쪽 원에 들게 작게
   return `<svg viewBox="0 0 64 64" width="${size}" height="${size}" aria-hidden="true" class="badge-art${earned ? "" : " locked"}">
     <path d="M20 40 L14 60 L24 55 L28 62 L32 44 Z M44 40 L50 60 L40 55 L36 62 L32 44 Z" fill="${edge}" opacity="${earned ? 1 : 0.6}"/>
     <path d="M32 3 L39 7.5 L47.5 7.5 L51 15 L57.5 20.5 L55.5 29 L58 37 L51.5 42.5 L48.5 50.5 L40 50.5 L32 55 L24 50.5 L15.5 50.5 L12.5 42.5 L6 37 L8.5 29 L6.5 20.5 L13 15 L16.5 7.5 L25 7.5 Z" fill="${fill}" stroke="${edge}" stroke-width="2.5" stroke-linejoin="round" ${earned ? "" : 'stroke-dasharray="4 3"'}/>

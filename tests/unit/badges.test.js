@@ -121,6 +121,18 @@ test("every badge has its own art (no '?' fallback), incl. v0.7 심화 2개", as
   }
 });
 
+test("guard_perfect 그림 글자는 색인 수(45/45, v0.16) — 색인이 바뀌면 따라 바뀜", async () => {
+  const { badgeArt } = await import("../../src/ui/badges.js");
+  assert.ok(badgeArt("guard_perfect", true).includes(`>${FULL.length}/${FULL.length}</text>`));
+  assert.equal(FULL.length, 45);
+  setGuardIndex(FULL.slice(0, 3));
+  try {
+    assert.ok(badgeArt("guard_perfect", true).includes(">3/3</text>"));
+  } finally {
+    setGuardIndex(FULL);
+  }
+});
+
 test("badge_guard_first: 경비실 사건 하나 해결", () => {
   assert.deepEqual(checkBadges(mkSave(), {}), []);
   assert.deepEqual(checkBadges(mkSave({ guard: { solved: { G1: { firstTry: false, how: "code" } } } }), {}), ["guard_first"]);

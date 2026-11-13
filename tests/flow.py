@@ -61,6 +61,10 @@
 - test_guard_room_load_fail_retry / _switch_while_loading: v0.16.0 작업 2. 사건 본문은 장 파일(guard/chN-*.json)에서 받는다.
                  장 파일을 막으면 「사건을 불러오지 못했어요」+「다시 시도」 → 풀고 다시 시도하면 카드 / 3장 파일이 늦는 동안
                  4장 G3으로 바꾸면 늦게 온 G1 카드는 그리지 않는다. 캡처: guard-load-fail.png
+- test_guard_room_file_case / _json_case / _list_45 / _locked_chapters: v0.16.0 작업 8. 11장 저장 → 목록에서 G25(파일
+                 blocklist.txt)를 빈칸 정답으로 「사건 해결」(firstTry) / 14장 저장 → G34(주문 JSON) 해결 / 17장 저장 → 머리
+                 「0/45 해결」, 목록 45개 장 순서·모두 열림 / 6장 저장 → 7장 사건 G13~G15 「7장을 끝내면 열려요」 잠김.
+                 캡처: guard-file-case.png·guard-json-case.png·guard-list-45.png
 """
 
 import atexit
@@ -3785,7 +3789,7 @@ def test_guard_room_g1():
         if not a.page.query_selector('#gd-gate-t svg path[d^="M5.338"]'):
             fails.append("gate heading lacks shield-check icon")
         head = a.page.inner_text(".gd-head")
-        for w in ("견습 문지기", "0/6 해결"):
+        for w in ("견습 문지기", "0/45 해결"):
             if w not in head:
                 fails.append("head lacks %r: %r" % (w, head))
         card = a.page.inner_text("#gd-card")
@@ -3856,8 +3860,8 @@ def test_guard_room_g1():
             fails.append("seed should have no xp quest (G-C2)")
         if "사건 해결" not in a.page.inner_text("#gd-result"):
             fails.append("result lacks 사건 해결")
-        if "1/6 해결" not in a.page.inner_text(".gd-head"):
-            fails.append("count not 1/6")
+        if "1/45 해결" not in a.page.inner_text(".gd-head"):
+            fails.append("count not 1/45")
 
         # 직접 쓰기: 처음 내용은 빈칸을 비운 시작 코드 → 정답 코드 → 해결, how 그대로
         a.page.click("#gd-mode")
@@ -4084,6 +4088,115 @@ def test_guard_room_switch_while_loading():
         errs = _app_errors(a)
         if errs:
             fails.append("console errors %r" % errs)
+    assert not fails, "\n".join(fails)
+
+
+def _gd_solve_from_list(a, gid, answer, fails):
+    """목록에서 사건을 열고 빈칸을 정답으로 채워 실행 → 「사건 해결」 창 → 닫기"""
+    a.page.click("#gd-list")
+    _sheet_pick(a, '[data-v="%s"]' % gid)
+    a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+    if a.js("() => document.querySelector('#gd-card .gd-id')?.textContent") != gid:
+        fails.append("card is not %s" % gid)
+    for n, v in enumerate(answer):
+        _gd_pick(a, n, v)
+    _gd_run(a)
+    a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
+    body = a.page.inner_text(".modal")
+    if "사건 해결" not in body or "XP +5" not in body:
+        fails.append("%s solved dialog: %r" % (gid, body))
+    a.page.wait_for_timeout(GUARD_WAIT)
+    a.page.click(".modal .btn.primary")
+    a.page.wait_for_selector(".modal .gd-done", state="detached")
+    if "사건 해결" not in a.page.inner_text("#gd-result"):
+        fails.append("%s result: %r" % (gid, a.page.inner_text("#gd-result")))
+    bad = a.js("() => document.querySelectorAll('.gd-try.bad').length")
+    if bad:
+        fails.append("%s: %d bad tries after the right answer" % (gid, bad))
+    g = a.save().get("guard") or {}
+    if g.get("solved", {}).get(gid) != {"firstTry": True, "how": "blank"}:
+        fails.append("%s solved save: %r" % (gid, g.get("solved")))
+
+
+def test_guard_room_file_case():
+    """v0.16.0 작업 8: 11장까지 통과 → 목록에서 G25(파일 사건, blocklist.txt)를 빈칸 정답으로 해결(Review Focus 5)."""
+    fails = []
+    with App("iPhone 17", save=_guard_seed(11)) as a:
+        _open_guard(a)
+        _gd_solve_from_list(a, "G25", [0, 0, 0], fails)
+        if "차단 목록 파일" not in a.page.inner_text("#gd-card"):
+            fails.append("card title: %r" % a.page.inner_text("#gd-card"))
+        a.shot("guard-file-case.png")
+        _gd_check_layout(a, "guard-file-case", fails)
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_room_json_case():
+    """v0.16.0 작업 8: 14장까지 통과 → 목록에서 G34(주문 JSON 검사)를 빈칸 정답으로 해결."""
+    fails = []
+    with App("iPhone 17", save=_guard_seed(14)) as a:
+        _open_guard(a)
+        _gd_solve_from_list(a, "G34", [0, 0, 0], fails)
+        a.shot("guard-json-case.png")
+        _gd_check_layout(a, "guard-json-case", fails)
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_room_list_45():
+    """v0.16.0 작업 8: 17장까지 통과 → 머리 「0/45 해결」, 목록 시트에 사건 45개가 장 순서(3장 G1·G2·G7 …), 모두 열림."""
+    fails = []
+    with App("iPhone 17", save=_guard_seed(17)) as a:
+        _open_guard(a)
+        head = a.page.inner_text(".gd-head")
+        if "0/45 해결" not in head:
+            fails.append("head: %r" % head)
+        a.page.click("#gd-list")
+        a.page.wait_for_selector(".modal.g-sheet")
+        ids = a.js("() => [...document.querySelectorAll('.modal.g-sheet .gd-item')].map(b => b.dataset.g)")
+        if len(ids) != 45 or set(ids) != {"G%d" % i for i in range(1, 46)}:
+            fails.append("list ids: %r" % ids)
+        # 장 순서: 목록 차례대로 색인의 need가 줄지 않고, 3~17장 모두 3개씩(G7~G12처럼 뒤에 더한 사건도 제 장 자리에)
+        need_of = a.js("() => Object.fromEntries((window.RIA_GUARD_INDEX || []).map(e => [e.id, e.need]))")
+        need = [need_of.get(i) for i in ids]
+        if need != sorted(need, key=lambda x: x or 0) or [need.count(c) for c in range(3, 18)] != [3] * 15:
+            fails.append("chapter order: %r" % list(zip(ids, need)))
+        dis = a.js("() => document.querySelectorAll('.modal.g-sheet .gd-item[disabled]').length")
+        if dis:
+            fails.append("%d locked at chapter 17" % dis)
+        if "끝내면 열려요" in a.page.inner_text(".modal.g-sheet"):
+            fails.append("lock note at chapter 17")
+        a.shot("guard-list-45.png")
+        _gd_check_layout(a, "guard-list-45", fails)
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_room_locked_chapters():
+    """v0.16.0 작업 8: 6장까지 통과 → 6장 사건(G10~G12)은 열리고, 7장 사건(G13~G15)은 「7장을 끝내면 열려요」로 잠김."""
+    fails = []
+    with App("iPhone 17", save=_guard_seed(6)) as a:
+        _open_guard(a)
+        a.page.click("#gd-list")
+        a.page.wait_for_selector(".modal.g-sheet")
+        for gid in ("G10", "G11", "G12"):
+            if a.page.is_disabled('.modal.g-sheet [data-g="%s"]' % gid):
+                fails.append("%s should be open" % gid)
+        for gid in ("G13", "G14", "G15"):
+            b = '.modal.g-sheet [data-g="%s"]' % gid
+            if not a.page.is_disabled(b):
+                fails.append("%s should be locked" % gid)
+            note = a.page.inner_text(b)
+            if "7장을 끝내면 열려요" not in note:
+                fails.append("%s note: %r" % (gid, note))
+        if "8장을 끝내면 열려요" not in a.page.inner_text('.modal.g-sheet [data-g="G16"]'):
+            fails.append("G16 note")
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
     assert not fails, "\n".join(fails)
 
 

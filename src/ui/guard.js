@@ -343,7 +343,8 @@ export function render(root, ctx, params = {}) {
     const input = guardInput(inc);
     let r;
     try {
-      r = await ctx.py.run(code, "", [], { guard: input });
+      // 파일 사건(G25 등): 엔진은 files를 guard 안이 아니라 따로 받아 실행 폴더에 써 둔다(tests/guard_incidents.py와 같은 모양)
+      r = await ctx.py.run(code, "", [], input.files ? { guard: input, files: input.files } : { guard: input });
     } catch (e) {
       r = { error: { type: "WorkerError", msg: String(e && e.message || e) } };
     }

@@ -215,3 +215,21 @@
 | **G-C5** | loop에서 첫 next_try() 전 block()/allow()는 무시 |
 | **G-C6** | 첫 파일 상한 820KB→850KB |
 | **G-C7** | 직접 쓰기 첫 내용 = 저장 코드, 없으면 빈칸 ___ 모양 |
+
+## v0.16 경비실 45
+
+| # | 판정 |
+|---|---|
+| **P1** | 커밋은 로컬 브랜치 feature/guard-content에만, 푸시·합치기는 사용자 승인 뒤 |
+| **P2** | 첫 파일 < 844,631 B |
+| **P3** | 7~17장 시도·보기·문구는 만드는 사람이 정하고 사건 시험이 보장 |
+| **G2-C1** | GUARD_XP는 src/guard/catalog.js, data/guard.js는 다시 내보냄 |
+| **G2-C2** | 장 파일은 start·blanks를 두고 solution만 뺌 |
+| **G2-C3** | 색인은 저장을 읽기 전에, 색인 없이 부르면 오류 |
+| **G2-C4** | applyGuardRun은 받은 사건 본문을 받음 |
+| **G2-C5** | RANKS 대신 RANK_IDS+rankThresholds(n) |
+| **G2-C6** | 색인 칸은 {id, need, title, blanks} |
+| **G2-C7** | 9장에서 set.add 허용 |
+| **G2-C8** | perms.csv 머리 role,write, 11장부터 keyword 마디 허용 |
+| **G2-C9** | G34 품목 허용 목록, G33 hostname 비교, G35 next 없으면 거부 |
+| **G2-C10** | G43 막은 값은 기준선에서 뺌, G45 지금 시도를 먼저 세고 5번 이상·절반 초과면 막음 |

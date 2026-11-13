@@ -125,6 +125,9 @@ const COL = {
   carrot: "#F28C28", carrotD: "#C9661A", potato: "#D9B77A", potatoD: "#A88550", potLeaf: "#4F9A55",
   pieRing: "#FFD43B", teal: "#1F9E93", ink: "#22304A", card: "#FFFDF8", coral: "#E4664F", coralInk: "#B03A25",
   sun: "#FFD43B", gray: "#8A90A0",
+  // v0.19.0: 말풍선 판·글자는 그림이 아니라 글자 → CSS 이름표(밝게는 #FFFDF8·#22304A 그대로, 어둡게는 밤 색).
+  // 표현 속성(fill="…") 안의 var()는 브라우저마다 달라 style로 주고, 속성 값은 밝게 색으로 남겨 둔다
+
   tomato: "#E2483A", tomatoD: "#B32E24", tomatoL: "#FF8A7A", tomatoG: "#8CC63F", tomLeaf: "#3F8F3A", stake: "#9C6B3E",
 };
 
@@ -254,6 +257,8 @@ function wrapText(text, maxW, maxLines = 2) {
   return { lines, width: Math.max(...lines.map((l) => [...l].reduce((a, c) => a + charW(c), 0))) };
 }
 
+const V_PLATE = "fill:var(--card);stroke:var(--ink)";
+
 function bubbleSVG(text, pie, W, H) {
   const maxW = W - 2 * PAD - 24;
   const { lines, width } = wrapText(text, maxW);
@@ -271,10 +276,10 @@ function bubbleSVG(text, pie, W, H) {
   const tspans = lines.map((l, i) => `<tspan x="${r1(tx)}" y="${r1(by + 21 + i * 18)}">${esc(l)}</tspan>`).join("");
   void H;
   return `<g class="g-bubble">
-    <rect x="${r1(bx)}" y="${r1(by)}" width="${r1(bw)}" height="${bh}" rx="12" fill="${COL.card}" stroke="${COL.ink}" stroke-width="2.2"/>
-    <path d="${tail}" fill="${COL.card}" stroke="${COL.ink}" stroke-width="2.2" stroke-linejoin="round"/>
-    <path d="M${px - 5.5},${above ? by + bh - 1.2 : by + 1.2} L${px + 5.5},${above ? by + bh - 1.2 : by + 1.2}" stroke="${COL.card}" stroke-width="3"/>
-    <text text-anchor="middle" font-size="13" font-weight="700" fill="${COL.ink}">${tspans}</text>
+    <rect x="${r1(bx)}" y="${r1(by)}" width="${r1(bw)}" height="${bh}" rx="12" fill="${COL.card}" stroke="${COL.ink}" style="${V_PLATE}" stroke-width="2.2"/>
+    <path d="${tail}" fill="${COL.card}" stroke="${COL.ink}" style="${V_PLATE}" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M${px - 5.5},${above ? by + bh - 1.2 : by + 1.2} L${px + 5.5},${above ? by + bh - 1.2 : by + 1.2}" stroke="${COL.card}" style="stroke:var(--card)" stroke-width="3"/>
+    <text text-anchor="middle" font-size="13" font-weight="700" fill="${COL.ink}" style="fill:var(--ink)">${tspans}</text>
   </g>`;
 }
 
@@ -303,7 +308,7 @@ function fxSVG(fx, size) {
         <text x="${bx - 2}" y="${by + 5}" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">${t`앗`}</text>`;
       break;
     case "harvest_empty":
-      body = `<circle cx="${bx}" cy="${by}" r="10" fill="${COL.card}" stroke="${COL.gray}" stroke-width="2" stroke-dasharray="3 2"/>
+      body = `<circle cx="${bx}" cy="${by}" r="10" fill="${COL.card}" style="fill:var(--card)" stroke="${COL.gray}" stroke-width="2" stroke-dasharray="3 2"/>
         <text x="${bx}" y="${by + 4.5}" text-anchor="middle" font-size="13" font-weight="800" fill="${COL.gray}">?</text>`;
       break;
     default:

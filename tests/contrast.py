@@ -5,6 +5,8 @@
     python3 tests/contrast.py --theme dark [--strict]            앱을 빌드해 화면 목록을 돌며 대비를 잰다
     python3 tests/contrast.py --theme light --report out.json    미달 목록을 JSON으로
     python3 tests/contrast.py --theme dark --skip-editor-tokens  CodeMirror 문법 색 글자는 뺌(판정 D-P1, 작업 4에서 필요 없어짐)
+    python3 tests/contrast.py --theme dark --strict --skip-editor-tokens --skip-art-text   어둡게 엄격(flow test_theme_dark_contrast)
+    python3 tests/contrast.py --theme light --compare tests/fixtures/contrast-light-baseline.json   밝게 그대로(flow test_theme_light_unchanged)
 
 하는 일
 - `build.py --dev-pyodide`로 만든 앱(tests/flow.py의 빌드·서버·Chromium 하나를 같이 씀)을 `localStorage["ria-python.theme"]`를
@@ -30,6 +32,7 @@
 - 글자 낱자(`\\p{L}`·`\\p{N}`)가 하나도 없는 글(이모지·기호만 = 장식). `aria-hidden` 안이라도 낱자가 보이면 잰다(`info.ariaHiddenChecked`)
 - 비활성(`:disabled`, `aria-disabled="true"` 안) — WCAG 대비 기준 예외
 - `--skip-editor-tokens`일 때만: `.cm-content` 안 `.cm-line`의 자손 토큰 칸(문법 색)
+- `--skip-art-text`일 때만: ART_TEXT 목록(그림 속 글자, 판정 D-C6 — 배지 그림 안 「1장」 등). 어둡게 엄격 시험이 씀(`excluded.artText`)
 - SVG 그림 안의 캐릭터·작물은 글자가 없어 저절로 빠짐. 이모지 글자는 위 규칙으로 빠짐.
 """
 
@@ -44,6 +47,8 @@ ROOT = os.path.dirname(HERE)
 OUT = os.path.join(ROOT, "tests", "out", "contrast")
 THEME_KEY = "ria-python.theme"
 NEED_TEXT, NEED_LARGE = 4.5, 3.0
+# 그림으로 보는 글자(판정 D-C6): 배지 그림(src/ui/badges.js) 안 <text>. 그림 색은 손대지 않으므로 어둡게 엄격 시험에서 뺀다
+ART_TEXT = [".badge-art > text", ".badge-art text"]
 
 CHECK_JS = r"""(opts) => {
   const cv = document.createElement('canvas'); cv.width = cv.height = 1;
@@ -107,7 +112,7 @@ CHECK_JS = r"""(opts) => {
     return s;
   };
   const vw = window.innerWidth, vh = window.innerHeight;
-  const ex = { noLetterSkipped: 0, invisible: 0, tiny: 0, offscreen: 0, clippedHoriz: 0, disabledSkipped: 0, editorToken: 0, svgSkipped: 0 };
+  const ex = { noLetterSkipped: 0, invisible: 0, tiny: 0, offscreen: 0, clippedHoriz: 0, disabledSkipped: 0, editorToken: 0, artText: 0, svgSkipped: 0 };
   const info = { ariaHiddenChecked: 0, bgimgChecked: 0 }; const digest = [];
   const fails = {}; let checked = 0, minRatio = 99;
   const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD', 'META', 'LINK', 'TITLE']);
@@ -152,6 +157,7 @@ CHECK_JS = r"""(opts) => {
       const cm = el.closest('.cm-content');
       if (cm && !el.classList.contains('cm-line') && el !== cm) { ex.editorToken++; continue; }
     }
+    if (opts.artText.length && opts.artText.some(q => el.matches(q))) { ex.artText++; continue; }
     const svg = el instanceof SVGElement ? el.closest('svg') : null;
     let fgc, bd;
     if (svg) {
@@ -160,7 +166,7 @@ CHECK_JS = r"""(opts) => {
       bd = svgBackdrop(el, svg);
     } else {
       let col = cs.color;
-      if (input && !el.value) col = getComputedStyle(el, '::placeholder').color;
+      if (input && !el.value && el.placeholder) col = getComputedStyle(el, '::placeholder').color;   // 빈 칸·placeholder 없음 = 입력할 글자색(자기 color)
       const f = parse(col); fgc = [f[0], f[1], f[2], f[3] * cum(el)];
       bd = backdrop(el);
     }
@@ -182,8 +188,8 @@ CHECK_JS = r"""(opts) => {
 }"""
 
 
-def run_check(page, skip_editor_tokens=False):
-    return page.evaluate(CHECK_JS, {"skipEditorTokens": bool(skip_editor_tokens)})
+def run_check(page, skip_editor_tokens=False, skip_art=False):
+    return page.evaluate(CHECK_JS, {"skipEditorTokens": bool(skip_editor_tokens), "artText": ART_TEXT if skip_art else []})
 
 
 # ---------------------------------------------------------------- 자기 시험
@@ -197,11 +203,15 @@ SELF_HTML = """<!doctype html><html><body style="margin:0;background:#fff;backgr
 <p id="f" aria-hidden="true" style="color:#fff;margin:0">보이는 글자는 aria-hidden이어도 잼</p>
 <span id="f2" aria-hidden="true" style="color:#fff">★</span>
 <input id="h" style="color:#fff;background:#fff">
+<style>#i::placeholder{color:#fff}</style><input id="i" style="color:#22304A;background:#fff">
 <p id="g" hidden style="color:#fff">숨김 빼기</p>
+<svg class="badge-art" width="60" height="30"><rect width="60" height="30" fill="#E4DCCB"/><text x="4" y="20" fill="#9A8F78">1장</text></svg>
 </body></html>"""
 
 # 기대: 미달은 a(입력, 흰/흰), h(빈 입력칸 흰/흰), c(남색 위 #222), d(작은 회색 3.54:1), f(aria-hidden이지만 글자가 보임). 낱자 없는 ★ 장식·hidden은 뺌
-SELF_EXPECT_FAIL = {"input#a", "p#c", "p#d", "p#f", "input#h"}
+# i: 빈 입력칸(placeholder 없음)은 ::placeholder 색(흰)이 아니라 입력칸 자기 글자색(남색)으로 잰다 → 통과
+#    (Chromium의 getComputedStyle(el,'::placeholder')는 자기 color를 돌려줘 고치기 전에도 통과한다 — 다른 엔진 대비 규칙 고정용)
+SELF_EXPECT_FAIL = {"input#a", "p#c", "p#d", "p#f", "input#h", ".badge-art > text"}   # 배지 글자는 --skip-art-text일 때만 빠짐
 
 
 def self_test():
@@ -212,6 +222,7 @@ def self_test():
             page = b.new_page()
             page.set_content(SELF_HTML)
             res = run_check(page)
+            art = run_check(page, skip_art=True)
         finally:
             b.close()
     got = {f["selector"] for f in res["fails"]}
@@ -220,6 +231,9 @@ def self_test():
         problems.append("fails %r != expected %r" % (sorted(got), sorted(SELF_EXPECT_FAIL)))
     if res["excluded"]["noLetterSkipped"] != 1 or res["excluded"]["invisible"] != 1 or res["info"]["ariaHiddenChecked"] != 1:
         problems.append("excluded counts wrong: %r" % res["excluded"])
+    got_art = {f["selector"] for f in art["fails"]}
+    if got_art != SELF_EXPECT_FAIL - {".badge-art > text"} or art["excluded"]["artText"] != 1:
+        problems.append("skip_art: fails %r, artText %r" % (sorted(got_art), art["excluded"]["artText"]))
     first = next((f for f in res["fails"] if f["selector"] == "input#a"), None)
     if not first or first["ratio"] != 1.0 or first["need"] != 4.5:
         problems.append("input#a entry wrong: %r" % first)
@@ -236,9 +250,10 @@ def test_contrast_self_test():
 # ---------------------------------------------------------------- 화면 순회
 
 class Runner:
-    def __init__(self, theme, skip_tokens):
+    def __init__(self, theme, skip_tokens, skip_art=False):
         self.theme = theme
         self.skip_tokens = skip_tokens
+        self.skip_art = skip_art
         self.dir = os.path.join(OUT, theme)
         os.makedirs(self.dir, exist_ok=True)
         self.screens = []     # [{screen, checked, minRatio, fails, excluded, theme_ok}]
@@ -253,7 +268,7 @@ class Runner:
         a.page.wait_for_timeout(150)
         flow._settle_animations(a)
         applied = a.js("() => document.documentElement.dataset.theme")
-        res = run_check(a.page, self.skip_tokens)
+        res = run_check(a.page, self.skip_tokens, self.skip_art)
         a.page.screenshot(path=os.path.join(self.dir, name + ".png"), animations="disabled", caret="hide")
         for f in res["fails"]:
             f["screen"] = name
@@ -386,17 +401,17 @@ def sc_guard(r):
         r.cap(a, "guard-write")
 
 
-def run_app(theme, skip_tokens):
+def run_app(theme, skip_tokens, skip_art=False):
     import flow
     flow.env()
-    r = Runner(theme, skip_tokens)
+    r = Runner(theme, skip_tokens, skip_art)
     r.scenario("새 저장: 인사·튜토리얼·홈·레슨", lambda: sc_fresh(r))
     r.scenario("1장 통과 저장: 홈·배지·의상실·설정·텃밭", lambda: sc_garden_home(r))
     r.scenario("3장 통과 저장: 경비실", lambda: sc_guard(r))
     return r
 
 
-def summarize(r, theme, skip_tokens, secs):
+def summarize(r, theme, skip_tokens, secs, skip_art=False):
     fails = [f for s in r.screens for f in s["fails"]]
     info = {}
     for s in r.screens:
@@ -406,7 +421,7 @@ def summarize(r, theme, skip_tokens, secs):
     for s in r.screens:
         for k, v in s["excluded"].items():
             ex[k] = ex.get(k, 0) + v
-    return {"theme": theme, "skip_editor_tokens": skip_tokens, "seconds": round(secs, 1),
+    return {"theme": theme, "skip_editor_tokens": skip_tokens, "skip_art_text": ART_TEXT if skip_art else [], "seconds": round(secs, 1),
             "screens": [{k: s[k] for k in ("screen", "checked", "minRatio", "theme_applied")} | {"fails": len(s["fails"])} for s in r.screens],
             "checked": sum(s["checked"] for s in r.screens), "fail_count": len(fails),
             "fail_elements": sum(f["count"] for f in fails), "excluded": ex, "info": info, "errors": r.errors, "failures": fails,
@@ -438,6 +453,7 @@ def main(argv=None):
     ap.add_argument("--report", help="결과 JSON 경로")
     ap.add_argument("--strict", action="store_true", help="미달이 있으면 종료 코드 1")
     ap.add_argument("--skip-editor-tokens", action="store_true", help=".cm-content 안 문법 색 칸을 뺌")
+    ap.add_argument("--skip-art-text", action="store_true", help="그림 속 글자(ART_TEXT, 판정 D-C6)를 뺌")
     ap.add_argument("--compare", metavar="BASELINE.json", help="기준 JSON과 화면별 글자색·바탕색이 하나라도 다르면 종료 코드 1(「밝게 그대로」 확인)")
     ap.add_argument("--self-test", action="store_true")
     args = ap.parse_args(argv)
@@ -447,8 +463,8 @@ def main(argv=None):
         print("self-test OK: fails=%s checked=%d" % (sorted(f["selector"] for f in res["fails"]), res["checked"]))
         return 0
     t0 = time.time()
-    r = run_app(args.theme, args.skip_editor_tokens)
-    rep = summarize(r, args.theme, args.skip_editor_tokens, time.time() - t0)
+    r = run_app(args.theme, args.skip_editor_tokens, args.skip_art_text)
+    rep = summarize(r, args.theme, args.skip_editor_tokens, time.time() - t0, args.skip_art_text)
     if args.report:
         os.makedirs(os.path.dirname(os.path.abspath(args.report)), exist_ok=True)
         with open(args.report, "w", encoding="utf-8") as f:

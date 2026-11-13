@@ -234,6 +234,19 @@ test("render: 말풍선 글은 이스케이프되고, 효과·방향이 그려�
   assert.match(render(farm, { fx: { t: "harvest_young", x: 0, y: 0, crop: "당근" } }), /class="g-fx harvest_young"/);
 });
 
+test("render: 말풍선 판·글자는 CSS 이름표를 따른다(v0.19.0 어둡게, 밝게는 같은 값)", () => {
+  const farm = farmSetup(START_ROWS);
+  const b = render(farm, { say: "안녕" }).match(/<g class="g-bubble">[\s\S]*?<\/g>/)[0];
+  // style(이름표)이 표현 속성(밝게 값, 대비용 예비)보다 앞선다
+  assert.match(b, /<rect [^>]*fill="#FFFDF8" stroke="#22304A" style="fill:var\(--card\);stroke:var\(--ink\)"/);
+  assert.match(b, /<path [^>]*style="fill:var\(--card\);stroke:var\(--ink\)"/);
+  assert.match(b, /<path [^>]*style="stroke:var\(--card\)"/);
+  assert.match(b, /<text [^>]*style="fill:var\(--ink\)"/);
+  assert.equal((b.match(/style="/g) || []).length, 4, b);
+  const e = render(farm, { fx: { t: "harvest_empty", x: 0, y: 0 } });
+  assert.match(e, /<circle [^>]*style="fill:var\(--card\)"/);
+});
+
 test("render: 같은 입력이면 같은 글자(id·defs 없음)", () => {
   const farm = farmSetup(START_ROWS);
   assert.equal(render(farm, { say: "a" }), render(farm, { say: "a" }));

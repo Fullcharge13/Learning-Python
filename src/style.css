@@ -1037,3 +1037,113 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 
 /* v0.19.0 화면 설정 줄(어둡게 색은 작업 3) */
 .seg#theme-seg button { padding: 8px 6px; line-height: 1.25; }
+
+/* ================= v0.19.0 밤의 연구 노트 (어둡게) =================
+   밝게(:root)는 그대로. 같은 이름표를 [data-theme="dark"]에서 다시 정의하고, 직접 적은 밝은 색과
+   「이름표를 바탕으로 쓰고 그 위에 흰 글자」인 곳만 아래에서 어둡게 전용으로 고친다.
+   이름표 뜻(어둡게): --*-ink·--teal-deep = 어두운 바탕 위 글자색(밝은 색조), --*-soft = 어두운 색조 바탕,
+   --teal-fill·--coral-fill = 흰 글자를 얹는 채움 단추색. 값은 tests/contrast.py --theme dark --strict로 맞춤.
+   --paper는 src/index.html 머리 스크립트·src/theme.js THEME_COLOR와 같은 값이어야 한다. */
+[data-theme="dark"] {
+  --paper: #141C2B;
+  --paper-2: #1B2538;
+  --card: #1E2940;
+  --line: #34425E;
+  --ink: #F1EBDD;
+  --ink-2: #B7BFCD;
+  --teal: #3DBFB1;
+  --teal-ink: #5FD3C4;
+  --teal-deep: #7FE0D3;
+  --teal-soft: #173B3D;
+  --teal-fill: #12756D;
+  --teal-fill-edge: #0A4A45;
+  --sun: #FFD43B;
+  --sun-deep: #E0B400;
+  --sun-soft: #3A3220;
+  --sun-ink: #F5D67A;
+  --coral: #F07A62;
+  --coral-ink: #FF9A85;
+  --coral-soft: #3D2328;
+  --coral-fill: #B03A25;
+  --navy: #0E1522;
+  --focus: #6AA8FF;
+  --on-sun: #22304A;      /* 해(노랑) 채움 위 글자 = 밝게의 남색 잉크 */
+  --muted-ink: #8E97A8;   /* 잠긴 노드·꺼진 고르기 글자 */
+  color-scheme: dark;
+}
+/* 모눈: 짙은 남색 종이 위 옅은 밝은 선 */
+[data-theme="dark"] body {
+  background-image:
+    linear-gradient(rgba(241, 235, 221, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(241, 235, 221, 0.04) 1px, transparent 1px);
+}
+@media (min-width: 520px) { [data-theme="dark"] #app { background: rgba(20, 28, 43, 0.6); } }
+/* 반투명 종이색 띠·가림 */
+[data-theme="dark"] .status { background: rgba(20, 28, 43, 0.94); }
+[data-theme="dark"] .g-top { background: rgba(20, 28, 43, 0.96); }
+[data-theme="dark"] .node-label { background: rgba(20, 28, 43, 0.9); }
+[data-theme="dark"] .lesson-foot { background: linear-gradient(to bottom, rgba(20, 28, 43, 0), var(--paper) 22%); }
+[data-theme="dark"] .lesson-foot.has-dock { background: var(--paper); }
+[data-theme="dark"] .sym-more { background: linear-gradient(to right, rgba(20, 28, 43, 0), var(--paper) 65%); }
+[data-theme="dark"] .order-answer { background: rgba(30, 41, 64, 0.6); }
+[data-theme="dark"] .modal-back { background: rgba(4, 8, 15, 0.6); }
+[data-theme="dark"] .celebrate { background: rgba(4, 8, 15, 0.65); }
+/* 그림자: 남색 잉크 그림자 → 검은 그림자 */
+[data-theme="dark"] .bubble { box-shadow: 3px 3px 0 rgba(0, 0, 0, .3); }
+[data-theme="dark"] .stage { box-shadow: 4px 4px 0 rgba(0, 0, 0, .3); }
+[data-theme="dark"] .cel-card { box-shadow: 6px 6px 0 rgba(0, 0, 0, .4); }
+[data-theme="dark"] .star-node .star-svg { filter: drop-shadow(0 3px 0 rgba(0, 0, 0, .6)); }
+/* 흰 글자를 얹는 채움(밝게는 --teal-ink·--coral-ink를 바탕으로 씀) */
+[data-theme="dark"] .btn.primary { background: var(--teal-fill); box-shadow: 0 4px 0 var(--teal-fill-edge); }
+[data-theme="dark"] .modal.install #ins-ok { box-shadow: 0 4px 0 var(--teal-fill-edge), 0 -10px 14px 4px var(--card); }
+[data-theme="dark"] .btn.coral { background: var(--coral-fill); box-shadow: 0 4px 0 #6A1F12; }
+[data-theme="dark"] .opt[aria-checked="true"] .opt-key { background: var(--teal-fill); }
+[data-theme="dark"] .node.done { background: var(--teal-fill); border-color: var(--teal-fill-edge); box-shadow: 0 5px 0 var(--teal-fill-edge); }
+[data-theme="dark"] .result.ok .result-ic { background: var(--teal-fill); }
+[data-theme="dark"] .result.bad .result-ic { background: var(--coral-fill); }
+[data-theme="dark"] .seg button[aria-checked="true"] { background: var(--teal-fill); border-color: var(--teal-ink); }
+[data-theme="dark"] .switch[aria-checked="true"] span { background: var(--teal-fill); }
+[data-theme="dark"] .new-dot { background: var(--coral-fill); }
+[data-theme="dark"] .toast.warn { background: var(--coral-fill); }
+[data-theme="dark"] .toast.warn .toast-act { color: #FFF3C4; }
+/* 잉크(크림)를 바탕으로 쓰는 곳: 글자는 종이색 */
+[data-theme="dark"] .ch-no, [data-theme="dark"] .ins-no { color: var(--paper); }
+[data-theme="dark"] .toast { background: #2E3B57; color: var(--ink); border: 1.5px solid var(--line); box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+/* 해(노랑) 채움 위 글자는 남색 그대로 */
+[data-theme="dark"] .btn.sun, [data-theme="dark"] .sfx, [data-theme="dark"] .node.perfect,
+[data-theme="dark"] .milestone, [data-theme="dark"] .gd-blank.on { color: var(--on-sun); }
+[data-theme="dark"] .sfx { border-color: var(--on-sun); }
+[data-theme="dark"] .node.perfect { border-color: var(--on-sun); }
+[data-theme="dark"] .star-node.done .star-no, [data-theme="dark"] .star-node.perfect .star-no { fill: var(--on-sun); }
+[data-theme="dark"] .star-node.done .star-shape, [data-theme="dark"] .star-node.perfect .star-shape { stroke: var(--on-sun); }
+/* 노드: 크림 그림자 대신 선 색 그림자 */
+[data-theme="dark"] .node { box-shadow: 0 5px 0 var(--line); }
+[data-theme="dark"] .node.locked { color: var(--muted-ink); border-color: #46536E; box-shadow: 0 5px 0 #2A3550; }
+[data-theme="dark"] .star-node.locked .star-svg { filter: drop-shadow(0 3px 0 #2A3550); }
+[data-theme="dark"] .star-node.locked .star-shape { stroke: #46536E; }
+[data-theme="dark"] .star-lock rect, [data-theme="dark"] .star-lock path { stroke: var(--muted-ink); }
+[data-theme="dark"] .tab.locked { opacity: .8; }
+/* 꺼진 단추·스위치 */
+[data-theme="dark"] .btn:disabled, [data-theme="dark"] .btn.is-off { background: #2A344A; color: #A3ACBC; }
+[data-theme="dark"] .switch span { background: #4A5876; }
+[data-theme="dark"] .g-pick-btn:disabled { color: var(--muted-ink); }
+/* 흰 바탕 입력칸 → 어두운 칸(글자는 상속된 크림) */
+[data-theme="dark"] input[type="text"], [data-theme="dark"] .g-input { background: var(--paper-2); }
+[data-theme="dark"] input::placeholder { color: var(--muted-ink); opacity: 1; }
+[data-theme="dark"] .ins-dots { background: var(--card); }
+/* 결과·오류 판 */
+[data-theme="dark"] .result.ok { background: #15302F; }
+[data-theme="dark"] .result.bad { background: #3A2226; }
+[data-theme="dark"] .result { box-shadow: 0 -8px 24px rgba(0, 0, 0, .45); }
+[data-theme="dark"] .err-panel.soft { background: #2C2125; }
+[data-theme="dark"] .import-warn { color: var(--coral-ink); }
+/* 그래프 셋째 선(남색)은 어두운 판 위에서 안 보임 */
+[data-theme="dark"] .chart-svg .c-line-3, [data-theme="dark"] .chart-svg .c-dot-3 { stroke: var(--ink-2); }
+/* 텃밭 */
+[data-theme="dark"] .g-var { background: #1E3A22; color: #A6DDA0; }
+[data-theme="dark"] .g-note-empty { color: #A9B1C0 !important; }
+[data-theme="dark"] .g-line.now { background: rgba(255, 212, 59, .2); }
+[data-theme="dark"] .g-ln { opacity: .8; }
+/* 홈 화면 추가 안내 그림 속 파란 글자(흰 단추 그림 위) */
+[data-theme="dark"] .ins-steps svg text[fill="#2F7BE0"] { fill: #1F65C6; }
+[data-theme="dark"] .ins-steps svg text[fill="#1E8E5A"] { fill: #16704A; }

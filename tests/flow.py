@@ -5219,6 +5219,51 @@ def test_theme_no_flash():
         assert not _app_errors(a), a.errors
 
 
+def _contrast_main(argv):
+    """tests/contrast.py를 같은 빌드·서버·Chromium으로 돌린다(flow.py를 직접 실행할 때 `import flow`가 빌드를 다시 하지 않게)."""
+    sys.modules.setdefault("flow", sys.modules[__name__])
+    sys.path.insert(0, os.path.join(ROOT, "tests"))
+    import contrast
+    return contrast.main(argv)
+
+
+def test_theme_dark_contrast():
+    """v0.19.0 작업 3: 어둡게에서 주요 화면 31곳의 보이는 글자 전부 4.5:1(큰 글씨 3:1) 이상.
+    편집기 문법 색(판정 D-P1, 작업 4)과 배지 그림 속 글자(판정 D-C6)는 뺌. 결과: tests/out/contrast-dark.json"""
+    rc = _contrast_main(["--theme", "dark", "--strict", "--skip-editor-tokens", "--skip-art-text",
+                         "--report", os.path.join(ROOT, "tests", "out", "contrast-dark.json")])
+    assert rc == 0, "dark contrast failures: see tests/out/contrast-dark.json"
+
+
+def test_theme_light_unchanged():
+    """v0.19.0 작업 3: 밝게는 그대로 — 31곳 화면의 (선택자, 글자색, 바탕색) 전부가 작업 2 기준과 같다.
+    스크린숏은 실행마다 바이트가 달라(애니메이션·글꼴 타이밍) 계산된 색 값 비교를 쓴다."""
+    rc = _contrast_main(["--theme", "light", "--compare", os.path.join(ROOT, "tests", "fixtures", "contrast-light-baseline.json"),
+                         "--report", os.path.join(ROOT, "tests", "out", "contrast-light.json")])
+    assert rc == 0, "light colors changed vs tests/fixtures/contrast-light-baseline.json"
+
+
+def test_theme_dark_first_frame_pixels():
+    """v0.19.0 작업 3: 어둡게 저장으로 열 때 첫 그림(첫 requestAnimationFrame)에 body 바탕이 이미 어두운 --paper이고,
+    인사 화면 스크린숏의 가장자리 픽셀도 어둡다(밝은 크림색 번쩍임 없음)."""
+    init = ("localStorage.setItem(%s, 'dark');"
+            "window.__first = null; requestAnimationFrame(() => { const b = document.body;"
+            " window.__first = b ? { bg: getComputedStyle(b).backgroundColor, html: getComputedStyle(document.documentElement).backgroundColor } : null; });"
+            % json.dumps(THEME_KEY))
+    with App("iPhone 17", init_js=init) as a:
+        first = a.js("() => window.__first")
+        assert first and first["bg"] == "rgb(20, 28, 43)", first
+        shot = os.path.join(OUT, "theme-dark-first.png")
+        a.page.screenshot(path=shot)
+        from PIL import Image
+        im = Image.open(shot).convert("RGB")
+        w, h = im.size
+        lum = lambda p: 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]
+        for xy in ((2, 2), (w - 3, 2), (2, h - 3), (w - 3, h - 3), (w // 2, 4)):
+            assert lum(im.getpixel(xy)) < 60, (xy, im.getpixel(xy))
+        assert not _app_errors(a), a.errors
+
+
 def test_theme_follows_system():
     """설정이 없으면 시스템을 따르고(앱이 켜진 채 바뀌어도), 「밝게」를 고르면 그 뒤 시스템이 바뀌어도 그대로."""
     with App("iPhone 17") as a:

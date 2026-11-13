@@ -177,9 +177,8 @@ export function migrate(raw) {
   const chosen = Object.hasOwn(rawSet, "langChosen") ? rawSet.langChosen !== false : true;
   const s = clampRanges(fill(newSave(), structuredClone(raw)));
   s.settings.langChosen = chosen;
-  // v0.18.0: 저장된 null은 그대로(다시 저장해도 안 바뀜). 칸이 없거나 null·done·skipped가 아니면
-  // 기록이 있는 저장(쓰던 사람)은 done, 아니면 null
-  if (s.tutorial !== "done" && s.tutorial !== "skipped" && !(Object.hasOwn(raw, "tutorial") && raw.tutorial === null)) {
+  // v0.18.0: done·skipped가 아니면(없음·null·이상한 값) 기록이 있는 저장(쓰던 사람)은 done, 아니면 null
+  if (s.tutorial !== "done" && s.tutorial !== "skipped") {
     s.tutorial = s.completed_lessons.length > 0 || s.xp > 0 ? "done" : null;
   }
   migrateOutfits(s, ver < 2);

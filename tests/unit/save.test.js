@@ -91,7 +91,7 @@ test("migrate: fills missing nested fields, keeps existing values", () => {
 
 test("migrate: full current (v2) save passes through unchanged", () => {
   const full = newSave();
-  full.xp = 99;
+  full.xp = 99; full.tutorial = "done";
   full.grading_results = { "1-1": { perfect: true, attempts: 1 } };
   assert.deepEqual(migrate(JSON.parse(JSON.stringify(full))), full);
 });
@@ -140,7 +140,7 @@ test("cap", () => {
 test("store: round trip", () => {
   const st = fakeStorage();
   const s = newSave();
-  s.xp = 42; s.outfits.push("casual");
+  s.xp = 42; s.tutorial = "done"; s.outfits.push("casual");
   store(st, s);
   assert.deepEqual(load(st), s);
 });
@@ -521,4 +521,10 @@ test("tutorial: 잘못된 값은 칸이 없는 것으로 보고 기록 규칙을
     assert.equal(migrate({ ...newSave(), tutorial: bad, completed_lessons: ["1-1"] }).tutorial, "done", String(bad));
     assert.equal(migrate({ ...newSave(), tutorial: bad, xp: 3 }).tutorial, "done", String(bad));
   }
+});
+
+test("tutorial: 저장된 null이어도 기록이 있으면 done, 없으면 null", () => {
+  assert.equal(migrate({ ...newSave(), tutorial: null, xp: 5 }).tutorial, "done");
+  assert.equal(migrate({ ...newSave(), tutorial: null, completed_lessons: ["1-1"] }).tutorial, "done");
+  assert.equal(migrate({ ...newSave(), tutorial: null }).tutorial, null);
 });

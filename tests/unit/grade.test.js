@@ -81,7 +81,7 @@ test("explain_detective: 탐정 말투는 탐험가 의상에서 (판정 C42)", 
 test("errors_table_complete", () => {
   for (const k of ["SyntaxError", "IndentationError", "NameError", "TypeError", "ValueError", "InputMissing", "Timeout", "EngineCrash", "OutputLimit", "_default"]) {
     assert.ok(ERRORS[k], k);
-    assert.ok(ERRORS[k].title && ERRORS[k].body && ERRORS[k].detective, k);
+    assert.ok(ERRORS[k].title && ERRORS[k].body && (k === "EngineCrash" || ERRORS[k].detective), k);
   }
 });
 

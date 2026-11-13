@@ -50,12 +50,9 @@ export const ERRORS = {
     detective:
       "같은 자리를 빙빙 도는 발자국이 보여요. 코드가 {seconds}초 안에 끝나지 않았어요. 반복문이 멈출 조건에 영영 닿지 못하는 게 범인일 확률이 높아요. 반복할 때마다 조건 속 값이 정말 바뀌는지 추적해 봐요.",
   },
-  // v0.16.1: Pyodide 엔진이 치명 오류로 멈춤(src/worker.js가 EngineCrash로 돌려주고 PyRun이 작업자를 새로 띄움)
   EngineCrash: {
     title: "엔진을 다시 켰어요",
     body: "파이썬 엔진이 멈춰서 다시 켰어요. 아주 깊게 겹친 자료나 끝없이 자기를 부르는 함수가 원인일 때가 많아요. 코드를 줄여서 다시 실행해 보세요.",
-    detective:
-      "파이썬 엔진이 멈춰서 다시 켰어요. 아주 깊게 겹친 자료나 끝없이 자기를 부르는 함수가 원인일 때가 많아요. 코드를 줄여서 다시 실행해 보세요.",
   },
   OutputLimit: {
     title: "출력이 너무 많아요",
@@ -63,7 +60,6 @@ export const ERRORS = {
     detective:
       "종이가 산더미처럼 쌓였어요! 출력이 너무 많아 수사를 멈췄어요. 사건은 {line}번째 줄의 출력에서 시작됐어요. 반복문이 생각보다 훨씬 많이, 어쩌면 끝없이 돈 게 아닐까요? 반복 횟수와 멈출 조건을 추적해 봐요.",
   },
-  // v0.15 경비실(src/py/guard.py): 명령을 사건에 맞지 않게 씀 / check가 True·False가 아닌 값을 돌려줌
   GuardUsageError: {
     title: "경비실 명령 쓰임 오류 ({type})",
     body: "경비실 명령을 이 사건에 맞지 않게 썼어요. 단서는 {line}번째 줄에 있어요. 오류 이름 옆의 안내가 무엇이 어긋났는지 알려 줘요. 사건마다 쓰는 명령이 달라요. next_try()는 has_try()로 남은 시도를 먼저 확인한 뒤에 불러요. 사건의 「쓸 수 있는 것」을 다시 확인해 볼까요?",
@@ -76,7 +72,6 @@ export const ERRORS = {
     detective:
       "check 함수가 애매하게 대답했어요. 단서는 {line}번째 줄의 check 함수에 있어요. 들일지 막을지 True·False로 딱 잘라 말해야 해요. return 없이 끝나는 갈래(그러면 None)가 숨어 있지 않은지 모든 길을 따라가 봐요.",
   },
-  // v0.16.1 새 종류(설계서 §2-4). 정답 코드는 쓰지 않고 고치는 방향만 알려 준다.
   IndexError: {
     title: "번호 범위 오류 ({type})",
     body: "목록(또는 문자열)에서 없는 번호를 불렀어요. 단서는 {line}번째 줄에 있어요. 번호는 0부터 세니까 항목이 3개면 0, 1, 2번까지만 있어요. 빈 목록에서 꺼내려 했거나 마지막 번호를 하나 넘겨 불렀을 때 자주 생겨요. 목록에 항목이 몇 개 들어 있는지, 부른 번호가 그 안에 있는지 확인해 볼까요?",
@@ -119,7 +114,6 @@ export const ERRORS = {
     detective:
       "함수가 자기 자신을 끝없이 부르는 메아리가 들려요. 단서는 {line}번째 줄에 있어요. 멈추는 조건이 아예 없거나, 부를 때마다 그 조건에 가까워지지 않는 게 범인일 확률이 높아요. 멈추는 조건과 부를 때 넘기는 값의 변화를 차례로 추적해 봐요.",
   },
-  // v0.16.1 원인별 변형(ERROR_VARIANTS가 고른다). 정답 코드는 쓰지 않는다.
   TypeError_self: {
     title: "값의 개수가 안 맞아요 ({type})",
     body: "함수나 메서드가 받는 값의 개수와 넘긴 값의 개수가 달라요. 단서는 {line}번째 줄에 있어요. 클래스 안 메서드라면 정의의 첫 칸에 self를 빠뜨렸는지 먼저 봐요. 메서드는 부를 때 자기 자신이 첫 값으로 자동으로 넘어가거든요. 메서드 정의의 괄호 안과 부르는 쪽의 값 개수를 세어 볼까요?",
@@ -176,9 +170,6 @@ export const ERROR_ALIASES = {
   UnboundLocalError: "NameError",
 };
 
-// 같은 종류 안 원인별 안내(설계서 §2-4). 첫 일치가 이긴다. pattern은 error.msg(Pyodide 3.14 영어 메시지)에 쓰는 RegExp 문자열.
-// NameError_starter는 explain()이 opts.starterNames에 그 이름이 있을 때만 고른다(무늬는 이름을 뽑는 용도).
-// 시작 코드에 있던 이름이 import 이름과 겹치면(import re 줄을 지움) 시작 코드 안내가 더 정확해서 import보다 앞에 둔다.
 export const ERROR_VARIANTS = [
   { type: "TypeError", pattern: "takes \\d+ positional arguments? but \\d+ (were|was) given", key: "TypeError_self" },
   { type: "TypeError", pattern: "not supported between instances of", key: "TypeError_compare" },

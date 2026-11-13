@@ -4621,5 +4621,107 @@ def test_editor_slot_fail():
     assert not fails, "\n".join(fails)
 
 
+ERRORS_FILE_GLOB = re.compile(r"/js/errors-[0-9a-f]{8}\.js(\?.*)?$")
+CLUES_TEXT = {"ko": "단서 찾는 중…", "en": "Looking for clues…"}
+
+
+def _clues_wait(a, box, held, lang_="ko"):
+    """오류 칸에 「단서 찾는 중…」(정식 카드는 아직 없음) → 묶음이 오면 정식 카드. 돌려줌: 정식 카드 제목"""
+    a.page.wait_for_selector(box + " .ed-msg", timeout=30_000)
+    msg = a.page.inner_text(box + " .ed-msg")
+    assert CLUES_TEXT[lang_] in msg, msg
+    assert not a.page.query_selector(box + " .err-panel"), "card drawn before the errors file came"
+    a.page.wait_for_timeout(3000)   # 3초 늦춰도 그대로 기다림
+    assert a.page.query_selector(box + " .ed-msg") and not a.page.query_selector(box + " .err-panel")
+    assert held, "errors file was never requested"
+    a.shot("clues-wait-%s.png" % lang_)
+    for r in held:
+        r.continue_()
+    a.page.wait_for_selector(box + " .err-panel", timeout=15_000)
+    assert not a.page.query_selector(box + " .ed-msg"), "wait message left"
+    return a.page.inner_text(box + " .err-panel h3")
+
+
+def test_error_card_waits():
+    """v0.17.0 작업 3: 오류 안내 파일(js/errors-*.js)을 3초 늦추면 오류 카드 자리에 「단서 찾는 중…」 → 오면 정식 카드(원인별 변형 제목).
+    레슨 코드 쓰기(ko·en)·텃밭 코드 모드·경비실 직접 쓰기. 파일을 못 받으면 종류·줄 번호만 있는 간단 카드. 캡처: clues-wait-*.png"""
+    fails = []
+    for lang_ in ("ko", "en"):
+        held = []
+        with App("iPhone 17", locale="en-US" if lang_ == "en" else "ko-KR", routes=[(ERRORS_FILE_GLOB, lambda r: held.append(r))]) as a:
+            a.start()
+            a.page.click("#continue")
+            _to_write(a)
+            a.wait_py()
+            a.set_code('print("a" + 1)')
+            a.page.click("#run")
+            title = _clues_wait(a, ".console", held, lang_)
+            want = "TypeError" if lang_ == "en" else "더할 수 없는 값 오류"
+            if want not in title or title in ("TypeError 오류", "TypeError error"):
+                fails.append("%s lesson card title %r" % (lang_, title))
+            if lang_ == "en":
+                left = _hangul_left(a)
+                if left:
+                    fails.append("en hangul %r" % left)
+            errs = _app_errors(a)
+            if errs:
+                fails.append("%s lesson console errors %r" % (lang_, errs))
+    # 텃밭 코드 모드
+    held = []
+    seed = _garden_seed(9, _garden(order_idx=17, size=4, upgrades=G11_UP, mode="code", code='mvoe("오른쪽")\n'))
+    with App("iPhone 17", save=seed, reduced=True, routes=[(ERRORS_FILE_GLOB, lambda r: held.append(r))]) as a:
+        _open_garden(a)
+        a.wait_py()
+        a.page.click("#g-run")
+        title = _clues_wait(a, "#g-result", held)
+        err = a.page.inner_text("#g-result .err-panel")
+        if "혹시 move?" not in err:
+            fails.append("garden card lost the garden explain %r" % err)
+        a.page.wait_for_selector(".screen.garden[data-state=idle]", timeout=30_000)
+        errs = _app_errors(a)
+        if errs:
+            fails.append("garden console errors %r" % errs)
+    # 경비실: 빈칸 고르기 오답은 NameError 안내
+    held = []
+    g = _guard_g(solved={"G37": {"firstTry": True, "how": "blank"}}, blanks={"G37": [0, 0, 0]}, attempts={"G37": 1}, runs=1)
+    with App("iPhone 17", save=_guard_seed(17, guard=g), routes=[(ERRORS_FILE_GLOB, lambda r: held.append(r))]) as a:
+        _open_guard(a)
+        a.page.click("#gd-list")
+        _sheet_pick(a, '[data-g="G37"]')
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-mode")
+        a.wait_py()
+        _gd_pick(a, 0, 1)
+        a.page.click("#gd-run")   # (_gd_run은 끝날 때까지 기다리는데 여기서는 오류 안내를 기다리는 중이라 직접 누름)
+        title = _clues_wait(a, "#gd-result", held)
+        if "NameError" not in title:
+            fails.append("guard card title %r" % title)
+        a.page.wait_for_selector(".screen.guard[data-state=idle]", timeout=30_000)
+        a.page.click("#gd-mode")
+        a.page.wait_for_selector("#gd-ed .cm-content")
+        a.set_code("def check(attempt):\n    return gate.allows(attempt)\n")
+        _gd_run(a, skip=False)
+        a.page.wait_for_selector("#gd-result .err-panel")
+        title = a.page.inner_text("#gd-result .err-panel h3")
+        if "지워진 시작 코드" not in title:   # 경비실 starterNames 변형은 그대로
+            fails.append("guard starter variant lost %r" % title)
+    # 못 받으면 간단 카드(종류 + 줄 번호), 던지지 않음
+    with App("iPhone 17", routes=[(ERRORS_FILE_GLOB, lambda r: r.abort())]) as a:
+        a.start()
+        a.page.click("#continue")
+        _to_write(a)
+        a.wait_py()
+        a.set_code('print("a" + 1)')
+        a.page.click("#run")
+        a.page.wait_for_selector(".console .err-panel", timeout=30_000)
+        card = a.page.inner_text(".console .err-panel")
+        a.shot("clues-simple.png")
+        if "TypeError 오류" not in card or "1번째 줄 근처를 살펴보세요" not in card:
+            fails.append("simple card %r" % card)
+        errs = [e for e in _app_errors(a) if "errors-" not in e and "ERR_FAILED" not in e]
+        if errs:
+            fails.append("simple card console errors %r" % errs)
+    assert not fails, "\n".join(fails)
+
+
 if __name__ == "__main__":
     sys.exit(main())

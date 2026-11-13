@@ -1,9 +1,26 @@
 // 채점 핵심 (설계서 4-3, 4-5). 실행은 runner.py(작업 5에서 Pyodide 작업자)가 하고,
 // 이 파일은 실행 결과를 비교하고 오류를 설명할 뿐이다.
 import { OUTFITS } from "../data/outfits.js";
-import { ERRORS, ERROR_ALIASES, ERROR_VARIANTS } from "../data/errors.js";
 import { chartMismatch } from "./chart.js";
 import { t, tx, lang } from "./i18n.js";
+import { loadChunk } from "./chunks.js";
+
+// v0.17.0: 오류 설명 자료(data/errors.js)는 첫 파일 밖의 묶음(js/errors-<지문>.js)이라, 받아 온 뒤에야 있다.
+// useErrorData(모듈): 시험·개발판이 직접 넣음 / ensureErrorData(): 묶음을 받아 넣고(실패해도 던지지 않음) / hasErrorData(): 있나
+let data = null;
+let pending = null;
+export function useErrorData(d) {
+  data = d && d.ERRORS ? { ERRORS: d.ERRORS, ERROR_ALIASES: d.ERROR_ALIASES || {}, ERROR_VARIANTS: d.ERROR_VARIANTS || [] } : null;
+}
+export function hasErrorData() { return data !== null; }
+export function ensureErrorData() {
+  if (data) return Promise.resolve();
+  if (!pending) {
+    const p = pending = loadChunk("errors").then(useErrorData, () => {})   // 실패하면 간단 카드로 남고, 다음 오류 때 다시 받아 봄
+      .finally(() => { if (pending === p) pending = null; });
+  }
+  return pending;
+}
 
 // 줄마다 오른쪽 공백 제거, \r\n → \n, 끝 줄바꿈 제거.
 export function normalize(text) {
@@ -68,6 +85,11 @@ export function explain(error, outfit, opts = {}) {
   const type = error && typeof error.type === "string" && error.type ? error.type : "";
   const rawLine = error ? error.line : null;
   const line = Number.isInteger(rawLine) && rawLine > 0 ? rawLine : null;
+  if (!data) {
+    // 오류 안내 묶음을 못 받았을 때: 종류와 줄 번호만 있는 간단 카드
+    return { title: type ? t`${type} 오류` : t`오류`, body: line == null ? t`코드를 살펴보세요` : t`${line}번째 줄 근처를 살펴보세요`, line };
+  }
+  const { ERRORS, ERROR_ALIASES, ERROR_VARIANTS } = data;
   const has = (k) => Object.prototype.hasOwnProperty.call(ERRORS, k) && k !== "_default";
   const key = has(type) ? type
     : (Object.prototype.hasOwnProperty.call(ERROR_ALIASES, type) ? ERROR_ALIASES[type] : "_default");

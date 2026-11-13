@@ -26,7 +26,7 @@ import { render as farmSVG, replayFrames, thinFrames } from "../garden/view.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, el, dialog, toast, bar, riaSays, celebrate } from "./dom.js";
 import { mountEditor } from "./editorslot.js";
-import { errorPanel } from "./write.js";
+import { errorPanel, waitForClues } from "./write.js";
 import { SYMBOL_ORDER } from "../kbd.js";
 import { t, tp, tx, lang } from "../i18n.js";
 import { cropName, dirName, fileName, pyName } from "../garden/lang.js";
@@ -1244,6 +1244,10 @@ export function render(root, ctx, params = {}) {
     if (err && mode === "nodes" && err.line && lineMap) S.runErr = lineMap[err.line] ?? null;
     if (mode === "nodes") paintProg();
     else if (err && S.ed && err.line) S.ed.markLine(err.line, false);
+    if (err) {   // 오류 안내 묶음이 아직이면 「단서 찾는 중…」(v0.17.0)
+      await waitForClues(resultEl);
+      if (S.destroyed) return;
+    }
     resultEl.innerHTML = resultHTML({ ap, r, err, code, short });
     if (err || ap.rejected) ctx.sound.play("error");
     else if (cropNames(ap.harvested).length) ctx.sound.play("correct");

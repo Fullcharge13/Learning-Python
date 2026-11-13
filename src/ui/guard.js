@@ -12,7 +12,7 @@ import { passedChapters } from "../garden/state.js";
 import { sheet } from "./garden.js";
 import { esc, icon, dialog, toast, riaSays, celebrate } from "./dom.js";
 import { mountEditor } from "./editorslot.js";
-import { errorPanel } from "./write.js";
+import { errorPanel, waitForClues } from "./write.js";
 import { SYMBOL_ORDER } from "../kbd.js";
 import { t, tx } from "../i18n.js";
 import { definedNames } from "../grade.js";
@@ -406,6 +406,10 @@ export function render(root, ctx, params = {}) {
     if (out.solved) paintCard(true);
     if (out.firstSolve) paintCode();   // 「직접 쓰기」 단추가 생김
     if (err && S.ed && err.line) S.ed.markLine(err.line, false);
+    if (err) {   // 오류 안내 묶음이 아직이면 「단서 찾는 중…」(v0.17.0)
+      await waitForClues(resultEl);
+      if (!mine()) { solvedNote(); return; }
+    }
     const st = ok ? r.guard.stats : null;
     resultEl.innerHTML = (out.solved ? `<p class="g-msg gd-win">${icon("check")}<span>${t`사건 해결!`}</span></p>`
         + (/\beval\s*\(/.test(code) ? `<p class="g-msg warn gd-eval">${icon("cross")}<span>${t`eval은 입력을 코드로 실행해요. JSON은 json.loads로 읽어요`}</span></p>` : "")

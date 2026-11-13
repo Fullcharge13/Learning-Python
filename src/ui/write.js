@@ -1,5 +1,5 @@
 // 직접 작성 문제: 입력창 + 기호 줄 + 「실행」·「제출」, 힌트 4단계, 정답 보기, 오류 설명
-import { normalize, judge, explain } from "../grade.js";
+import { normalize, judge, explain, hasErrorData, ensureErrorData } from "../grade.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, codeBlock, filesNote, chartNote } from "./dom.js";
 import { mountEditor } from "./editorslot.js";
@@ -17,6 +17,14 @@ export function runEnv(item, t) {
 }
 
 export const DRAFT_DEBOUNCE_MS = 500;
+
+/** 오류 카드를 그리기 전에 부른다(v0.17.0). 오류 안내 묶음이 아직 안 왔으면 el에 「단서 찾는 중…」을 보이고 기다린다.
+ *  받기가 실패해도 끝난다(그때 errorPanel은 종류·줄 번호만 있는 간단 카드를 그림). */
+export async function waitForClues(el) {
+  if (hasErrorData()) return;
+  if (el) el.innerHTML = `<p class="ed-msg" role="status"><span class="dot" aria-hidden="true"></span>${t`단서 찾는 중…`}</p>`;
+  await ensureErrorData();
+}
 
 /** 실행 오류 설명 칸(원래 오류 + 줄 + 한국어 설명). 텃밭 화면(v0.10)도 같이 쓴다 */
 // over({ title, text }, 선택): 화면 전용 설명(예: 텃밭 gardenExplain)이 있으면 일반 설명 대신 쓴다
@@ -262,6 +270,8 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
         st.hadError = true;
         ed.markLine(r.error.line);
         ctx.sound.play("error");
+        await waitForClues(consoleEl);
+        if (st.destroyed) return;
         html += errorHTML(r.error) + riaLine("error", t`어라?`);
       }
       consoleEl.innerHTML = html;
@@ -298,6 +308,8 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
         st.hadError = true;
         ed.markLine(r.error.line, false);
         ctx.sound.play("error");
+        await waitForClues(consoleEl);
+        if (st.destroyed) return;
         html = (normalize(r.stdout) ? `<p class="ex-label">${t`실행 결과`}</p><pre class="out">${esc(normalize(r.stdout))}</pre>` : "") + chartNote(r.charts) + errorHTML(r.error) + riaLine("error", t`어라?`);
       } else if (v.reason === "chart") {
         // 출력은 맞고 그래프가 다름(v0.5 E3): 쉬운 말 + 기대 그래프와 내 그래프

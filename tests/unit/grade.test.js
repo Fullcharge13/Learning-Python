@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalize, judge, explain } from "../../src/grade.js";
+import { normalize, judge, explain, useErrorData } from "../../src/grade.js";
 import { ERRORS } from "../../data/errors.js";
+
+// v0.17.0: 오류 자료는 따로 받는 묶음 → 시험은 직접 넣는다
+useErrorData(await import("../../data/errors.js"));
 
 const ok = (stdout) => ({ stdout, stderr: "", error: null, missing: [] });
 

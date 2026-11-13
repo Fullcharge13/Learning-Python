@@ -2,10 +2,13 @@
 // 대표 메시지는 실제 Pyodide 3.14 문구 — tests/grader_browser.py test_error_variants_real_engine가 같은 문구를 엔진에서 다시 뽑아 맞춘다.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { explain, definedNames } from "../../src/grade.js";
+import { explain, definedNames, useErrorData } from "../../src/grade.js";
 import { readFileSync } from "node:fs";
 import { setLang, usePack } from "../../src/i18n.js";
 import { ERRORS, ERROR_VARIANTS } from "../../data/errors.js";
+
+// v0.17.0: 오류 자료는 따로 받는 묶음 → 시험은 직접 넣는다
+useErrorData(await import("../../data/errors.js"));
 
 const NEW_TYPES = {
   IndexError: "list index out of range",

@@ -711,8 +711,10 @@ def test_error_variants_real_engine():
         ("recursion", "def f():\n    f()\nf()\n", "RecursionError", "RecursionError"),
     ]
     res = _page().evaluate("""async (cases) => {
-        const { explain } = await import("/src/grade.js");
-        const { ERRORS } = await import("/data/errors.js");
+        const { explain, useErrorData } = await import("/src/grade.js");
+        const errorData = await import("/data/errors.js");
+        const { ERRORS } = errorData;
+        useErrorData(errorData);   // v0.17.0: 오류 자료는 따로 받는 묶음 → 시험은 직접 넣는다
         const out = [];
         for (const [name, code] of cases) {
             const r = await window.runner.run(code, "", [], {});

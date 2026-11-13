@@ -304,10 +304,15 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       onWrong();
       const r = results[v.failedIndex] || {};
       let html = "";
+      // 상태 처리(정답 자동 펼침·저장 알림)는 오류 안내를 기다리기 전에 끝낸다. 기다림은 카드 그리기만(v0.17.0)
       if (r.error) {
         st.hadError = true;
         ed.markLine(r.error.line, false);
         ctx.sound.play("error");
+      }
+      if (st.submits >= 3 && !st.solutionSeen) revealSolution(true);
+      notify();
+      if (r.error) {
         await waitForClues(consoleEl);
         if (st.destroyed) return;
         html = (normalize(r.stdout) ? `<p class="ex-label">${t`실행 결과`}</p><pre class="out">${esc(normalize(r.stdout))}</pre>` : "") + chartNote(r.charts) + errorHTML(r.error) + riaLine("error", t`어라?`);
@@ -341,8 +346,6 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       }
       html = `<p class="submit-count">${t`제출 ${st.submits}번째 · 시험 ${tests.length}개 중 ${v.failedIndex}개 통과`}</p>` + html;
       consoleEl.innerHTML = html;
-      if (st.submits >= 3 && !st.solutionSeen) revealSolution(true);
-      notify();
       // 틀린 까닭이 보이도록 설명 쪽으로 이동
       const room = window.innerHeight - 80 - 160; // style.css의 scroll-margin 위·아래와 같은 값
       consoleEl.scrollIntoView({ behavior: reduced() ? "auto" : "smooth", block: consoleEl.offsetHeight < room ? "end" : "start" });

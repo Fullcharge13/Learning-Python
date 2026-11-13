@@ -4653,6 +4653,46 @@ def _clues_wait(a, box, held, lang_="ko"):
     return a.page.inner_text(box + " .err-panel h3")
 
 
+def test_error_wait_keeps_state():
+    """v0.17.0 고침: 오류 안내 묶음을 붙잡아 둬도 저장·정답 자동 펼침은 기다리지 않음(기다림은 카드 그리기만).
+    세 번째 틀린 제출이 오류일 때: 「단서 찾는 중…」이 떠 있는 동안 이미 정답이 펼쳐지고, 이어 하기 기록에 제출 3번·정답 본 것·오류가 남음.
+    그 상태에서 새로고침해도 이어 하기로 되살아남."""
+    held = []
+    with App("iPhone 17", routes=[(ERRORS_FILE_GLOB, lambda r: held.append(r))]) as a:
+        a.start()
+        a.page.click("#continue")
+        _to_write(a)
+        a.wait_py()
+        for i in range(2):   # 오류 없이 틀린 제출 두 번
+            a.set_code('print("x%d")' % i)
+            a.page.click("#submit")
+            a.page.wait_for_selector(".submit-count:has-text('%d')" % (i + 1), timeout=30_000)
+        a.set_code('print("a" + 1)')
+        a.page.click("#submit")
+        a.page.wait_for_selector(".console .ed-msg", timeout=30_000)
+        assert not a.page.query_selector(".console .err-panel")
+        assert held, "errors file was never requested"
+        assert a.page.is_visible("#solution"), "solution not revealed while waiting for the clues"
+        a.page.wait_for_timeout(300)
+        rec = _resume_rec(a)
+        it = rec and rec.get("item")
+        assert it and it["submits"] == 3 and it["solutionSeen"] and it["hadError"], rec
+        # 붙잡힌 채 새로고침 → 이어 하기에서 그대로
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.start()
+        a.page.click("#continue")
+        a.page.wait_for_selector(".modal .resume-ask", timeout=10_000)
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".item.write #solution:not([hidden])", timeout=30_000)
+        for r in held:
+            try:
+                r.continue_()
+            except Exception:
+                pass
+        assert not _app_errors(a), _app_errors(a)
+
+
 def test_error_card_waits():
     """v0.17.0 작업 3: 오류 안내 파일(js/errors-*.js)을 3초 늦추면 오류 카드 자리에 「단서 찾는 중…」 → 오면 정식 카드(원인별 변형 제목).
     레슨 코드 쓰기(ko·en)·텃밭 코드 모드·경비실 직접 쓰기. 파일을 못 받으면 종류·줄 번호만 있는 간단 카드. 캡처: clues-wait-*.png"""

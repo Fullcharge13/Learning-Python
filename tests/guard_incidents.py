@@ -55,9 +55,10 @@ METHODS_BY_CH = {7: {"append", "remove", "sort"}, 8: {"get", "keys", "values", "
 WANT_IDS = ["G1", "G2", "G7", "G3", "G8", "G9", "G4", "G5", "G10", "G6", "G11", "G12",
             "G13", "G14", "G15", "G16", "G17", "G18", "G19", "G20", "G21",
             "G22", "G23", "G24", "G25", "G26", "G27", "G28", "G29", "G30",
-            "G31", "G32", "G33", "G34", "G35", "G36", "G37", "G38", "G39"]
+            "G31", "G32", "G33", "G34", "G35", "G36", "G37", "G38", "G39",
+            "G40", "G41", "G42", "G43", "G44", "G45"]
 WANT_CHAPTERS = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9,
-                 10, 10, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15]
+                 10, 10, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16, 16, 17, 17, 17]
 
 
 def allowed(need):
@@ -197,7 +198,11 @@ def main():
     per = {}
     for i in incs:
         per[i["need"]] = per.get(i["need"], 0) + 1
-    check(len(incs) == 39 and all(n == 3 for n in per.values()), "⑧ 있는 장마다 정확히 3개", str(per))
+    check(len(incs) == 45 and sorted(per) == list(range(3, 18)) and all(n == 3 for n in per.values()),
+          "⑧ 3~17장 모두 있고 장마다 정확히 3개(1·2장 없음)", str(per))
+    ids = [i["id"] for i in incs]
+    check(sorted(ids, key=lambda x: int(x[1:])) == ["G%d" % n for n in range(1, 46)] and len(set(ids)) == 45,
+          "⑨ id가 G1~G45 모두 한 번씩")
     check(data["xp"] == 5, "GUARD_XP = 5")
     for inc in incs:
         n = len(inc["tries"])

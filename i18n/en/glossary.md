@@ -139,3 +139,9 @@
 | 열린 리다이렉트 | Open redirect |
 | API 키 · 키 범위 | API key · Key scope |
 | 심층 방어 | Defense in depth |
+| 읽기 전용 계정 | Read-only account |
+| 데이터 최소화 | Data minimization |
+| SQL 주입 · 매개변수 쿼리 | SQL injection · Parameterized query |
+| 이상 탐지 · 기준선 | Anomaly detection · Baseline |
+| 실패율 경보 | Failure-rate alert |
+| 상위 출처 | Top talker |

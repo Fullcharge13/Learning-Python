@@ -45,7 +45,9 @@ SRC = os.path.join(ROOT, "src")
 PYODIDE_VERSION = "314.0.7"
 PYODIDE_CDN = "https://cdn.jsdelivr.net/npm/pyodide@%s/" % PYODIDE_VERSION
 PYODIDE_DEV = "/node_modules/pyodide/"
-MAX_RAW = 850 * 1024  # 판정 C28 → C61(760) → C68(v0.12, 800KB) → C76(v0.13.0 영어판 문구 감싸기, 820KB) → 판정 G-C6 (v0.15 경비실, 850KB)
+MAX_RAW = 614_400  # 판정 C28 → … → G-C6(850KB) → v0.17.0 첫 화면 가볍게: 600KB (목표 520KB)
+MAX_EDITOR_CHUNK = 430_080   # v0.17.0: 편집기 묶음 420KB
+MAX_ERRORS_CHUNK = 40_960    # v0.17.0: 오류 안내 묶음 40KB
 TARGET = ["es2022", "safari16"]
 
 # esbuild를 JS API로 부른다(한 번에 세 묶음을 글자로 받기 위해).
@@ -531,7 +533,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     with open(os.path.join(out, runner_name), "wb") as f:
         f.write(runner_body)
     chapter_files.append(runner_name)  # Python 실행에 꼭 필요 → 미리 받음(오프라인)
-    # v0.17.0 작업 2(최소): 편집기 묶음도 설치 때 미리 받음(오프라인 코드 쓰기). sw.js 쪽 정리(GAME_FILES·지문 규칙)는 작업 4
+    # v0.17.0: 편집기·오류 안내 묶음도 설치 때 미리 받음(오프라인 코드 쓰기·오류 카드). sw.js CHAPTER_RE가 저장본 먼저로 다룸
     chapter_files.append(editor_name)
     chapter_files.append(errors_name)   # 오류 카드도 오프라인에서 필요
 
@@ -579,6 +581,10 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     print("chunk: %s %.1f KB (%d B)" % (errors_name, len(errors_body) / 1024, len(errors_body)))
     if raw > MAX_RAW:
         raise SystemExit("build: index.html is over %d KB" % (MAX_RAW // 1024))
+    if len(editor_body) > MAX_EDITOR_CHUNK:
+        raise SystemExit("build: editor chunk is over %d KB (%d B)" % (MAX_EDITOR_CHUNK // 1024, len(editor_body)))
+    if len(errors_body) > MAX_ERRORS_CHUNK:
+        raise SystemExit("build: errors chunk is over %d KB (%d B)" % (MAX_ERRORS_CHUNK // 1024, len(errors_body)))
 
 
 def main():

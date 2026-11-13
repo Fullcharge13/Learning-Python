@@ -1,7 +1,7 @@
 // v0.17.0: 첫 파일 밖에서 따로 받는 묶음(편집기 js/editor-<지문>.js, 오류 안내 js/errors-<지문>.js).
 // 배포판은 첫 파일의 이름표 window.RIA_CHUNKS에서 주소를 찾아 import(), 이름표에 없으면(개발판) chunkdev.js가 바로 import.
 // 같은 이름은 한 번만 받고(약속 재사용), 실패하면 약속을 지워 다음에 다시 받는다.
-// 실패 까닭(.kind): "stale" — 파일이 없음(404 등, 새 판이 나온 뒤 옛 탭) / "offline" — 그 밖(연결 없음 등)
+// 실패 까닭(.kind): "stale" — 파일이 없음(404·410, 새 판이 나온 뒤 옛 탭) / "offline" — 그 밖(연결 없음 등)
 import { devChunk } from "./chunkdev.js";
 
 /** 새 판이 나와 옛 묶음 파일이 서버에 없음(404 등) */
@@ -28,7 +28,7 @@ function offlineError(name, cause) {
  */
 export function createChunkLoader(io) {
   const loading = new Map();
-  let tries = 0;
+  const tries = new Map();   // 묶음 이름마다 따로 센다(편집기가 실패했다고 오류 묶음 주소가 바뀌지 않게)
   async function fetchChunk(name, attempt) {
     const path = io.chunks()?.[name];
     if (!path) {
@@ -41,17 +41,17 @@ export function createChunkLoader(io) {
     } catch (e) {
       let res = null;
       try { res = await io.probe(url); } catch { /* 연결 없음 */ }
-      if (res && !res.ok && res.status >= 400 && res.status < 500) throw new ChunkMissingError(name, res.status);
+      if (res && !res.ok && (res.status === 404 || res.status === 410)) throw new ChunkMissingError(name, res.status);
       throw offlineError(name, e);
     }
   }
   function loadChunk(name) {
     let p = loading.get(name);
     if (!p) {
-      const attempt = tries;
+      const attempt = tries.get(name) || 0;
       p = fetchChunk(name, attempt);
       loading.set(name, p);
-      p.catch(() => { tries += 1; if (loading.get(name) === p) loading.delete(name); });
+      p.catch(() => { tries.set(name, attempt + 1); if (loading.get(name) === p) loading.delete(name); });
     }
     return p;
   }

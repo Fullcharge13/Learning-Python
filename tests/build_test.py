@@ -47,9 +47,9 @@ DIST = os.path.join(ROOT, "dist")
 OUT = os.path.join(ROOT, "tests", "out")
 DEV_OUT = os.path.join(OUT, "dist-dev")
 CDN = "https://cdn.jsdelivr.net/npm/pyodide@314.0.7/"
-MAX_RAW = 850 * 1024  # 판정 C28 → C61(760) → C68(v0.12, 800KB) → C76(820KB) → 판정 G-C6 (v0.15 경비실, 850KB)
+MAX_RAW = 614_400  # 판정 C28 → … → G-C6(850KB) → v0.17.0 첫 화면 가볍게: 600KB(목표 520KB)
 V02_RAW = 667397  # v0.2 dist/index.html (651.8 KB). v0.3~v0.9는 이보다 작아야 했음
-FIRST_FILE_MAX = 850 * 1024  # 판정 C61 → C68 → C76 → 판정 G-C6 (v0.15 경비실): 첫 파일 상한을 build.py와 같게
+FIRST_FILE_MAX = 614_400  # 판정 C61 → … → v0.17.0: 첫 파일 상한을 build.py와 같게
 CHAPTER_FILE = re.compile(r"^ch(\d+)-([0-9a-f]{8})\.json$")
 ICON_SIZES = {"icons/icon-180.png": 180, "icons/icon-192.png": 192, "icons/icon-512.png": 512,
               "icons/icon-maskable-512.png": 512, "icons/apple-touch-icon.png": 180}
@@ -782,7 +782,7 @@ def test_guard_chapter_files():
 
 
 def test_runner_has_guard():
-    """경비실: py/runner-*.py 한 개에 guard.py가 앞에 이어 붙어 있고, 첫 파일은 MAX_RAW(850KB) 아래."""
+    """경비실: py/runner-*.py 한 개에 guard.py가 앞에 이어 붙어 있고, 첫 파일은 MAX_RAW(600KB) 아래."""
     _build()
     files = glob.glob(os.path.join(DIST, "py", "runner-*.py"))
     assert len(files) == 1, files
@@ -796,11 +796,11 @@ const m = await import(process.argv[1]);
 const g = m.INCIDENTS.find((i) => i.id === "G1");
 console.log(JSON.stringify({ why: g.tries[0].why, solution: g.solution }));
 """
-FIRST_FILE_LIMIT = 870_400   # 상한 850KB(판정 G-C6). v0.16.0엔 844,631(v0.15.0 크기)였으나 v0.16.1(오류 안내·시도 보강 글)이 커져 상한으로 되돌림(판정 G3-C12)
+FIRST_FILE_LIMIT = 614_400   # v0.17.0: 상한 600KB(편집기·오류 안내를 따로 떼어냄). 이전: 850KB(판정 G-C6)
 
 
 def test_guard_not_in_first_file():
-    """v0.16.0 작업 2: 사건 본문(「왜?」 글·정답)은 첫 파일에 없고(장 파일에서 받음), 첫 파일은 상한(850KB)보다 작다."""
+    """v0.16.0 작업 2: 사건 본문(「왜?」 글·정답)은 첫 파일에 없고(장 파일에서 받음), 첫 파일은 상한(600KB)보다 작다."""
     _build()
     r = subprocess.run(["node", "--input-type=module", "-e", GUARD_G1_SRC,
                         "file://" + os.path.join(ROOT, "data", "guard.js")], capture_output=True, text=True)
@@ -1287,6 +1287,68 @@ def test_third_party_notices():
     assert '"licenses.txt"' in sw, "licenses.txt must be precached for offline"
     html = _read(os.path.join(DIST, "index.html"))
     assert "licenses.txt" in html, "settings must link to licenses.txt"
+
+FIRST_FILE_GOAL = 532_480        # 520KB 목표
+EDITOR_CHUNK_MAX = 430_080       # 420KB
+ERRORS_CHUNK_MAX = 40_960        # 40KB
+CHUNK_NAME = re.compile(r"^js/(editor|errors)-([0-9a-f]{8})\.js$")
+
+
+def _ria_chunks(html):
+    m = re.search(r"window\.RIA_CHUNKS\s*=\s*(\{[^}]*\})", html)
+    assert m, "window.RIA_CHUNKS missing from the first file"
+    return json.loads(re.sub(r"([{,])\s*(\w+)\s*:", r'\1"\2":', m.group(1)))
+
+
+def test_chunks_split():
+    """v0.17.0 작업 4: 첫 파일은 600KB 아래(목표 520KB), 편집기·오류 안내는 따로 나간 지문 이름 파일. 첫 파일에 편집기(CodeMirror)·
+    오류 안내 글이 없고, 편집기 묶음에 앱의 i18n.js(언어 상태)가 없다. 서비스 작업자가 설치 때 미리 받고 저장본 먼저."""
+    _build()
+    raw = open(os.path.join(DIST, "index.html"), "rb").read()
+    print("    first file %d B (goal %d, limit %d)" % (len(raw), FIRST_FILE_GOAL, MAX_RAW))
+    assert len(raw) < MAX_RAW and len(raw) <= FIRST_FILE_GOAL, len(raw)
+    html = raw.decode("utf-8")
+    # 편집기 흔적: 앱 자신의 CSS에 cm-editor가 있어 쓰지 않고, CodeMirror 안쪽 이름(minify 뒤에도 남는 글자)으로 본다
+    for marker in ("cm-scroller", "cm-gutters", "cm-gutterElement", "cm-tooltip", "cm-panels", "\u037c"):
+        assert marker not in html, "editor code leaked into the first file: " + marker
+    assert "TypeError_concat" not in html, "error explain data leaked into the first file"
+    chunks = _ria_chunks(html)
+    assert sorted(chunks) == ["editor", "errors"], chunks
+    sizes = {}
+    for name, path in chunks.items():
+        m = CHUNK_NAME.match(path)
+        assert m and m.group(1) == name, path
+        full = os.path.join(DIST, *path.split("/"))
+        assert os.path.exists(full), path
+        body = open(full, "rb").read()
+        assert hashlib.sha256(body).hexdigest()[:8] == m.group(2), "fingerprint != sha256 of content: " + path
+        sizes[name] = len(body)
+    print("    chunks: %r" % sizes)
+    assert sizes["editor"] <= EDITOR_CHUNK_MAX and sizes["errors"] <= ERRORS_CHUNK_MAX, sizes
+    editor = open(os.path.join(DIST, *chunks["editor"].split("/")), encoding="utf-8").read()
+    assert "cm-scroller" in editor, "editor chunk lost CodeMirror?"
+    assert '["ko","en"]' in html and '["ko","en"]' not in editor, "editor chunk must not bundle src/i18n.js (language state)"
+    assert "TypeError_concat" in open(os.path.join(DIST, *chunks["errors"].split("/")), encoding="utf-8").read()
+    sw = _read(os.path.join(DIST, "sw.js"))
+    for path in chunks.values():
+        assert json.dumps(path) in sw, "sw.js must precache " + path
+    m = re.search(r"const CHAPTER_RE = (/.+/);", sw)
+    assert m, "CHAPTER_RE missing"
+    probe = subprocess.run(["node", "-e", "const re=%s; console.log(JSON.stringify(process.argv.slice(1).map(p=>re.test(p))))" % m.group(1),
+                            "https://x.test/app/" + chunks["editor"], "https://x.test/app/" + chunks["errors"],
+                            "https://x.test/app/js/editor-xyz.js", "https://x.test/app/js/other-0123abcd.js"],
+                           capture_output=True, text=True)
+    assert probe.returncode == 0, probe.stderr
+    assert json.loads(probe.stdout) == [True, True, False, False], probe.stdout
+
+
+def test_build_stops_over_chunk_caps():
+    """묶음별 한도(편집기 420KB·오류 안내 40KB)와 첫 파일 600KB는 build.py가 직접 지킨다."""
+    src = _read(os.path.join(ROOT, "build.py"))
+    assert re.search(r"MAX_RAW\s*=\s*614_?400\b|MAX_RAW\s*=\s*600\s*\*\s*1024", src), "build.py MAX_RAW must be 600KB"
+    assert re.search(r"MAX_EDITOR_CHUNK\s*=\s*(430_?080|420\s*\*\s*1024)", src)
+    assert re.search(r"MAX_ERRORS_CHUNK\s*=\s*(40_?960|40\s*\*\s*1024)", src)
+
 
 def main():
     tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]

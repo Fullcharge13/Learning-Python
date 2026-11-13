@@ -100,3 +100,34 @@ test("chunkdev: 개발판 import 길", () => {
   assert.match(src, /import\("\.\/ui\/editor\.js"\)/);
   assert.match(src, /import\("\.\.\/data\/errors\.js"\)/);
 });
+
+test("loadChunk: 404·410만 stale, 그 밖의 4xx·5xx는 offline(권한·서버 문제를 새 판으로 오해하지 않음)", async () => {
+  const fail = async () => { throw new TypeError("Failed to fetch dynamically imported module"); };
+  for (const [status, kind] of [[404, "stale"], [410, "stale"], [400, "offline"], [403, "offline"], [429, "offline"], [500, "offline"], [503, "offline"]]) {
+    const { loader } = fake({ importer: fail, probe: async () => ({ ok: false, status }) });
+    const e = await loader.loadChunk("editor").catch((x) => x);
+    assert.equal(e.kind, kind, "status " + status);
+  }
+});
+
+test("loadChunk: 다시 받는 횟수(?r=)는 묶음 이름마다 따로 센다", async () => {
+  const urls = [];
+  const loader = createChunkLoader({
+    chunks: () => ({ editor: "js/editor-0123abcd.js", errors: "js/errors-89abcdef.js" }),
+    base: () => BASE,
+    importer: async (url) => { urls.push(url); if (!/errors-/.test(url) || urls.filter((u) => /errors-/.test(u)).length < 2) throw new TypeError("x"); return {}; },
+    probe: async () => { throw new TypeError("offline"); },
+    devChunk: async () => ({}),
+  });
+  await assert.rejects(loader.loadChunk("editor"));
+  await assert.rejects(loader.loadChunk("editor"));
+  await assert.rejects(loader.loadChunk("editor"));
+  await assert.rejects(loader.loadChunk("errors"));   // errors는 처음 실패 → 다음엔 ?r=1 (editor의 횟수를 물려받지 않음)
+  await loader.loadChunk("errors");
+  const errs = urls.filter((u) => /errors-/.test(u));
+  assert.equal(errs[0], "https://example.test/app/js/errors-89abcdef.js");
+  assert.equal(errs[1], "https://example.test/app/js/errors-89abcdef.js?r=1");
+  const eds = urls.filter((u) => /editor-/.test(u));
+  assert.equal(eds[1], "https://example.test/app/js/editor-0123abcd.js?r=1");
+  assert.equal(eds[2], "https://example.test/app/js/editor-0123abcd.js?r=2");
+});

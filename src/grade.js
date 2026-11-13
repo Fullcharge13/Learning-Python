@@ -13,11 +13,16 @@ export function useErrorData(d) {
   data = d && d.ERRORS ? { ERRORS: d.ERRORS, ERROR_ALIASES: d.ERROR_ALIASES || {}, ERROR_VARIANTS: d.ERROR_VARIANTS || [] } : null;
 }
 export function hasErrorData() { return data !== null; }
-export function ensureErrorData() {
+export const ERROR_DATA_TIMEOUT_MS = 8000;
+/** 못 받거나 ~8초 안에 안 오면 던지지 않고 끝난다(간단 카드로 남음). 늦게라도 오면 쓰고, 다음 오류 때는 같은 받기를 이어 기다린다. */
+export function ensureErrorData({ load = () => loadChunk("errors"), timeoutMs = ERROR_DATA_TIMEOUT_MS } = {}) {
   if (data) return Promise.resolve();
   if (!pending) {
-    const p = pending = loadChunk("errors").then(useErrorData, () => {})   // 실패하면 간단 카드로 남고, 다음 오류 때 다시 받아 봄
-      .finally(() => { if (pending === p) pending = null; });
+    let timer;
+    const timeout = new Promise((resolve) => { timer = setTimeout(resolve, timeoutMs); });
+    const got = load().then(useErrorData, () => {});   // 실패하면 간단 카드로 남고, 다음 오류 때 다시 받아 봄
+    const p = pending = Promise.race([got, timeout])
+      .finally(() => { clearTimeout(timer); if (pending === p) pending = null; });
   }
   return pending;
 }

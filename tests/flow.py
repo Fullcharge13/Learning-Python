@@ -181,14 +181,15 @@ def today(n=0):
 class App:
     """기기 하나 + 새 저장소의 앱 한 판."""
 
-    def __init__(self, device="iPhone 17", save=None, reduced=False, url=None, locale=None, init_js=None, routes=()):
+    def __init__(self, device="iPhone 17", save=None, reduced=False, url=None, locale=None, init_js=None, routes=(), sw=False):
         e = env()
         opts = device_opts(device)
         opts["locale"] = locale or "ko-KR"   # v0.14.0: 처음 언어는 휴대폰 언어를 따른다 → 기본은 한국어 휴대폰
         if reduced:
             opts["reduced_motion"] = "reduce"
-        # sw.js가 옛 빌드를 저장해 두지 않도록 서비스 작업자는 막는다(오프라인은 build_test.py가 시험)
-        self.context = e["browser"].new_context(service_workers="block", **opts)
+        # sw.js가 옛 빌드를 저장해 두지 않도록 서비스 작업자는 막는다(오프라인은 build_test.py가 시험).
+        # v0.17.0: 묶음 오프라인·옛 판 시험만 sw=True(서비스 작업자 허용, 배포판 sw.js 그대로)
+        self.context = e["browser"].new_context(service_workers="allow" if sw else "block", **opts)
         self.page = self.context.new_page()
         self.device = device
         self.errors = []
@@ -4460,7 +4461,17 @@ def _editor_wait_checks(a, slot, run, syms, lang_="ko"):
     dis = a.js("(s) => [...document.querySelectorAll(s)].filter((b) => b.offsetParent).map((b) => b.disabled)", syms)
     if not dis or not all(dis):
         fails.append("symbol keys not disabled: %r" % dis)
+    # 눌러도 아무 일 없음: 결과·콘솔 칸의 글, 시작 코드 글자, 콘솔 오류 수가 그대로
+    snap = "() => JSON.stringify(['.console', '#result', '#g-result', '#gd-result'].map((q) => { const e = document.querySelector(q); return e ? e.innerText : null; }))"
+    before = (a.js(snap), a.js("(s) => document.querySelector(s + ' .ed-pre')?.textContent", slot), len(a.errors))
     a.js("(bs) => bs.forEach((b) => document.querySelector(b)?.click())", run)
+    a.js("(s) => [...document.querySelectorAll(s)].forEach((b) => b.click())", syms)   # 꺼진 단추라 클릭은 무시돼야 함
+    a.page.wait_for_timeout(400)
+    after = (a.js(snap), a.js("(s) => document.querySelector(s + ' .ed-pre')?.textContent", slot), len(a.errors))
+    if after != before:
+        fails.append("pressing disabled buttons changed something: %r -> %r" % (before, after))
+    if a.page.query_selector(slot + " .cm-content") or not a.page.query_selector(slot + " .ed-wait"):
+        fails.append("editor state changed by pressing")
     return fails, start
 
 
@@ -4599,7 +4610,7 @@ def test_editor_slot_fail():
             _to_write(a, ready=".item.write")
             a.page.wait_for_selector("#ed .ed-refresh", timeout=15_000)
             msg = a.page.inner_text("#ed .ed-wait")
-            want = ("새 판이 나왔어요. 새로 고침하면 열려요", "새로 고침") if lang_ == "ko" else ("A new version is out", "Refresh")
+            want = ("새 판이 나왔어요. 새로 고침하면 열려요", "새로 고침") if lang_ == "ko" else ("A new version is out. Refresh to open it", "Refresh")
             if not all(w in msg for w in want):
                 fails.append("%s stale text %r" % (lang_, msg))
             if a.page.query_selector("#ed .ed-retry"):
@@ -4720,6 +4731,132 @@ def test_error_card_waits():
         errs = [e for e in _app_errors(a) if "errors-" not in e and "ERR_FAILED" not in e]
         if errs:
             fails.append("simple card console errors %r" % errs)
+    assert not fails, "\n".join(fails)
+
+
+# ---------------------------------------------------------------- v0.17.0 작업 4: 서비스 작업자 + 묶음 (배포판 sw.js 그대로)
+
+def _sw_controlled(a):
+    """서비스 작업자가 설치를 마치고 이 페이지를 맡을 때까지 + 두 묶음이 저장본에 있음"""
+    a.page.wait_for_function("() => navigator.serviceWorker && navigator.serviceWorker.controller", timeout=60_000)
+    got = a.js("""async () => {
+        const urls = [];
+        for (const k of await caches.keys()) for (const r of await (await caches.open(k)).keys()) urls.push(r.url);
+        return { editor: urls.some((u) => /\\/js\\/editor-[0-9a-f]{8}\\.js$/.test(u)), errors: urls.some((u) => /\\/js\\/errors-[0-9a-f]{8}\\.js$/.test(u)) };
+    }""")
+    assert got == {"editor": True, "errors": True}, "chunks not precached: %r" % got
+
+
+def test_offline_chunks():
+    """v0.17.0 작업 4(검토 2): 첫 방문 → 서비스 작업자 준비 → 네트워크 끊음 → 새로 고침 → 레슨 코드 쓰기·경비실 직접 쓰기·
+    텃밭 프로그램 편집기가 열리고, 오류 나는 코드를 돌리면 정식 오류 카드(간단 카드 아님)."""
+    fails = []
+    # 레슨 코드 쓰기 + 정식 오류 카드
+    with App("iPhone 17", sw=True) as a:
+        _sw_controlled(a)
+        a.context.set_offline(True)
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.start()
+        a.page.click("#continue")
+        _to_write(a)
+        a.wait_py()
+        a.set_code('print("a" + 1)')
+        a.page.click("#run")
+        a.page.wait_for_selector(".console .err-panel", timeout=30_000)
+        title = a.page.inner_text(".console .err-panel h3")
+        a.shot("offline-chunks-card.png")
+        if "더할 수 없는 값 오류" not in title or title == "TypeError 오류":
+            fails.append("offline lesson error card is not the formal one: %r" % title)
+        errs = _app_errors(a)
+        if errs:
+            fails.append("offline lesson console errors %r" % errs)
+    # 텃밭 프로그램 편집기 + 경비실 직접 쓰기
+    seed = _guard_seed(3, guard=_guard_solved_g1())
+    seed["garden"]["mode"] = "code"
+    seed["garden"]["code"] = 'move("오른쪽")\nharvest()\n'
+    with App("iPhone 17", save=seed, reduced=True, sw=True) as a:
+        _sw_controlled(a)
+        a.context.set_offline(True)
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        _open_garden(a)
+        a.page.wait_for_selector(".g-editor .cm-content", timeout=15_000)
+        if _ed_text(a, ".g-editor") != 'move("오른쪽")\nharvest()\n'.rstrip("\n") + "\n" and _ed_text(a, ".g-editor") != 'move("오른쪽")\nharvest()\n':
+            fails.append("offline garden editor %r" % _ed_text(a, ".g-editor"))
+        a.page.click("#g-guard")
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+        _gd_open_g1(a)
+        a.page.click("#gd-mode")
+        a.page.wait_for_selector("#gd-ed .cm-content", timeout=15_000)
+        errs = _app_errors(a)
+        if errs:
+            fails.append("offline garden/guard console errors %r" % errs)
+    assert not fails, "\n".join(fails)
+
+
+# 옛 탭 흉내: 첫 파일이 이름표를 적는 순간 편집기 주소를 없는 지문으로 바꿔 끼운다(서비스 작업자는 그대로 켜 둠)
+STALE_EDITOR_JS = """(() => { let v; Object.defineProperty(window, 'RIA_CHUNKS', { configurable: true,
+  get() { return v; }, set(x) { v = { ...x, editor: 'js/editor-00000000.js' }; } }); })();"""
+
+
+def test_stale_chunk():
+    """v0.17.0 작업 4(검토 3): 새 판이 나와 옛 탭이 가리키는 편집기 파일이 서버에 없으면(서비스 작업자도 저장본이 없음)
+    편집기 화면에 「새 판이 나왔어요. 새로 고침하면 열려요」+「새로 고침」, 「다시 시도」는 없음."""
+    fails = []
+    with App("iPhone 17", sw=True, init_js=STALE_EDITOR_JS) as a:
+        a.page.wait_for_function("() => navigator.serviceWorker && navigator.serviceWorker.controller", timeout=60_000)
+        a.start()
+        a.page.click("#continue")
+        _to_write(a, ready=".item.write")
+        a.page.wait_for_selector("#ed .ed-refresh", timeout=20_000)
+        msg = a.page.inner_text("#ed .ed-wait")
+        if "새 판이 나왔어요. 새로 고침하면 열려요" not in msg or "새로 고침" not in msg:
+            fails.append("stale text %r" % msg)
+        if a.page.query_selector("#ed .ed-retry"):
+            fails.append("retry shown for a stale chunk")
+        if not a.page.is_disabled("#run"):
+            fails.append("run enabled without an editor")
+        errs = _app_errors(a)
+        if errs:
+            fails.append("console errors %r" % errs)
+    assert not fails, "\n".join(fails)
+
+
+def test_editor_held_garden_toggle():
+    """v0.17.0 작업 4(검토 d): 편집기 파일을 붙잡아 둔 채 텃밭에서 코드 → 노드 → 코드로 오가도, 파일이 오면
+    편집기는 정확히 하나(`.cm-editor` 1개)이고 시작 코드 그대로·실행 가능."""
+    fails = []
+    held = []
+    code = 'move("오른쪽")\nharvest()\n'
+    with App("iPhone 17", save=_garden_seed(1, _garden(order_idx=1, mode="code", code=code)), reduced=True,
+             routes=[(EDITOR_FILE_GLOB, lambda r: held.append(r))]) as a:
+        _open_garden(a)
+        a.wait_py()
+        a.page.wait_for_selector("#g-prog .ed-wait", timeout=10_000)
+        a.page.click("#to-nodes")
+        a.page.wait_for_selector(".g-flow", timeout=10_000)
+        a.page.click("#to-code")
+        a.page.wait_for_selector("#g-prog .ed-wait", timeout=10_000)
+        a.page.wait_for_timeout(500)
+        if a.page.query_selector(".cm-editor"):
+            fails.append("editor appeared before the file came")
+        for r in held:
+            r.continue_()
+        a.page.wait_for_selector(".g-editor .cm-content", timeout=10_000)
+        a.page.wait_for_timeout(500)
+        n = a.js("() => document.querySelectorAll('.cm-editor').length")
+        if n != 1:
+            fails.append("expected exactly one .cm-editor, got %d" % n)
+        if a.page.query_selector(".ed-wait"):
+            fails.append("wait cover left")
+        if _ed_text(a, ".g-editor") not in (code, code.rstrip("\n")):
+            fails.append("start code %r" % _ed_text(a, ".g-editor"))
+        if a.page.is_disabled("#g-run"):
+            fails.append("run disabled after the editor came")
+        errs = _app_errors(a)
+        if errs:
+            fails.append("console errors %r" % errs)
     assert not fails, "\n".join(fails)
 
 

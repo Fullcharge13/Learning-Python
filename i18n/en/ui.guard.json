@@ -44,5 +44,6 @@
  "판정 안 함": "No decision",
  "2번": "Twice",
  "이 시도에서 allow()도 block()도 부르지 않았어요": "In this try, neither allow() nor block() was called",
- "이 시도에서 판정을 두 번 했어요 — 첫 번째만 셌어요": "This try was judged twice — only the first one counted"
+ "이 시도에서 판정을 두 번 했어요 — 첫 번째만 셌어요": "This try was judged twice — only the first one counted",
+ "eval은 입력을 코드로 실행해요. JSON은 json.loads로 읽어요": "eval runs the input as code. Read JSON with json.loads"
 }

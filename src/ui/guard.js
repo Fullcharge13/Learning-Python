@@ -389,6 +389,7 @@ export function render(root, ctx, params = {}) {
     if (err && S.ed && err.line) S.ed.markLine(err.line, false);
     const st = ok ? r.guard.stats : null;
     resultEl.innerHTML = (out.solved ? `<p class="g-msg gd-win">${icon("check")}<span>${t`사건 해결!`}</span></p>`
+        + (/\beval\s*\(/.test(code) ? `<p class="g-msg warn gd-eval">${icon("cross")}<span>${t`eval은 입력을 코드로 실행해요. JSON은 json.loads로 읽어요`}</span></p>` : "")
       : !ok && !err ? `<p class="g-msg warn">${t`실행 결과를 확인하지 못했어요`}</p>` : "")
       + (st ? `<p class="gd-stats">${t`막은 공격 ${st.attacks_blocked}/${st.attacks_total} · 들인 손님 ${st.guests_allowed}/${st.guests_total}`}</p>
         <p class="gd-why" id="gd-why">${t`칸을 누르면 「왜?」를 볼 수 있어요.`}</p>` : "")

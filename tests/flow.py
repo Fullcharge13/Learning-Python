@@ -4291,6 +4291,32 @@ def test_guard_room_json_case():
     assert not fails, "\n".join(fails)
 
 
+def test_guard_room_eval_warning():
+    """v0.16.1 작업 6: G34를 푼 뒤 직접 쓰기로 eval을 쓴 올바른 풀이 → 해결 결과에 「eval」 경고 한 줄(없는 풀이엔 없음)."""
+    code = ('items = ["carrot", "potato", "apple"]\n\ndef check(attempt):\n    try:\n        order = eval(attempt)\n'
+            '        item = order["item"]\n        qty = order["qty"]\n    except Exception:\n        return False\n'
+            '    return item in items and type(qty) == int and 1 <= qty <= 50\n')
+    with App("iPhone 17", save=_guard_seed(14, guard=_guard_g(solved={"G34": {"firstTry": True, "how": "blank"}},
+                                                               blanks={"G34": [0, 0, 0]}, attempts={"G34": 1}, runs=1))) as a:
+        _open_guard(a)
+        a.page.click("#gd-list")
+        _sheet_pick(a, '[data-g="G34"]')
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-mode")
+        a.page.click("#gd-mode")
+        a.page.wait_for_selector("#gd-ed .cm-content")
+        a.set_code(code)
+        _gd_run(a)
+        res = a.page.inner_text("#gd-result")
+        assert "사건 해결" in res, res
+        assert "eval은 입력을 코드로 실행해요. JSON은 json.loads로 읽어요" in res, res
+        a.page.click("#gd-mode")   # 빈칸 고르기로 → 정답 빈칸 풀이엔 경고 없음
+        a.page.wait_for_selector(".gd-blank")
+        _gd_run(a)
+        res = a.page.inner_text("#gd-result")
+        assert "사건 해결" in res and "eval" not in res, res
+        assert not a.errors, a.errors
+
+
 def test_guard_room_list_45():
     """v0.16.0 작업 8: 17장까지 통과 → 머리 「0/45 해결」, 목록 시트에 사건 45개가 장 순서(3장 G1·G2·G7 …), 모두 열림."""
     fails = []

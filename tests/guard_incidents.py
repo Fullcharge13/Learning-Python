@@ -89,6 +89,9 @@ WRONG_SOLUTIONS = {
         'perms = {\n    "guest": ["read"],\n    "farmer": ["read", "write"],\n    "owner": ["read", "write", "delete"],\n}\n\n'
         'def check(attempt):\n    parts = attempt.split(":")\n    role = parts[0]\n    action = parts[1]\n'
         "    return action in perms.get(role, [])\n",
+        'perms = {\n    "guest": ["read"],\n    "farmer": ["read", "write"],\n    "owner": ["read", "write", "delete"],\n}\n\n'
+        'def check(attempt):\n    parts = attempt.split(":")\n    role = parts[0]\n    action = parts[-1]\n'
+        "    return action in perms.get(role, [])\n",
     ],
     "G22": [
         "def check(attempt):\n    return attempt.isdigit() and 1 <= int(attempt) <= 50\n",
@@ -98,6 +101,44 @@ WRONG_SOLUTIONS = {
         'import re\ndef check(attempt):\n    return re.match(r"^\\d{6}$", attempt) is not None\n',
         'import re\ndef check(attempt):\n    return re.fullmatch(r"\\d{6}", attempt) is not None\n',
         'import re\ndef check(attempt):\n    return re.search(r"^\\d{6}$", attempt) is not None\n',
+    ],
+    "G31": [
+        'from urllib.parse import urlparse\n\ndef check(attempt):\n    url = urlparse(attempt)\n'
+        '    return url.scheme == "https" and url.hostname.endswith("farm.pi.example")\n',
+        'from urllib.parse import urlparse\n\ndef check(attempt):\n    url = urlparse(attempt)\n'
+        '    return url.scheme == "https" and url.hostname == "farm.pi.example"\n',
+    ],
+    "G33": [
+        'import re\nfrom urllib.parse import urlparse\n\ndef check(attempt):\n    links = re.findall(r\'href="([^"]*)"\', attempt)\n'
+        '    for link in links:\n        parts = urlparse(link)\n        if parts.hostname == "farm.pi.example":\n            continue\n'
+        '        if parts.scheme != "" or parts.netloc != "":\n            return False\n'
+        '        if not link.startswith("/") or link.startswith("//") or "\\\\" in link:\n            return False\n    return True\n',
+    ],
+    "G40": [
+        'def check(attempt):\n    q = attempt.strip().upper()\n    return "SELECT" in q and ";" not in q\n',
+    ],
+    "G41": [
+        'def check(attempt):\n    q = attempt.upper()\n    if "PHONE" in q or "ADDRESS" in q:\n        return False\n'
+        '    return "COUNT(" in q or "AVG(" in q\n',
+        'def check(attempt):\n    q = attempt.upper()\n    if ";" in q or "PHONE" in q or "ADDRESS" in q:\n        return False\n'
+        '    return "COUNT(" in q or "AVG(" in q\n',
+        'def check(attempt):\n    q = attempt.upper()\n    if "PHONE" in q or "ADDRESS" in q or " FROM " not in q:\n        return False\n'
+        '    for col in q.replace("SELECT", "").split(" FROM ")[0].split(","):\n'
+        '        if not (col.strip().startswith("COUNT(") or col.strip().startswith("AVG(")):\n            return False\n    return True\n',
+    ],
+    "G43": [
+        "seen = []\nwhile has_try():\n    n = next_try()\n    if len(seen) < 3:\n        seen.append(n)\n        allow()\n    else:\n"
+        "        avg = sum(seen) // len(seen)\n        if n > avg * 2:\n            block()\n        else:\n            seen.append(n)\n            allow()\n",
+        "seen = []\nwhile has_try():\n    n = next_try()\n    if len(seen) < 3:\n        seen.append(n)\n        allow()\n    else:\n"
+        "        avg = sum(seen[-3:]) / 3\n        if n > avg * 2:\n            block()\n        else:\n            seen.append(n)\n            allow()\n",
+    ],
+    "G44": [
+        "def check(attempt):\n    try:\n        parts = attempt.split(\",\")\n        ok = int(parts[0])\n        fail = int(parts[1])\n"
+        "    except (ValueError, IndexError):\n        return False\n    total = ok + fail\n    if total == 0:\n        return True\n"
+        "    return round(fail / total, 2) <= 0.5\n",
+        "def check(attempt):\n    try:\n        parts = attempt.split(\",\")\n        ok = int(parts[0])\n        fail = int(parts[1])\n"
+        "    except (ValueError, IndexError):\n        return False\n    total = ok + fail\n    if total == 0:\n        return True\n"
+        "    return fail / total <= 0.5\n",
     ],
 }
 

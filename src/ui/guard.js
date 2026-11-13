@@ -6,7 +6,7 @@
 //   받는 동안 「사건을 불러오는 중…」, 실패하면 「사건을 불러오지 못했어요」+「다시 시도」. 늦게 온 응답은 실행 토큰으로 버린다.
 import { BADGES } from "../../data/badges.js";
 import { crowSVG } from "../guard/crow.js";
-import { fillBlanks } from "../guard/blanks.js";
+import { fillBlanks, optionOrder } from "../guard/blanks.js";
 import { cleanGuard, markSeen, guardInput, guardConsistent, rankOf, applyGuardRun, incidentOpen } from "../guard/state.js";
 import { passedChapters } from "../garden/state.js";
 import { sheet } from "./garden.js";
@@ -178,7 +178,7 @@ export function render(root, ctx, params = {}) {
     const inc = S.inc;
     const v = await sheet({
       title: t`빈칸 ${n + 1} 고르기`,
-      html: `<ul class="g-pick">${b.options.map((o, k) => `<li><button class="g-pick-btn${S.picks[n] === k ? " on" : ""}" data-v="${k}" aria-label="${esc(optLabel(o))}"><code class="gd-opt">${esc(optLabel(o))}</code></button></li>`).join("")}</ul>`,
+      html: `<ul class="g-pick">${optionOrder(inc.id, n, b.options.length).map((k) => [b.options[k], k]).map(([o, k]) => `<li><button class="g-pick-btn${S.picks[n] === k ? " on" : ""}" data-v="${k}" aria-label="${esc(optLabel(o))}"><code class="gd-opt">${esc(optLabel(o))}</code></button></li>`).join("")}</ul>`,
     });
     if (v == null || S.destroyed || S.inc !== inc || S.state !== "idle") return;
     S.picks = S.picks.map((p, i) => (i === n ? +v : p));

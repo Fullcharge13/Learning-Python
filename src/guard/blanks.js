@@ -1,6 +1,8 @@
 // 경비실 빈칸 채우기: 시작 코드의 {n} 자리에 고른 보기를 넣어 코드를 만든다. 순수 함수.
 // {{ 와 }} 는 글자 { } 로 (파이썬 dict·f-문자열 대비).
 
+import { shuffleChoices } from "../shuffle.js";
+
 /** 시작 코드를 조각으로 나눔: {text} 글자, {n,line,col} 빈칸. line은 1부터, col은 0부터(원문 기준) */
 function scan(start) {
   const parts = [];
@@ -61,4 +63,11 @@ export function blankSpots(start) {
   return scan(start)
     .filter((p) => p.n !== undefined)
     .map(({ n, line, col }) => ({ n, line, col }));
+}
+
+/** 보기 화면 순서(시험·스크린샷이 안정되게 사건 id와 빈칸 번호로 정함): 화면 자리 -> 데이터 번호 */
+export function optionOrder(id, n, count) {
+  let h = 2166136261;
+  for (const ch of `${id}#${n}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return shuffleChoices(new Array(count).fill(0), 0, h >>> 0).order;
 }

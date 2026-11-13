@@ -47,3 +47,24 @@ test("blanks_spots_escape: 이스케이프는 빈칸 아님, 같은 줄 뒤쪽 �
   assert.deepEqual(blankSpots("x = {{1}}"), []);
   assert.deepEqual(blankSpots("{{a}} {0} {1}"), [{ n: 0, line: 1, col: 6 }, { n: 1, line: 1, col: 10 }]);
 });
+
+test("optionOrder: 순열이고 같은 입력은 같은 결과", async () => {
+  const { optionOrder } = await import("../../src/guard/blanks.js");
+  for (const c of [1, 2, 3, 4]) {
+    const o = optionOrder("G1", 0, c);
+    assert.deepEqual([...o].sort(), Array.from({ length: c }, (_, i) => i));
+    assert.deepEqual(optionOrder("G1", 0, c), o);
+  }
+});
+
+test("optionOrder: 45개 사건에서 정답이 화면 첫 자리인 빈칸은 절반 미만", async () => {
+  const { optionOrder } = await import("../../src/guard/blanks.js");
+  const { INCIDENTS } = await import("../../data/guard.js");
+  let first = 0, all = 0;
+  for (const inc of INCIDENTS) inc.blanks.forEach((b, n) => {
+    all++;
+    if (optionOrder(inc.id, n, b.options.length)[0] === b.answer) first++;
+  });
+  assert.ok(all > 45);
+  assert.ok(first / all < 0.5, `${first}/${all}`);
+});

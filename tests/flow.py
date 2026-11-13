@@ -3734,6 +3734,14 @@ def _gd_pick(a, n, v):
     _sheet_pick(a, '[data-v="%d"]' % v)
 
 
+def _gd_pick_text(a, n, text):
+    """화면에 보이는 보기 글자로 고른다(화면 자리가 아니라 글자로 찾는다)."""
+    a.page.click('.gd-blank[data-n="%d"]' % n)
+    a.page.wait_for_selector(".modal.g-sheet")
+    a.page.click('.modal.g-sheet .g-pick-btn:has-text("%s")' % text.replace('"', '\\"'))
+    a.page.wait_for_selector(".modal.g-sheet", state="detached")
+
+
 def _gd_run(a, skip=True):
     """「실행」 → (재생이면 건너뛰기) → 끝날 때까지"""
     a.wait_py()
@@ -3924,6 +3932,36 @@ def test_guard_room_no_decision():
         assert not a.errors, a.errors
 
 
+def test_guard_room_shuffled_blanks():
+    """v0.16.1 작업 4: 보기는 섞여 보이지만 저장은 데이터 번호, 다시 열면 같은 글자가 골라져 있다."""
+    inc = json.loads(subprocess.check_output(["node", "tests/guard_incidents_helper.mjs"], cwd=ROOT))["incidents"][0]
+    assert inc["id"] == "G1"
+    with App("iPhone 17", save=_guard_seed(3)) as a:
+        _open_guard(a)
+        texts = [b["options"][b["answer"]] for b in inc["blanks"]]
+        order_all = []
+        for n, b in enumerate(inc["blanks"]):
+            a.page.click('.gd-blank[data-n="%d"]' % n)
+            a.page.wait_for_selector(".modal.g-sheet")
+            shown = a.js("() => [...document.querySelectorAll('.g-pick-btn')].map(e => +e.dataset.v)")
+            assert sorted(shown) == list(range(len(b["options"]))), shown
+            order_all.append(shown)
+            a.page.click('.modal.g-sheet .g-pick-btn:has-text("%s")' % texts[n])
+            a.page.wait_for_selector(".modal.g-sheet", state="detached")
+        assert any(o != sorted(o) for o in order_all), order_all
+        assert (a.save().get("guard") or {}).get("blanks", {}).get("G1") == [0, 0, 0], a.save().get("guard")
+        _gd_run(a)
+        a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".modal .gd-done", state="detached")
+        a.page.reload()
+        _open_guard(a)
+        _gd_open_g1(a)
+        got = a.js("() => [...document.querySelectorAll('.gd-blank')].map(e => e.textContent)")
+        assert got == texts, (got, texts)
+        assert not a.errors, a.errors
+
+
 def test_guard_room_twice_mark():
     """v0.16.1 작업 2: 한 시도에 판정을 두 번 하면 칸에 「2번」, 「왜?」 앞에 안내 한 줄(첫 판정만 셈)."""
     with App("iPhone 17", save=_guard_seed(3, guard=_guard_solved_g1())) as a:
@@ -4067,8 +4105,8 @@ def test_guard_room_empty_option_label():
         assert len(opts) == 3, opts
         for o in opts:
             assert o["text"] and o["aria"], opts
-        assert opts[2]["text"] == "(비워 두기)" and opts[2]["aria"] == "(비워 두기)", opts
-        _sheet_pick(a, '[data-v="2"]')
+        assert any(o["text"] == "(비워 두기)" and o["aria"] == "(비워 두기)" for o in opts), opts
+        _sheet_pick(a, '.g-pick-btn[aria-label="(비워 두기)"]')
         b = a.page.query_selector('.gd-blank[data-n="1"]')
         assert b.inner_text().strip() == "(비워 두기)", b.inner_text()
         assert "(비워 두기)" in (b.get_attribute("aria-label") or ""), b.get_attribute("aria-label")

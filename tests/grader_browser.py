@@ -684,13 +684,57 @@ def test_guard_three_modes():
     assert res["n"].get("guard") is None, res["n"]
 
 
+def test_error_variants_real_engine():
+    # 오류 무늬가 영어 메시지에 의존한다 → 실제 Pyodide 3.14가 돌려주는 문구로 변형이 골라지는지 본다(v0.16.1 §2-4).
+    cases = [
+        ("self", "class A:\n    def f():\n        return 1\nA().f()\n", "TypeError", "TypeError_self"),
+        ("self2", "class A:\n    def f(x):\n        return 1\nA().f(2)\n", "TypeError", "TypeError_self"),
+        ("compare", "print([1] <= {1})\n", "TypeError", "TypeError_compare"),
+        ("container", "d = {}\nprint('a' in d.get('x'))\n", "TypeError", "TypeError_container"),
+        ("iterable", "for x in None:\n    pass\n", "TypeError", "TypeError_container"),
+        ("call", "x = 5\nx()\n", "TypeError", "TypeError_call"),
+        ("import", "print(re.match('a', 'a'))\n", "NameError", "NameError_import"),
+        ("eq", "x = 1\nif x = 1:\n    pass\n", "SyntaxError", "SyntaxError_eq"),
+        ("plain_name", "print(zzz)\n", "NameError", None),
+        ("plain_syntax", "print('a'\n", "SyntaxError", None),
+        ("index", "a = [1]\na[5]\n", "IndexError", "IndexError"),
+        ("key", "{}['a']\n", "KeyError", "KeyError"),
+        ("attr", "'a'.foo()\n", "AttributeError", "AttributeError"),
+        ("file", "open('nope.txt')\n", "FileNotFoundError", "FileNotFoundError"),
+        ("zero", "1 / 0\n", "ZeroDivisionError", "ZeroDivisionError"),
+        ("json", "import json\njson.loads('{')\n", "JSONDecodeError", "JSONDecodeError"),
+        ("recursion", "def f():\n    f()\nf()\n", "RecursionError", "RecursionError"),
+    ]
+    res = _page().evaluate("""async (cases) => {
+        const { explain } = await import("/src/grade.js");
+        const { ERRORS } = await import("/data/errors.js");
+        const out = [];
+        for (const [name, code] of cases) {
+            const r = await window.runner.run(code, "", [], {});
+            const e = r.error;
+            const got = explain(e, "basic", { starterNames: [] });
+            const keys = Object.keys(ERRORS).filter((k) => k !== "_default" && ERRORS[k].title.replace("{type}", e.type) === got.title);
+            out.push({ name, type: e.type, msg: e.msg, keys });
+        }
+        const st = await window.runner.run("print(common)\\n", "", [], {});
+        const sv = explain(st.error, "basic", { starterNames: ["common"] });
+        return { out, starter: sv.title, starterBase: explain(st.error, "basic").title };
+    }""", [[c[0], c[1]] for c in cases])
+    for c, got in zip(cases, res["out"]):
+        name, _code, typ, want = c
+        print("    %-12s %s: %s -> %s" % (name, got["type"], got["msg"], got["keys"]))
+        assert got["type"] == typ, got
+        assert (want is None and got["keys"] in ([typ], [])) or got["keys"][:1] == [want], (name, got)
+    assert res["starter"] != res["starterBase"] and "NameError" in res["starter"], res
+
+
 TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, test_require,
          test_require_comment_elif_else_in_pyodide, test_require_selfcall_formatspec_triplestr_in_pyodide,
          test_require_namedgroup_listcomp_lambda_in_pyodide, test_require_reraise_in_pyodide,
          test_require_def_sql_in_pyodide, test_multiline_chart_in_pyodide,
          test_error_line, test_output_limit, test_isolation, test_files_in_pyodide,
          test_practice_server_in_pyodide, test_chart_in_pyodide, test_farm_in_pyodide,
-         test_sqlite3_in_pyodide, test_lang_in_pyodide, test_guard_three_modes, test_queue, test_timeout_then_ok,
+         test_sqlite3_in_pyodide, test_lang_in_pyodide, test_error_variants_real_engine, test_guard_three_modes, test_queue, test_timeout_then_ok,
          test_status_phases, test_engine_crash_restart, test_queued_own_clock, test_ui_alive, test_no_page_errors,
          test_load_error_resolves, test_cdn_constant, test_fetch_retry, test_worker_ctor_throws,
          test_load_timeout_retry, test_idle_worker_killed_silently, test_idle_worker_error_event]

@@ -51,7 +51,7 @@ test("stdin", () => {
 
 test("explain_unknown", () => {
   let r;
-  assert.doesNotThrow(() => { r = explain({ type: "ZeroDivisionError", line: 2, msg: "division by zero" }, "basic"); });
+  assert.doesNotThrow(() => { r = explain({ type: "OverflowError", line: 2, msg: "too big" }, "basic"); });
   assert.match(r.body, /처음 보는 오류예요/);
   assert.equal(r.line, 2);
   assert.doesNotThrow(() => explain(null, undefined));
@@ -143,7 +143,7 @@ test("alias_title: 제목은 실제 오류 이름, 본문은 부모 것", () => 
 });
 
 test("grammar_all: 모든 오류 × 줄 있음/없음 × 기본/탐정 → 어색한 문형·자리 표시 없음", () => {
-  const types = [...Object.keys(ERRORS).filter((k) => k !== "_default"), "TabError", "UnboundLocalError", "ZeroDivisionError"];
+  const types = [...Object.keys(ERRORS).filter((k) => k !== "_default"), "TabError", "UnboundLocalError", "OverflowError"];
   for (const type of types) {
     for (const line of [null, 3]) {
       for (const outfit of ["basic", "explorer"]) {
@@ -165,7 +165,7 @@ test("grammar_all: 모든 오류 × 줄 있음/없음 × 기본/탐정 → 어�
 });
 
 test("default_with_line: 줄 번호가 있으면 설계서 문구 그대로", () => {
-  const r = explain({ type: "ZeroDivisionError", line: 2 }, "basic");
+  const r = explain({ type: "OverflowError", line: 2 }, "basic");
   assert.match(r.body, /처음 보는 오류예요\. 줄 번호부터 볼까요\?/);
 });
 

@@ -20,8 +20,9 @@ export const DRAFT_DEBOUNCE_MS = 500;
 
 /** 실행 오류 설명 칸(원래 오류 + 줄 + 한국어 설명). 텃밭 화면(v0.10)도 같이 쓴다 */
 // over({ title, text }, 선택): 화면 전용 설명(예: 텃밭 gardenExplain)이 있으면 일반 설명 대신 쓴다
-export function errorPanel(err, outfit, over = null) {
-  const ex = over ? { title: over.title, body: over.text } : explain(err, outfit);
+// opts: explain()에 그대로 넘김(경비실이 그 사건 시작 코드의 이름 목록 starterNames를 넘긴다)
+export function errorPanel(err, outfit, over = null, opts = {}) {
+  const ex = over ? { title: over.title, body: over.text } : explain(err, outfit, opts);
   const orig = err.type === "Timeout" ? `Timeout: ${t`3초 안에 끝나지 않음`}`
     : `${err.type}${err.msg ? ": " + err.msg : ""}`;
   // 앱이 만든 한국어 오류 문구(차트 등)는 일반 설명보다 먼저 그대로 보여 준다

@@ -124,6 +124,21 @@ def test_data_keys_match():
             assert v.startswith("{name}, ") and v.count("{name}") == 1, (k, v)
 
 
+def test_error_variant_keys():
+    # v0.16.1: ERROR_VARIANTS의 key마다 한국어 항목(ERRORS)과 영어 title·body·detective가 있다
+    r = subprocess.run(["node", "--input-type=module", "-e",
+                        'const m = await import("file://" + process.cwd() + "/data/errors.js");'
+                        'console.log(JSON.stringify({ v: m.ERROR_VARIANTS, e: Object.keys(m.ERRORS) }));'],
+                       cwd=ROOT, capture_output=True, text=True, check=True)
+    d = json.loads(r.stdout)
+    en = load("data.json")
+    assert len(d["v"]) == 7, d["v"]
+    for v in d["v"]:
+        assert v["key"] in d["e"], v
+        for f in ("title", "body", "detective"):
+            assert "error.%s.%s" % (v["key"], f) in en, (v["key"], f)
+
+
 def main():
     fails = 0
     for name, fn in list(globals().items()):

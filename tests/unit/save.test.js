@@ -37,6 +37,7 @@ const LEDGER_SHAPE = {
   guard: newGuard(),   // v0.15 경비실(saveVer 그대로, 없으면 기본값)
   goal_pending: null,  // v0.12.1 하루 목표 예약(내일부터)
   broken_notice: null, // v0.12.1 깨진 저장 안내(한 번)
+  tutorial: null,      // v0.18.0 첫 사용 튜토리얼(null|"done"|"skipped")
 };
 
 test("constants", () => {
@@ -495,4 +496,29 @@ test("guard: 새 저장에 guard, guard 없는 옛 저장은 migrate가 newGuard
   assert.equal(m.saveVer, 2);
   const broken = migrate({ ...JSON.parse(JSON.stringify(newSave())), guard: { solved: "x", seen: [1] } });
   assert.deepEqual(broken.guard, newGuard());
+});
+
+test("tutorial: 새 저장은 null, 칸 없는 옛 저장은 기록이 있으면 done, 없으면 null, saveVer 2 그대로", () => {
+  assert.equal(newSave().tutorial, null);
+  const base = () => { const o = JSON.parse(JSON.stringify(newSave())); delete o.tutorial; return o; };
+  assert.equal(migrate(base()).tutorial, null);
+  assert.equal(migrate({ ...base(), completed_lessons: [] , xp: 0 }).tutorial, null);
+  assert.equal(migrate({ ...base(), completed_lessons: ["1-1"] }).tutorial, "done");
+  assert.equal(migrate({ ...base(), xp: 5 }).tutorial, "done");
+  assert.equal(migrate({ ...base(), completed_lessons: ["1-1"] }).saveVer, 2);
+});
+
+test("tutorial: skipped·done 유지(기록이 없어도), null 유지", () => {
+  assert.equal(migrate({ ...newSave(), tutorial: "skipped" }).tutorial, "skipped");
+  assert.equal(migrate({ ...newSave(), tutorial: "done" }).tutorial, "done");
+  assert.equal(migrate({ ...newSave(), tutorial: "skipped", xp: 9 }).tutorial, "skipped");
+  assert.equal(migrate({ ...newSave(), tutorial: null }).tutorial, null);
+});
+
+test("tutorial: 잘못된 값은 칸이 없는 것으로 보고 기록 규칙을 따른다", () => {
+  for (const bad of ["x", 3, true, {}, []]) {
+    assert.equal(migrate({ ...newSave(), tutorial: bad }).tutorial, null, String(bad));
+    assert.equal(migrate({ ...newSave(), tutorial: bad, completed_lessons: ["1-1"] }).tutorial, "done", String(bad));
+    assert.equal(migrate({ ...newSave(), tutorial: bad, xp: 3 }).tutorial, "done", String(bad));
+  }
 });

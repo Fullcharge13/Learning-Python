@@ -38,6 +38,7 @@ export function newSave() {
     guard: newGuard(),   // v0.15 경비실(src/guard/state.js). saveVer 그대로, 없거나 망가지면 기본값
     goal_pending: null,  // v0.12.1 하루 목표 예약 { value: 10|20|30, from: "YYYY-MM-DD" } — 바꾼 목표는 다음 날부터(rules.js)
     broken_notice: null, // v0.12.1 깨진 저장을 남긴 칸 이름. 홈에서 한 번 알리고 null로
+    tutorial: null,      // v0.18.0 첫 사용 튜토리얼 null(아직)|"done"|"skipped". saveVer 그대로, 없거나 이상하면 기록 규칙(migrate)
   };
 }
 
@@ -176,6 +177,11 @@ export function migrate(raw) {
   const chosen = Object.hasOwn(rawSet, "langChosen") ? rawSet.langChosen !== false : true;
   const s = clampRanges(fill(newSave(), structuredClone(raw)));
   s.settings.langChosen = chosen;
+  // v0.18.0: 저장된 null은 그대로(다시 저장해도 안 바뀜). 칸이 없거나 null·done·skipped가 아니면
+  // 기록이 있는 저장(쓰던 사람)은 done, 아니면 null
+  if (s.tutorial !== "done" && s.tutorial !== "skipped" && !(Object.hasOwn(raw, "tutorial") && raw.tutorial === null)) {
+    s.tutorial = s.completed_lessons.length > 0 || s.xp > 0 ? "done" : null;
+  }
   migrateOutfits(s, ver < 2);
   s.saveVer = ver > SAVE_VER ? ver : SAVE_VER;
   return s;

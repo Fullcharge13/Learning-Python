@@ -5202,5 +5202,96 @@ def test_tutorial_run_error_and_cleanup():
         assert not _app_errors(a), a.errors
 
 
+THEME_KEY = "ria-python.theme"
+_THEME_STATE = """() => ({ theme: document.documentElement.dataset.theme, scheme: document.documentElement.style.colorScheme,
+    meta: document.querySelector('meta[name=theme-color]').getAttribute('content') })"""
+
+
+def test_theme_no_flash():
+    """v0.19.0: 저장된 「어둡게」는 첫 그림(첫 requestAnimationFrame) 때 이미 data-theme·theme-color에 반영된다."""
+    init = ("localStorage.setItem(%s, 'dark');"
+            "window.__first = null; requestAnimationFrame(() => { window.__first = { theme: document.documentElement.dataset.theme,"
+            " meta: document.querySelector('meta[name=theme-color]').getAttribute('content') }; });" % json.dumps(THEME_KEY))
+    with App("iPhone 17", init_js=init) as a:
+        first = a.js("() => window.__first")
+        assert first == {"theme": "dark", "meta": "#141C2B"}, first
+        assert a.js(_THEME_STATE)["scheme"] == "dark"
+        assert not _app_errors(a), a.errors
+
+
+def test_theme_follows_system():
+    """설정이 없으면 시스템을 따르고(앱이 켜진 채 바뀌어도), 「밝게」를 고르면 그 뒤 시스템이 바뀌어도 그대로."""
+    with App("iPhone 17") as a:
+        a.page.emulate_media(color_scheme="light")
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go")
+        assert a.js(_THEME_STATE) == {"theme": "light", "scheme": "light", "meta": "#FBF6EA"}
+        a.start()
+        a.page.emulate_media(color_scheme="dark")
+        a.page.wait_for_function("() => document.documentElement.dataset.theme === 'dark'")
+        assert a.js(_THEME_STATE) == {"theme": "dark", "scheme": "dark", "meta": "#141C2B"}
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        a.page.click('[data-theme-pick="light"]')
+        assert a.js(_THEME_STATE)["theme"] == "light"
+        a.page.emulate_media(color_scheme="light")
+        a.page.emulate_media(color_scheme="dark")
+        a.page.wait_for_timeout(300)
+        assert a.js(_THEME_STATE) == {"theme": "light", "scheme": "light", "meta": "#FBF6EA"}
+        assert not _app_errors(a), a.errors
+
+
+def test_theme_settings_row():
+    """설정의 「화면」 줄: 세 단추·현재 값 표시, 즉시 적용, 새로고침·개발자 모드에서도 유지, 학습 기록에 안 들어감, 영어판 문구."""
+    with App("iPhone 17") as a:
+        a.page.emulate_media(color_scheme="light")
+        a.start()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        row = a.js("""() => { const panels = [...document.querySelectorAll('.screen.settings main > section.panel')];
+            const p = panels.find(x => x.querySelector('[data-theme-pick]'));
+            const i = panels.indexOf(p);
+            return { i, prevHasName: !!panels[i - 1].querySelector('#name'), nextHasExport: !!panels[i + 1].querySelector('#export'),
+                     title: p.querySelector('h2').innerText, note: p.innerText,
+                     btns: [...p.querySelectorAll('[data-theme-pick]')].map(b => [b.dataset.themePick, b.innerText.trim(), b.getAttribute('aria-checked')]) }; }""")
+        assert row["prevHasName"] and row["nextHasExport"], row
+        assert row["title"] == "화면" and "밤에는 어두운 화면이 눈이 편해요" in row["note"], row
+        assert row["btns"] == [["system", "시스템 따라가기", "true"], ["light", "밝게", "false"], ["dark", "어둡게", "false"]], row
+        m = measure(a, "settings-theme")
+        assert not m["problems"] and not m["small"], m
+
+        a.page.click('[data-theme-pick="dark"]')
+        assert a.js(_THEME_STATE) == {"theme": "dark", "scheme": "dark", "meta": "#141C2B"}
+        assert a.page.get_attribute('[data-theme-pick="dark"]', "aria-checked") == "true"
+        assert a.page.get_attribute('[data-theme-pick="system"]', "aria-checked") == "false"
+        assert _ls(a, THEME_KEY) == "dark"
+        assert THEME_KEY not in json.dumps(a.save()), "학습 기록에 화면 설정이 들어가면 안 됨"
+
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go")
+        assert a.js(_THEME_STATE)["theme"] == "dark", "새로고침 뒤 유지"
+
+        a.start()
+        _to_settings_dev(a)
+        a.page.click("#dev")
+        a.page.wait_for_selector(".modal [data-i]")
+        a.page.click(".modal [data-i='1']")
+        a.page.wait_for_selector(".modal", state="detached")
+        assert a.js(_THEME_STATE)["theme"] == "dark", "개발자 모드를 켜도 유지"
+        assert _ls(a, THEME_KEY) == "dark"
+        assert not _app_errors(a), a.errors
+
+    with App("iPhone 17", locale="en-US") as a:
+        a.page.emulate_media(color_scheme="light")
+        a.start()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        en = a.js("""() => { const p = [...document.querySelectorAll('.screen.settings main > section.panel')].find(x => x.querySelector('[data-theme-pick]'));
+            return { title: p.querySelector('h2').innerText, text: p.innerText, btns: [...p.querySelectorAll('[data-theme-pick]')].map(b => b.innerText.trim()) }; }""")
+        assert en["title"] == "Display" and "Easier on the eyes at night" in en["text"], en
+        assert en["btns"] == ["System", "Light", "Dark"], en
+        assert not re.search(r"[가-힣]", en["text"]), en
+
+
 if __name__ == "__main__":
     sys.exit(main())

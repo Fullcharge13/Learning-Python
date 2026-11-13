@@ -1034,3 +1034,6 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 @media (prefers-reduced-motion: reduce) {
   .tut-card { animation: none !important; transition: none !important; }
 }
+
+/* v0.19.0 화면 설정 줄(어둡게 색은 작업 3) */
+.seg#theme-seg button { padding: 8px 6px; line-height: 1.25; }

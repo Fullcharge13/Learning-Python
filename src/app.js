@@ -23,6 +23,7 @@ import { createGuardData } from "./guard/catalog.js";
 import { loadDevIncidents } from "./guard/guarddev.js";
 import { prefetchChunks } from "./chunks.js";
 import { setGuardIndex } from "./guard/state.js";
+import { watchSystem } from "./theme.js";
 import { createSound } from "./sound.js";
 import { toast } from "./ui/dom.js";
 import { statusBar } from "./ui/nav.js";
@@ -449,6 +450,7 @@ async function boot() {
   await initGuard();   // 저장을 읽기 전에(판정 G2-C3)
   app.dev = readDevFlag(storage);
   paintDev();
+  watchSystem();   // v0.19.0: 「시스템 따라가기」일 때 휴대폰 어두운 모드 전환을 바로 따라감
   const { save, readFailed, brokenKey } = loadSlot(storage, app.dev);
   app.save = save;
   followPhoneLang();

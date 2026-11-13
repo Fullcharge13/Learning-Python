@@ -10,6 +10,7 @@ import { markDev } from "../devmode.js";
 import { tabBar, bindTabs, gardenTabOf, statusBar } from "./nav.js";
 import { localDate } from "../today.js";
 import { t, tp, lang } from "../i18n.js";
+import { getTheme, setTheme } from "../theme.js";
 
 /** 이름: 앞뒤 빈칸과 끝의 「님」을 빼고 8자까지 */
 export function cleanName(v) {
@@ -67,6 +68,7 @@ export function render(root, ctx) {
   const pend = s.goal_pending && DAILY_GOALS.includes(s.goal_pending.value) ? s.goal_pending.value : null;
   const picked = pend ?? goal;
   const dev = !!ctx.dev;
+  const theme = getTheme();
     root.innerHTML = `<div class="screen settings with-tabs">
     ${statusBar(s)}
     <main>
@@ -90,6 +92,14 @@ export function render(root, ctx) {
         <div class="row">
           <p class="row-label" id="tut-label">${t`사용법 다시 보기`}<small>${t`리아의 첫 인사 카드 네 장을 다시 봐요. 기록은 그대로예요.`}</small></p>
           <button class="btn ghost small" id="tut-replay" aria-labelledby="tut-label tut-replay">${tp("replay", "보기")}</button>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="theme-title">
+        <div class="row col" role="group" aria-labelledby="theme-title">
+          <h2 id="theme-title">${t`화면`}</h2>
+          <p class="muted">${t`밤에는 어두운 화면이 눈이 편해요`}</p>
+          <div class="seg" id="theme-seg" role="radiogroup" aria-labelledby="theme-title">${[["system", t`시스템 따라가기`], ["light", t`밝게`], ["dark", t`어둡게`]].map(([v, label]) =>
+            `<button role="radio" aria-checked="${v === theme}" data-theme-pick="${v}">${label}</button>`).join("")}</div>
         </div>
       </section>
       <section class="panel">
@@ -182,6 +192,11 @@ export function render(root, ctx) {
     window.scrollTo(0, y);
     const again = document.querySelector(`[data-g="${g}"]`);
     if (again) again.focus({ preventScroll: true });
+  }));
+
+  root.querySelectorAll("[data-theme-pick]").forEach((b) => b.addEventListener("click", () => {
+    setTheme(b.dataset.themePick);   // 기기 설정: 학습 기록(save)에는 넣지 않음
+    root.querySelectorAll("[data-theme-pick]").forEach((x) => x.setAttribute("aria-checked", String(x === b)));
   }));
 
   const name = root.querySelector("#name");

@@ -132,7 +132,7 @@ export function guardConsistent(input, r) {
     const e = ev[k];
     if (!isObj(e) || e.i !== k || !VERDICTS.has(e.verdict)) return false;
     const expect = input.tries[k].expect;
-    const ok = expect === "block" ? e.verdict === "block" : e.verdict !== "block";
+    const ok = e.verdict === expect;   // v0.16.1: "none"(판정 안 함)은 손님에서도 틀림
     if (e.ok !== ok) return false;
     if (ok) stats[expect === "block" ? "attacks_blocked" : "guests_allowed"]++;
   }

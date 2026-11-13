@@ -28,7 +28,7 @@ function resultOf(input, events, stopped = null) {
   return { events, stats, solved, stopped };
 }
 function failingResult(input) {
-  const events = input.tries.map((t, i) => ({ i, verdict: "none", ok: t.expect !== "block" }));
+  const events = input.tries.map((t, i) => ({ i, verdict: "none", ok: false }));
   return resultOf(input, events);
 }
 // 이정표·퀘스트가 끼지 않는 저장: XP가 목표 근처에도 못 가고, 오늘 퀘스트는 모두 끝난 상태
@@ -99,6 +99,34 @@ test("guardConsistent: en 값으로 대조", () => {
   const skip = structuredClone(res); skip.events[1].i = 5;
   assert.equal(guardConsistent(inp, skip), false);
   assert.equal(guardConsistent(inp, null), false);
+});
+
+test("guardConsistent: none은 손님에서도 틀림", () => {
+  const inp = guardInput(G("G1"), "ko");
+  const guest = inp.tries.findIndex((t) => t.expect === "allow");
+  const bad = structuredClone(perfectResult(inp));
+  bad.events[guest].verdict = "none";   // ok: true는 옛 규칙
+  assert.equal(guardConsistent(inp, bad), false);
+  const good = resultOf(inp, bad.events.map((e, i) => (i === guest ? { ...e, ok: false } : e)));
+  assert.equal(guardConsistent(inp, good), true);
+  assert.equal(good.solved, false);
+  const a = failingResult(inp);   // 공격 쪽 none도 틀림
+  assert.equal(guardConsistent(inp, a), true);
+});
+
+test("applyGuardRun: 해결 기록이 있는 사건 다시 실행 — none 규칙이 바뀌어도 기록 그대로, XP 0", () => {
+  const inp = guardInput(G("G1"), "ko");
+  const a = applyGuardRun(quietSave(), G("G1"), perfectResult(inp), "blank", NOW);
+  const none = { events: inp.tries.map((t, i) => ({ i, verdict: "none", ok: false })) };
+  const r2 = resultOf(inp, none.events);
+  const b = applyGuardRun(a.save, G("G1"), r2, "code", NOW);
+  assert.equal(b.outcome.solved, false);
+  assert.equal(b.outcome.xp, 0);
+  assert.equal(b.save.xp, a.save.xp);
+  assert.deepEqual(b.save.guard.solved.G1, a.save.guard.solved.G1);
+  const c = applyGuardRun(b.save, G("G1"), perfectResult(inp), "blank", NOW);
+  assert.equal(c.outcome.firstSolve, false);
+  assert.equal(c.outcome.xp, 0);
 });
 
 test("applyGuardRun: 첫 해결 → XP 5, firstTry, 바이트는 earnXp·tick이 보고한 것 외에 없음", () => {

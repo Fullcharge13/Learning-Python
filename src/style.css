@@ -989,6 +989,9 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .gd-try.now { border-color: var(--sun-deep); background: var(--sun-soft); transform: translateY(-3px); }
 .gd-try.ok { border-color: var(--teal); background: var(--teal-soft); }
 .gd-try.bad { border-color: var(--coral); background: var(--coral-soft); }
+.gd-try.none { border-style: dotted; border-color: var(--ink-2); background: var(--card); }
+.gd-twice { font-size: .7rem; line-height: 1; padding: 2px 5px; border-radius: 8px; background: var(--sun-soft); color: var(--ink-2); }
+.gd-why-note { font-weight: 600; }
 .gd-try.skip { border-style: dashed; color: var(--ink-2); }
 .gd-try.sel { outline: 3px solid var(--focus); outline-offset: 1px; }
 .gd-result { margin-top: -4px; }

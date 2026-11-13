@@ -44,6 +44,26 @@ def test_script_none_is_allow():
     assert r["guard"]["solved"] is False
 
 
+def test_none_is_wrong_for_guest():
+    code = 'if attempt == password:\n    pass\nelse:\n    block()\n'
+    r = run(code, guard=G("script", T(("sunflower77", "allow"), ("123456", "block")), password="sunflower77"))
+    e = r["guard"]["events"][0]
+    assert e["verdict"] == "none"
+    assert e["ok"] is False
+    assert r["guard"]["solved"] is False
+    assert r["guard"]["stats"]["guests_allowed"] == 0
+    assert r["guard"]["events"][1]["ok"] is True
+
+
+def test_answer_error_names_type():
+    r = run('def check(attempt):\n    print(attempt)\n', guard=G("func", T(("a", "allow"))))
+    assert err_type(r) == "GuardAnswerError"
+    assert "None" in r["error"]["msg"]
+    r = run('import re\ndef check(attempt):\n    return re.match("a", attempt)\n', guard=G("func", T(("a", "allow"))))
+    assert err_type(r) == "GuardAnswerError"
+    assert "Match" in r["error"]["msg"]
+
+
 def test_script_fresh_namespace():
     code = 'n = globals().get("n", 0) + 1\nif n > 1:\n    block()\nelse:\n    allow()\n'
     r = run(code, guard=G("script", T(("a", "allow"), ("b", "allow"))))

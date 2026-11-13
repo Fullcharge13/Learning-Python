@@ -27,9 +27,11 @@ const VERD = {
   breached: ["❌", () => t`뚫렸어요`],
   wrong: ["⚠️", () => t`잘못 막았어요`],
   let: ["✅", () => t`들였어요`],
+  none: ["⚪", () => t`판정 안 함`],   // v0.16.1: 손님 시도에서 allow()도 block()도 안 부름(공격 쪽은 그대로 breached)
 };
-const kindOf = (expect, verdict) => (expect === "block" ? (verdict === "block" ? "blocked" : "breached") : (verdict === "block" ? "wrong" : "let"));
-const POSE = { blocked: "shock", breached: "loot", wrong: "wait", let: "wait" };
+const kindOf = (expect, verdict) => (expect === "block" ? (verdict === "block" ? "blocked" : "breached")
+  : verdict === "block" ? "wrong" : verdict === "none" ? "none" : "let");
+const POSE = { blocked: "shock", breached: "loot", wrong: "wait", let: "wait", none: "wait" };
 // 화면에 보이는 시도 값: 글자는 따옴표로(빈 값·빈칸이 보이게)
 const shown = (v) => (typeof v === "string" ? JSON.stringify(v) : String(v));
 const txt = (inc, f) => tx(`guard.${inc.id}.${f}`, inc[f]);
@@ -192,9 +194,10 @@ export function render(root, ctx, params = {}) {
     triesEl.innerHTML = guardInput(inc).tries.map((tr, i) => {
       const e = ev[i];
       const k = e ? kindOf(tr.expect, e.verdict) : null;
-      const cls = e ? (e.ok ? " ok" : " bad") : stopped ? " skip" : "";
-      const lab = t`시도 ${i + 1}: ${shown(tr.value)}` + (k ? ` · ${VERD[k][1]()}` : "");
-      return `<li><button class="gd-try${cls}${i === now ? " now" : ""}" data-i="${i}" aria-label="${esc(lab)}"><span class="gd-v mono">${esc(shown(tr.value))}</span><span class="gd-mark" aria-hidden="true">${k ? VERD[k][0] : stopped ? "·" : ""}</span></button></li>`;
+      const cls = e ? (e.ok ? " ok" : k === "none" ? " none" : " bad") : stopped ? " skip" : "";
+      const twice = !!(e && e.twice);
+      const lab = t`시도 ${i + 1}: ${shown(tr.value)}` + (k ? ` · ${VERD[k][1]()}` : "") + (twice ? ` · ${t`2번`}` : "");
+      return `<li><button class="gd-try${cls}${i === now ? " now" : ""}" data-i="${i}" aria-label="${esc(lab)}"><span class="gd-v mono">${esc(shown(tr.value))}</span><span class="gd-mark" aria-hidden="true">${k ? VERD[k][0] : stopped ? "·" : ""}</span>${twice ? `<span class="gd-twice" aria-hidden="true">${t`2번`}</span>` : ""}</button></li>`;
     }).join("");
   }
   function showWhy(i) {
@@ -205,7 +208,9 @@ export function render(root, ctx, params = {}) {
     const e = S.last.ev[i];
     const k = e && kindOf(tr.expect, e.verdict);
     w.hidden = false;
-    w.innerHTML = `<b class="mono">${esc(shown(tr.value))}</b> · ${tr.expect === "block" ? t`공격` : t`손님`} · ${k ? `${VERD[k][0]} ${esc(VERD[k][1]())}` : t`판정하지 않았어요`}<br>${esc(tx(`guard.${inc.id}.why.${i}`, inc.tries[i].why))}`;
+    const notes = [e && e.verdict === "none" ? t`이 시도에서 allow()도 block()도 부르지 않았어요` : "",
+      e && e.twice ? t`이 시도에서 판정을 두 번 했어요 — 첫 번째만 셌어요` : ""].filter(Boolean);
+    w.innerHTML = notes.map((n) => `<span class="gd-why-note">${esc(n)}</span><br>`).join("") + `<b class="mono">${esc(shown(tr.value))}</b> · ${tr.expect === "block" ? t`공격` : t`손님`} · ${k ? `${VERD[k][0]} ${esc(VERD[k][1]())}` : t`판정하지 않았어요`}<br>${esc(tx(`guard.${inc.id}.why.${i}`, inc.tries[i].why))}`;
     triesEl.querySelectorAll(".gd-try.sel").forEach((b) => b.classList.remove("sel"));
     triesEl.querySelector(`[data-i="${i}"]`)?.classList.add("sel");
     w.scrollIntoView({ block: "nearest", behavior: reduced() ? "auto" : "smooth" });

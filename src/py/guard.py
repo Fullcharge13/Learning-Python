@@ -30,6 +30,7 @@ GUARD_NO_MORE_MSG = "더 이상 시도가 없어요 — has_try()로 먼저 확�
 GUARD_FUNC_ONLY_MSG = "이 사건에서는 check가 True/False를 돌려줘요"
 GUARD_NO_CHECK_MSG = "check 함수를 만들어 주세요: def check(attempt):"
 GUARD_BOOL_MSG = "check는 True나 False를 돌려줘야 해요"
+GUARD_BOOL_GOT_MSG = "돌려준 값: {}"
 GUARD_NO_NEXT_MSG = "이 사건에서는 next_try()를 쓰지 않아요"
 
 # 한국어 문구 → 영어(계획 R4: runner의 _EN과 따로, 바꿀 수 없는 표)
@@ -38,6 +39,7 @@ _GUARD_EN = _guard_types.MappingProxyType({
     GUARD_FUNC_ONLY_MSG: "In this case, check returns True or False",
     GUARD_NO_CHECK_MSG: "Please make a check function: def check(attempt):",
     GUARD_BOOL_MSG: "check must return True or False",
+    GUARD_BOOL_GOT_MSG: "returned: {}",
     GUARD_NO_NEXT_MSG: "This case doesn't use next_try()",
 })
 
@@ -244,7 +246,9 @@ def _guard_exec(gs, compiled, user_globals):
                     raise
                 if _g_type(r) is not _g_bool:
                     gs["err_line"] = first
-                    raise GuardAnswerError(_guard_tr(gs["lang"])(GUARD_BOOL_MSG))
+                    tr = _guard_tr(gs["lang"])
+                    name = "None" if r is None else _g_getattr(_g_type(r), "__qualname__", "?")
+                    raise GuardAnswerError(tr(GUARD_BOOL_MSG) + " (" + tr(GUARD_BOOL_GOT_MSG).replace("{}", _g_str(name)) + ")")
                 ev = _guard_new_event(gs, i)
                 ev["verdict"] = "allow" if r else "block"
                 gs["cur"] = None
@@ -291,7 +295,7 @@ def _guard_result(gs):
         v = ev.get("verdict")
         v = v if v in ("block", "allow", "none") else "none"
         expect = tries[i][1]
-        e = {"i": i, "verdict": v, "ok": (v == "block") if expect == "block" else (v != "block")}
+        e = {"i": i, "verdict": v, "ok": v == expect}
         if ev.get("twice") is True:
             e["twice"] = True
         events.append(e)

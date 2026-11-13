@@ -40,5 +40,9 @@
  "크로우가 문 앞에 왔어요…": "Crow is at the door…",
  "텃밭 보안관": "Garden Sheriff",
  "판정하지 않았어요": "Not judged",
- "해결": "Solved"
+ "해결": "Solved",
+ "판정 안 함": "No decision",
+ "2번": "Twice",
+ "이 시도에서 allow()도 block()도 부르지 않았어요": "In this try, neither allow() nor block() was called",
+ "이 시도에서 판정을 두 번 했어요 — 첫 번째만 셌어요": "This try was judged twice — only the first one counted"
 }

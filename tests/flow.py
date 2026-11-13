@@ -3887,6 +3887,85 @@ def test_guard_room_g1():
     assert not fails, "\n".join(fails)
 
 
+def _guard_solved_g1():
+    return _guard_g(solved={"G1": {"firstTry": True, "how": "blank"}}, blanks={"G1": [0, 0, 0]}, attempts={"G1": 1}, runs=1)
+
+
+def _gd_open_g1(a):
+    """해결한 G1은 목록에서 골라야 열린다(처음 열림은 풀지 않은 사건)."""
+    a.page.click("#gd-list")
+    _sheet_pick(a, '[data-g="G1"]')
+    a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-mode")
+
+
+def _gd_code_run(a, code):
+    _gd_open_g1(a)
+    a.page.click("#gd-mode")
+    a.page.wait_for_selector("#gd-ed .cm-content")
+    a.set_code(code)
+    _gd_run(a)
+
+
+def test_guard_room_no_decision():
+    """v0.16.1 작업 2: allow/block을 안 부른 시도(`pass`)는 손님 칸에서도 ⚪ 「판정 안 함」 — 해결 아님, 「왜?」 첫 줄 안내."""
+    with App("iPhone 17", save=_guard_seed(3, guard=_guard_solved_g1())) as a:
+        _open_guard(a)
+        _gd_code_run(a, 'if attempt == password:\n    pass\nelse:\n    block()\n')
+        marks = a.js("() => [...document.querySelectorAll('.gd-try')].map(e => e.textContent)")
+        assert any("⚪" in m for m in marks), marks
+        assert a.page.query_selector(".gd-try.none"), "none 칸 클래스"
+        assert "사건 해결" not in a.page.inner_text("#gd-result")
+        a.page.click(".gd-try.none >> nth=0")
+        why = a.page.inner_text("#gd-why")
+        assert why.split("\n")[0] == "이 시도에서 allow()도 block()도 부르지 않았어요", why
+        assert "판정 안 함" in why, why
+        s = a.save()["guard"]
+        assert s["solved"]["G1"] == {"firstTry": True, "how": "blank"}
+        assert not a.errors, a.errors
+
+
+def test_guard_room_twice_mark():
+    """v0.16.1 작업 2: 한 시도에 판정을 두 번 하면 칸에 「2번」, 「왜?」 앞에 안내 한 줄(첫 판정만 셈)."""
+    with App("iPhone 17", save=_guard_seed(3, guard=_guard_solved_g1())) as a:
+        _open_guard(a)
+        _gd_code_run(a, 'allow()\nblock()\n')
+        cell = a.page.inner_text(".gd-try >> nth=0")
+        assert "2번" in cell, cell
+        a.page.click(".gd-try >> nth=0")
+        why = a.page.inner_text("#gd-why")
+        assert "이 시도에서 판정을 두 번 했어요 — 첫 번째만 셌어요" in why, why
+        assert not a.errors, a.errors
+
+
+def test_guard_room_engine_crash():
+    """작업 1 연결: 치명 오류(EngineCrash)는 저장을 건드리지 않고, 다시 준비하는 동안 「실행」은 꺼졌다가 준비되면 켜진다."""
+    with App("iPhone 17", save=_guard_seed(3, guard=_guard_solved_g1())) as a:
+        _open_guard(a)
+        _gd_open_g1(a)
+        before = a.save()["guard"]
+        a.page.click("#gd-mode")
+        a.page.wait_for_selector("#gd-ed .cm-content")
+        a.set_code("x = []\nfor i in range(100000):\n    x = [x]\nprint(x)\n")
+        a.wait_py()
+        a.page.click("#gd-run")
+        a.page.wait_for_selector(".screen.guard[data-state=idle]", timeout=60_000)
+        a.page.wait_for_function("() => document.querySelector('#gd-result').innerText.trim().length > 0", timeout=30_000)
+        after = a.save()["guard"]
+        for k in ("solved", "attempts", "runs"):   # 쓴 코드(code)만 저장되고, 해결·시도·실행 횟수는 그대로
+            assert after[k] == before[k], (k, before, after)
+        assert "사건 해결" not in a.page.inner_text("#gd-result")
+        st = a.js("() => ({ s: window.__ria.app.pyStatus, d: document.querySelector('#gd-run').disabled })")
+        if st["s"] != "ready":
+            assert st["d"] is True, st
+        a.wait_py()
+        a.page.wait_for_function("() => !document.querySelector('#gd-run').disabled", timeout=10_000)
+        a.set_code(G1_SOLUTION)
+        _gd_run(a)
+        assert "막은 공격" in a.page.inner_text("#gd-result")
+        noise = ("Pyodide has suffered", "cause of the fatal error", "Maximum call stack", "RangeError")   # 치명 오류가 남기는 기대한 소음
+        assert not [e for e in a.errors if not any(n in str(e) for n in noise)], a.errors
+
+
 def test_guard_room_switch_during_replay():
     """재생 중 사건 목록에서 G2로 바꾸면 재생이 멈추고 결과 영역이 비어 있다(Review Focus 5). 목록: 열림·✓·잠김."""
     fails = []

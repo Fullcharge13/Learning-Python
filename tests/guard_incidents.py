@@ -52,8 +52,9 @@ METHODS = {"lower", "upper", "strip", "split", "replace", "find", "count", "star
 METHODS_BY_CH = {7: {"append", "remove", "sort"}, 8: {"get", "keys", "values", "items"}, 9: {"add"},
                  11: {"reader", "readlines", "read"},
                  12: {"search", "fullmatch", "findall", "sub"}, 14: {"loads"}}
-WANT_IDS = ["G1", "G2", "G7", "G3", "G8", "G9", "G4", "G5", "G10", "G6", "G11", "G12"]
-WANT_CHAPTERS = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6]
+WANT_IDS = ["G1", "G2", "G7", "G3", "G8", "G9", "G4", "G5", "G10", "G6", "G11", "G12",
+            "G13", "G14", "G15", "G16", "G17", "G18", "G19", "G20", "G21"]
+WANT_CHAPTERS = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9]
 
 
 def allowed(need):
@@ -193,7 +194,7 @@ def main():
     per = {}
     for i in incs:
         per[i["need"]] = per.get(i["need"], 0) + 1
-    check(len(incs) == 12 and all(n == 3 for n in per.values()), "⑧ 있는 장마다 정확히 3개", str(per))
+    check(len(incs) == 21 and all(n == 3 for n in per.values()), "⑧ 있는 장마다 정확히 3개", str(per))
     check(data["xp"] == 5, "GUARD_XP = 5")
     for inc in incs:
         n = len(inc["tries"])

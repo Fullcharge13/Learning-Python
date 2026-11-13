@@ -113,3 +113,14 @@
 | 서비스 거부 공격 | Denial of service |
 | 비밀번호 강도 | Password strength |
 | 오탐 | False positive |
+| 사전 공격 | Dictionary attack |
+| 금지 목록 · 차단 목록 | Blocklist |
+| 허용 목록 | Allowlist |
+| 재사용(리플레이) 공격 | Replay attack |
+| 최소 권한 | Least privilege |
+| 역할 기반 접근 | Role-based access |
+| 세션 토큰 | Session token |
+| 출입증(토큰) | Pass (token) |
+| 권한 범위 | Permission scope |
+| 부분집합 | Subset |
+| 동시 접속 기기 제한 | Concurrent device limit |

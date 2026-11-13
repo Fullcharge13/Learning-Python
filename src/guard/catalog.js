@@ -1,7 +1,7 @@
 // 경비실 사건 장별 파일 (v0.16.0 작업 1, 설계 docs/specs/2026-11-13-경비실-사건-12개-설계.md §5-1·§5-2)
 //
 // - 원본은 data/guard.js의 INCIDENTS 한 곳. build.py가 이 파일의 splitGuard로 나눈다(레슨의 lessondata.js와 같은 갈래).
-// - 색인(index, 첫 파일의 window.RIA_GUARD_INDEX): 사건마다 { id, need, mode, tag, title, blanks: [보기 수, …] }.
+// - 색인(index, 첫 파일의 window.RIA_GUARD_INDEX): 사건마다 { id, need, title, blanks: [보기 수, …] } (mode·tag는 장 파일 본문에만 — 45개 색인이 첫 파일을 키우지 않게, 판정 G2-C6).
 //   목록·등급·배지·저장 다듬기는 색인만 쓴다.
 // - 장 파일(guard/chN-<지문8자>.json): 그 장 사건들의 본문 배열(원본에서 solution만 뺀 것, 원본 순서).
 //   이름표는 window.RIA_GUARD_FILES = { "N": "guard/chN-xxxxxxxx.json" }.
@@ -14,8 +14,8 @@ export const GUARD_FILE_RE = /^guard\/ch([1-9]\d*)-([0-9a-f]{8})\.json$/;
 
 /** 사건 하나의 색인 칸. blanks는 빈칸마다 보기 수 */
 export function guardIndexEntry(incident) {
-  const { id, need, mode, tag, title } = incident;
-  return { id, need, mode, tag, title, blanks: (incident.blanks || []).map((b) => (b && Array.isArray(b.options) ? b.options.length : 0)) };
+  const { id, need, title } = incident;
+  return { id, need, title, blanks: (incident.blanks || []).map((b) => (b && Array.isArray(b.options) ? b.options.length : 0)) };
 }
 
 /** 색인 목록(원본 순서) */

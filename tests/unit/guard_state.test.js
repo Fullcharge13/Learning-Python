@@ -180,14 +180,15 @@ test("applyGuardRun: 에러로 멈춘 결과는 해결 아님", () => {
 test("rankOf 경계", () => {
   assert.deepEqual(RANK_IDS, ["apprentice", "keeper", "captain", "sheriff"]);
   const mk = (n) => ({ ...newGuard(), solved: Object.fromEntries(INCIDENTS.slice(0, n).map((i) => [i.id, { firstTry: true, how: "code" }])) });
+  const N = INCIDENTS.length, th = rankThresholds(N);   // 사건 수에 따라 0·⌈N/3⌉·⌈2N/3⌉·N (지금 21개: 0·7·14·21)
   assert.equal(rankOf(mk(0)), "apprentice");
   assert.equal(rankOf(mk(1)), "apprentice");
-  assert.equal(rankOf(mk(3)), "apprentice");   // 사건 12개: 0·4·8·12
-  assert.equal(rankOf(mk(4)), "keeper");
-  assert.equal(rankOf(mk(7)), "keeper");
-  assert.equal(rankOf(mk(8)), "captain");
-  assert.equal(rankOf(mk(11)), "captain");
-  assert.equal(rankOf(mk(12)), "sheriff");
+  assert.equal(rankOf(mk(th.keeper - 1)), "apprentice");
+  assert.equal(rankOf(mk(th.keeper)), "keeper");
+  assert.equal(rankOf(mk(th.captain - 1)), "keeper");
+  assert.equal(rankOf(mk(th.captain)), "captain");
+  assert.equal(rankOf(mk(N - 1)), "captain");
+  assert.equal(rankOf(mk(N)), "sheriff");
 });
 
 const INHERITED = ["toString", "valueOf", "constructor", "hasOwnProperty", "__proto__"];

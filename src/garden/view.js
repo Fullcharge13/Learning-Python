@@ -125,9 +125,6 @@ const COL = {
   carrot: "#F28C28", carrotD: "#C9661A", potato: "#D9B77A", potatoD: "#A88550", potLeaf: "#4F9A55",
   pieRing: "#FFD43B", teal: "#1F9E93", ink: "#22304A", card: "#FFFDF8", coral: "#E4664F", coralInk: "#B03A25",
   sun: "#FFD43B", gray: "#8A90A0",
-  // v0.19.0: 말풍선 판·글자는 그림이 아니라 글자 → CSS 이름표(밝게는 #FFFDF8·#22304A 그대로, 어둡게는 밤 색).
-  // 표현 속성(fill="…") 안의 var()는 브라우저마다 달라 style로 주고, 속성 값은 밝게 색으로 남겨 둔다
-
   tomato: "#E2483A", tomatoD: "#B32E24", tomatoL: "#FF8A7A", tomatoG: "#8CC63F", tomLeaf: "#3F8F3A", stake: "#9C6B3E",
 };
 
@@ -257,6 +254,8 @@ function wrapText(text, maxW, maxLines = 2) {
   return { lines, width: Math.max(...lines.map((l) => [...l].reduce((a, c) => a + charW(c), 0))) };
 }
 
+// v0.19.0: 말풍선 판·글자는 그림이 아니라 글자 → CSS 이름표(밝게는 #FFFDF8·#22304A 그대로, 어둡게는 밤 색).
+// 표현 속성(fill="…") 안의 var()는 브라우저마다 달라 style로 주고, 속성 값은 밝게 색으로 남겨 둔다
 const V_PLATE = "fill:var(--card);stroke:var(--ink)";
 
 function bubbleSVG(text, pie, W, H) {

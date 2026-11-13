@@ -117,6 +117,10 @@ WRONG_SOLUTIONS = {
         '    for link in links:\n        parts = urlparse(link)\n        if parts.hostname == "farm.pi.example":\n            continue\n'
         '        if parts.scheme != "" or parts.netloc != "":\n            return False\n'
         '        if not link.startswith("/") or link.startswith("//") or "\\\\" in link:\n            return False\n    return True\n',
+        'import re\nfrom urllib.parse import urlparse\n\ndef check(attempt):\n    links = re.findall(r\'(?:href|src)=["\\\']([^"\\\']*)["\\\']\', attempt)\n'
+        '    for link in links:\n        parts = urlparse(link)\n        if parts.scheme in ("http", "https") and parts.hostname == "farm.pi.example":\n            continue\n'
+        '        if parts.scheme != "" or parts.netloc != "":\n            return False\n'
+        '        if not link.startswith("/") or link.startswith("//") or "\\\\" in link:\n            return False\n    return True\n',
     ],
     "G40": [
         'def check(attempt):\n    q = attempt.strip().upper()\n    return "SELECT" in q and ";" not in q\n',
@@ -129,6 +133,10 @@ WRONG_SOLUTIONS = {
         'def check(attempt):\n    q = attempt.upper()\n    if "PHONE" in q or "ADDRESS" in q or " FROM " not in q:\n        return False\n'
         '    for col in q.replace("SELECT", "").split(" FROM ")[0].split(","):\n'
         '        if not (col.strip().startswith("COUNT(") or col.strip().startswith("AVG(")):\n            return False\n    return True\n',
+        'def check(attempt):\n    q = attempt.upper()\n    if ";" in q or " FROM " not in q:\n        return False\n'
+        '    if "PHONE" in q or "ADDRESS" in q:\n        return False\n'
+        '    for col in q.replace("SELECT", "").split(" FROM ")[0].split(","):\n        col = col.strip()\n'
+        '        if not (col.startswith("COUNT(") or col.startswith("AVG(")):\n            return False\n    return True\n',
     ],
     "G43": [
         "seen = []\nwhile has_try():\n    n = next_try()\n    if len(seen) < 3:\n        seen.append(n)\n        allow()\n    else:\n"

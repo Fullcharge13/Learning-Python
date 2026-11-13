@@ -1331,6 +1331,7 @@ def test_chunks_split():
     editor = open(os.path.join(DIST, *chunks["editor"].split("/")), encoding="utf-8").read()
     assert "cm-scroller" in editor, "editor chunk lost CodeMirror?"
     assert '["ko","en"]' in html and '["ko","en"]' not in editor, "editor chunk must not bundle src/i18n.js (language state)"
+    assert "ria-python.theme" not in editor and "theme-color" not in editor, "editor chunk must not bundle src/theme.js (it reads <html data-theme> itself)"
     assert "TypeError_concat" in open(os.path.join(DIST, *chunks["errors"].split("/")), encoding="utf-8").read()
     sw = _read(os.path.join(DIST, "sw.js"))
     for path in chunks.values():

@@ -5229,8 +5229,8 @@ def _contrast_main(argv):
 
 def test_theme_dark_contrast():
     """v0.19.0 작업 3: 어둡게에서 주요 화면 31곳의 보이는 글자 전부 4.5:1(큰 글씨 3:1) 이상.
-    편집기 문법 색(판정 D-P1, 작업 4)과 배지 그림 속 글자(판정 D-C6)는 뺌. 결과: tests/out/contrast-dark.json"""
-    rc = _contrast_main(["--theme", "dark", "--strict", "--skip-editor-tokens", "--skip-art-text",
+    편집기 문법 색도 잼. 배지 그림 속 글자(판정 D-C6)만 뺌. 결과: tests/out/contrast-dark.json"""
+    rc = _contrast_main(["--theme", "dark", "--strict", "--skip-art-text",
                          "--report", os.path.join(ROOT, "tests", "out", "contrast-dark.json")])
     assert rc == 0, "dark contrast failures: see tests/out/contrast-dark.json"
 
@@ -5261,6 +5261,63 @@ def test_theme_dark_first_frame_pixels():
         lum = lambda p: 0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]
         for xy in ((2, 2), (w - 3, 2), (2, h - 3), (w - 3, h - 3), (w // 2, 4)):
             assert lum(im.getpixel(xy)) < 60, (xy, im.getpixel(xy))
+        assert not _app_errors(a), a.errors
+
+
+_TOKEN_JS = """() => { const q = (t) => [...document.querySelectorAll('.cm-content .cm-line span')].find(e => e.textContent.trim() === t);
+    const c = (e) => e ? getComputedStyle(e).color : null;
+    const ed = document.querySelector('.cm-editor');
+    return { kw: c(q('def')), str: c(q('"hi"')), cm: c(q('# memo')), plain: c(document.querySelector('.cm-content .cm-line')),
+             bg: getComputedStyle(ed).backgroundColor, theme: document.documentElement.dataset.theme,
+             code: document.querySelector('.cm-content').innerText, caret: getComputedStyle(document.querySelector('.cm-content')).caretColor }; }"""
+
+
+def _rgb(s):
+    return [int(x) for x in re.findall(r"\d+", s)[:3]]
+
+
+def _lum(c):
+    f = lambda v: (v / 255 / 12.92) if v / 255 <= 0.03928 else (((v / 255) + 0.055) / 1.055) ** 2.4
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2])
+
+
+def _ratio(a, b):
+    la, lb = sorted((_lum(_rgb(a)), _lum(_rgb(b))), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+def test_theme_editor_live():
+    """v0.19.0 작업 4: 열린 편집기의 문법 색이 어둡게에서 4.5:1 이상, 열린 채 밝게로 바꾸면 지금 밝은 색, 다시 어둡게. 내용·커서 그대로."""
+    code = 'def f():\n    s = "hi"  # memo\n    return s'
+    with App("iPhone 17") as a:
+        a.page.emulate_media(color_scheme="dark")
+        a.start()
+        a.page.click("#continue")
+        _to_write(a)
+        a.wait_py()
+        a.set_code(code)
+        a.page.keyboard.press("Control+Home")
+        a.page.keyboard.press("ArrowDown")
+        a.page.keyboard.press("End")
+        _CARET = "() => { const s = getSelection(); if (!s.rangeCount) return -1; const r = document.createRange(); r.selectNodeContents(document.querySelector('.cm-content')); r.setEnd(s.anchorNode, s.anchorOffset); return r.toString().length; }"
+        sel0 = a.js(_CARET)
+        d = a.js(_TOKEN_JS)
+        assert d["theme"] == "dark", d
+        for k in ("kw", "str", "cm", "plain"):
+            assert d[k] and _ratio(d[k], d["bg"]) >= 4.5, (k, d)
+        a.page.emulate_media(color_scheme="light")
+        a.page.wait_for_function("() => document.documentElement.dataset.theme === 'light'")
+        a.page.wait_for_timeout(200)
+        l = a.js(_TOKEN_JS)
+        assert l["theme"] == "light" and l["code"] == d["code"], l
+        assert l["kw"] == "rgb(119, 0, 136)" and l["str"] == "rgb(170, 17, 17)" and l["cm"] == "rgb(153, 68, 0)", l
+        assert l["kw"] != d["kw"] and l["str"] != d["str"], (l, d)
+        assert sel0 > 0 and a.js(_CARET) == sel0, (sel0, a.js(_CARET))
+        a.page.emulate_media(color_scheme="dark")
+        a.page.wait_for_function("() => document.documentElement.dataset.theme === 'dark'")
+        a.page.wait_for_timeout(200)
+        d2 = a.js(_TOKEN_JS)
+        assert d2["kw"] == d["kw"] and d2["str"] == d["str"] and d2["cm"] == d["cm"], (d, d2)
         assert not _app_errors(a), a.errors
 
 

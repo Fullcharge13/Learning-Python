@@ -442,6 +442,8 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
         raise SystemExit("build: editor code leaked into the app bundle (e.g. %s)" % cm[0])
     if any(p.endswith("src/i18n.js") for p in b["editorInputs"]):
         raise SystemExit("build: editor chunk must not bundle src/i18n.js (pass a translated label instead)")
+    if any(p.endswith("src/theme.js") for p in b["editorInputs"]):
+        raise SystemExit("build: editor chunk must not bundle src/theme.js (editor reads <html data-theme> itself)")
     editor_body = b["editor"].encode("utf-8")
     editor_name = "js/editor-%s.js" % hashlib.sha256(editor_body).hexdigest()[:8]
     # v0.17.0: 오류 안내(data/errors.js)도 js/errors-<지문>.js로만. 첫 파일에 다시 묶이면 멈춘다

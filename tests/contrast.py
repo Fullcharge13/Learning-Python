@@ -4,8 +4,8 @@
     python3 tests/contrast.py --self-test                       도구 자기 시험(앱 빌드 없음, 몇 초)
     python3 tests/contrast.py --theme dark [--strict]            앱을 빌드해 화면 목록을 돌며 대비를 잰다
     python3 tests/contrast.py --theme light --report out.json    미달 목록을 JSON으로
-    python3 tests/contrast.py --theme dark --skip-editor-tokens  CodeMirror 문법 색 글자는 뺌(판정 D-P1, 작업 4에서 필요 없어짐)
-    python3 tests/contrast.py --theme dark --strict --skip-editor-tokens --skip-art-text   어둡게 엄격(flow test_theme_dark_contrast)
+    python3 tests/contrast.py --theme dark --skip-editor-tokens  CodeMirror 문법 색 글자는 뺌(작업 4부터 어둡게 엄격 시험은 이 옵션 없이 통과)
+    python3 tests/contrast.py --theme dark --strict --skip-art-text   어둡게 엄격(flow test_theme_dark_contrast)
     python3 tests/contrast.py --theme light --compare tests/fixtures/contrast-light-baseline.json   밝게 그대로(flow test_theme_light_unchanged)
 
 하는 일

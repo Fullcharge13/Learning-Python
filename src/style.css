@@ -1102,7 +1102,9 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 [data-theme="dark"] .result.ok .result-ic { background: var(--teal-fill); }
 [data-theme="dark"] .result.bad .result-ic { background: var(--coral-fill); }
 [data-theme="dark"] .seg button[aria-checked="true"] { background: var(--teal-fill); border-color: var(--teal-ink); }
-[data-theme="dark"] .switch[aria-checked="true"] span { background: var(--teal-fill); }
+/* 스위치 트랙: 카드·판 바탕과 3:1 이상(꺼짐 #66759A, 켜짐 #1A8F85). 개발자 모드 줄은 밝게 규칙(.panel.devmode …)이 더 세서 따로 */
+[data-theme="dark"] .switch[aria-checked="true"] span,
+[data-theme="dark"] .panel.devmode .switch[aria-checked="true"] span { background: #1A8F85; }
 [data-theme="dark"] .new-dot { background: var(--coral-fill); }
 [data-theme="dark"] .toast.warn { background: var(--coral-fill); }
 [data-theme="dark"] .toast.warn .toast-act { color: #FFF3C4; }
@@ -1119,13 +1121,14 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 /* 노드: 크림 그림자 대신 선 색 그림자 */
 [data-theme="dark"] .node { box-shadow: 0 5px 0 var(--line); }
 [data-theme="dark"] .node.locked { color: var(--muted-ink); border-color: #46536E; box-shadow: 0 5px 0 #2A3550; }
+[data-theme="dark"] .node:active { box-shadow: none; }
 [data-theme="dark"] .star-node.locked .star-svg { filter: drop-shadow(0 3px 0 #2A3550); }
 [data-theme="dark"] .star-node.locked .star-shape { stroke: #46536E; }
 [data-theme="dark"] .star-lock rect, [data-theme="dark"] .star-lock path { stroke: var(--muted-ink); }
 [data-theme="dark"] .tab.locked { opacity: .8; }
 /* 꺼진 단추·스위치 */
 [data-theme="dark"] .btn:disabled, [data-theme="dark"] .btn.is-off { background: #2A344A; color: #A3ACBC; }
-[data-theme="dark"] .switch span { background: #4A5876; }
+[data-theme="dark"] .switch span { background: #66759A; }
 [data-theme="dark"] .g-pick-btn:disabled { color: var(--muted-ink); }
 /* 흰 바탕 입력칸 → 어두운 칸(글자는 상속된 크림) */
 [data-theme="dark"] input[type="text"], [data-theme="dark"] .g-input { background: var(--paper-2); }

@@ -880,13 +880,13 @@ export const INCIDENTS = [
     crowIntro: "쪽지 한구석에 내 링크를 숨겨 두면 아무도 모르겠지~",
     crowLose: "링크를 하나하나 열어 보다니, 숨긴 보람이 없네!",
     crow: { intro: "wave", lose: "cry" },
-    start: 'import re\nfrom urllib.parse import urlparse\n\ndef check(attempt):\n    links = re.findall(r\'\'\'{0}\'\'\', attempt)\n    for link in links:\n        parts = urlparse(link)\n        if parts.{1} == "farm.pi.example":\n            continue\n        if parts.scheme != "" or parts.netloc != "":\n            return False\n        if not link.startswith("/") or link.startswith("//") or "\\\\" {2} link:\n            return False\n    return True\n',
+    start: 'import re\nfrom urllib.parse import urlparse\n\ndef check(attempt):\n    links = re.findall(r\'\'\'{0}\'\'\', attempt)\n    for link in links:\n        parts = urlparse(link)\n        if parts.scheme in ("http", "https") and parts.{1} == "farm.pi.example":\n            continue\n        if parts.scheme != "" or parts.netloc != "":\n            return False\n        if not link.startswith("/") or link.startswith("//") or "\\\\" {2} link:\n            return False\n    return True\n',
     blanks: [
       { options: ["(?:href|src)=[\"']([^\"']*)[\"']", 'href="([^"]*)"', 'href="[^"]*"', 'href=([^ ]*)'], answer: 0 },
       { options: ["hostname", "netloc", "scheme"], answer: 0 },
       { options: ["in", "not in"], answer: 0 },
     ],
-    solution: 'import re\nfrom urllib.parse import urlparse\n\ndef check(attempt):\n    links = re.findall(r\'\'\'(?:href|src)=[\"\']([^\"\']*)[\"\']\'\'\', attempt)\n    for link in links:\n        parts = urlparse(link)\n        if parts.hostname == "farm.pi.example":\n            continue\n        if parts.scheme != "" or parts.netloc != "":\n            return False\n        if not link.startswith("/") or link.startswith("//") or "\\\\" in link:\n            return False\n    return True\n',
+    solution: 'import re\nfrom urllib.parse import urlparse\n\ndef check(attempt):\n    links = re.findall(r\'\'\'(?:href|src)=[\"\']([^\"\']*)[\"\']\'\'\', attempt)\n    for link in links:\n        parts = urlparse(link)\n        if parts.scheme in ("http", "https") and parts.hostname == "farm.pi.example":\n            continue\n        if parts.scheme != "" or parts.netloc != "":\n            return False\n        if not link.startswith("/") or link.startswith("//") or "\\\\" in link:\n            return False\n    return True\n',
     tries: [
       { value: '<p>Visit <a href="https://farm.pi.example/shop">the shop</a></p>', expect: "allow", why: "링크의 호스트가 farm.pi.example이라 들입니다." },
       { value: '<a href="/notes/7">notes</a>', expect: "allow", why: "호스트가 없는 사이트 안 링크라 들입니다." },
@@ -900,6 +900,7 @@ export const INCIDENTS = [
       { value: '<a href="/\\evil.example">x</a>', expect: "block", why: "브라우저는 \\ 를 /로 읽어 //evil.example 바깥 호스트로 가니 막습니다." },
       { value: "<a href='//evil.example'>x</a>", expect: "block", why: "작은따옴표로 쓴 링크도 링크예요. //로 시작하면 바깥 호스트를 가리켜서 막습니다." },
       { value: '<img src="//evil.example/x.png">', expect: "block", why: "href만이 아니라 src도 바깥 주소를 불러오니 같이 살펴서 막습니다." },
+      { value: '<a href="javascript://farm.pi.example/%0aalert(1)">x</a>', expect: "block", why: "호스트가 farm.pi.example처럼 보여도 scheme이 javascript라서 누르면 코드가 돕니다. 호스트만 보지 말고 scheme이 http나 https인지도 봐야 해요." },
     ],
   },
   {

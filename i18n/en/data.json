@@ -669,6 +669,7 @@
  "guard.G33.why.9": "Browsers read \\ as /, so it goes to the outside host //evil.example. Block it.",
  "guard.G33.why.10": "A link in single quotes is still a link. Starting with // points to an outside host, so block it.",
  "guard.G33.why.11": "Not only href: src also loads from an outside address, so check it too and block it.",
+ "guard.G33.why.12": "The host looks like farm.pi.example, but the scheme is javascript, so clicking it runs code. Do not look only at the host; check that the scheme is http or https too.",
  "guard.G34.brief": "An order arrives as JSON text shaped like {\"item\": name, \"qty\": amount}. If the JSON is broken or item or qty is missing, return False. Return True only if item is one of carrot, potato, apple and qty is a whole number from 1 to 50.",
  "guard.G34.concept": "API input validation",
  "guard.G34.crowIntro": "If I put a weird value in the amount, the ledger will get tangled~",

@@ -111,12 +111,15 @@ export function render(root, ctx, params = {}) {
     const g = G();
     $("#gd-rank").textContent = `${RANK[rankOf(g)]()} · ${t`${Object.keys(g.solved).length}/${LIST.length} 해결`}`;
   }
-  /** 본문을 받는 동안·못 받았을 때의 카드(제목은 색인에서). 코드 칸·시도 줄은 비운다 */
-  function paintPending(failed) {
+  /** 본문을 받는 동안·못 받았을 때의 카드(제목은 색인에서). 코드 칸·시도 줄은 비운다.
+   *  stale(새 판이 나와 옛 장 파일이 없음): 다시 시도 대신 「새로 고치기」(lesson.js와 같은 글·동작) */
+  function paintPending(failed, stale = false) {
     const e = S.entry;
     cardEl.innerHTML = `<h2 id="gd-title">${esc(txt(e, "title"))}</h2>`
       + (failed
-        ? `<div class="err-panel soft gd-loadfail"><p>${t`사건을 불러오지 못했어요`}</p><button class="btn primary" id="gd-retry">${t`다시 시도`}</button></div>`
+        ? `<div class="err-panel soft gd-loadfail"><p role="alert">${stale ? t`새 판이 나왔어요. 눌러서 새로 고쳐요` : t`사건을 불러오지 못했어요`}</p>${stale
+          ? `<button class="btn primary" id="gd-refresh">${t`새로 고치기`}</button>`
+          : `<button class="btn primary" id="gd-retry">${t`다시 시도`}</button>`}</div>`
         : `<p class="g-msg gd-loading" role="status">${t`사건을 불러오는 중…`}</p>`);
     codeEl.innerHTML = "";
     codeEl.hidden = true;   // 본문이 없으면 코드 칸은 숨김(빈 판만 남지 않게)
@@ -262,7 +265,8 @@ export function render(root, ctx, params = {}) {
   function failed(e) {
     console.warn(e);
     setState("failed");
-    paintPending(true);
+    paintPending(true, !!(e && e.stale) || !!(ctx.swChanged && ctx.swChanged()));
+    $("#gd-refresh, #gd-retry")?.focus();
   }
   /** 받은 본문으로 카드·코드 칸·시도 줄을 그리고, 처음 본 사건이면 본 것으로 */
   function showIncident(inc) {
@@ -427,6 +431,7 @@ export function render(root, ctx, params = {}) {
   root.addEventListener("click", (e) => {
     if (modalOpen()) return;
     if (e.target.closest("#gd-retry") && S.state === "failed") { openIncident(S.entry); return; }
+    if (e.target.closest("#gd-refresh") && S.state === "failed") { location.reload(); return; }
     const b = e.target.closest(".gd-blank");
     if (b && S.state === "idle") { pickBlank(+b.dataset.n); return; }
     const c = e.target.closest(".gd-try");

@@ -4055,6 +4055,34 @@ def test_guard_room_load_fail_retry():
     assert not fails, "\n".join(fails)
 
 
+def test_guard_room_load_stale_refresh():
+    """v0.16 최종 검토: 새 판이 나와 옛 장 파일이 404면 「다시 시도」 대신 「새로 고치기」(lesson.js와 같은 글·동작).
+    실패 글은 role=alert, 초점은 새로 고치기 단추로. 누르면 앱을 다시 불러온다."""
+    fails = []
+    with App("iPhone 17", save=_guard_seed(3)) as a:
+        a.page.route(GUARD_FILE_GLOB, lambda route: route.fulfill(status=404, body="not found"))
+        _open_guard(a, loaded=False)
+        a.page.wait_for_selector("#gd-refresh", timeout=15_000)
+        card = a.page.inner_text("#gd-card")
+        if "새로 고치기" not in card or "새 판이 나왔어요" not in card:
+            fails.append("stale card: %r" % card)
+        if a.page.query_selector("#gd-retry"):
+            fails.append("retry shown for a stale (404) chapter file")
+        if not a.page.query_selector(".gd-loadfail [role=alert]"):
+            fails.append("failure message has no role=alert")
+        if a.js("() => document.activeElement && document.activeElement.id") != "gd-refresh":
+            fails.append("focus not on refresh: %r" % a.js("() => document.activeElement && document.activeElement.id"))
+        a.js("() => { window.__beforeReload = 1; }")
+        with a.page.expect_navigation(timeout=15_000):
+            a.page.click("#gd-refresh")
+        if a.js("() => window.__beforeReload || 0"):
+            fails.append("refresh did not reload the app")
+        errs = _app_errors(a)
+        if errs:
+            fails.append("console errors %r" % errs)
+    assert not fails, "\n".join(fails)
+
+
 def test_guard_room_switch_while_loading():
     """3장 파일이 늦게 오는 동안 목록에서 4장 G3을 고르면 끝에 화면은 G3이고, 늦게 온 G1 카드는 나타나지 않는다."""
     fails = []

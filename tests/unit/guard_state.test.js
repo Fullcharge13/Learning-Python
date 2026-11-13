@@ -180,7 +180,7 @@ test("applyGuardRun: 에러로 멈춘 결과는 해결 아님", () => {
 test("rankOf 경계", () => {
   assert.deepEqual(RANK_IDS, ["apprentice", "keeper", "captain", "sheriff"]);
   const mk = (n) => ({ ...newGuard(), solved: Object.fromEntries(INCIDENTS.slice(0, n).map((i) => [i.id, { firstTry: true, how: "code" }])) });
-  const N = INCIDENTS.length, th = rankThresholds(N);   // 사건 수에 따라 0·⌈N/3⌉·⌈2N/3⌉·N (지금 21개: 0·7·14·21)
+  const N = INCIDENTS.length, th = rankThresholds(N);   // 사건 수에 따라 0·⌈N/3⌉·⌈2N/3⌉·N (지금 45개: 0·15·30·45)
   assert.equal(rankOf(mk(0)), "apprentice");
   assert.equal(rankOf(mk(1)), "apprentice");
   assert.equal(rankOf(mk(th.keeper - 1)), "apprentice");

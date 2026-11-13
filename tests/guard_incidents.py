@@ -45,7 +45,7 @@ IMPORTS_BY_CH = {11: {"csv"}, 12: {"re"}, 13: {"urllib.parse"}, 14: {"json"}}
 FROM_NAMES_BY_CH = {13: {"urlparse"}, 14: {"parse_qs"}}
 CALLS_BY_CH = {4: {"len"}, 5: {"range"},
                7: {"sorted", "min", "max", "sum"},
-               9: {"set"},
+               9: {"set", "type"},
                10: {"int", "float"},
                11: {"open"}, 13: {"urlparse"}, 14: {"parse_qs"}, 15: {"super"}}
 METHODS = {"lower", "upper", "strip", "split", "replace", "find", "count", "startswith", "endswith"}
@@ -140,6 +140,9 @@ def self_test():
         (6, "x = [1, 2]\n", False),
         (9, "s = set()\ns.add(attempt)\n", True),
         (8, "s = set()\n", False),
+        (9, "ok = type(attempt) == int\n", True),
+        (14, "ok = type(attempt) == int\n", True),
+        (8, "ok = type(attempt) == int\n", False),
         (13, "from os import path\n", False),
         (13, "from urllib.parse import parse_qs\n", False),
     ]

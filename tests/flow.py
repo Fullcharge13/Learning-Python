@@ -4998,6 +4998,22 @@ def test_tutorial_input_is_inert():
         assert not _app_errors(a), a.errors
 
 
+def test_tutorial_input_readable():
+    """4장째 입력칸 글자가 배경과 충분히 대비(WCAG AA 4.5:1) — 코드 상자의 밝은 글자색을 물려받지 않음"""
+    with App("iPhone 17") as a:
+        _tut_open(a)
+        _tut_to_last(a)
+        ratio = a.page.evaluate("""() => {
+          const el = document.querySelector('#tut-input'), cs = getComputedStyle(el);
+          const rgb = (s) => s.match(/[\\d.]+/g).slice(0, 3).map(Number);
+          const lum = ([r, g, b]) => { const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+            return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+          const a = lum(rgb(cs.color)), b = lum(rgb(cs.backgroundColor));
+          return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        }""")
+        assert ratio >= 4.5, ratio
+
+
 def test_tutorial_skip():
     with App("iPhone 17") as a:
         _tut_open(a)

@@ -1026,7 +1026,7 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .tut-card .ria-wrap { display: flex; justify-content: center; }
 .tut-line { display: flex; align-items: center; margin: 0; white-space: nowrap; overflow-x: auto; }
 .tut-line input { flex: 1; min-width: 4ch; min-height: 44px; margin: 0 2px; padding: 4px 8px; border: 2px solid var(--teal-ink);
-  border-radius: 8px; background: var(--card); font-family: var(--mono); font-size: 16px; }
+  border-radius: 8px; background: var(--card); color: var(--ink); font-family: var(--mono); font-size: 16px; }
 .tut-load, .tut-after { display: grid; gap: 10px; text-align: center; }
 .tut-out { margin: 0; min-height: 1.6em; white-space: pre-wrap; word-break: break-word; }
 .tut-success { margin: 0; font-weight: 900; text-align: center; color: var(--teal-ink); }

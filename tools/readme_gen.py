@@ -85,7 +85,7 @@ def first_line(text):
 def build(d):
     version = read_const("src/app.js", r'export const VERSION = "([^"]+)"')
     pyodide = read_const("build.py", r'PYODIDE_VERSION = "([^"]+)"')
-    max_kb = int(read_const("build.py", r"MAX_RAW = (\d+) \* 1024"))
+    max_kb = int(read_const("build.py", r"MAX_RAW = ([\d_]+)").replace("_", "")) // 1024
     concept_name = {c["id"]: c["name"] for c in d["CONCEPTS"]}
 
     lessons = [l for ch in d["chapters"] for l in ch["lessons"]]

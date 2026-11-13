@@ -15,12 +15,15 @@ export function useErrorData(d) {
 export function hasErrorData() { return data !== null; }
 export const ERROR_DATA_TIMEOUT_MS = 8000;
 /** 못 받거나 ~8초 안에 안 오면 던지지 않고 끝난다(간단 카드로 남음). 늦게라도 오면 쓰고, 다음 오류 때는 같은 받기를 이어 기다린다. */
-export function ensureErrorData({ load = () => loadChunk("errors"), timeoutMs = ERROR_DATA_TIMEOUT_MS } = {}) {
+export const ERROR_DATA_RETRY_WAIT_MS = 300;   // 한 번 제한 시간을 넘긴 뒤에는 같은 받기를 이만큼만 더 기다림
+let timedOut = false;
+export function ensureErrorData({ load = () => loadChunk("errors"), timeoutMs = ERROR_DATA_TIMEOUT_MS, retryWaitMs = ERROR_DATA_RETRY_WAIT_MS } = {}) {
   if (data) return Promise.resolve();
   if (!pending) {
     let timer;
-    const timeout = new Promise((resolve) => { timer = setTimeout(resolve, timeoutMs); });
-    const got = load().then(useErrorData, () => {});   // 실패하면 간단 카드로 남고, 다음 오류 때 다시 받아 봄
+    const wait = timedOut ? Math.min(retryWaitMs, timeoutMs) : timeoutMs;
+    const timeout = new Promise((resolve) => { timer = setTimeout(() => { timedOut = true; resolve(); }, wait); });
+    const got = load().then((d) => { timedOut = false; useErrorData(d); }, () => { timedOut = false; });   // 실패하면 간단 카드로 남고, 다음 오류 때 다시 받아 봄
     const p = pending = Promise.race([got, timeout])
       .finally(() => { clearTimeout(timer); if (pending === p) pending = null; });
   }

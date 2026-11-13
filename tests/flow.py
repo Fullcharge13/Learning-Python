@@ -4747,6 +4747,17 @@ def _sw_controlled(a):
     assert got == {"editor": True, "errors": True}, "chunks not precached: %r" % got
 
 
+def _assert_cut(a):
+    """네트워크가 서비스 작업자의 요청까지 끊겼는지: 저장본에 없는 묶음 주소(CHAPTER_RE에 맞음)를 받으면 작업자가 fetch(request)를 하고,
+    끊겼으면 거부(새는 중이면 서버의 404 응답이 와서 알아챔). 끊고 새로 고친 뒤에도 작업자가 페이지를 맡고 있어야 함."""
+    got = a.js("""async () => {
+        const ctl = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+        try { const r = await fetch("js/editor-00000000.js", { cache: "no-store" }); return { ctl, leaked: r.status }; }
+        catch (e) { return { ctl, rejected: true }; }
+    }""")
+    assert got == {"ctl": True, "rejected": True}, "offline not effective for service-worker fetches: %r" % got
+
+
 def test_offline_chunks():
     """v0.17.0 작업 4(검토 2): 첫 방문 → 서비스 작업자 준비 → 네트워크 끊음 → 새로 고침 → 레슨 코드 쓰기·경비실 직접 쓰기·
     텃밭 프로그램 편집기가 열리고, 오류 나는 코드를 돌리면 정식 오류 카드(간단 카드 아님)."""
@@ -4757,6 +4768,7 @@ def test_offline_chunks():
         a.context.set_offline(True)
         a.page.reload()
         a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        _assert_cut(a)
         a.start()
         a.page.click("#continue")
         _to_write(a)
@@ -4780,6 +4792,7 @@ def test_offline_chunks():
         a.context.set_offline(True)
         a.page.reload()
         a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        _assert_cut(a)
         _open_garden(a)
         a.page.wait_for_selector(".g-editor .cm-content", timeout=15_000)
         if _ed_text(a, ".g-editor") != 'move("오른쪽")\nharvest()\n'.rstrip("\n") + "\n" and _ed_text(a, ".g-editor") != 'move("오른쪽")\nharvest()\n':

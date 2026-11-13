@@ -9,8 +9,12 @@ test("ensureErrorData: 안 끝나는 불러오기는 제한 시간 뒤 던지지
   let release;
   const load = () => new Promise((resolve) => { release = resolve; });   // 끝나지 않는 가짜 불러오기
   const t0 = Date.now();
-  await assert.doesNotReject(ensureErrorData({ load, timeoutMs: 50 }));
-  assert.ok(Date.now() - t0 >= 40, "제한 시간을 기다림");
+  await assert.doesNotReject(ensureErrorData({ load, timeoutMs: 400, retryWaitMs: 20 }));
+  assert.ok(Date.now() - t0 >= 350, "제한 시간을 기다림");
+  // 같은 멈춘 받기에 대한 두 번째 호출은 제한 시간을 또 다 기다리지 않고 짧게만
+  const t1 = Date.now();
+  await ensureErrorData({ load, timeoutMs: 400, retryWaitMs: 20 });
+  assert.ok(Date.now() - t1 < 200, "두 번째는 짧게: " + (Date.now() - t1));
   assert.equal(hasErrorData(), false);
   assert.equal(explain({ type: "TypeError", line: 2 }, "basic").title, "TypeError 오류");
   // 묶음이 뒤늦게 오면 다음 오류부터 정식 카드

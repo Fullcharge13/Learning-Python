@@ -37,7 +37,7 @@ NODES_BY_CH = {3: {"Compare", "BoolOp", "UnaryOp", "If"}, 4: {"FunctionDef", "Re
                8: {"Dict"},
                9: {"Tuple", "Set", "BitAnd", "BitOr"},
                10: {"Try", "ExceptHandler", "Raise"},
-               11: {"With", "withitem", "Import", "alias"},
+               11: {"With", "withitem", "Import", "alias", "keyword"},
                13: {"ImportFrom"},
                15: {"ClassDef", "Pass"}}
 # 장별로 import할 수 있는 모듈(누적)과 from-import로 가져올 이름
@@ -53,8 +53,10 @@ METHODS_BY_CH = {7: {"append", "remove", "sort"}, 8: {"get", "keys", "values", "
                  11: {"reader", "readlines", "read"},
                  12: {"search", "fullmatch", "findall", "sub"}, 14: {"loads"}}
 WANT_IDS = ["G1", "G2", "G7", "G3", "G8", "G9", "G4", "G5", "G10", "G6", "G11", "G12",
-            "G13", "G14", "G15", "G16", "G17", "G18", "G19", "G20", "G21"]
-WANT_CHAPTERS = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9]
+            "G13", "G14", "G15", "G16", "G17", "G18", "G19", "G20", "G21",
+            "G22", "G23", "G24", "G25", "G26", "G27", "G28", "G29", "G30"]
+WANT_CHAPTERS = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9,
+                 10, 10, 10, 11, 11, 11, 12, 12, 12]
 
 
 def allowed(need):
@@ -194,7 +196,7 @@ def main():
     per = {}
     for i in incs:
         per[i["need"]] = per.get(i["need"], 0) + 1
-    check(len(incs) == 21 and all(n == 3 for n in per.values()), "⑧ 있는 장마다 정확히 3개", str(per))
+    check(len(incs) == 30 and all(n == 3 for n in per.values()), "⑧ 있는 장마다 정확히 3개", str(per))
     check(data["xp"] == 5, "GUARD_XP = 5")
     for inc in incs:
         n = len(inc["tries"])

@@ -124,3 +124,11 @@
 | 권한 범위 | Permission scope |
 | 부분집합 | Subset |
 | 동시 접속 기기 제한 | Concurrent device limit |
+| 견고한 입력 처리 | Robust input handling |
+| 예외 처리 | Exception handling |
+| 실패해도 안전하게 · 기본 거부 | Fail safe · Default deny |
+| 차단 목록 파일 | Blocklist file |
+| 로그 분석 | Log analysis |
+| 허용 패턴 | Allow pattern |
+| 피싱 메시지 | Phishing message |
+| 비밀번호 정책 | Password policy |

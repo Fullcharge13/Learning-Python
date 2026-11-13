@@ -4124,7 +4124,7 @@ def test_guard_room_reduced_motion():
         states = a.js("() => window.__gdStates")
         assert "replay" not in states, states
         assert "막은 공격" in a.page.inner_text("#gd-result")
-        assert a.js("() => document.querySelectorAll('.gd-try.ok, .gd-try.bad').length") == 7
+        assert a.js("() => document.querySelectorAll('.gd-try.ok, .gd-try.bad').length") == 9  # G1 시도 9개(v0.16.1 보강 뒤)
         assert not a.errors, a.errors
 
 

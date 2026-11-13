@@ -40,6 +40,8 @@ export const INCIDENTS = [
       { value: "sunflower77", expect: "allow", why: "맞는 암호는 몇 번이든 들입니다." },
       { value: "password", expect: "block", why: "암호가 아니라 그냥 '암호'라는 낱말입니다." },
       { value: "", expect: "block", why: "아무것도 대지 않은 빈 값도 막아야 합니다." },
+      { value: "sunflower77x", expect: "block", why: "암호 뒤에 글자가 더 붙었으니 다른 암호입니다. 앞부분만 맞아서는 안 됩니다." },
+      { value: " sunflower77", expect: "block", why: "앞에 빈칸이 붙었으니 다른 암호입니다. 빈칸을 몰래 지워 주면 안 됩니다." },
     ],
   },
   {
@@ -93,6 +95,9 @@ export const INCIDENTS = [
       { value: "Owner", expect: "block", why: "대문자가 다르면 다른 역할 이름이라 막습니다." },
       { value: "crow", expect: "block", why: "크로우는 권한이 있는 역할이 아닙니다." },
       { value: "owner", expect: "allow", why: "주인은 몇 번이든 들입니다." },
+      { value: "own", expect: "block", why: "owner의 앞부분일 뿐 역할 이름 전체가 아니라서 막습니다." },
+      { value: "owner2", expect: "block", why: "owner에 글자가 더 붙은 다른 역할 이름이라 막습니다." },
+      { value: "", expect: "block", why: "아무것도 안 댄 빈 값은 어떤 역할도 아니라서 막습니다." },
     ],
   },
   {
@@ -276,6 +281,7 @@ export const INCIDENTS = [
       { value: "carrot2026", expect: "allow", why: "10자에 숫자가 있고 pie도 없어서 받습니다." },
       { value: "pie12345", expect: "block", why: "길이와 숫자는 충분하지만 pie가 들어 있습니다." },
       { value: "potato99garden", expect: "allow", why: "14자에 숫자가 있고 pie도 없어서 받습니다." },
+      { value: "carrot12", expect: "allow", why: "딱 8자이고 숫자가 있고 pie도 없어서 받습니다. 8자는 기준을 채운 길이입니다." },
     ],
   },
   {
@@ -352,6 +358,7 @@ export const INCIDENTS = [
       { value: "Qwerty", expect: "block", why: "첫 글자만 대문자일 뿐 qwerty라서 막습니다." },
       { value: "carrot2026", expect: "allow", why: "목록에 없는 비밀번호라 받습니다." },
       { value: "iloveyou", expect: "block", why: "목록에 있는 흔한 비밀번호라 막습니다." },
+      { value: "sun42", expect: "allow", why: "짧아도 목록에 없는 비밀번호는 이 검사에서는 받습니다. 길이 규칙은 따로 정하는 일입니다." },
     ],
   },
   {
@@ -415,13 +422,13 @@ export const INCIDENTS = [
     crowIntro: "나는 손님이지만 삭제 버튼도 눌러 볼래~",
     crowLose: "역할마다 딱 맞는 권한만 준다니, 틈이 없네!",
     crow: { intro: "wave", lose: "cry" },
-    start: 'perms = {\n    "guest": ["read"],\n    "farmer": ["read", "write"],\n    "owner": ["read", "write", "delete"],\n}\n\ndef check(attempt):\n    parts = attempt.split({0})\n    role = parts[0]\n    action = parts[{1}]\n    return action in perms.get(role, {2})\n',
+    start: 'perms = {\n    "guest": ["read"],\n    "farmer": ["read", "write"],\n    "owner": ["read", "write", "delete"],\n}\n\ndef check(attempt):\n    parts = attempt.split({0})\n    if len(parts) != 2:\n        return False\n    role = parts[0]\n    action = parts[{1}]\n    return action in perms.get(role, {2})\n',
     blanks: [
       { options: ['":"', '","', '";"'], answer: 0 },
       { options: ["1", "0", "2"], answer: 0 },
       { options: ["[]", '["read"]', "None"], answer: 0 },
     ],
-    solution: 'perms = {\n    "guest": ["read"],\n    "farmer": ["read", "write"],\n    "owner": ["read", "write", "delete"],\n}\n\ndef check(attempt):\n    parts = attempt.split(":")\n    role = parts[0]\n    action = parts[1]\n    return action in perms.get(role, [])\n',
+    solution: 'perms = {\n    "guest": ["read"],\n    "farmer": ["read", "write"],\n    "owner": ["read", "write", "delete"],\n}\n\ndef check(attempt):\n    parts = attempt.split(":")\n    if len(parts) != 2:\n        return False\n    role = parts[0]\n    action = parts[1]\n    return action in perms.get(role, [])\n',
     tries: [
       { value: "owner:delete", expect: "allow", why: "owner는 delete를 할 수 있어서 들입니다." },
       { value: "guest:read", expect: "allow", why: "guest도 read는 할 수 있어서 들입니다." },
@@ -430,6 +437,8 @@ export const INCIDENTS = [
       { value: "farmer:write", expect: "allow", why: "farmer는 write를 할 수 있어서 들입니다." },
       { value: "farmer:delete", expect: "block", why: "farmer는 delete 권한이 없어서 막습니다." },
       { value: "Owner:delete", expect: "block", why: "대문자 Owner는 사전에 없는 역할이라 막습니다." },
+      { value: "owner:delete:x", expect: "block", why: "조각이 셋이라 모양이 틀린 요청입니다. 뒤를 무시하고 허락하면 안 됩니다." },
+      { value: "guest", expect: "block", why: "콜론이 없어 행동이 빠진 요청이라 막습니다. 오류가 나도록 두면 안 됩니다." },
     ],
   },
   {
@@ -590,6 +599,8 @@ export const INCIDENTS = [
       { value: "", expect: "block", why: "빈 글자도 int()가 ValueError를 내므로 잡아서 막습니다." },
       { value: "3.5", expect: "block", why: "소수 글자는 int()가 ValueError를 내서 막습니다." },
       { value: "-4", expect: "block", why: "-4는 음수라 1보다 작아서 막습니다." },
+      { value: "²", expect: "block", why: "위첨자 2는 숫자처럼 보여도 int()가 못 읽어 ValueError라서 막습니다." },
+      { value: " 5 ", expect: "allow", why: "int()는 앞뒤 빈칸을 무시하고 5로 읽으므로 1~50 사이 정수라 들입니다." },
     ],
   },
   {
@@ -733,9 +744,9 @@ export const INCIDENTS = [
     start: 'import re\n\ndef check(attempt):\n    if re.{0}(r"{1}", attempt):\n        return True\n    return False\n',
     blanks: [
       { options: ["fullmatch", "search", "findall"], answer: 0 },
-      { options: ["\\d{6}", "\\d+", "\\w{6}"], answer: 0 },
+      { options: ["[0-9]{6}", "\\d{6}", "\\d+", "\\w{6}"], answer: 0 },
     ],
-    solution: 'import re\n\ndef check(attempt):\n    if re.fullmatch(r"\\d{6}", attempt):\n        return True\n    return False\n',
+    solution: 'import re\n\ndef check(attempt):\n    if re.fullmatch(r"[0-9]{6}", attempt):\n        return True\n    return False\n',
     tries: [
       { value: "123456", expect: "allow", why: "숫자 여섯 개로만 이루어져서 들입니다." },
       { value: "000000", expect: "allow", why: "0만 있어도 숫자 여섯 개라 들입니다." },
@@ -745,6 +756,8 @@ export const INCIDENTS = [
       { value: "abcdef", expect: "block", why: "여섯 글자지만 숫자가 아니라 막습니다." },
       { value: " 123456", expect: "block", why: "앞에 공백이 붙어 있어 전체가 여섯 자리 숫자가 아니라 막습니다." },
       { value: "", expect: "block", why: "빈 글자는 숫자가 하나도 없어서 막습니다." },
+      { value: "123456\n", expect: "block", why: "끝에 줄바꿈이 붙어 있어 글자 전체가 여섯 자리 숫자가 아니라 막습니다." },
+      { value: "١٢٣٤٥٦", expect: "block", why: "아랍 숫자는 \\d에는 숫자로 잡히지만 우리가 받을 0~9가 아니라 막습니다." },
     ],
   },
   {

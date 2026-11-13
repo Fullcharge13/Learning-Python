@@ -8,6 +8,7 @@
   ⑤ solution이 그 장까지 배운 문법(AST 마디·부르는 이름)만 씀
   ⑥ 시도 1~20개, block·allow 각 1개 이상  ⑦ 사건 id 순서(장 순서), need 오름차순
   ⑧ 있는 장마다 사건이 정확히 3개
+  ⑩ WRONG_SOLUTIONS(어설픈 풀이)는 해결에 실패
 영어 실행은 시도 값을 value_en ?? value 로 만든다.
 
 실행: python3 tests/guard_incidents.py   (하나라도 실패하면 종료 코드 1)
@@ -59,6 +60,46 @@ WANT_IDS = ["G1", "G2", "G7", "G3", "G8", "G9", "G4", "G5", "G10", "G6", "G11", 
             "G40", "G41", "G42", "G43", "G44", "G45"]
 WANT_CHAPTERS = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9,
                  10, 10, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16, 16, 17, 17, 17]
+
+
+# ⑩ 틀린 풀이: 초보·대학생이 흔히 쓰는 어설픈 풀이. 시도를 보강한 뒤에는 각각 해결에 실패해야 한다
+# (설계서 docs/specs/2026-11-13-경비실-v0.16.1-다듬기-설계.md §2-5). 풀이는 사건 방식(script/func)에 맞춘 코드다.
+WRONG_SOLUTIONS = {
+    "G1": [
+        "if attempt.startswith(password):\n    allow()\nelse:\n    block()\n",
+        "if attempt.strip() == password:\n    allow()\nelse:\n    block()\n",
+        "if password in attempt:\n    allow()\nelse:\n    block()\n",
+    ],
+    "G6": [
+        'def check(attempt):\n    if len(attempt) <= 8:\n        return False\n    if "pie" in attempt.lower():\n        return False\n'
+        '    for ch in attempt:\n        if ch in "0123456789":\n            return True\n    return False\n',
+    ],
+    "G7": [
+        'if attempt.startswith("owner") or attempt == "ria":\n    allow()\nelse:\n    block()\n',
+        'if attempt in "owner" or attempt == "ria":\n    allow()\nelse:\n    block()\n',
+        'if "owner" in attempt or attempt == "ria":\n    allow()\nelse:\n    block()\n',
+    ],
+    "G13": [
+        'common = ["123456", "password", "qwerty", "letmein", "iloveyou"]\n\ndef check(attempt):\n'
+        "    if attempt.lower() in common or len(attempt) < 8:\n        return False\n    return True\n",
+        'common = ["123456", "password", "qwerty", "letmein", "iloveyou"]\n\ndef check(attempt):\n'
+        "    if attempt.lower() in common:\n        return False\n    return len(attempt) > 6\n",
+    ],
+    "G16": [
+        'perms = {\n    "guest": ["read"],\n    "farmer": ["read", "write"],\n    "owner": ["read", "write", "delete"],\n}\n\n'
+        'def check(attempt):\n    parts = attempt.split(":")\n    role = parts[0]\n    action = parts[1]\n'
+        "    return action in perms.get(role, [])\n",
+    ],
+    "G22": [
+        "def check(attempt):\n    return attempt.isdigit() and 1 <= int(attempt) <= 50\n",
+        "def check(attempt):\n    if not attempt.strip().isdigit():\n        return False\n    return 1 <= int(attempt) <= 50\n",
+    ],
+    "G28": [
+        'import re\ndef check(attempt):\n    return re.match(r"^\\d{6}$", attempt) is not None\n',
+        'import re\ndef check(attempt):\n    return re.fullmatch(r"\\d{6}", attempt) is not None\n',
+        'import re\ndef check(attempt):\n    return re.search(r"^\\d{6}$", attempt) is not None\n',
+    ],
+}
 
 
 def allowed(need):
@@ -232,6 +273,9 @@ def main():
                 ok, err, _ = solved(inc, w["code"], lang)
                 check(not ok, "③ %s 칸%d 오답 %r → 실패" % (inc["id"], w["blank"], w["option"]),
                       "해결됨(보기 바꿔야 함)" if ok else "")
+            for k, code in enumerate(WRONG_SOLUTIONS.get(inc["id"], [])):
+                ok, _, _ = solved(inc, code, lang)
+                check(not ok, "⑩ %s 틀린 풀이 %d → 해결 못 함" % (inc["id"], k + 1), "해결됨(시도 보강 필요)" if ok else "")
             for verdict, name in (("block", "전부 막기"), ("allow", "전부 들이기")):
                 ok, _, _ = solved(inc, all_code(inc, verdict), lang)
                 check(not ok, "④ %s %s → 실패" % (inc["id"], name))

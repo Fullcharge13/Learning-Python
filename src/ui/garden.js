@@ -200,13 +200,13 @@ function sheet({ title, html, bind, cls = "" }) {
   });
 }
 
-/** −/+ 숫자 고르기 */
+/** −/+ 숫자 고르기. v는 저장 가져오기의 조건 숫자일 수 있어 글자로 escape(v0.19.2 출력 점검) */
 function stepperHTML(id, v, min, max) {
   const big = max - min > 30 ? 10 : 5;
-  return `<div class="g-stepper" data-min="${min}" data-max="${max}" id="${id}">
+  return `<div class="g-stepper" data-min="${esc(min)}" data-max="${esc(max)}" id="${esc(id)}">
     <button class="btn ghost" data-step="${-big}" aria-label="${t`${big} 빼기`}">−${big}</button>
     <button class="btn ghost" data-step="-1" aria-label="${t`${1} 빼기`}">−1</button>
-    <output class="g-num" aria-live="polite">${v}</output>
+    <output class="g-num" aria-live="polite">${esc(v)}</output>
     <button class="btn ghost" data-step="1" aria-label="${t`${1} 더하기`}">+1</button>
     <button class="btn ghost" data-step="${big}" aria-label="${t`${big} 더하기`}">+${big}</button>
   </div>`;
@@ -456,7 +456,7 @@ export function render(root, ctx, params = {}) {
     </div>`;
   }
   function addBtn(parent, slot) {
-    return `<li class="g-add-li"><button class="g-add" data-parent="${parent ?? ""}" data-slot="${slot}">${icon("plus")}<span>${t`노드`}</span></button></li>`;
+    return `<li class="g-add-li"><button class="g-add" data-parent="${esc(parent ?? "")}" data-slot="${esc(slot)}">${icon("plus")}<span>${t`노드`}</span></button></li>`;
   }
   function listHTML(list, depth, errs, parent, slot) {
     const items = (list || []).map((n) => {
@@ -552,7 +552,8 @@ export function render(root, ctx, params = {}) {
     }
     const lines = code.split("\n");
     nowEl.hidden = false;
-    nowEl.innerHTML = `<span class="g-ln">${line}</span>${esc((lines[line - 1] || "").trim())}`;
+    // line은 작업자 결과(사건 줄 번호). 학습자 코드가 작업자를 바꿔 글자를 넣을 수 있어 escape(v0.19.2 출력 점검)
+    nowEl.innerHTML = `<span class="g-ln">${esc(line)}</span>${esc((lines[line - 1] || "").trim())}`;
     if (S.garden.mode === "code") {
       if (S.ed) S.ed.markNow(line);
       return;
@@ -562,7 +563,7 @@ export function render(root, ctx, params = {}) {
       const row = root.querySelector(`.g-node[data-id="${CSS.escape(String(id))}"]`);
       if (row) row.classList.add("now");
     }
-    const l = linesEl.querySelector(`.g-line[data-line="${line}"]`);
+    const l = linesEl.querySelector(`.g-line[data-line="${CSS.escape(String(line))}"]`);
     if (l) l.classList.add("now");
   }
 
@@ -1489,4 +1490,4 @@ export function render(root, ctx, params = {}) {
   };
 }
 
-export { argChips, goalText, condLabel, sheet };
+export { argChips, goalText, condLabel, sheet, stepperHTML };

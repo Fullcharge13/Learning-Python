@@ -68,6 +68,9 @@
 - test_editor_slot_slow / _fail: v0.17.0 작업 2. 편집기는 따로 받는 묶음(js/editor-<지문>.js). 늦으면 시작 코드 글자 +
                  「코드 입력창 준비 중…」, 「실행」「제출」·기호 줄 꺼짐 → 오면 편집기(레슨·텃밭 코드·경비실 직접 쓰기) /
                  연결 끊김 → 「다시 시도」로 열림, 404 → 「새로 고침」. 영어판 한글 없음. 캡처: editor-wait-*.png·editor-fail.png·editor-stale.png
+- test_xss_*: v0.19.2 작업 2 출력 보안(docs/security/2026-11-14-출력-점검표.md). 공격 글자(<img onerror>·"><svg onload>·
+                 </textarea><b>x</b>·" onmouseover=")를 저장 가져오기(이름·텃밭 노드 id·조건 숫자 등)·레슨 출력·그래프·오류 카드·
+                 텃밭 출력·경비실 「왜?」·작업자를 바꾼 텃밭 줄 번호에 넣음 → 글자 그대로, 새 요소·속성 없음, window.__xss 없음
 """
 
 import atexit
@@ -5412,6 +5415,183 @@ def test_theme_settings_row():
         assert en["title"] == "Display" and "Easier on the eyes at night" in en["text"], en
         assert en["btns"] == ["System", "Light", "Dark"], en
         assert not re.search(r"[가-힣]", en["text"]), en
+
+
+# ---- v0.19.2 작업 2: 출력 보안 점검(docs/security/2026-11-14-출력-점검표.md) ----
+XSS = ['<img src=x onerror="window.__xss=1">', '"><svg onload=window.__xss=1>', "</textarea><b>x</b>",
+       '" onmouseover="window.__xss=1']
+# 공격 글자가 HTML로 해석됐을 때만 생기는 것: window.__xss, img[src=x], svg[onload], 글자 x인 <b>, onmouseover 속성
+_XSS_PROBE = """() => ({ xss: window.__xss === 1, img: document.querySelectorAll('img[src="x"]').length,
+  svg: document.querySelectorAll('svg[onload]').length,
+  b: [...document.querySelectorAll('b')].filter((e) => e.textContent === 'x').length,
+  hover: document.querySelectorAll('[onmouseover]').length })"""
+
+
+def _xss_clean(a, where):
+    a.page.wait_for_timeout(250)   # img onerror는 그림 받기가 실패한 뒤에 불린다
+    got = a.js(_XSS_PROBE)
+    assert got == {"xss": False, "img": 0, "svg": 0, "b": 0, "hover": 0}, (where, got)
+
+
+def _xss_text(a, sel):
+    return a.js("(s) => [...document.querySelectorAll(s)].map((e) => e.textContent).join('\\n')", sel)
+
+
+def _xss_save():
+    """공격 글자를 이름·텃밭 노드 id·조건 숫자·복습 개념·약한 개념·퀘스트·의상·배지·경비실 빈칸에 넣은 저장 파일"""
+    prog = [_nd(x, "repeat", body=[], n=2) for x in XSS]
+    prog.append(_nd("if-var", "if", body=[], cond={"var": "a", "op": "<", "num": XSS[0]}))
+    prog.append(_nd("if-store", "if", body=[], cond={"store": {"crop": "당근", "op": "<", "num": XSS[1]}}))
+    s = _garden_seed(17, garden=_garden(order_idx=2, program=prog), xp=40)
+    s["settings"] = {"sound": False, "dailyGoal": 10, "name": XSS[0]}
+    s["review_queue"] = list(XSS)
+    s["weak_concepts"] = {x: 3 for x in XSS}
+    s["quests"] = {"date": today(), "ids": list(XSS), "progress": {x: 1 for x in XSS}, "done": [], "chest": False}
+    s["outfit"] = XSS[1]
+    s["outfits"] = ["basic"] + XSS
+    s["badges"] = list(XSS)
+    s["guard"] = _guard_g(blanks={"G1": list(XSS)}, code={"G1": XSS[2]})
+    return s
+
+
+def test_xss_import_save():
+    """설정 「저장 가져오기」로 공격 글자가 든 파일 → 확인 창·홈·설정(이름 칸·이름 바꾸기 알림)·배지·텃밭(노드 id·조건 창 숫자)에서
+    글자 그대로, 새 요소·속성 없음, window.__xss 없음."""
+    with App("iPhone 17", save=_garden_seed(17, xp=40)) as a:
+        a.start()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        a.page.set_input_files("#import", files=[{"name": "evil.json", "mimeType": "application/json",
+                                                   "buffer": json.dumps(_xss_save()).encode("utf-8")}])
+        a.page.wait_for_selector(".modal [data-i='1']")
+        _xss_clean(a, "import dialog")
+        a.page.click(".modal [data-i='1']")
+        a.page.wait_for_selector(".screen.home")
+        a.dismiss()
+        _xss_clean(a, "home")
+        assert a.save()["settings"]["name"] == XSS[0], a.save()["settings"]
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        assert a.js("() => document.querySelector('#name').value") == XSS[0], a.js("() => document.querySelector('#name').value")
+        _xss_clean(a, "settings")
+        a.page.fill("#name", "<b>x</b>")   # 8자 그대로 남음 → 알림 「이제 「<b>x</b>님」…」
+        a.page.dispatch_event("#name", "change")
+        a.page.wait_for_selector(".toast")
+        assert "<b>x</b>" in _xss_text(a, ".toast"), _xss_text(a, ".toast")
+        _xss_clean(a, "rename toast")
+        a.page.click('[data-go="badges"]')
+        a.page.wait_for_selector(".screen.badges")
+        _xss_clean(a, "badges")
+        a.page.click('[data-go="garden"]')
+        a.page.wait_for_selector(".screen.garden .g-flow")
+        a.page.wait_for_timeout(150)
+        _xss_clean(a, "garden nodes")
+        parents = a.js("() => [...document.querySelectorAll('.g-add[data-parent]')].map((e) => e.dataset.parent)")
+        for x in XSS:
+            assert x in parents, ("node id kept as attribute value", x, parents)
+        a.page.click('.g-node[data-id="if-var"] .g-arg[data-arg="cond"]')
+        a.page.wait_for_selector(".modal.g-sheet #g-step")
+        _xss_clean(a, "cond sheet (var)")
+        # 숫자 칸: 글자는 HTML이 아니라 글로 들어간 뒤 bindStepper가 수로 읽어 NaN으로 바꾼다(요소는 없음)
+        assert a.js("() => document.querySelector('#g-step .g-num').childElementCount") == 0
+        a.page.keyboard.press("Escape")
+        a.page.wait_for_selector(".modal.g-sheet", state="detached")
+        a.page.click('.g-node[data-id="if-store"] .g-arg[data-arg="cond"]')
+        a.page.wait_for_selector(".modal.g-sheet #g-step2")
+        _xss_clean(a, "cond sheet (store)")
+        assert a.js("() => document.querySelector('#g-step2 .g-num').childElementCount") == 0
+        a.page.keyboard.press("Escape")
+        assert not _app_errors(a), a.errors
+
+
+def test_xss_lesson_output():
+    """레슨 직접 작성: print·그래프·오류 메시지·오류 종류 이름·제출(내 출력)에 공격 글자 → 글자 그대로, 요소 없음."""
+    with App("iPhone 17") as a:
+        a.start()
+        a.page.click("#continue")
+        _to_write(a)
+        a.wait_py()
+        prints = "\n".join("print(%s)" % json.dumps(x) for x in XSS)
+        a.set_code(prints + "\nimport chart\nchart.bar(%s, [1, 2, 3, 4])\nchart.title(%s)\nchart.show()"
+                   % (json.dumps(XSS), json.dumps(XSS[2])))
+        a.page.click("#run")
+        a.page.wait_for_selector("#console pre.out")
+        a.page.wait_for_selector("#console .chart")
+        out = _xss_text(a, "#console pre.out")
+        for x in XSS:
+            assert x in out, (x, out)
+        assert XSS[2] in _xss_text(a, "#console .chart-desc")
+        _xss_clean(a, "lesson run output + chart")
+        a.set_code("raise ValueError(%s)" % json.dumps(XSS[0]))
+        a.page.click("#run")
+        a.page.wait_for_selector("#console .err-panel .err-orig")
+        assert XSS[0] in _xss_text(a, "#console .err-orig"), _xss_text(a, "#console .err-orig")
+        _xss_clean(a, "lesson error card")
+        a.set_code("raise type(%s, (Exception,), {})('m')" % json.dumps(XSS[1]))
+        a.page.click("#run")
+        a.page.wait_for_selector("#console .err-panel .err-orig")
+        assert XSS[1] in _xss_text(a, "#console .err-orig"), _xss_text(a, "#console .err-orig")
+        _xss_clean(a, "lesson error type")
+        a.set_code(prints)
+        a.page.click("#submit")
+        a.page.wait_for_selector("#console .submit-count")
+        _xss_clean(a, "lesson submit diff")
+        assert not _app_errors(a), a.errors
+
+
+def test_xss_garden_output():
+    """텃밭 코드 모드: print(파이의 말풍선)·오류 메시지에 공격 글자 → 글자 그대로(그림 이름표·오류 카드), 요소 없음."""
+    code = 'move("오른쪽")\nprint(%s)\nraise ValueError(%s)\n' % (json.dumps(XSS[0]), json.dumps(XSS[1]))
+    with App("iPhone 17", save=_garden_seed(17, garden=_garden(order_idx=2, mode="code", code=code)), reduced=True) as a:
+        _open_garden(a)
+        a.page.wait_for_selector("#g-ed .cm-content")
+        _garden_run(a)
+        a.page.wait_for_selector("#g-result .err-orig")
+        assert XSS[1] in _xss_text(a, "#g-result .err-orig"), _xss_text(a, "#g-result")
+        label = a.js("() => document.querySelector('#board svg').getAttribute('aria-label')")
+        assert XSS[0] in label, label
+        _xss_clean(a, "garden output")
+        assert not _app_errors(a), a.errors
+
+
+def test_xss_guard_why():
+    """경비실 직접 쓰기: print·「왜?」·오류 카드에 공격 글자 → 요소 없음, 오류 원문은 글자 그대로."""
+    with App("iPhone 17", save=_guard_seed(3, guard=_guard_solved_g1()), reduced=True) as a:
+        _open_guard(a)
+        _gd_open_g1(a)
+        a.page.click("#gd-mode")
+        a.page.wait_for_selector("#gd-ed .cm-content")
+        a.set_code("print(%s)\nallow()\n" % json.dumps(XSS[0]))
+        _gd_run(a, skip=False)
+        a.page.click(".gd-try >> nth=0")
+        a.page.wait_for_selector("#gd-why:not([hidden])")
+        _xss_clean(a, "guard why")
+        a.set_code("raise ValueError(%s)\n" % json.dumps(XSS[3]))
+        _gd_run(a, skip=False)
+        a.page.wait_for_selector("#gd-result .err-orig")
+        assert XSS[3] in _xss_text(a, "#gd-result .err-orig"), _xss_text(a, "#gd-result")
+        _xss_clean(a, "guard error card")
+        assert not _app_errors(a), a.errors
+
+
+def test_xss_garden_tampered_worker():
+    """작업자 결과는 학습자 코드가 바꿀 수 있다(js.eval로 작업자의 postMessage를 감쌈). 텃밭 사건의 줄 번호(line)에
+    공격 글자를 넣어도 재생 중 「지금 줄」 표시(#g-now)에 요소가 생기지 않는다."""
+    hook = ("if(!self.__hk){self.__hk=1;const o=self.postMessage.bind(self);self.postMessage=(m)=>{try{"
+            "if(m&&m.type==='result'&&m.result&&m.result.farm){for(const e of m.result.farm.events)e.line=%s}}"
+            "catch(_){}o(m)}}") % json.dumps(XSS[0])
+    code = 'import js\njs.eval(%s)\nmove("오른쪽")\nmove("왼쪽")\n' % json.dumps(hook)
+    with App("iPhone 17", save=_garden_seed(17, garden=_garden(order_idx=2, mode="code", code=code))) as a:
+        _open_garden(a)
+        a.page.wait_for_selector("#g-ed .cm-content")
+        a.wait_py()
+        a.page.click("#g-run")
+        a.page.wait_for_selector(".screen.garden[data-state=replay]", timeout=30_000)
+        a.page.wait_for_selector("#g-now:not([hidden])")
+        assert XSS[0] in _xss_text(a, "#g-now .g-ln"), _xss_text(a, "#g-now")
+        _xss_clean(a, "garden replay line")
+        a.page.wait_for_selector(".screen.garden[data-state=idle]", timeout=30_000)
+        _xss_clean(a, "garden after replay")
 
 
 if __name__ == "__main__":

@@ -6,15 +6,16 @@
 // - Pyodide 파일(주소가 PYODIDE_PREFIX로 시작): 저장본 먼저 → 없으면 받아서 저장. 버전 고정 주소라 바뀌지 않음.
 // - 장 파일(lessons/chN-<지문8자>.json, v0.3 작업 1): 설치 때 모두 미리 받음(하나가 실패해도 설치는 계속, 처음 열 때 받음).
 //   이름에 내용 지문이 있어 바뀌지 않으므로 저장본 먼저. 게임 저장본에 함께 들어 있어 새 판 활성화 때 함께 지워진다.
-//   Python 실행기(py/runner-<지문>.py, v0.14.0 판정 C80)도 같은 방법(설치 때 미리 받음).
+//   Python 실행기(py/runner-<지문>.py, v0.14.0 판정 C80)·경비실 장(guard/chN-<지문>.json, v0.16.0)·
+//   편집기·오류 안내 묶음(js/editor-<지문>.js, js/errors-<지문>.js, v0.17.0)도 같은 방법(설치 때 미리 받음).
 // - 영어 장(lessons/en/, v0.14.0 판정 C81): 설치 때 미리 받지 않고, 처음 열 때·영어 사용자의 앱이 미리 받을 때
 //   판과 상관없는 저장소(ria-lang-en)에 넣는다. 새 판이 켜지면 그 판 목록에 없는 옛 영어 장만 지운다.
 // - GET이 아닌 요청, 다른 주소의 요청은 건드리지 않는다.
 // - 게임 저장본 이름에 판 번호와 내용 지문이 들어 있어, 새 판을 올리면 활성화 때 옛 저장본을 지운다.
 //   Pyodide 저장본은 Pyodide 버전으로만 이름이 바뀐다(판을 올려도 10MB를 다시 받지 않게).
 
-const VERSION = "v0.14.3";
-const GAME_CACHE = "ria-game-v0.14.3-ae46edd76c";
+const VERSION = "v0.19.1";
+const GAME_CACHE = "ria-game-v0.19.1-96a06943e5";
 const PY_CACHE = "ria-pyodide-314.0.7";
 const PYODIDE_PREFIX = new URL("https://cdn.jsdelivr.net/npm/pyodide@314.0.7/", self.location.href).href;
 const GAME_FILES = ["./", "index.html", "manifest.webmanifest", "manifest.en.webmanifest", "licenses.txt", "icons/apple-touch-icon.png", "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png"];
@@ -24,8 +25,8 @@ const GAME_FILES = ["./", "index.html", "manifest.webmanifest", "manifest.en.web
 const LANG_CACHE = "ria-lang-en";
 const LANG_CHAPTER_FILES = ["lessons/en/ch1-d67772a9.json", "lessons/en/ch10-56dcb00e.json", "lessons/en/ch11-135a31eb.json", "lessons/en/ch12-3f1d4216.json", "lessons/en/ch13-0af10dbe.json", "lessons/en/ch14-6cfdc76a.json", "lessons/en/ch15-7b8ae211.json", "lessons/en/ch16-b9d55954.json", "lessons/en/ch17-47ca806b.json", "lessons/en/ch2-d8af68e3.json", "lessons/en/ch3-081d5b36.json", "lessons/en/ch4-0912eb86.json", "lessons/en/ch5-c5450c84.json", "lessons/en/ch6-ae9efe89.json", "lessons/en/ch7-4513680e.json", "lessons/en/ch8-3854d93a.json", "lessons/en/ch9-85fc0189.json"];
 const LANG_CHAPTER_RE = /\/lessons\/en\/ch[1-9]\d*-[0-9a-f]{8}\.json$/;
-const CHAPTER_FILES = ["lessons/ch1-335d9e46.json", "lessons/ch2-89b60a90.json", "lessons/ch3-a4e6ec46.json", "lessons/ch4-a480e773.json", "lessons/ch5-cb9026b3.json", "lessons/ch6-ba5538f0.json", "lessons/ch7-6a49b6c8.json", "lessons/ch8-364dbb0d.json", "lessons/ch9-4b400353.json", "lessons/ch10-6c525f3e.json", "lessons/ch11-fcb52ebe.json", "lessons/ch12-f90cf7ba.json", "lessons/ch13-b92a0458.json", "lessons/ch14-b306b667.json", "lessons/ch15-eb9bff22.json", "lessons/ch16-dc387c35.json", "lessons/ch17-d4d588a5.json", "lang/en-7d5ec325.json", "py/runner-9cf08488.py"];
-const CHAPTER_RE = /\/((lessons\/(en\/)?ch[1-9]\d*|lang\/[a-z]{2})-[0-9a-f]{8}\.json|py\/runner-[0-9a-f]{8}\.py)$/; // 장 파일·언어 꾸러미(v0.13.0): 이름에 지문이 있어 저장본 먼저
+const CHAPTER_FILES = ["lessons/ch1-335d9e46.json", "lessons/ch2-89b60a90.json", "lessons/ch3-a4e6ec46.json", "lessons/ch4-a480e773.json", "lessons/ch5-cb9026b3.json", "lessons/ch6-ba5538f0.json", "lessons/ch7-6a49b6c8.json", "lessons/ch8-364dbb0d.json", "lessons/ch9-4b400353.json", "lessons/ch10-6c525f3e.json", "lessons/ch11-fcb52ebe.json", "lessons/ch12-f90cf7ba.json", "lessons/ch13-b92a0458.json", "lessons/ch14-b306b667.json", "lessons/ch15-eb9bff22.json", "lessons/ch16-dc387c35.json", "lessons/ch17-d4d588a5.json", "guard/ch3-32cf37d2.json", "guard/ch4-a4e4ec56.json", "guard/ch5-0e4f649e.json", "guard/ch6-8acd5fd7.json", "guard/ch7-f39a8ac2.json", "guard/ch8-393b9bb7.json", "guard/ch9-f4d05c44.json", "guard/ch10-79096d20.json", "guard/ch11-c9267007.json", "guard/ch12-c5fe5d8b.json", "guard/ch13-f1529cc7.json", "guard/ch14-4ddfe09c.json", "guard/ch15-43153200.json", "guard/ch16-769e87e1.json", "guard/ch17-aff6283c.json", "lang/en-ad34fa63.json", "py/runner-29b6db5a.py", "js/editor-b5d0bce9.js", "js/errors-f0ba3d37.js"];
+const CHAPTER_RE = /\/((lessons\/(en\/)?ch[1-9]\d*|guard\/ch[1-9]\d*|lang\/[a-z]{2})-[0-9a-f]{8}\.json|py\/runner-[0-9a-f]{8}\.py|js\/(editor|errors)-[0-9a-f]{8}\.js)$/; // 장 파일·경비실 장(v0.16.0)·언어 꾸러미(v0.13.0)·편집기/오류 안내 묶음(v0.17.0): 이름에 지문이 있어 저장본 먼저(?r=N 다시 받기 주소도 ignoreSearch로 같은 저장본)
 const NETWORK_TIMEOUT_MS = 4000; // 게임 파일: 이보다 느리면 저장본을 먼저 보여 줌
 // 처음 설치 때 미리 받아 두는 Pyodide 핵심 파일(실패해도 설치는 계속, 쓸 때 다시 받음)
 // sqlite3(16장)도 여기에 들어 있다: _sqlite3는 pyodide.asm.wasm에, sqlite3 모듈은 python_stdlib.zip에(Pyodide 314.0.7)

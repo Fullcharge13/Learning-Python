@@ -1456,6 +1456,60 @@ def test_garden_first_orders():
         assert not a.errors, a.errors
 
 
+def test_garden_leave_running_and_return():
+    """v0.20.2 독립 검토 보고: 실행 중에 텃밭을 나갔다가 실행이 끝나기 전에 다시 들어오면, 옛 화면의 실행 결과가 저장된 뒤
+    새 화면의 다음 저장이 그것을 덮어 수확·주문이 사라지고 같은 주문 XP를 다시 받을 수 있었다.
+    규칙(v0.20.2): 실행 중 떠난 뒤 텃밭을 다시 열었으면 그 실행은 세지 않는다. 다시 열지 않았으면 예전처럼 저장한다."""
+    slow = "n = 0\nfor i in range(6000000):\n    n += 1\nmove(\"오른쪽\")\nharvest()\n"
+    # ① 나갔다가 실행이 끝나기 전에 다시 들어옴 → 그 실행은 버려지고, 새 화면에서 고치고 실행하면 XP는 한 번만
+    with App("iPhone 17", save=_garden_seed(1, _garden(order_idx=0, mode="code", code=slow)), reduced=True) as a:
+        _open_garden(a)
+        a.page.wait_for_selector(".g-editor .cm-content")
+        a.wait_py()
+        s0 = a.save()
+        xp0, runs0 = s0["xp"], s0["garden"]["runs"]
+        a.page.click("#g-run")
+        a.page.wait_for_selector(".screen.garden[data-state=running]")
+        a.page.click("#g-back")
+        a.page.wait_for_selector(".screen.home")
+        a.page.click('.tabbar [data-go="garden"]')
+        a.page.wait_for_selector(".screen.garden .g-editor .cm-content")
+        a.page.wait_for_timeout(6000)   # 옛 실행이 끝날 시간
+        s1 = a.save()
+        assert s1["garden"]["runs"] == runs0 and s1["xp"] == xp0, ("old run counted after re-enter", s1["garden"]["runs"], s1["xp"])
+        assert not a.page.query_selector(".modal-back"), "stale popup after re-enter"
+        a.page.click(".g-editor .cm-content")
+        a.page.keyboard.press("Control+End")
+        a.page.keyboard.type("# hi")
+        a.page.wait_for_timeout(800)
+        s2 = a.save()
+        assert s2["garden"]["code"].endswith("# hi"), s2["garden"]["code"][-20:]
+        a.page.wait_for_function("() => !document.querySelector('#g-run').disabled")
+        a.page.click("#g-run")
+        a.page.wait_for_function("(r) => (JSON.parse(localStorage.getItem('ria-python.save')).garden.runs || 0) > r", arg=runs0, timeout=60_000)
+        a.page.wait_for_selector(".screen.garden[data-state=idle]", timeout=60_000)
+        a.page.wait_for_timeout(500)
+        while a.page.query_selector(".modal-back"):
+            a.page.click(".modal-back button")
+            a.page.wait_for_timeout(300)
+        s3 = a.save()
+        assert s3["garden"]["runs"] == runs0 + 1, s3["garden"]["runs"]
+        assert s3["garden"]["pie"] == {"x": 1, "y": 0}, s3["garden"]["pie"]   # 새 화면의 실행만 반영(옛 실행이 먼저 옮겼으면 x=2)
+        assert s3["garden"]["order"]["paid"].count("o_first") <= 1, s3["garden"]["order"]
+    # ② 나간 뒤 다시 열지 않음 → 실행 결과는 예전처럼 저장됨
+    with App("iPhone 17", save=_garden_seed(1, _garden(order_idx=0, mode="code", code=slow)), reduced=True) as a:
+        _open_garden(a)
+        a.page.wait_for_selector(".g-editor .cm-content")
+        a.wait_py()
+        runs0 = a.save()["garden"]["runs"]
+        a.page.click("#g-run")
+        a.page.wait_for_selector(".screen.garden[data-state=running]")
+        a.page.click("#g-back")
+        a.page.wait_for_selector(".screen.home")
+        a.page.wait_for_function("(r) => (JSON.parse(localStorage.getItem('ria-python.save')).garden.runs || 0) > r", arg=runs0, timeout=30_000)
+        assert a.save()["garden"]["pie"] == {"x": 1, "y": 0}, a.save()["garden"]["pie"]
+
+
 def test_garden_code_mode():
     with App("iPhone 17", save=_garden_seed(1, _garden(order_idx=1)), reduced=True) as a:
         _open_garden(a)

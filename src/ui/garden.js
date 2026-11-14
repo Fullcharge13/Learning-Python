@@ -235,7 +235,11 @@ function bindStepper(box, onChange) {
 }
 
 // ---- 화면 ----
+// v0.20.2: 텃밭 화면을 연 횟수. 실행 중 떠난 화면의 결과는, 그 사이 새 텃밭 화면이 열렸으면 버린다(새 화면이 옛 상태를 들고 있어 덮어쓰고 XP를 다시 줄 수 있었음)
+let gardenGen = 0;
+
 export function render(root, ctx, params = {}) {
+  const gen = ++gardenGen;
   const passed = passedChapters(ctx.save, ctx.chapters);
   const unlocked = unlockedKinds(passed);
   const tomatoOpen = unlocked.has(TOMATO_LOCK);
@@ -1219,6 +1223,7 @@ export function render(root, ctx, params = {}) {
     // 실행 중 화면을 떠났어도 결과는 저장한다(그리기만 건너뜀). 그 사이 저장의 텃밭이 바뀌었으면(다시 들어와
     // 다른 일을 함) 이 결과는 옛 상태에서 나온 것이라 버린다.
     if (S.destroyed) {
+      if (gen !== gardenGen) return;   // 다시 들어온 새 텃밭 화면이 있음 → 이 실행은 세지 않음
       const now = fillGarden(ctx.save).garden;
       if (JSON.stringify(runInput(now, passed)) !== JSON.stringify(start)) return;
       S.garden = now;

@@ -7,8 +7,11 @@
   ④ 「전부 막기」·「전부 들이기」 코드는 해결에 실패
   ⑤ solution이 그 장까지 배운 문법(AST 마디·부르는 이름)만 씀
   ⑥ 시도 1~20개, block·allow 각 1개 이상  ⑦ 사건 id 순서(장 순서), need 오름차순
-  ⑧ 있는 장마다 사건이 정확히 3개
-  ⑩ WRONG_SOLUTIONS(어설픈 풀이)는 해결에 실패
+  ⑧ 3~17장마다 기본 정확히 3개 + 응용(tier "field") 0~1개, 응용은 장의 마지막
+  ⑨ 기본 id G1~G45 한 번씩, 응용 id = FIELD_IDS
+  ⑩ WRONG_SOLUTIONS(어설픈 풀이)는 해결에 실패, 응용 사건은 어설픈 풀이 1개 이상
+  ⑪ tier는 없거나 "field", 응용에만 사건 파일 카드(file)와 영어 카드 열쇠(check_file)
+  ⑫ OVERLAP_PAIRS: 응용 정답을 기본 사건 시도로 돌리면 실패(같은 판정 규칙이 아님)
 영어 실행은 시도 값을 value_en ?? value 로 만든다.
 
 실행: python3 tests/guard_incidents.py   (하나라도 실패하면 종료 코드 1)
@@ -53,13 +56,19 @@ METHODS = {"lower", "upper", "strip", "split", "replace", "find", "count", "star
 METHODS_BY_CH = {7: {"append", "remove", "sort"}, 8: {"get", "keys", "values", "items"}, 9: {"add"},
                  11: {"reader", "readlines", "read"},
                  12: {"search", "fullmatch", "findall", "sub"}, 14: {"loads"}}
-WANT_IDS = ["G1", "G2", "G7", "G3", "G8", "G9", "G4", "G5", "G10", "G6", "G11", "G12",
-            "G13", "G14", "G15", "G16", "G17", "G18", "G19", "G20", "G21",
+WANT_IDS = ["G1", "G2", "G7", "G46", "G3", "G8", "G9", "G47", "G4", "G5", "G10", "G48", "G6", "G11", "G12", "G49",
+            "G13", "G14", "G15", "G50", "G16", "G17", "G18", "G19", "G20", "G21",
             "G22", "G23", "G24", "G25", "G26", "G27", "G28", "G29", "G30",
             "G31", "G32", "G33", "G34", "G35", "G36", "G37", "G38", "G39",
             "G40", "G41", "G42", "G43", "G44", "G45"]
-WANT_CHAPTERS = [3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9,
+WANT_CHAPTERS = [3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9,
                  10, 10, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16, 16, 17, 17, 17]
+BASIC_IDS = ["G%d" % n for n in range(1, 46)]
+# 응용 사건(tier "field", 설계 docs/specs/2026-11-14-경비실-응용-사건-설계.md §4-1·§6). 작업마다 늘린다.
+FIELD_IDS = ["G46", "G47", "G48", "G49", "G50"]
+# 겹침 검사(설계 §8): (응용, 기본) — 응용의 solution을 기본 사건의 시도로 돌리면 해결에 실패해야 한다
+# (같은 판정 규칙이 아님). 방식(mode)이 같은 짝만 넣는다. 작업 4·5가 채운다.
+OVERLAP_PAIRS = []
 
 
 # ⑩ 틀린 풀이: 초보·대학생이 흔히 쓰는 어설픈 풀이. 시도를 보강한 뒤에는 각각 해결에 실패해야 한다
@@ -69,6 +78,34 @@ WRONG_SOLUTIONS = {
         "if attempt.startswith(password):\n    allow()\nelse:\n    block()\n",
         "if attempt.strip() == password:\n    allow()\nelse:\n    block()\n",
         "if password in attempt:\n    allow()\nelse:\n    block()\n",
+    ],
+    "G46": [
+        'if attempt == "asleep":\n    block()\nelse:\n    allow()\n',
+        'if attempt == "asleep" or attempt == "lunch":\n    block()\nelse:\n    allow()\n',
+    ],
+    "G47": [
+        'def check(attempt):\n    return attempt != "agency:transfer"\n',
+        'def check(attempt):\n    if "agency" in attempt:\n        return False\n    return True\n',
+        'def check(attempt):\n    if "agency" in attempt or "transfer" in attempt:\n        return False\n    return True\n',
+    ],
+    "G48": [
+        "count = 0\nwhile has_try():\n    next_try()\n    count = count + 1\n    if count >= 3:\n        block()\n    else:\n        allow()\n",
+        'last = ""\naccounts = 0\nwhile has_try():\n    name = next_try()\n    if name != last:\n        accounts = accounts + 1\n'
+        "    if accounts >= 3:\n        block()\n    else:\n        allow()\n",
+        'last = ""\naccounts = 0\nwhile has_try():\n    name = next_try()\n    if name != last:\n        accounts = accounts + 1\n'
+        "        last = name\n        if accounts >= 3:\n            block()\n        else:\n            allow()\n    else:\n        allow()\n",
+    ],
+    "G49": [
+        'def check(attempt):\n    return "exe" not in attempt.lower()\n',
+        'def check(attempt):\n    return not attempt.lower().endswith(".exe")\n',
+        'def check(attempt):\n    ext = attempt.lower().split(".")[1]\n    if ext == "exe" or ext == "scr" or ext == "bat":\n'
+        "        return False\n    return True\n",
+    ],
+    "G50": [
+        'real = ["lotusbank.example", "mail.pi.example", "farm.pi.example"]\n\ndef check(attempt):\n    return attempt.lower() in real\n',
+        'def check(attempt):\n    if "1" in attempt or "0" in attempt:\n        return False\n    return True\n',
+        'real = ["lotusbank.example", "mail.pi.example", "farm.pi.example"]\n\ndef check(attempt):\n    name = attempt.lower()\n    if name in real:\n        return True\n'
+        '    if name.replace("1", "l") in real:\n        return False\n    return True\n',
     ],
     "G6": [
         'def check(attempt):\n    if len(attempt) <= 8:\n        return False\n    if "pie" in attempt.lower():\n        return False\n'
@@ -159,6 +196,72 @@ WRONG_SOLUTIONS = {
         "    return fail / total <= 0.5\n",
     ],
 }
+
+
+EN_DATA = os.path.join(ROOT, "i18n", "en", "data.json")
+FILE_TEXT_KEYS = ("attack", "alias", "real", "todo")
+
+
+def en_table():
+    with open(EN_DATA, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _text(v):
+    return isinstance(v, str) and v.strip() != ""
+
+
+def check_file(inc, en=None):
+    """응용 사건 카드(file)와 tier 검사(설계 §4-1). 문제 목록을 돌려준다(빈 목록이면 통과).
+    tier는 없거나 "field". tier가 "field"면 file.attack·alias·real·todo가 비지 않은 글, search가 1~3개의 비지 않은 글,
+    영어 열쇠 guard.<id>.file.attack|real|todo와 search.<n>(같은 개수)가 있다. tier가 없으면 file도 없다."""
+    en = en_table() if en is None else en
+    gid, tier, card = inc.get("id"), inc.get("tier"), inc.get("file")
+    bad = []
+    if tier not in (None, "field"):
+        bad.append("tier가 %r(없거나 \"field\"만)" % (tier,))
+    if tier != "field":
+        if card is not None:
+            bad.append("기본 사건에 file이 있음")
+        return bad
+    if not isinstance(card, dict):
+        return bad + ["응용 사건에 file이 없음"]
+    for k in FILE_TEXT_KEYS:
+        if not _text(card.get(k)):
+            bad.append("file.%s가 비었음" % k)
+    search = card.get("search")
+    if not (isinstance(search, list) and 1 <= len(search) <= 3 and all(_text(x) for x in search)):
+        bad.append("file.search가 1~3개의 글이 아님")
+        search = []
+    for k in ("attack", "real", "todo"):
+        if not _text(en.get("guard.%s.file.%s" % (gid, k))):
+            bad.append("영어 guard.%s.file.%s 없음" % (gid, k))
+    for n in range(len(search)):
+        if not _text(en.get("guard.%s.file.search.%d" % (gid, n))):
+            bad.append("영어 guard.%s.file.search.%d 없음" % (gid, n))
+    if ("guard.%s.file.search.%d" % (gid, len(search))) in en:
+        bad.append("영어 search 열쇠가 한국어 search보다 많음")
+    return bad
+
+
+def chapter_problems(incs):
+    """장마다 기본 정확히 3개 + 응용 0~1개, 응용은 그 장의 마지막(작업 5가 「응용 정확히 1개」로 조인다)."""
+    bad = []
+    by_ch = {}
+    for i in incs:
+        by_ch.setdefault(i["need"], []).append(i)
+    if sorted(by_ch) != list(range(3, 18)):
+        bad.append("장 %s(3~17장이어야 함)" % sorted(by_ch))
+    for ch, lst in sorted(by_ch.items()):
+        basic = [i for i in lst if i.get("tier") != "field"]
+        field = [i for i in lst if i.get("tier") == "field"]
+        if len(basic) != 3:
+            bad.append("%d장 기본 %d개" % (ch, len(basic)))
+        if len(field) > 1:
+            bad.append("%d장 응용 %d개" % (ch, len(field)))
+        if field and lst[-1] is not field[0]:
+            bad.append("%d장 응용 %s가 장의 마지막이 아님" % (ch, field[0]["id"]))
+    return bad
 
 
 def allowed(need):
@@ -253,6 +356,41 @@ def self_test():
             bad += 1
             print("FAIL 자체 시험 %d장 %r → %s (기대 %s)" % (ch, code[:40], got, want))
     print("%s 허용 문법 검사기 자체 시험 %d개" % ("ok  " if not bad else "FAIL", len(cases)))
+    # 카드·장 규칙 검사기 자체 시험
+    en = {"guard.X.file.attack": "a", "guard.X.file.real": "r", "guard.X.file.todo": "t", "guard.X.file.search.0": "s"}
+    card = {"attack": "가", "alias": "a", "real": "나", "todo": "다", "search": ["라"]}
+    file_cases = [
+        ({"id": "X"}, True),
+        ({"id": "X", "tier": "field", "file": card}, True),
+        ({"id": "X", "tier": "field"}, False),
+        ({"id": "X", "file": card}, False),
+        ({"id": "X", "tier": "hard", "file": card}, False),
+        ({"id": "X", "tier": "field", "file": dict(card, alias=" ")}, False),
+        ({"id": "X", "tier": "field", "file": dict(card, search=[])}, False),
+        ({"id": "X", "tier": "field", "file": dict(card, search=["a", "b"])}, False),   # 영어 search.1 없음
+        ({"id": "Y", "tier": "field", "file": card}, False),                              # 영어 열쇠 없음
+    ]
+    for inc, want in file_cases:
+        if (not check_file(inc, en)) != want:
+            bad += 1
+            print("FAIL 자체 시험 check_file %r → %s" % (inc, check_file(inc, en)))
+
+    def chs(spec):
+        out = []
+        for ch in range(3, 18):
+            for k in spec.get(ch, "bbb"):
+                out.append({"id": "%d%s%d" % (ch, k, len(out)), "need": ch, **({"tier": "field"} if k == "f" else {})})
+        return out
+    ch_cases = [({}, True), ({3: "bbbf", 17: "bbbf"}, True), ({3: "bbfb"}, False), ({4: "bbbff"}, False),
+                ({5: "bbf"}, False), ({6: "bbbb"}, False)]
+    for spec, want in ch_cases:
+        if (not chapter_problems(chs(spec))) != want:
+            bad += 1
+            print("FAIL 자체 시험 chapter_problems %r" % spec)
+    if not chapter_problems([i for i in chs({}) if i["need"] != 9]):
+        bad += 1
+        print("FAIL 자체 시험 chapter_problems 9장 빠짐을 못 잡음")
+    print("%s 카드·장 규칙 검사기 자체 시험 %d개" % ("ok  " if not bad else "FAIL", len(file_cases) + len(ch_cases) + 1))
     return bad
 
 
@@ -298,14 +436,20 @@ def main():
         print("%s %s%s" % ("ok  " if ok else "FAIL", label, (" — " + extra) if extra else ""))
 
     check([i["id"] for i in incs] == WANT_IDS and [i["need"] for i in incs] == WANT_CHAPTERS, "⑦ 사건 id 순서·장 번호")
-    per = {}
-    for i in incs:
-        per[i["need"]] = per.get(i["need"], 0) + 1
-    check(len(incs) == 45 and sorted(per) == list(range(3, 18)) and all(n == 3 for n in per.values()),
-          "⑧ 3~17장 모두 있고 장마다 정확히 3개(1·2장 없음)", str(per))
+    bad = chapter_problems(incs)
+    check(not bad, "⑧ 3~17장 모두 있고 장마다 기본 정확히 3개 + 응용 0~1개(응용은 장의 마지막)", ", ".join(bad))
     ids = [i["id"] for i in incs]
-    check(sorted(ids, key=lambda x: int(x[1:])) == ["G%d" % n for n in range(1, 46)] and len(set(ids)) == 45,
-          "⑨ id가 G1~G45 모두 한 번씩")
+    basic_ids = [i["id"] for i in incs if i.get("tier") != "field"]
+    field_ids = [i["id"] for i in incs if i.get("tier") == "field"]
+    check(sorted(basic_ids, key=lambda x: int(x[1:])) == BASIC_IDS and len(set(ids)) == len(ids),
+          "⑨ 기본 id가 G1~G45 모두 한 번씩, id 겹침 없음")
+    check(field_ids == FIELD_IDS, "⑨ 응용 id = FIELD_IDS", str(field_ids))
+    en = en_table()
+    for inc in incs:
+        bad = check_file(inc, en)
+        check(not bad, "⑪ %s tier·사건 파일 카드" % inc["id"], ", ".join(bad))
+        if inc.get("tier") == "field":
+            check(len(WRONG_SOLUTIONS.get(inc["id"], [])) >= 1, "⑩ %s 응용 사건에 어설픈 풀이 1개 이상" % inc["id"])
     check(data["xp"] == 5, "GUARD_XP = 5")
     for inc in incs:
         n = len(inc["tries"])
@@ -338,6 +482,14 @@ def main():
             for verdict, name in (("block", "전부 막기"), ("allow", "전부 들이기")):
                 ok, _, _ = solved(inc, all_code(inc, verdict), lang)
                 check(not ok, "④ %s %s → 실패" % (inc["id"], name))
+        by_id = {i["id"]: i for i in incs}
+        for a, b in OVERLAP_PAIRS:
+            fa, bb = by_id.get(a), by_id.get(b)
+            if not fa or not bb or fa["mode"] != bb["mode"]:
+                check(False, "⑫ 겹침 %s↔%s 두 사건이 있고 방식이 같음" % (a, b))
+                continue
+            ok, _, _ = solved(bb, fa["solution"], lang)
+            check(not ok, "⑫ 겹침 %s 정답을 %s 시도로 → 해결 못 함(다른 판정 규칙)" % (a, b), "같은 규칙" if ok else "")
     print("실패 %d" % fails)
     return 1 if fails else 0
 

@@ -49,6 +49,11 @@ const GD = await imp("data/guard.js");
 for (const g of GD.INCIDENTS) {
   for (const f of ["title", "brief", "ria", "concept", "crowIntro", "crowLose"]) out[`guard.${g.id}.${f}`] = g[f];
   g.tries.forEach((t, i) => { out[`guard.${g.id}.why.${i}`] = t.why; });
+  // v0.20.0 응용 사건 카드(alias는 이미 영어라 열쇠 없음)
+  if (g.file) {
+    for (const f of ["attack", "real", "todo"]) out[`guard.${g.id}.file.${f}`] = g.file[f];
+    g.file.search.forEach((s, i) => { out[`guard.${g.id}.file.search.${i}`] = s; });
+  }
 }
 console.log(JSON.stringify(out));
 """

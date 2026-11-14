@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkBadges, RULES } from "../../src/badges.js";
 import { BADGES } from "../../data/badges.js";
-import { setGuardIndex, guardIndex, basicIndex } from "../../src/guard/state.js";
+import { setGuardIndex, basicIndex } from "../../src/guard/state.js";
 import { buildGuardIndex } from "../../src/guard/catalog.js";
 import { INCIDENTS } from "../../data/guard.js";
 
@@ -139,8 +139,8 @@ test("badge_guard_first: 경비실 사건 하나 해결", () => {
   assert.deepEqual(checkBadges(mkSave({ guard: { solved: { G1: { firstTry: false, how: "code" } } } }), {}), ["guard_first"]);
 });
 
-test("badge_guard_perfect: 색인의 사건 모두 첫 실행(firstTry)일 때만", () => {
-  const ids = guardIndex().map((e) => e.id);
+test("badge_guard_perfect: 색인의 기본 사건 모두 첫 실행(firstTry)일 때만", () => {
+  const ids = basicIndex().map((e) => e.id);   // 응용(tier "field")은 세지 않음 — 응용까지 풀면 guard_files가 따로 붙음
   const last = ids[ids.length - 1];
   const solved = Object.fromEntries(ids.map((id) => [id, { firstTry: true, how: "blank" }]));
   assert.deepEqual(checkBadges(mkSave({ guard: { solved } }), {}), ["guard_first", "guard_perfect"]);
@@ -193,5 +193,11 @@ test("badge_guard_files: 응용 모두 해결, 응용이 0개면 받지 않음",
   } finally {
     setGuardIndex(FULL);
   }
-  assert.equal(RULES.guard_files(mkSave({ guard: { solved: solvedFT(...FULL.map((e) => e.id)) } })), false);
+  const basics = FULL.filter((e) => e.tier !== "field");   // 응용이 0개인 색인
+  setGuardIndex(basics);
+  try {
+    assert.equal(RULES.guard_files(mkSave({ guard: { solved: solvedFT(...basics.map((e) => e.id)) } })), false);
+  } finally {
+    setGuardIndex(FULL);
+  }
 });

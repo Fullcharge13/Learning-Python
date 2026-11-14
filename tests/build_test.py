@@ -232,7 +232,7 @@ def test_guards():
 class _Handler(http.server.SimpleHTTPRequestHandler):
     """dist-dev와 /node_modules/를 함께 준다. 시험이 STATE로 네트워크 상태를 흉내 낸다."""
     STATE = {"block_pyodide": False, "slow_s": 0, "block_chapters": False, "slow_chapter_s": 0,
-             "chapter_404": False, "block_names": (), "block_sw": False, "slow_pyodide_s": 0}
+             "chapter_404": False, "block_names": (), "block_sw": False, "slow_pyodide_s": 0, "block_engine_files": ()}
     extensions_map = {
         **http.server.SimpleHTTPRequestHandler.extensions_map,
         ".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm",
@@ -244,6 +244,9 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         p = self.path.split("?")[0]
         if p.startswith("/node_modules/pyodide/") and self.STATE["block_pyodide"]:
             self.close_connection = True  # 답 없이 끊음(막힌 CDN 흉내)
+            return
+        if p.startswith("/pyodide/") and p.rsplit("/", 1)[-1] in self.STATE["block_engine_files"]:
+            self.close_connection = True  # 배포판 엔진 파일 하나만 끊음(업데이트 중 네트워크 불안 흉내)
             return
         if p.startswith("/lessons/") and self.STATE["block_chapters"]:
             self.close_connection = True  # 장 파일만 끊음(비행기 모드·막힌 망 흉내)
@@ -294,7 +297,7 @@ class _Browser:
     def __init__(self, folder, service_workers="allow", init_save=None):
         from playwright.sync_api import sync_playwright
         _Handler.STATE.update(block_pyodide=False, slow_s=0, block_chapters=False, slow_chapter_s=0,
-                              chapter_404=False, block_names=(), block_sw=False, slow_pyodide_s=0)
+                              chapter_404=False, block_names=(), block_sw=False, slow_pyodide_s=0, block_engine_files=())
         self.httpd = _Server(("127.0.0.1", 0), functools.partial(_Handler, directory=folder))
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
         self.url = "http://127.0.0.1:%d/" % self.httpd.server_address[1]
@@ -511,6 +514,7 @@ def test_browser_legacy_engine_cache():
         cached = _wait_engine_cached(b)
         assert all(any(u == b.url + "pyodide/" + f for u in cached) for f in PY_CORE_FILES), cached
         assert not any(CDN_HOST in u for u in cached), "legacy jsDelivr entries should be dropped: %r" % cached
+        assert "ria-pyodide-314.0.7" not in b.cache_keys(), b.cache_keys()
         b.context.set_offline(True)
         resp = pg.reload()
         assert resp is not None and resp.from_service_worker
@@ -521,6 +525,64 @@ def test_browser_legacy_engine_cache():
         assert b.external == [], b.external
     finally:
         b.close()
+
+
+def test_engine_update_failure_keeps_old_worker():
+    """업데이트 중 엔진 파일이 안 받아지면 설치가 실패해 옛 작업자·옛 엔진 저장소가 그대로 남고(오프라인에서도 파이썬 됨), 풀리면 업데이트가 끝난다."""
+    r = _run_build("--out", REL_OUT, "--build-id", "A")
+    assert r.returncode == 0, r.stdout + r.stderr
+    swp = os.path.join(REL_OUT, "sw.js")
+    sw = _read(swp)
+    assert '-self"' in sw
+    with open(swp, "w", encoding="utf-8") as f:   # 옛 판 흉내: 엔진 저장소 이름이 옛 이름
+        f.write(sw.replace('314.0.7-self"', '314.0.7"'))
+    b = _Browser(REL_OUT)
+    try:
+        pg = b.page
+        pg.goto(b.url)
+        b.home()
+        b.wait_controlled()
+        _wait_engine_cached(b)
+        keys = b.cache_keys()
+        assert "ria-pyodide-314.0.7" in keys and not any(k.endswith("-self") for k in keys), keys
+        old_game = [k for k in keys if k.startswith("ria-game-")]
+        r = _run_build("--out", REL_OUT, "--build-id", "B")
+        assert r.returncode == 0, r.stdout + r.stderr
+        _Handler.STATE["block_engine_files"] = ("pyodide.asm.wasm",)
+        pg.evaluate("""async () => { const r = await navigator.serviceWorker.getRegistration();
+            try { await r.update(); } catch (_) {} }""")
+        pg.wait_for_timeout(3000)
+        for _ in range(50):   # 설치가 실패해 installing이 사라질 때까지
+            st = pg.evaluate("""async () => { const r = await navigator.serviceWorker.getRegistration();
+                return [!!r.installing, !!r.waiting, !!r.active]; }""")
+            if not st[0]:
+                break
+            pg.wait_for_timeout(200)
+        assert st == [False, False, True], st
+        keys = b.cache_keys()
+        assert "ria-pyodide-314.0.7" in keys, keys
+        assert [k for k in keys if k.startswith("ria-game-") and k in old_game] == old_game, keys
+        b.context.set_offline(True)
+        resp = pg.reload()
+        assert resp is not None and resp.from_service_worker
+        b.home()
+        r = pg.evaluate("() => window.__ria.ctx.py.run('print(4)')")
+        assert r["stdout"] == "4\n" and r["error"] is None, r
+        b.context.set_offline(False)
+        _Handler.STATE["block_engine_files"] = ()
+        pg.evaluate("""async () => { const r = await navigator.serviceWorker.getRegistration(); await r.update(); }""")
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            keys = b.cache_keys()
+            if "ria-pyodide-314.0.7" not in keys and not any(k in old_game for k in keys):
+                break
+            pg.wait_for_timeout(200)
+        assert "ria-pyodide-314.0.7" not in keys and "ria-pyodide-314.0.7-self" in keys, keys
+        cached = _wait_engine_cached(b)
+        assert all(any(u == b.url + "pyodide/" + f for u in cached) for f in PY_CORE_FILES), cached
+    finally:
+        b.close()
+        shutil.rmtree(REL_OUT, ignore_errors=True)
 
 
 def test_blocked_pyodide_install():

@@ -51,7 +51,7 @@ async function init(msg) {
   const t0 = performance.now();
   try {
     const { loadPyodide } = await import(msg.indexURL + "pyodide.mjs");
-    pyodide = await loadPyodide({ indexURL: msg.indexURL });
+    pyodide = await loadPyodide({ indexURL: msg.indexURL, packageBaseUrl: msg.indexURL });  // v0.19.2: loadPackage 기본 주소(jsDelivr)가 쓰일 길을 막음
     // runner.py를 진짜 모듈(ria_runner)로 올린다. 파일 이름이 있어야 오류 원문이 깔끔하다.
     pyodide.globals.set("__ria_src", String(msg.runnerSource));
     pyodide.runPython(

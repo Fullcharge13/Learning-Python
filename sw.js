@@ -46,6 +46,10 @@ self.addEventListener("install", (event) => {
         if (res.ok) await game.put(f, res);
       } catch (_) { /* 이 장은 처음 열 때 받는다 */ }
     }));
+    // 엔진: 처음 방문이면 실패해도 설치를 계속(쓸 때 다시 받음). 이미 옛 작업자가 있으면(= 업데이트) 엔진 5개가 다 저장되지
+    // 않았을 때 설치를 실패시켜 옛 작업자·옛 엔진 저장소를 그대로 둔다(활성화가 옛 저장소를 지우므로). 다음 방문에 다시 시도.
+    const replacing = !!self.registration.active;
+    let missingAfter = [];
     try {
       const py = await caches.open(PY_CACHE);
       const missing = [];
@@ -54,10 +58,14 @@ self.addEventListener("install", (event) => {
         if (!(await py.match(url))) missing.push(url);
       }
       await Promise.all(missing.map(async (url) => {
-        const res = await fetch(url, { mode: "cors", credentials: "omit" });
-        if (res.ok) await py.put(url, res);
+        try {
+          const res = await fetch(new Request(url, { mode: "cors", credentials: "omit", cache: "reload" }));
+          if (res.ok) await py.put(url, res);
+        } catch (_) { /* 아래에서 빠진 것을 다시 센다 */ }
       }));
-    } catch (_) { /* 네트워크가 약하면 나중에 실제로 쓸 때 저장한다 */ }
+      for (const url of missing) if (!(await py.match(url))) missingAfter.push(url);
+    } catch (_) { missingAfter = PY_CORE.map((f) => PYODIDE_PREFIX + f); /* 저장소를 못 열면 */ }
+    if (replacing && missingAfter.length) throw new Error("engine precache incomplete: " + missingAfter.join(", "));
     await self.skipWaiting();
   })());
 });

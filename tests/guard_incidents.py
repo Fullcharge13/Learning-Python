@@ -57,18 +57,18 @@ METHODS_BY_CH = {7: {"append", "remove", "sort"}, 8: {"get", "keys", "values", "
                  11: {"reader", "readlines", "read"},
                  12: {"search", "fullmatch", "findall", "sub"}, 14: {"loads"}}
 WANT_IDS = ["G1", "G2", "G7", "G46", "G3", "G8", "G9", "G47", "G4", "G5", "G10", "G48", "G6", "G11", "G12", "G49",
-            "G13", "G14", "G15", "G50", "G16", "G17", "G18", "G19", "G20", "G21",
-            "G22", "G23", "G24", "G25", "G26", "G27", "G28", "G29", "G30",
+            "G13", "G14", "G15", "G50", "G16", "G17", "G18", "G51", "G19", "G20", "G21", "G52",
+            "G22", "G23", "G24", "G53", "G25", "G26", "G27", "G54", "G28", "G29", "G30", "G55",
             "G31", "G32", "G33", "G34", "G35", "G36", "G37", "G38", "G39",
             "G40", "G41", "G42", "G43", "G44", "G45"]
-WANT_CHAPTERS = [3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9,
-                 10, 10, 10, 11, 11, 11, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16, 16, 17, 17, 17]
+WANT_CHAPTERS = [3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9,
+                 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16, 16, 17, 17, 17]
 BASIC_IDS = ["G%d" % n for n in range(1, 46)]
 # 응용 사건(tier "field", 설계 docs/specs/2026-11-14-경비실-응용-사건-설계.md §4-1·§6). 작업마다 늘린다.
-FIELD_IDS = ["G46", "G47", "G48", "G49", "G50"]
+FIELD_IDS = ["G46", "G47", "G48", "G49", "G50", "G51", "G52", "G53", "G54", "G55"]
 # 겹침 검사(설계 §8): (응용, 기본) — 응용의 solution을 기본 사건의 시도로 돌리면 해결에 실패해야 한다
 # (같은 판정 규칙이 아님). 방식(mode)이 같은 짝만 넣는다. 작업 4·5가 채운다.
-OVERLAP_PAIRS = []
+OVERLAP_PAIRS = [("G55", "G11"), ("G55", "G29")]
 
 
 # ⑩ 틀린 풀이: 초보·대학생이 흔히 쓰는 어설픈 풀이. 시도를 보강한 뒤에는 각각 해결에 실패해야 한다
@@ -109,6 +109,83 @@ WRONG_SOLUTIONS = {
         'def check(attempt):\n    if "1" in attempt or "0" in attempt:\n        return False\n    return True\n',
         'real = ["pinebank.example", "login.pi.example", "farm.pi.example"]\n\ndef check(attempt):\n    name = attempt.lower()\n    if name in real:\n        return True\n'
         '    if name.replace("1", "l") in real:\n        return False\n    return True\n',
+    ],
+    "G51": [
+        'def check(attempt):\n    return "010-" not in attempt\n',
+        # 이름(키)을 찾는 풀이 — 번호가 아니라 이름을 봄
+        'phones = {"minji": "010-0000-1234", "jun": "010-0001-5678", "sora": "010-0002-9012"}\n\n'
+        'def check(attempt):\n    for name in phones:\n        if name in attempt:\n            return False\n'
+        '    return True\n',
+        # 반복 안에서 바로 True를 돌려줘 첫 고객만 봄
+        'phones = {"minji": "010-0000-1234", "jun": "010-0001-5678", "sora": "010-0002-9012"}\n\n'
+        'def check(attempt):\n    for phone in phones.values():\n        if phone in attempt:\n'
+        '            return False\n        return True\n',
+        'phones = {"minji": "010-0000-1234", "jun": "010-0001-5678", "sora": "010-0002-9012"}\n\n'
+        'def check(attempt):\n    return "010-0000" not in attempt\n',
+    ],
+    "G52": [
+        'allowed = {"pi-garden", "seed-calc", "weather-pi"}\n\ndef check(attempt):\n'
+        '    return attempt in allowed\n',
+        'allowed = {"pi-garden", "seed-calc", "weather-pi"}\n\ndef check(attempt):\n'
+        '    return attempt.lower() in allowed\n',
+        'allowed = {"pigarden", "seedcalc", "weatherpi"}\n\ndef check(attempt):\n'
+        '    return attempt.lower().replace("_", "").replace("-", "") in allowed\n',
+        'allowed = {"pi-garden", "seed-calc", "weather-pi"}\n\ndef check(attempt):\n'
+        '    name = attempt.lower().replace("_", "-")\n    for a in allowed:\n        if name.startswith(a):\n'
+        '            return True\n    return False\n',
+        # 기본 G19 정답 모양(집합 부분집합)을 이 사건 집합에 맞춘 것 — 표기 맞추기가 없음
+        'allowed = {"pi-garden", "seed-calc", "weather-pi"}\n\ndef check(attempt):\n'
+        '    return set(attempt.split(",")) <= allowed\n',
+    ],
+    "G53": [
+        # 기본 G24 정답 모양(KeyError 하나만 잡기)을 이 사건에 맞춘 것
+        'backups = {"ledger": ["locked", "ok"], "photos": ["locked", "broken", "ok"], "diary": ["ok"]}\n\n'
+        'def check(attempt):\n    try:\n        name, num = attempt.split(":")\n'
+        '        state = backups[name][int(num)]\n    except KeyError:\n        return False\n'
+        '    return state == "ok"\n',
+        'backups = {"ledger": ["locked", "ok"], "photos": ["locked", "broken", "ok"], "diary": ["ok"]}\n\n'
+        'def check(attempt):\n    try:\n        name, num = attempt.split(":")\n'
+        '        state = backups[name][int(num)]\n    except ValueError:\n        return False\n'
+        '    except KeyError:\n        return False\n    except IndexError:\n        return False\n'
+        '    return True\n',
+        'backups = {"ledger": ["locked", "ok"], "photos": ["locked", "broken", "ok"], "diary": ["ok"]}\n\n'
+        'def check(attempt):\n    try:\n        name, num = attempt.split(":")\n'
+        '        state = backups[name][int(num)]\n    except ValueError:\n        return False\n'
+        '    except KeyError:\n        return False\n    except IndexError:\n        return False\n'
+        '    return state != "locked"\n',
+        'backups = {"ledger": ["locked", "ok"], "photos": ["locked", "broken", "ok"], "diary": ["ok"]}\n\n'
+        'def check(attempt):\n    try:\n        name = attempt.split(":")[0]\n'
+        '        state = backups[name][-1]\n    except KeyError:\n        return False\n'
+        '    return state == "ok"\n',
+    ],
+    "G54": [
+        'recorded = {}\nwith open("fingerprints.txt") as f:\n    for line in f:\n'
+        '        name, mark = line.strip().split(",")\n        recorded[name] = mark\n\ndef check(attempt):\n'
+        '    name, mark = attempt.split(",")\n    return mark in recorded.values()\n',
+        'recorded = {}\nwith open("fingerprints.txt") as f:\n    for line in f:\n'
+        '        name, mark = line.strip().split(",")\n        recorded[name] = mark\n\ndef check(attempt):\n'
+        '    name, mark = attempt.split(",")\n    return name in recorded\n',
+        'recorded = {}\nwith open("fingerprints.txt") as f:\n    for line in f:\n'
+        '        name, mark = line.strip().split(",")\n        recorded[name] = mark\n\ndef check(attempt):\n'
+        '    name, mark = attempt.split(",")\n    return name in recorded and recorded[name].startswith(mark)\n',
+        # 기본 G25처럼 파일 글에 들어 있는지만 보기 — 모자란 지문도 들어감
+        'with open("fingerprints.txt") as f:\n    lines = f.read()\n\ndef check(attempt):\n'
+        '    return attempt in lines\n',
+    ],
+    "G55": [
+        # 짧은 주소만 보고 막기
+        'import re\n\ndef check(attempt):\n'
+        '    return not re.search(r"https?://sl.example/\\w+", attempt.lower())\n',
+        # 미끼 말만 보고 막기
+        'import re\n\nbait = ["택배", "과태료", "청첩장", "parcel", "penalty", "invitation"]\n\ndef check(attempt):\n'
+        '    for word in bait:\n        if word in attempt.lower():\n            return False\n    return True\n',
+        'import re\n\nbait = ["택배", "과태료", "청첩장", "parcel", "penalty", "invitation"]\n\ndef check(attempt):\n'
+        '    text = attempt.lower()\n    if re.search(r"https?://sl.example/\\w+", text):\n'
+        '        return False\n    for word in bait:\n        if word in text:\n            return False\n'
+        '    return True\n',
+        'import re\n\nbait = ["택배", "과태료", "청첩장", "parcel", "penalty", "invitation"]\n\ndef check(attempt):\n'
+        '    text = attempt\n    if not re.search(r"https?://sl.example/\\w+", text):\n        return True\n'
+        '    for word in bait:\n        if word in text:\n            return False\n    return True\n',
     ],
     "G6": [
         'def check(attempt):\n    if len(attempt) <= 8:\n        return False\n    if "pie" in attempt.lower():\n        return False\n'

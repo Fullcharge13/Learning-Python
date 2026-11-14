@@ -1292,6 +1292,7 @@ export const INCIDENTS = [
       { value: "https://farm.pi.example@evil.example/pay", expect: "block", why: "@ 앞은 사용자 이름이고 진짜 목적지는 evil.example이에요. netloc이 목록과 똑같지 않아 막습니다." },
       { value: "https://pay.pi.example:8443/stall", expect: "block", why: "우리 가게 QR에는 포트 번호를 붙이지 않아요. netloc이 pay.pi.example:8443이라 목록과 똑같지 않으니 막습니다." },
       { value: "https://pay.pi.example/stall?id=7", expect: "allow", why: "우리 결제 도메인이라 엽니다." },
+      { value: "https://farm.pi.example?from=qr", expect: "allow", why: "경로 없이 이름 바로 뒤에 ?가 붙어도 netloc은 farm.pi.example이라 엽니다. 주소 글자를 /로 잘라 보거나 앞부분만 보면 놓쳐요." },
       { value: "https://pi-pay.example/stall", expect: "block", why: "이름이 비슷해 보여도 pi-pay.example은 목록에 없는 곳이라 막습니다." },
     ],
     file: {
@@ -1415,7 +1416,10 @@ export const INCIDENTS = [
       { value: '{"title": "<SCRIPT>alert(1)</SCRIPT>", "body": "안녕하세요"}', value_en: '{"title": "<SCRIPT>alert(1)</SCRIPT>", "body": "Hello"}', expect: "block", why: "제목에 대문자로 쓴 태그가 있어요. 소문자로 바꾸면 <script라서 막습니다. 본문만 보면 놓쳐요." },
       { value: '{"title": "사진", "body": "\\u003cimg src=x>"}', value_en: '{"title": "Photo", "body": "\\u003cimg src=x>"}', expect: "block", why: "\\u003c는 json.loads로 풀면 < 가 되어 본문이 <img 태그가 됩니다. 풀기 전 글자만 보면 놓쳐요. 막습니다." },
       { value: '{"title": "오늘의 장터", "body": "토마토 10개 남았어요"}', value_en: '{"title": "Market today", "body": "10 tomatoes left"}', expect: "allow", why: "태그가 없어서 보여 줍니다." },
+      { value: '{"title": "공지", "body": "<\\u0073cript>alert(1)</\\u0073cript>"}', value_en: '{"title": "Notice", "body": "<\\u0073cript>alert(1)</\\u0073cript>"}', expect: "block", why: "\\u0073은 json.loads로 풀면 s라서 본문이 <script 태그가 됩니다. 풀기 전 글자에는 <s도 script>도 없어요. 막습니다." },
+      { value: '{"title": "\\uac10\\uc790 \\ud6c4\\uae30", "body": "\\ub9db\\uc788\\uc5b4\\uc694"}', value_en: '{"title": "Caf\\u00e9 notes", "body": "Fresh bread"}', expect: "allow", why: "글자를 \\uXXXX로 적은 JSON도 흔해요(파이썬 json.dumps도 한글을 이렇게 써요). 풀면 「감자 후기」, 「맛있어요」라 태그가 없어서 보여 줍니다." },
       { value: '{"title": "영상", "body": "<iframe src=evil.example>"}', value_en: '{"title": "Video", "body": "<iframe src=evil.example>"}', expect: "block", why: "<iframe 태그는 다른 사이트를 몰래 끼워 넣을 수 있어서 막습니다." },
+      { value: '{"title": "<3 감자", "body": "맛있어요"}', value_en: '{"title": "<3 potatoes", "body": "Tasty"}', expect: "allow", why: "제목이 <로 시작하지만 하트 <3이라 태그가 아닙니다. 보여 줍니다." },
       { value: '{"title": "&lt;script&gt; 글자를 쓰려면", "body": "이렇게 바꿔 쓰면 안전해요"}', value_en: '{"title": "To write &lt;script&gt;", "body": "Encoding it like this is safe"}', expect: "allow", why: "&lt;는 이미 안전한 글자로 바꾼 < 라서 태그가 아닙니다. 보여 줍니다." },
     ],
     file: {
@@ -1653,6 +1657,7 @@ export const INCIDENTS = [
       { value: "CREATE TABLE members (id INTEGER, PW TEXT)", expect: "block", why: "대문자로 써도 소문자로 바꾸면 pw라서 막습니다." },
       { value: "CREATE TABLE staff (id INTEGER, pw_hash TEXT, pw TEXT)", expect: "block", why: "해시 칸이 있어도 그 옆에 pw 칸이 또 있어서 막습니다." },
       { value: "CREATE TABLE notes (id INTEGER, body TEXT)", expect: "allow", why: "비밀번호 칸이 없어서 만듭니다." },
+      { value: "CREATE TABLE t (id INTEGER,password TEXT)", expect: "block", why: "쉼표 뒤에 띄어쓰기가 없어도 칸은 나뉘어요. password 칸이라 막습니다. 띄어쓰기·괄호를 붙인 글자로 찾으면 놓쳐요." },
       { value: "CREATE TABLE logins (user TEXT, passwd TEXT, day TEXT)", expect: "block", why: "가운데 passwd 칸이 비밀번호를 그대로 담아서 막습니다." },
       { value: "CREATE TABLE guests (name TEXT, passwd_hash TEXT)", expect: "allow", why: "passwd_hash는 해시를 담는 칸이라 만듭니다." },
       { value: "CREATE TABLE admins (id INTEGER, password)", expect: "block", why: "칸 종류를 적지 않아도 표는 만들어져요. 칸 이름이 password라서 막습니다." },

@@ -69,7 +69,10 @@ BASIC_IDS = ["G%d" % n for n in range(1, 46)]
 FIELD_IDS = ["G46", "G47", "G48", "G49", "G50", "G51", "G52", "G53", "G54", "G55", "G56", "G57", "G58", "G59", "G60"]
 # 겹침 검사(설계 §8): (응용, 기본) — 응용의 solution을 기본 사건의 시도로 돌리면 해결에 실패해야 한다
 # (같은 판정 규칙이 아님). 방식(mode)이 같은 짝만 넣는다. 작업 4·5가 채운다.
-OVERLAP_PAIRS = [("G55", "G11"), ("G55", "G29"), ("G56", "G31"), ("G57", "G12")]
+# 실패는 오류 없이 판정이 틀려서여야 한다(오류로 멈춘 실패는 같은 규칙인지 알려 주지 않음).
+# (G57, G12)는 넣지 않는다: G12 시도는 JSON이 아니라서 G57 정답이 json.loads에서 오류를 낸다.
+# 대신 G12 정답을 WRONG_SOLUTIONS["G57"]에 넣어, G57 시도에서 판정이 틀려 실패함을 확인한다.
+OVERLAP_PAIRS = [("G55", "G11"), ("G55", "G29"), ("G56", "G31")]
 
 
 # ⑩ 틀린 풀이: 초보·대학생이 흔히 쓰는 어설픈 풀이. 시도를 보강한 뒤에는 각각 해결에 실패해야 한다
@@ -211,6 +214,10 @@ WRONG_SOLUTIONS = {
         # 기본 G31 모양을 목록으로 넓힌 것(hostname) — 포트를 붙인 QR을 들여 버림
         'from urllib.parse import urlparse\n\nshops = ["farm.pi.example", "pay.pi.example"]\n\ndef check(attempt):\n'
         '    url = urlparse(attempt)\n    return url.scheme == "https" and url.hostname in shops\n',
+        # urlparse 없이 「도메인 + /」로 시작하는지만 보기 — 경로 없이 ?가 붙은 주소를 막아 버림
+        'def check(attempt):\n    return attempt.startswith("https://farm.pi.example/") or attempt.startswith("https://pay.pi.example/")\n',
+        # urlparse 없이 /로 잘라 세 번째 조각을 보기 — 경로 없이 ?가 붙은 주소를 막아 버림
+        'shops = ["farm.pi.example", "pay.pi.example"]\n\ndef check(attempt):\n    return attempt.split("/")[2] in shops\n',
     ],
     "G57": [
         # JSON을 풀지 않고 글자 그대로 태그를 찾기 — 「\u003c」로 숨긴 태그를 놓침
@@ -227,6 +234,12 @@ WRONG_SOLUTIONS = {
         # <script만 보기 — <img, <iframe을 놓침
         'import json\n\ndef check(attempt):\n    post = json.loads(attempt)\n    for text in [post["title"], post["body"]]:\n'
         '        if "<script" in text.lower():\n            return False\n    return True\n',
+        # json.loads 없이 글자 조각으로 맞히기 — <\u0073cript>로 쓴 태그를 놓침
+        'def check(attempt):\n    t = attempt.lower()\n    return "script>" not in t and "src=" not in t\n',
+        'def check(attempt):\n    t = attempt.lower()\n    return "<s" not in t and "<i" not in t and "u003c" not in t\n',
+        # json.loads 없이 \\u가 보이면 다 막기 — \\uXXXX로 적은 평범한 글을 막아 버림
+        'tags = ["<script", "<img", "<iframe"]\n\ndef check(attempt):\n    t = attempt.lower()\n    if "\\\\u" in t:\n'
+        '        return False\n    for tag in tags:\n        if tag in t:\n            return False\n    return True\n',
     ],
     "G58": [
         # 막은 로그인까지 기억하기 — 공격자 위치가 기준이 되어 진짜 주인을 막음
@@ -276,6 +289,9 @@ WRONG_SOLUTIONS = {
         'import re\n\ndef check(attempt):\n    return re.search(r"(password|pw|passwd) text", attempt.lower()) is None\n',
         # 기본 G41 모양(대문자로 바꾼 쿼리에 PASSWORD·PW 글자가 있으면 막기) — 해시 칸을 막아 버림
         'def check(attempt):\n    q = attempt.upper()\n    if "PASSWORD" in q or "PW" in q:\n        return False\n    return True\n',
+        # 칸을 나누지 않고 앞뒤 띄어쓰기·괄호를 붙인 낱말로 찾기 — 쉼표 바로 뒤의 password 칸을 놓침
+        'def check(attempt):\n    t = attempt.lower()\n    for w in ["password", "pw", "passwd"]:\n'
+        '        if " " + w + " " in t or "(" + w + " " in t or " " + w + ")" in t:\n            return False\n    return True\n',
     ],
     "G60": [
         # 기본 G17 모양(출처마다 요청 횟수를 세기) — 같은 포트를 여러 번 오는 보통 손님을 막음
@@ -673,8 +689,9 @@ def main():
             if not fa or not bb or fa["mode"] != bb["mode"]:
                 check(False, "⑫ 겹침 %s↔%s 두 사건이 있고 방식이 같음" % (a, b))
                 continue
-            ok, _, _ = solved(bb, fa["solution"], lang)
-            check(not ok, "⑫ 겹침 %s 정답을 %s 시도로 → 해결 못 함(다른 판정 규칙)" % (a, b), "같은 규칙" if ok else "")
+            ok, err, _ = solved(bb, fa["solution"], lang)
+            check(not ok and err is None, "⑫ 겹침 %s 정답을 %s 시도로 → 오류 없이 판정이 틀려 해결 못 함(다른 판정 규칙)" % (a, b),
+                  "같은 규칙" if ok else ("오류로 멈춤: %s" % err if err else ""))
     print("실패 %d" % fails)
     return 1 if fails else 0
 

@@ -23,6 +23,12 @@ test("GUARD_FILE_RE: guard/chN-<지문8자>.json", () => {
   assert.ok(!GUARD_FILE_RE.test("guard/ch3-0123abc.json"));
 });
 
+test("guardIndexEntry: 응용에만 tier", () => {
+  assert.equal(guardIndexEntry({ id: "X", need: 3, title: "t", blanks: [], tier: "field" }).tier, "field");
+  assert.equal("tier" in guardIndexEntry({ id: "X", need: 3, title: "t", blanks: [] }), false);
+  assert.equal("tier" in guardIndexEntry({ id: "X", need: 3, title: "t", blanks: [], tier: "basic" }), false);
+});
+
 test("guardIndexEntry(G1): id·need·title·빈칸마다 보기 수(mode·tag는 본문에만)", () => {
   assert.deepEqual(guardIndexEntry(G1), { id: "G1", need: 3, title: "창고 문 암호", blanks: [3, 2, 3] });
   assert.deepEqual(guardIndexEntry(G1).blanks, G1.blanks.map((b) => b.options.length));

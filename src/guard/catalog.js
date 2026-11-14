@@ -15,7 +15,9 @@ export const GUARD_FILE_RE = /^guard\/ch([1-9]\d*)-([0-9a-f]{8})\.json$/;
 /** 사건 하나의 색인 칸. blanks는 빈칸마다 보기 수 */
 export function guardIndexEntry(incident) {
   const { id, need, title } = incident;
-  return { id, need, title, blanks: (incident.blanks || []).map((b) => (b && Array.isArray(b.options) ? b.options.length : 0)) };
+  const entry = { id, need, title, blanks: (incident.blanks || []).map((b) => (b && Array.isArray(b.options) ? b.options.length : 0)) };
+  if (incident.tier === "field") entry.tier = "field";   // v0.20.0: 응용 사건에만 표시(기본 칸 크기는 그대로)
+  return entry;
 }
 
 /** 색인 목록(원본 순서) */

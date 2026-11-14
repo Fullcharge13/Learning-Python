@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import {
   newGuard, cleanGuard, guardOpen, incidentOpen, guardNews, markSeen, guardInput, guardConsistent,
   applyGuardRun, RANK_IDS, rankOf, rankThresholds, setGuardIndex, guardIndex, clearGuardIndex,
+  isField, basicIndex, fieldIndex, basicLeft,
 } from "../../src/guard/state.js";
 import { INCIDENTS, GUARD_XP } from "../../data/guard.js";
 import { buildGuardIndex } from "../../src/guard/catalog.js";
+import { GUARD_INDEX } from "./_guard_index.js";
 import { newSave } from "../../src/save.js";
 import { localDate } from "../../src/today.js";
 
@@ -317,4 +319,64 @@ test("색인을 바꾸면 등급·새 소식이 그 색인을 따름", () => {
 test("applyGuardRun: 둘째 인자는 받은 사건 본문(시도 목록이 있어야 결과를 대조)", () => {
   const inp = guardInput(G("G1"), "ko");
   assert.throws(() => applyGuardRun(quietSave(), "G1", perfectResult(inp), "blank", NOW), TypeError);
+});
+
+// ---- v0.20.0 응용 사건 규칙(합성 색인, 시험이 끝나면 실제 색인으로 되돌림) ----
+const mkE = (id, need, tier) => ({ id, need, title: id, blanks: [2], ...(tier ? { tier } : {}) });
+const SYN = [mkE("A1", 3), mkE("A2", 3), mkE("A3", 3), mkE("F3", 3, "field"),
+  mkE("B1", 4), mkE("B2", 4), mkE("B3", 4), mkE("F4", 4, "field")];
+const withSyn = (fn) => () => {
+  setGuardIndex(SYN);
+  try { fn(); } finally { setGuardIndex(GUARD_INDEX); }
+};
+const solvedOf = (...ids) => ({ ...newGuard(), solved: Object.fromEntries(ids.map((id) => [id, { firstTry: true, how: "blank" }])) });
+const F = (id) => SYN.find((e) => e.id === id);
+
+test("incidentOpen: 응용은 기본 3개를 다 풀어야", withSyn(() => {
+  assert.equal(incidentOpen(F("F3"), new Set([1, 2]), solvedOf("A1", "A2", "A3")), false);
+  assert.equal(incidentOpen(F("F3"), new Set([3]), solvedOf("A1", "A2")), false);
+  assert.equal(incidentOpen(F("F3"), new Set([3]), solvedOf("A1", "A2", "A3")), true);
+  assert.equal(incidentOpen(F("A1"), new Set([3])), true);
+}));
+
+test("incidentOpen: dev면 응용도 열림", withSyn(() => {
+  assert.equal(incidentOpen(F("F3"), new Set([3]), newGuard(), true), true);
+  assert.equal(incidentOpen(F("F3"), new Set([1, 2]), newGuard(), true), false);
+}));
+
+test("basicLeft: 같은 장의 기본만 센다", withSyn(() => {
+  assert.equal(basicLeft(F("F3"), solvedOf("A1")), 2);
+  assert.equal(basicLeft(F("F3"), solvedOf("B1")), 3);
+}));
+
+test("guardNews: 기본을 다 풀면 응용 때문에 점", withSyn(() => {
+  const p = new Set([3]);
+  const seen = ["A1", "A2", "A3"];
+  assert.equal(guardNews({ ...solvedOf("A1", "A2"), seen }, p), false);
+  assert.equal(guardNews({ ...solvedOf("A1", "A2", "A3"), seen }, p), true);
+  assert.equal(guardNews({ ...solvedOf("A1", "A2", "A3"), seen: [...seen, "F3"] }, p), false);
+}));
+
+test("guardNews: dev", withSyn(() => {
+  assert.equal(guardNews({ ...newGuard(), seen: ["A1", "A2", "A3"] }, new Set([3]), true), true);
+}));
+
+test("rankOf: 응용을 세지 않음", withSyn(() => {
+  assert.equal(rankOf(solvedOf("A1", "A2", "A3", "B1", "B2", "B3")), "sheriff");
+  assert.equal(rankOf(solvedOf("A1", "A2", "A3", "B1")), "captain");   // 4/6, ⌈2·6/3⌉=4
+  assert.equal(rankOf(solvedOf("A1", "A2", "A3", "B1", "F3", "F4")), "captain");
+  assert.equal(rankOf(solvedOf("A1", "F3", "F4")), "apprentice");      // 기본 1/6 < ⌈6/3⌉=2
+}));
+
+test("basicIndex/fieldIndex: 나눔, 원본 순서", withSyn(() => {
+  assert.deepEqual(basicIndex().map((e) => e.id), ["A1", "A2", "A3", "B1", "B2", "B3"]);
+  assert.deepEqual(fieldIndex().map((e) => e.id), ["F3", "F4"]);
+  assert.equal(isField(F("F3")), true);
+  assert.equal(isField(F("A1")), false);
+}));
+
+test("setGuardIndex: 이상한 tier는 거부", () => {
+  try {
+    assert.throws(() => setGuardIndex([{ ...mkE("X", 3), tier: "adv" }]), /setGuardIndex/);
+  } finally { setGuardIndex(GUARD_INDEX); }
 });

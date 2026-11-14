@@ -16,5 +16,6 @@ export const BADGES = [
   { id: "advanced1", name: "심화 첫걸음", desc: "심화 레슨을 하나 끝내요" },
   { id: "advancedAll", name: "깊이 파는 사람", desc: "지금 있는 심화 레슨을 모두 끝내요" },
   { id: "guard_first", name: "첫 방어", desc: "경비실 사건을 하나 해결해요" },
-  { id: "guard_perfect", name: "완벽한 문지기", desc: "경비실 사건 6개를 모두 첫 실행에 해결해요" },
+  { id: "guard_perfect", name: "완벽한 문지기", desc: "경비실 기본 사건을 모두 첫 실행에 해결해요" },
+  { id: "guard_files", name: "사건 파일 수집가", desc: "경비실 응용 사건을 모두 해결해요" },
 ];

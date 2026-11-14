@@ -1,4 +1,5 @@
 // 아래 탭 줄과 위 상태 줄 (홈·배지·의상실·설정에서 같이 씀)
+import { isDev } from "../devgate.js";
 import { icon, esc, bar, toast } from "./dom.js";
 import { localDate } from "../today.js";
 import { gardenTab, passedChapters } from "../garden/state.js";
@@ -20,7 +21,7 @@ export function gardenTabOf(ctx) {
   const passed = passedChapters(ctx.save, ctx.chapters);
   const tab = gardenTab(ctx.save.garden, passed);
   // v0.15: 경비실 새 사건도 같은 칸의 점으로 알린다(잠김이면 그대로)
-  return tab === "open" && guardNews(ctx.save.guard, passed) ? "news" : tab;
+  return tab === "open" && guardNews(ctx.save.guard, passed, isDev(ctx.save)) ? "news" : tab;
 }
 
 export function tabBar(active, garden = "open") {

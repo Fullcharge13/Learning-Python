@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkBadges, RULES } from "../../src/badges.js";
 import { BADGES } from "../../data/badges.js";
-import { setGuardIndex, guardIndex } from "../../src/guard/state.js";
+import { setGuardIndex, guardIndex, basicIndex } from "../../src/guard/state.js";
 import { buildGuardIndex } from "../../src/guard/catalog.js";
 import { INCIDENTS } from "../../data/guard.js";
 
@@ -28,10 +28,10 @@ function mkSave(over = {}) {
 }
 const stats = (o) => ({ lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0, ...o });
 
-test("BADGES table: 17 ids (ledger 12 + streak100 + v0.7 심화 2 + v0.15 경비실 2) with Korean name/desc", () => {
-  assert.equal(BADGES.length, 17);
+test("BADGES table: 18 ids (ledger 12 + streak100 + v0.7 심화 2 + v0.15 경비실 2) with Korean name/desc", () => {
+  assert.equal(BADGES.length, 18);
   assert.deepEqual(BADGES.map((b) => b.id), ["first_print", "ch1", "ch2", "ch3", "streak7", "streak30", "streak100",
-    "fixer", "hintfree10", "perfectionist", "reviewer", "collector", "night_owl", "advanced1", "advancedAll", "guard_first", "guard_perfect"]);
+    "fixer", "hintfree10", "perfectionist", "reviewer", "collector", "night_owl", "advanced1", "advancedAll", "guard_first", "guard_perfect", "guard_files"]);
   for (const b of BADGES) {
     assert.match(b.name, /[가-힣]/);
     assert.match(b.desc, /[가-힣]/);
@@ -123,8 +123,9 @@ test("every badge has its own art (no '?' fallback), incl. v0.7 심화 2개", as
 
 test("guard_perfect 그림 글자는 색인 수(45/45, v0.16) — 색인이 바뀌면 따라 바뀜", async () => {
   const { badgeArt } = await import("../../src/ui/badges.js");
-  assert.ok(badgeArt("guard_perfect", true).includes(`>${FULL.length}/${FULL.length}</text>`));
-  assert.equal(FULL.length, 45);
+  const nb = basicIndex().length;
+  assert.ok(badgeArt("guard_perfect", true).includes(`>${nb}/${nb}</text>`));
+  assert.equal(nb, 45);
   setGuardIndex(FULL.slice(0, 3));
   try {
     assert.ok(badgeArt("guard_perfect", true).includes(">3/3</text>"));
@@ -165,4 +166,32 @@ test("badge_guard_perfect: 색인 3개짜리 — 셋 모두 firstTry면 받고, 
   } finally {
     setGuardIndex(FULL);
   }
+});
+
+const SYN = [
+  ...["A1", "A2", "A3"].map((id) => ({ id, need: 3, title: id, blanks: [2] })),
+  ...["F3", "F4"].map((id) => ({ id, need: 3, title: id, blanks: [2], tier: "field" })),
+];
+const solvedFT = (...ids) => Object.fromEntries(ids.map((id) => [id, { firstTry: true, how: "blank" }]));
+
+test("badge_guard_perfect: 기본만 — 응용을 안 풀어도 받음", () => {
+  setGuardIndex(SYN);
+  try {
+    assert.equal(RULES.guard_perfect(mkSave({ guard: { solved: solvedFT("A1", "A2", "A3") } })), true);
+    assert.equal(RULES.guard_perfect(mkSave({ guard: { solved: solvedFT("A1", "A2", "F3", "F4") } })), false);
+  } finally {
+    setGuardIndex(FULL);
+  }
+});
+
+test("badge_guard_files: 응용 모두 해결, 응용이 0개면 받지 않음", () => {
+  setGuardIndex(SYN);
+  try {
+    assert.equal(RULES.guard_files(mkSave({ guard: { solved: solvedFT("F3") } })), false);
+    assert.equal(RULES.guard_files(mkSave({ guard: { solved: solvedFT("F3", "F4") } })), true);
+    assert.ok(checkBadges(mkSave({ guard: { solved: solvedFT("F3", "F4") } }), {}).includes("guard_files"));
+  } finally {
+    setGuardIndex(FULL);
+  }
+  assert.equal(RULES.guard_files(mkSave({ guard: { solved: solvedFT(...FULL.map((e) => e.id)) } })), false);
 });

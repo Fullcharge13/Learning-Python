@@ -22,7 +22,8 @@ const CODE_MAX = 4000;
 let INDEX = null;
 let BY_ID = null;   // 상속 이름(toString 등)이 id로 통과하지 않게 프로토타입 없는 객체로
 const okEntry = (e) => !!e && typeof e === "object" && typeof e.id === "string" && e.id !== "" && Number.isInteger(e.need)
-  && Array.isArray(e.blanks) && e.blanks.every((n) => Number.isInteger(n) && n >= 0);
+  && Array.isArray(e.blanks) && e.blanks.every((n) => Number.isInteger(n) && n >= 0)
+  && (e.tier === undefined || e.tier === "field");   // v0.20.0: 기본은 tier 없음, 응용은 "field"만
 
 /** 사건 색인 넣기(앱 시작 때 한 번, 저장을 읽기 전). 비었거나 모양이 틀리면 던짐 */
 export function setGuardIndex(entries) {
@@ -46,6 +47,12 @@ export function guardIndex() {
   byId();
   return INDEX;
 }
+/** 응용 사건인가(v0.20.0) */
+export const isField = (entry) => !!entry && entry.tier === "field";
+/** 기본 사건 색인(원본 순서) */
+export const basicIndex = () => guardIndex().filter((e) => !isField(e));
+/** 응용 사건 색인(원본 순서) */
+export const fieldIndex = () => guardIndex().filter(isField);
 const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const nonNeg = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
 
@@ -94,14 +101,25 @@ export function cleanGuard(raw) {
 const toSet = (p) => (p instanceof Set ? p : new Set(p || []));
 /** 경비실이 열렸나(3장 통과) */
 export const guardOpen = (passed) => toSet(passed).has(3);
-/** 이 사건이 열렸나(필요한 장 통과). 색인 칸이나 본문 모두 need가 있다 */
-export const incidentOpen = (incident, passed) => toSet(passed).has(incident.need);
+/** 같은 장의 기본 사건 중 아직 해결 못 한 수(색인과 저장만 봄) */
+export function basicLeft(entry, guard) {
+  const solved = cleanGuard(guard).solved;
+  return basicIndex().filter((i) => i.need === entry.need && !solved[i.id]).length;
+}
+/**
+ * 이 사건이 열렸나. 기본은 필요한 장 통과. 응용는 거기에 더해 그 장의 기본을 모두 해결(개발자 모드는 건너뜀).
+ * 색인 칸이나 본문 모두 need가 있다.
+ */
+export function incidentOpen(incident, passed, guard = null, dev = false) {
+  if (!toSet(passed).has(incident.need)) return false;
+  if (!isField(incident)) return true;
+  return dev === true || basicLeft(incident, guard) === 0;
+}
 
 /** 열린 사건 중 아직 본 적 없는 것이 있나(하단 메뉴 새 소식 점) */
-export function guardNews(guard, passed) {
-  const p = toSet(passed);
+export function guardNews(guard, passed, dev = false) {
   const seen = new Set(cleanGuard(guard).seen);
-  return guardIndex().some((i) => p.has(i.need) && !seen.has(i.id));
+  return guardIndex().some((i) => incidentOpen(i, passed, guard, dev) && !seen.has(i.id));
 }
 
 export function markSeen(guard, id) {
@@ -143,10 +161,12 @@ export function guardConsistent(input, r) {
   return r.solved === solved;
 }
 
-/** 해결한 사건 수로 등급 id(기준은 색인의 사건 수) */
+/** 해결한 기본 사건 수로 등급 id(기준은 색인의 기본 사건 수, 응용는 세지 않음) */
 export function rankOf(guard) {
-  const n = Object.keys(cleanGuard(guard).solved).length;
-  const th = rankThresholds(guardIndex().length);
+  const solved = cleanGuard(guard).solved;
+  const basic = basicIndex();
+  const n = basic.filter((i) => solved[i.id]).length;
+  const th = rankThresholds(basic.length);
   let id = RANK_IDS[0];
   for (const r of RANK_IDS) if (n >= th[r]) id = r;
   return id;

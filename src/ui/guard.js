@@ -4,6 +4,7 @@
 // 실행 결과는 재생 전에 먼저 저장한다(재생 중 떠나도 남음). 경비실은 바이트를 직접 주지 않는다(XP만, state.js).
 // v0.16.0 작업 2: 목록·등급은 색인(ctx.guard.index)으로. 사건 본문은 열 때 장 파일에서 받는다(ctx.guard.load(장)).
 //   받는 동안 「사건을 불러오는 중…」, 실패하면 「사건을 불러오지 못했어요」+「다시 시도」. 늦게 온 응답은 실행 토큰으로 버린다.
+import { isDev } from "../devgate.js";
 import { BADGES } from "../../data/badges.js";
 import { crowSVG } from "../guard/crow.js";
 import { fillBlanks, optionOrder } from "../guard/blanks.js";
@@ -63,7 +64,7 @@ const startCode = (inc) => fillBlanks(inc.start, inc.blanks, inc.blanks.map(() =
 export function render(root, ctx, params = {}) {
   const passed = passedChapters(ctx.save, ctx.chapters);
   const LIST = ctx.guard.index;   // 색인(본문 없음)
-  const open = LIST.filter((i) => incidentOpen(i, passed));
+  const open = LIST.filter((i) => incidentOpen(i, passed, ctx.save.guard, isDev(ctx.save)));
   const G = () => cleanGuard(ctx.save.guard);
   const first = open.find((i) => i.id === params.id) || open.find((i) => !G().solved[i.id]) || open[0] || LIST[0];
   // entry: 지금 사건의 색인 칸, inc: 받은 본문(받기 전·실패면 null)
@@ -444,7 +445,7 @@ export function render(root, ctx, params = {}) {
     const id = await sheet({
       title: t`사건 목록`,
       html: `<ul class="g-pick">${LIST.map((i) => {
-        const on = incidentOpen(i, passed);
+        const on = incidentOpen(i, passed, ctx.save.guard, isDev(ctx.save));
         const note = !on ? `${icon("lock")}${esc(t`${i.need}장을 끝내면 열려요`)}` : g.solved[i.id] ? `${icon("check")}${t`해결`}` : "";
         return `<li><button class="g-pick-btn gd-item${i.id === S.entry.id ? " on" : ""}" data-g="${i.id}"${on ? ` data-v="${i.id}"` : " disabled"}>
           <span>${i.id} · ${esc(txt(i, "title"))}</span><small>${note}</small></button></li>`;

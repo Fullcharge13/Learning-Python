@@ -8,6 +8,7 @@
 // 규칙은 runner.py의 farm 모듈(실행), 노드·코드는 src/garden/nodes.js, 저장·주문·성장은 src/garden/state.js,
 // 그림·재생 단계는 src/garden/view.js에 있다. 이 화면은 그것들을 이어 붙이고 그리기만 한다.
 // 저장: save.garden 하나(바뀔 때마다 ctx.commit). 실행 결과는 재생 전에 먼저 저장한다(재생 중 앱을 닫아도 남음).
+import { isDev } from "../devgate.js";
 import {
   NODES, COND, VAR_NAMES, FUNC_NAMES, OPS, VALUE_RANGE, MAX_NODES, MSG as NODE_MSG,
   codegen, validate, unlockedKinds, newNode, insertNode, moveNode, removeNode, updateArgs, setElse, countNodes,
@@ -241,7 +242,7 @@ export function render(root, ctx, params = {}) {
   const notesOpen = unlocked.has("readnote");
   // v0.15 경비실 입구: 3장 전에는 자물쇠(누르면 알림), 새 사건이면 빨간 점
   const guardIn = guardOpen(passed);
-  const guardDot = guardIn && guardNews(ctx.save.guard, passed);
+  const guardDot = guardIn && guardNews(ctx.save.guard, passed, isDev(ctx.save));
   const S = {
     // v0.13.5 검토 I1: 언어를 바꾼 뒤 코드 모드 — 노드가 만든 코드를 고치지 않았으면 지금 언어 코드로(저장은 다음 save 때)
     garden: codeForLang(fillGarden(ctx.save).garden, lang()),

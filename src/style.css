@@ -106,8 +106,8 @@ button { cursor: pointer; }
 .btn.sun { background: var(--sun); color: var(--ink); box-shadow: 0 4px 0 var(--sun-deep); }
 .btn.coral { background: var(--coral-ink); color: #fff; box-shadow: 0 4px 0 #7E2516; }
 .btn.ghost { background: var(--card); color: var(--ink); border-color: var(--line); box-shadow: 0 3px 0 var(--line); }
-.btn:disabled { background: #E9E2D2; color: #6F6A5E; box-shadow: none; border-color: transparent; cursor: default; }
-.btn.is-off { background: #E9E2D2; color: #6F6A5E; box-shadow: none; border-color: transparent; cursor: default; } /* v0.12.1 초점 받는 「입고 있어요」 */
+.btn:disabled { background: #E9E2D2; color: #5C574C; box-shadow: none; border-color: transparent; cursor: default; }
+.btn.is-off { background: #E9E2D2; color: #5C574C; box-shadow: none; border-color: transparent; cursor: default; } /* v0.12.1 초점 받는 「입고 있어요」 */
 .link { background: none; border: 0; color: var(--teal-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; min-height: 44px; padding: 0 4px; }
 .icon-btn { width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0; border-radius: 12px; color: var(--ink-2); }
 
@@ -221,7 +221,7 @@ button { cursor: pointer; }
 .tab-dot { position: absolute; top: -2px; right: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--coral-ink); box-shadow: 0 0 0 2px var(--card); }
 .tab-lock { position: absolute; bottom: -3px; right: -8px; width: 15px; height: 15px; border-radius: 50%; background: var(--card); display: grid; place-items: center; }
 .tab-lock svg { width: 12px; height: 12px; }
-.tab.locked { opacity: .55; }
+.tab.locked { color: #636B7A; } /* v0.20.3 밝게: 불투명도 대신 글자색(4.5 이상), 잠김은 자물쇠로도 보임 */
 
 main { padding: 16px calc(16px + var(--sar)) 0 calc(16px + var(--sal)); }
 .page-title { font-size: 1.6rem; margin: 6px 0 14px; }
@@ -729,7 +729,7 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .g-svg text { font-family: var(--sans); }
 .g-now { margin: 0; max-width: 100%; display: flex; gap: 8px; align-items: center; padding: 6px 12px; border-radius: 10px;
   background: var(--navy); color: #F4EEDD; font-size: .9rem; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
-.g-now .g-ln { color: var(--sun); font-weight: 700; }
+.g-now .g-ln { color: var(--sun); font-weight: 700; opacity: 1; }
 
 /* 씨앗 봉투·쪽지함 줄(v0.12) */
 .g-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; width: 100%; }
@@ -842,6 +842,7 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 .g-lines { margin: 0; padding: 10px 12px; }
 .g-line { display: block; padding: 0 4px; border-radius: 6px; white-space: pre-wrap; }
 .g-line.now { background: rgba(255, 212, 59, .32); }
+.g-line.now .g-ln { opacity: 1; } /* v0.20.3 지금 줄 번호는 흐리지 않음 */
 .g-line.empty { color: #B9B3A2; }
 .g-ln { display: inline-block; min-width: 2ch; margin-right: 10px; text-align: right; opacity: .55; user-select: none; -webkit-user-select: none; }
 
@@ -1144,7 +1145,7 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 [data-theme="dark"] .star-node.locked .star-svg { filter: drop-shadow(0 3px 0 #2A3550); }
 [data-theme="dark"] .star-node.locked .star-shape { stroke: #46536E; }
 [data-theme="dark"] .star-lock rect, [data-theme="dark"] .star-lock path { stroke: var(--muted-ink); }
-[data-theme="dark"] .tab.locked { opacity: .8; }
+[data-theme="dark"] .tab.locked { opacity: .8; color: var(--ink-2); }
 /* 꺼진 단추·스위치 */
 [data-theme="dark"] .btn:disabled, [data-theme="dark"] .btn.is-off { background: #2A344A; color: #A3ACBC; }
 [data-theme="dark"] .switch span { background: #66759A; }
@@ -1165,7 +1166,7 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 [data-theme="dark"] .g-var { background: #1E3A22; color: #A6DDA0; }
 [data-theme="dark"] .g-note-empty { color: #A9B1C0 !important; }
 [data-theme="dark"] .g-line.now { background: rgba(255, 212, 59, .2); }
-[data-theme="dark"] .g-ln { opacity: .8; }
+[data-theme="dark"] .g-ln, [data-theme="dark"] .g-line.now .g-ln, [data-theme="dark"] .g-now .g-ln { opacity: .8; }
 /* 홈 화면 추가 안내 그림 속 파란 글자(흰 단추 그림 위) */
 [data-theme="dark"] .ins-steps svg text[fill="#2F7BE0"] { fill: #1F65C6; }
 [data-theme="dark"] .ins-steps svg text[fill="#1E8E5A"] { fill: #16704A; }

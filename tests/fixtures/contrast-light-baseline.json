@@ -2,7 +2,7 @@
  "theme": "light",
  "skip_editor_tokens": false,
  "skip_art_text": [],
- "seconds": 37.6,
+ "seconds": 36.3,
  "screens": [
   {
    "screen": "splash",
@@ -49,9 +49,9 @@
   {
    "screen": "home",
    "checked": 166,
-   "minRatio": 2.4,
+   "minRatio": 4.71,
    "theme_applied": "light",
-   "fails": 1
+   "fails": 0
   },
   {
    "screen": "lesson-card",
@@ -119,9 +119,9 @@
   {
    "screen": "done",
    "checked": 38,
-   "minRatio": 4.17,
+   "minRatio": 4.71,
    "theme_applied": "light",
-   "fails": 1
+   "fails": 0
   },
   {
    "screen": "home-garden-save",
@@ -175,9 +175,9 @@
   {
    "screen": "garden-bubble",
    "checked": 31,
-   "minRatio": 2.83,
+   "minRatio": 4.81,
    "theme_applied": "light",
-   "fails": 3
+   "fails": 0
   },
   {
    "screen": "garden-done-modal",
@@ -189,16 +189,16 @@
   {
    "screen": "guard-blank",
    "checked": 29,
-   "minRatio": 4.17,
+   "minRatio": 4.97,
    "theme_applied": "light",
-   "fails": 1
+   "fails": 0
   },
   {
    "screen": "guard-sheet",
    "checked": 30,
-   "minRatio": 4.17,
+   "minRatio": 4.97,
    "theme_applied": "light",
-   "fails": 1
+   "fails": 0
   },
   {
    "screen": "guard-result",
@@ -217,16 +217,16 @@
   {
    "screen": "guard-write",
    "checked": 40,
-   "minRatio": 4.17,
+   "minRatio": 4.63,
    "theme_applied": "light",
-   "fails": 1
+   "fails": 0
   },
   {
    "screen": "guard-field-list",
    "checked": 46,
    "minRatio": 3.05,
    "theme_applied": "light",
-   "fails": 2
+   "fails": 1
   },
   {
    "screen": "guard-field-card",
@@ -237,8 +237,8 @@
   }
  ],
  "checked": 1166,
- "fail_count": 11,
- "fail_elements": 24,
+ "fail_count": 2,
+ "fail_elements": 15,
  "excluded": {
   "noLetterSkipped": 165,
   "invisible": 1226,
@@ -257,26 +257,6 @@
  "errors": [],
  "failures": [
   {
-   "selector": ".tab > span",
-   "text": "텃밭",
-   "fg": "#a2a6ae",
-   "bg": "#fffdf8",
-   "ratio": 2.4,
-   "need": 4.5,
-   "count": 1,
-   "screen": "home"
-  },
-  {
-   "selector": "svg > text",
-   "text": "추가",
-   "fg": "#2f7be0",
-   "bg": "#ffffff",
-   "ratio": 4.17,
-   "need": 4.5,
-   "count": 1,
-   "screen": "done"
-  },
-  {
    "selector": ".badge-art > text",
    "text": "1장",
    "fg": "#9a8f78",
@@ -285,76 +265,6 @@
    "need": 4.5,
    "count": 14,
    "screen": "badges"
-  },
-  {
-   "selector": "#g-now > span.g-ln",
-   "text": "3",
-   "fg": "#9a883c",
-   "bg": "#1f2b3d",
-   "ratio": 4.05,
-   "need": 4.5,
-   "count": 1,
-   "screen": "garden-bubble"
-  },
-  {
-   "selector": "#g-guard > span",
-   "text": "경비실",
-   "fg": "#6f6a5e",
-   "bg": "#e9e2d2",
-   "ratio": 4.17,
-   "need": 4.5,
-   "count": 1,
-   "screen": "garden-bubble"
-  },
-  {
-   "selector": ".g-line > span.g-ln",
-   "text": "3",
-   "fg": "#b5af95",
-   "bg": "#67613c",
-   "ratio": 2.83,
-   "need": 4.5,
-   "count": 1,
-   "screen": "garden-bubble"
-  },
-  {
-   "selector": "#gd-run > span",
-   "text": "실행",
-   "fg": "#6f6a5e",
-   "bg": "#e9e2d2",
-   "ratio": 4.17,
-   "need": 4.5,
-   "count": 1,
-   "screen": "guard-blank"
-  },
-  {
-   "selector": "#gd-run > span",
-   "text": "실행",
-   "fg": "#6f6a5e",
-   "bg": "#e9e2d2",
-   "ratio": 4.17,
-   "need": 4.5,
-   "count": 1,
-   "screen": "guard-sheet"
-  },
-  {
-   "selector": "#gd-run > span",
-   "text": "실행",
-   "fg": "#6f6a5e",
-   "bg": "#e9e2d2",
-   "ratio": 4.17,
-   "need": 4.5,
-   "count": 1,
-   "screen": "guard-write"
-  },
-  {
-   "selector": "#gd-run > span",
-   "text": "실행",
-   "fg": "#6f6a5e",
-   "bg": "#e9e2d2",
-   "ratio": 4.17,
-   "need": 4.5,
-   "count": 1,
-   "screen": "guard-field-list"
   },
   {
    "selector": ".g-pick-btn > span",
@@ -574,7 +484,7 @@
    ".tab > span|#555f72|#fffdf8",
    ".tab > span|#555f72|#fffdf8",
    ".tab > span|#555f72|#fffdf8",
-   ".tab > span|#a2a6ae|#fffdf8",
+   ".tab > span|#636b7a|#fffdf8",
    "h2#d-title|#22304a|#f2e9d5",
    "h2#q-title|#22304a|#fffdf8",
    "main > p.path-end|#555f72|#fbf6ea"
@@ -740,7 +650,7 @@
    "ol > li|#22304a|#fffdf8",
    "ol > li|#22304a|#fffdf8",
    "ol > li|#22304a|#fffdf8",
-   "svg > text|#2f7be0|#ffffff"
+   "svg > text|#1f6fd1|#ffffff"
   ],
   "home-garden-save": [
    "#continue > span|#ffffff|#12756d",
@@ -1255,11 +1165,11 @@
   ],
   "garden-bubble": [
    "#g-clear > span|#b03a25|#fffdf8",
-   "#g-guard > span|#6f6a5e|#e9e2d2",
+   "#g-guard > span|#5c574c|#e9e2d2",
    "#g-lines > span.g-line.now|#f4eedd|#67613c",
    "#g-lines > span.g-line|#f4eedd|#1f2b3d",
    "#g-lines > span.g-line|#f4eedd|#1f2b3d",
-   "#g-now > span.g-ln|#9a883c|#1f2b3d",
+   "#g-now > span.g-ln|#ffd43b|#1f2b3d",
    "#g-prog > p.g-count|#555f72|#fbf6ea",
    "#g-prog-title > span|#22304a|#fbf6ea",
    "#g-result > p.g-msg|#22304a|#fbf6ea",
@@ -1271,7 +1181,7 @@
    ".g-goal > span|#22304a|#f2e9d5",
    ".g-line > span.g-ln|#949695|#1f2b3d",
    ".g-line > span.g-ln|#949695|#1f2b3d",
-   ".g-line > span.g-ln|#b5af95|#67613c",
+   ".g-line > span.g-ln|#f4eedd|#67613c",
    ".g-node-main > button.g-arg|#0b5953|#ddf1ec",
    ".g-node-main > button.g-arg|#0b5953|#ddf1ec",
    ".g-node-main > span.g-kind|#22304a|#fff3c4",
@@ -1331,7 +1241,7 @@
    "#gd-code-t > span|#22304a|#fffdf8",
    "#gd-gate-t > span|#22304a|#fffdf8",
    "#gd-list > span|#22304a|#fffdf8",
-   "#gd-run > span|#6f6a5e|#e9e2d2",
+   "#gd-run > span|#5c574c|#e9e2d2",
    ".g-mode-note > code|#555f72|#f2e9d5",
    ".g-mode-note > code|#555f72|#f2e9d5",
    ".g-mode-note > code|#555f72|#f2e9d5",
@@ -1362,7 +1272,7 @@
    "#gd-code-t > span|#22304a|#fffdf8",
    "#gd-gate-t > span|#22304a|#fffdf8",
    "#gd-list > span|#22304a|#fffdf8",
-   "#gd-run > span|#6f6a5e|#e9e2d2",
+   "#gd-run > span|#5c574c|#e9e2d2",
    ".g-mode-note > code|#555f72|#f2e9d5",
    ".g-mode-note > code|#555f72|#f2e9d5",
    ".g-mode-note > code|#555f72|#f2e9d5",
@@ -1462,7 +1372,7 @@
    "#gd-code-t > span|#22304a|#fffdf8",
    "#gd-gate-t > span|#22304a|#fffdf8",
    "#gd-list > span|#22304a|#fffdf8",
-   "#gd-run > span|#6f6a5e|#e9e2d2",
+   "#gd-run > span|#5c574c|#e9e2d2",
    ".cm-content > div.cm-line.cm-activeLine|#22304a|#eff6f1",
    ".cm-content > div.cm-line|#22304a|#fffdf8",
    ".cm-content > div.cm-line|#22304a|#fffdf8",
@@ -1505,7 +1415,7 @@
    "#gd-code-t > span|#22304a|#fffdf8",
    "#gd-gate-t > span|#22304a|#fffdf8",
    "#gd-list > span|#22304a|#fffdf8",
-   "#gd-run > span|#6f6a5e|#e9e2d2",
+   "#gd-run > span|#5c574c|#e9e2d2",
    ".g-mode-note > code|#555f72|#f2e9d5",
    ".g-mode-note > code|#555f72|#f2e9d5",
    ".g-mode-note > code|#555f72|#f2e9d5",

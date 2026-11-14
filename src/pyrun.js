@@ -1,6 +1,6 @@
 // Pyodide 작업자를 다루는 화면 쪽 손잡이 (설계서 4-3, 계획 작업 5).
 //
-//   const py = new PyRun({ indexURL: PYODIDE_CDN });
+//   const py = new PyRun({ indexURL: PYODIDE_DEFAULT });
 //   py.onstatus = (status, phase) => { ... };  // phase: "first-load" | "restart"
 //   py.preload();                       // 앱을 열자마자 미리 받기 시작(선택)
 //   const r = await py.run(code, "12\n30", ["If"]);
@@ -35,9 +35,9 @@ import { cleanCharts } from "./chart.js";
 import { lang as appLang } from "./i18n.js";
 
 export const PYODIDE_VERSION = "314.0.7";
-// 배포용 고정 주소(npm 패키지를 jsDelivr로 받음, 판정 C19). 시험·개발은 "/node_modules/pyodide/"를 쓴다.
-// 어느 쪽을 쓸지는 build.py가 정한다.
-export const PYODIDE_CDN = "https://cdn.jsdelivr.net/npm/pyodide@314.0.7/";
+// 배포용 기본 주소: 같은 사이트의 pyodide/(v0.19.2 H-C1, build.py가 dist/pyodide/에 싣는다).
+// 시험·개발은 "/node_modules/pyodide/"를 쓴다. 어느 쪽을 쓸지는 build.py가 window.RIA_PYODIDE_URL로 정한다.
+export const PYODIDE_DEFAULT = "./pyodide/";
 export const DEFAULT_TIMEOUT_MS = 3000;
 export const DEFAULT_LOAD_TIMEOUT_MS = 90_000;
 
@@ -102,7 +102,7 @@ export function cleanFarm(f) {
 }
 
 export class PyRun {
-  constructor({ indexURL = PYODIDE_CDN, runnerSource, runnerURL, workerURL, loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS } = {}) {
+  constructor({ indexURL = PYODIDE_DEFAULT, runnerSource, runnerURL, workerURL, loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS } = {}) {
     let idx = new URL(indexURL, baseHref()).href; // 작업자가 blob 주소여도 되도록 절대 주소로
     if (!idx.endsWith("/")) idx += "/";
     this.indexURL = idx;

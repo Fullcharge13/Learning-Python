@@ -530,12 +530,12 @@ def test_load_error_resolves():
     assert _run("print(5)")["stdout"] == "5\n"
 
 
-def test_cdn_constant():
+def test_default_engine_constant():
     v = _page().evaluate("""async () => {
         const m = await import("/src/pyrun.js");
-        return [m.PYODIDE_CDN, m.PYODIDE_VERSION];
+        return [m.PYODIDE_DEFAULT, m.PYODIDE_VERSION];
     }""")
-    assert v == ["https://cdn.jsdelivr.net/npm/pyodide@314.0.7/", "314.0.7"], v
+    assert v == ["./pyodide/", "314.0.7"], v
 
 
 def test_fetch_retry():
@@ -746,7 +746,7 @@ TESTS = [test_cold_start_ms, test_hello, test_input_short, test_string_stdin, te
          test_practice_server_in_pyodide, test_chart_in_pyodide, test_farm_in_pyodide,
          test_sqlite3_in_pyodide, test_lang_in_pyodide, test_error_variants_real_engine, test_guard_three_modes, test_queue, test_timeout_then_ok,
          test_status_phases, test_engine_crash_restart, test_queued_own_clock, test_ui_alive, test_no_page_errors,
-         test_load_error_resolves, test_cdn_constant, test_fetch_retry, test_worker_ctor_throws,
+         test_load_error_resolves, test_default_engine_constant, test_fetch_retry, test_worker_ctor_throws,
          test_load_timeout_retry, test_idle_worker_killed_silently, test_idle_worker_error_event]
 
 

@@ -26,7 +26,7 @@
   (window.RIA_CHAPTER_FILES)를 넣고, 앱은 레슨을 열 때 장 파일을 받는다. sw.js는 설치 때 장 파일을 모두 미리 받는다.
 - src/worker.js → 따로 묶고 줄여(ES 모듈) 글자로 넣고, 실행할 때 Blob 주소로 만든다(window.RIA_WORKER_URL).
 - src/py/guard.py + runner.py(tools/runner_src.py가 이어 붙임) → 글자 그대로 window.RIA_RUNNER_SRC로 넣는다.
-- Pyodide 주소: 배포는 jsDelivr(판정 C19), --dev-pyodide는 /node_modules/pyodide/.
+- Pyodide 주소: 배포는 같은 사이트 pyodide/(dist/pyodide/에 핵심 5개를 복사, v0.19.2 H-C1), --dev-pyodide는 /node_modules/pyodide/.
 - app.js가 PyRun에 window.RIA_WORKER_URL·RIA_RUNNER_SRC를 넘기지 않으면 빌드를 멈춘다
   (한 장짜리 HTML에는 worker.js·runner.py 파일이 따로 없어서 Python이 돌지 않는다).
 """
@@ -43,7 +43,8 @@ import sys
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(ROOT, "src")
 PYODIDE_VERSION = "314.0.7"
-PYODIDE_CDN = "https://cdn.jsdelivr.net/npm/pyodide@%s/" % PYODIDE_VERSION
+PYODIDE_LOCAL = "./pyodide/"   # v0.19.2(H-C1): 배포판은 엔진을 같은 사이트의 pyodide/에서(외부 요청 없음)
+PYODIDE_CORE = ("pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json")
 PYODIDE_DEV = "/node_modules/pyodide/"
 MAX_RAW = 614_400  # 판정 C28 → … → G-C6(850KB) → v0.17.0 첫 화면 가볍게: 600KB (목표 520KB)
 MAX_EDITOR_CHUNK = 430_080   # v0.17.0: 편집기 묶음 420KB
@@ -160,7 +161,7 @@ process.stdout.write(JSON.stringify({ index, files, contents }));
 """
 
 
-OWNED = ("index.html", "manifest.webmanifest", "manifest.en.webmanifest", "sw.js", "icons", "lessons", "guard", "lang", "py",
+OWNED = ("index.html", "pyodide", "manifest.webmanifest", "manifest.en.webmanifest", "sw.js", "icons", "lessons", "guard", "lang", "py",
          "licenses.txt", "js")
 HOOKS = ("RIA_WORKER_URL", "RIA_RUNNER_URL")
 
@@ -200,7 +201,7 @@ THE SOFTWARE."""
 
 
 def third_party_notices(inputs, pyodide_url):
-    """판정 C43: 묶어 넣은 꾸러미의 라이선스 전문 + CDN에서 받는 Pyodide 안내."""
+    """판정 C43: 묶어 넣은 꾸러미의 라이선스 전문 + 함께 싣는 Pyodide 안내(v0.19.2: 같은 사이트 pyodide/)."""
     parts = ["리아와 파이썬! — 사용한 프로그램과 라이선스 (Third-party notices)", "",
              "이 앱에는 아래 공개 소프트웨어가 들어 있습니다. 각 저작권자에게 감사드립니다.", ""]
     for pkg in bundled_packages(inputs):
@@ -217,8 +218,8 @@ def third_party_notices(inputs, pyodide_url):
               "경비실 아이콘 하나(shield-check)의 그림 길을 앱 안에 넣었습니다. https://icons.getbootstrap.com",
               BOOTSTRAP_ICONS_MIT, "", ""]
     parts += ["== pyodide %s (MPL-2.0)" % PYODIDE_VERSION, "",
-              "Python 실행기 Pyodide는 앱에 묶지 않고 실행할 때 아래 주소에서 받습니다(고치지 않은 원본).",
-              pyodide_url, "라이선스: Mozilla Public License 2.0 — https://www.mozilla.org/MPL/2.0/",
+              "Python 실행기 Pyodide는 앱 파일에 묶지 않고, 고치지 않은 원본 파일 그대로 같은 사이트의 pyodide/ 폴더에서 내려받습니다.",
+              "배포 주소: 같은 사이트의 pyodide/ (원본: npm pyodide %s)" % PYODIDE_VERSION, "라이선스: Mozilla Public License 2.0 — https://www.mozilla.org/MPL/2.0/",
               "소스: https://github.com/pyodide/pyodide", ""]
     return "\n".join(parts)
 
@@ -236,6 +237,25 @@ def check_output(html):
         raise SystemExit("build: external <script src> left in output")
     if re.search(r"<link\b[^>]*rel\s*=\s*[\"']?stylesheet", html, re.I):
         raise SystemExit("build: <link rel=\"stylesheet\"> left in output (CSS must be inlined)")
+
+
+def copy_pyodide(out):
+    """v0.19.2(H-C1): 엔진 핵심 5개를 node_modules/pyodide/에서 out/pyodide/로 복사하고, 원본과 sha256이 같은지 확인한다."""
+    src = os.path.join(ROOT, "node_modules", "pyodide")
+    dst = os.path.join(out, "pyodide")
+    os.makedirs(dst)
+    total = 0
+    for name in PYODIDE_CORE:
+        a, b = os.path.join(src, name), os.path.join(dst, name)
+        if not os.path.exists(a):
+            raise SystemExit("build: node_modules/pyodide/%s is missing. Run `npm install` first." % name)
+        shutil.copyfile(a, b)
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            da, db = fa.read(), fb.read()
+        if hashlib.sha256(da).hexdigest() != hashlib.sha256(db).hexdigest():
+            raise SystemExit("build: dist/pyodide/%s differs from node_modules/pyodide/%s (sha256)" % (name, name))
+        total += len(db)
+    return total
 
 
 def need_node():
@@ -421,7 +441,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
         app_src = f.read()
     check_app_hooks(app_src)
     version = app_version(app_src)
-    pyodide_url = PYODIDE_DEV if dev_pyodide else PYODIDE_CDN
+    pyodide_url = PYODIDE_DEV if dev_pyodide else PYODIDE_LOCAL
     split = split_lessons(lessons_dir or os.path.join(ROOT, "data", "lessons"))
     # 영어 레슨(v0.13.1): data/lessons/en/chN.js → lessons/en/chN-<지문>.json, 목록은 영어 꾸러미 안에
     en_dir = os.path.join(lessons_dir or os.path.join(ROOT, "data", "lessons"), "en")
@@ -531,6 +551,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
         f.write(editor_body)
     with open(os.path.join(out, errors_name), "wb") as f:
         f.write(errors_body)
+    pyodide_bytes = 0 if dev_pyodide else copy_pyodide(out)
     os.makedirs(os.path.join(out, "py"))
     with open(os.path.join(out, runner_name), "wb") as f:
         f.write(runner_body)
@@ -568,6 +589,8 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     raw, gz = len(data), len(gzip.compress(data, 9))
     print("dist: %s" % os.path.relpath(out, ROOT))
     print("version %s, Pyodide %s" % (version, pyodide_url))
+    if not dev_pyodide:
+        print("pyodide/: %d files, %.1f MB (sha256 = node_modules/pyodide)" % (len(PYODIDE_CORE), pyodide_bytes / 1048576))
     print("app.js %.1f KB, worker %.1f KB, runner.py %.1f KB, css %.1f KB" % (
         len(b["app"].encode()) / 1024, len(b["worker"].encode()) / 1024, len(runner.encode()) / 1024,
         len(b["css"].encode()) / 1024))

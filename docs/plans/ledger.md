@@ -28,7 +28,7 @@
 | C16 | 의상 이름(괄호·+ 포함)이 대사에 들어가면 문장이 깨짐 | `data/outfits.js`에 대사용 `short` 이름 추가(작업 7이 추가). 대사의 `{outfit}`은 `short`로 채움 |
 | C17 | 대사 검토: 「오늘부터 1일」(연애 관용구), 힌트/단서 혼용, 빈 값 자리 표시 | 문장 교체, 빈 값이 필요한 줄은 건너뜀. 작업 9 메모: 이름 입력은 8자 제한·끝의 「님」 제거, `say`의 `last`는 상황별로 따로 보관, 칭찬에 개념 이름을 넣는 것은 결과 패널 해설로 보완 |
 | C18 | 채점기 검토: stdin 형식, 실행 간 상태 누수, 출력 폭주 | 레슨의 `stdin`은 `\n`으로 나눈 문자열(작업 6도 따름). 실행마다 builtins·재귀 한도·새 모듈을 되돌림(이미 불러온 표준 모듈 값 변경은 알려진 한계). 출력 10만 글자 제한(`OutputLimit` 오류). TabError·UnboundLocalError는 각각 들여쓰기·이름 설명으로 안내. 작업 6 `content.py`는 `require` 이름이 `ast`에 있는지 검사 |
-| C19 | 배포용 Pyodide 주소(`cdn.jsdelivr.net/pyodide/v314.0.7/full/`)를 이 환경에서 확인할 수 없음(프록시 차단) | 이 환경에 설치된 npm 패키지와 같은 파일 묶음을 주는 `https://cdn.jsdelivr.net/npm/pyodide@314.0.7/`로 바꿈(이미 존재가 확인된 npm 판). 실기기 목록에서 확인 |
+| C19 | **(H-C1로 바뀜: 지금은 같은 사이트 `pyodide/`)** 배포용 Pyodide 주소(`cdn.jsdelivr.net/pyodide/v314.0.7/full/`)를 이 환경에서 확인할 수 없음(프록시 차단) | 이 환경에 설치된 npm 패키지와 같은 파일 묶음을 주는 `https://cdn.jsdelivr.net/npm/pyodide@314.0.7/`로 바꿈(이미 존재가 확인된 npm 판). 실기기 목록에서 확인 |
 | C20 | 계획 「직접 작성 시험 2~4개」 vs 1장은 `input()`이 없어 시험이 모두 같은 내용이 됨 | `input()`이 없는 문제는 공개 시험 1개, 있는 문제는 2~4개(공개 1개). `content.py`가 검사. 설계서 4-3 문구와 함께 기록 |
 | C21 | 레슨 파일 형식 | `data/lessons/chN.js`가 `CHAPTER`와 `LESSONS`를 내보냄. 글자 수 제한과 장별 허용 문법은 `content.py` 맨 위 표가 기준 |
 | C22 | 계획은 작업 9를 1~8이 모두 끝난 뒤로 잡음. 작업 5(소규모 수정 중)·6(2·3장 작성 중)이 남은 상태 | 인터페이스가 확정된 모듈(1·2·3·4·7·8)과 1장 데이터로 작업 9를 먼저 시작. 작업 5의 `phase` 추가는 두 모양 모두 받도록 지시. 2·3장은 있는 파일만 읽게 함. 작업 12도 2·3 승인 뒤 바로 시작 |
@@ -308,3 +308,10 @@
 | 텃밭 말풍선 | `.g-line > span.g-ln` | #b5af95 / #67613c | 2.83 | 3 |
 | 텃밭 말풍선 | `#g-guard > span`(경비실 단추) | #6f6a5e / #e9e2d2 | 4.17 | 경비실 |
 | 경비실(빈칸·시트·쓰기) | `#gd-run > span`(실행할 수 없어 보이는 「실행」) | #6f6a5e / #e9e2d2 | 4.17 | 실행 |
+
+## v0.19.2 보안·안정성
+
+| # | 판정 |
+|---|---|
+| **H-C1** | 판정 C19(jsDelivr)를 바꿈. 배포판은 엔진 핵심 5개(`pyodide.mjs`·`pyodide.asm.mjs`·`pyodide.asm.wasm`·`python_stdlib.zip`·`pyodide-lock.json`)를 `dist/pyodide/`에 원본 그대로 싣고 `RIA_PYODIDE_URL = "./pyodide/"`로 같은 사이트에서 받는다(외부 요청 0). 빌드가 5개의 sha256을 `node_modules/pyodide/`와 맞춰 본다. 개발·시험판(`--dev-pyodide`)은 `/node_modules/pyodide/` 그대로. `src/pyrun.js` 기본 주소도 `./pyodide/`(`PYODIDE_CDN`→`PYODIDE_DEFAULT`)라 첫 파일에 jsDelivr 글자가 없음. 원본 `pyodide.mjs` 안의 `loadPackage` 기본 주소(cdnUrl)는 고치지 않은 원본 규칙대로 남음(앱은 loadPackage를 부르지 않음, 외부 요청 0 시험으로 확인) |
+| **H-C1a** | 기존 학습자: 엔진 저장소 이름을 `ria-pyodide-314.0.7-self`로 새로 함. 옛 `ria-pyodide-314.0.7`은 jsDelivr 주소가 키라 같은 사이트 요청에 맞지 않고, 이름 파일만 보는 오프라인 준비 판정이 옛 저장본을 보고 「준비됨」이라 잘못 말할 수 있어서, 새 서비스 작업자가 켜질 때 기존 `ria-` 정리로 지워지게 함(약 12MB를 같은 사이트에서 한 번 다시 받음) |

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { offlineStatus, PYODIDE_REQUIRED } from "../../src/offline.js";
 
-const BASE = "https://cdn.jsdelivr.net/npm/pyodide@314.0.7/";
+const BASE = "https://ria.example/pyodide/";   // v0.19.2: 같은 사이트 pyodide/
 const ALL = PYODIDE_REQUIRED.map((f) => BASE + f).concat([BASE + "pyodide-lock.json"]);
 
 test("offline_ready: 작업자가 다루고 Pyodide 저장본에 필수 파일이 모두 있음", () => {

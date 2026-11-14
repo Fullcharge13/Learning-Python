@@ -8,7 +8,7 @@ import { readDevFlag, setDevMode, loadSlot, storeSlot, keysFor, markDev } from "
 import { rollDay } from "./rules.js";
 import { ensureQuests } from "./quests.js";
 import { say as pickLine } from "./say.js";
-import { PyRun, PYODIDE_CDN } from "./pyrun.js";
+import { PyRun, PYODIDE_DEFAULT } from "./pyrun.js";
 import { OUTFITS } from "../data/outfits.js";
 import { localDate, daysSince } from "./today.js";
 import { finishLesson } from "./finish.js";
@@ -127,7 +127,7 @@ const sound = createSound(() => app.save && app.save.settings && app.save.settin
 
 // ---- Python 작업자 ----
 function initPy() {
-  const indexURL = (typeof window !== "undefined" && window.RIA_PYODIDE_URL) || PYODIDE_CDN;
+  const indexURL = (typeof window !== "undefined" && window.RIA_PYODIDE_URL) || PYODIDE_DEFAULT;
   // build.py가 작업자·runner를 HTML에 넣으면 이 두 값을 채운다(판정 C29). 개발판에서는 undefined → 기본 동작
   const py = new PyRun({ indexURL, workerURL: window.RIA_WORKER_URL, runnerURL: window.RIA_RUNNER_URL });
   let everReady = false;

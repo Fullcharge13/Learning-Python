@@ -46,7 +46,9 @@ APP_VERSION = re.search(r'VERSION = "(v[0-9.]+)"', open(os.path.join(ROOT, "src"
 DIST = os.path.join(ROOT, "dist")
 OUT = os.path.join(ROOT, "tests", "out")
 DEV_OUT = os.path.join(OUT, "dist-dev")
-CDN = "https://cdn.jsdelivr.net/npm/pyodide@314.0.7/"
+CDN_HOST = "cdn.jsdelivr.net"   # v0.19.2(H-C1): 배포판 어디에도 나오면 안 됨
+PY_CORE_FILES = ("pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json")
+REL_OUT = os.path.join(OUT, "dist-rel")
 MAX_RAW = 614_400  # 판정 C28 → … → G-C6(850KB) → v0.17.0 첫 화면 가볍게: 600KB(목표 520KB)
 V02_RAW = 667397  # v0.2 dist/index.html (651.8 KB). v0.3~v0.9는 이보다 작아야 했음
 FIRST_FILE_MAX = 614_400  # 판정 C61 → … → v0.17.0: 첫 파일 상한을 build.py와 같게
@@ -103,7 +105,8 @@ def test_html_static():
     assert 'rel="stylesheet"' not in html, "CSS must be inlined"
     assert raw <= MAX_RAW, "too big: %d bytes" % raw
     assert APP_VERSION in html
-    assert CDN in html, "deploy build must point Pyodide at the CDN (C19)"
+    assert 'window.RIA_PYODIDE_URL = "./pyodide/";' in html, "deploy build must point Pyodide at same-origin pyodide/ (H-C1)"
+    assert CDN_HOST not in html
     assert "/node_modules/" not in html
     assert "RIA_WORKER_URL" in html and "RIA_RUNNER_URL" in html
     assert '<link rel="manifest" href="manifest.webmanifest">' in html
@@ -144,7 +147,7 @@ def test_manifest_and_icons():
 def test_sw_static():
     _build()
     sw = _read(os.path.join(DIST, "sw.js"))
-    assert CDN in sw
+    assert 'new URL("./pyodide/", self.location.href)' in sw and CDN_HOST not in sw
     assert "__RIA_" not in sw, "placeholders left in sw.js"
     assert APP_VERSION in sw
     assert "NETWORK_TIMEOUT_MS = 4000" in sw
@@ -383,6 +386,139 @@ def test_browser_offline():
         b.context.set_offline(False)
         pg.screenshot(path=os.path.join(OUT, "build_offline_home.png"))
         assert b.errors == [], b.errors
+    finally:
+        b.close()
+
+
+def _text_files(folder):
+    for dp, _, names in os.walk(folder):
+        for n in names:
+            if n.endswith((".html", ".js", ".mjs", ".json", ".py", ".txt", ".webmanifest", ".css")):
+                yield os.path.join(dp, n)
+
+
+def _sha(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def test_pyodide_same_origin_static():
+    """v0.19.2 H-C1: 배포판은 엔진 5개를 dist/pyodide/에 직접 싣고, 어느 글 파일에도 jsDelivr 주소가 없다."""
+    _build()
+    src = os.path.join(ROOT, "node_modules", "pyodide")
+    for f in PY_CORE_FILES:
+        assert os.path.exists(os.path.join(DIST, "pyodide", f)), f
+        assert _sha(os.path.join(DIST, "pyodide", f)) == _sha(os.path.join(src, f)), f
+    assert sorted(os.listdir(os.path.join(DIST, "pyodide"))) == sorted(PY_CORE_FILES)
+    # 우리가 쓴 모든 글 파일에 jsDelivr 없음. 고치지 않은 원본 pyodide/는 제외: pyodide.mjs는 loadPackage 기본 주소(cdnUrl)로
+    # jsDelivr를 품고 있으나(앱은 핵심 파일만 쓰고 loadPackage를 부르지 않음) 원본 그대로 싣는 것이 규칙이라 바꾸지 않는다.
+    own = os.path.join(DIST, "pyodide") + os.sep
+    bad = [p for p in _text_files(DIST) if not p.startswith(own) and CDN_HOST in _read(p)]
+    assert not bad, bad
+    texts = [f for f in PY_CORE_FILES if f.endswith((".mjs", ".json"))]   # .wasm·.zip은 글 파일이 아님
+    in_engine = [f for f in texts if CDN_HOST in _read(os.path.join(DIST, "pyodide", f))]
+    assert in_engine == [f for f in texts if CDN_HOST in _read(os.path.join(src, f))] == ["pyodide.mjs"], in_engine
+    sw = _read(os.path.join(DIST, "sw.js"))
+    assert "/node_modules/" not in sw and 'new URL("./pyodide/"' in sw
+    assert 'PY_CORE = ["pyodide.mjs"' in sw
+
+
+def test_pyodide_dev_unchanged():
+    _build("--dev-pyodide", "--out", DEV_OUT)
+    html = _read(os.path.join(DEV_OUT, "index.html"))
+    assert 'window.RIA_PYODIDE_URL = "/node_modules/pyodide/";' in html
+    assert not os.path.exists(os.path.join(DEV_OUT, "pyodide")), "dev build must not copy the engine"
+
+
+def test_pyodide_copy_checked():
+    """빌드가 복사본의 sha256을 원본과 맞춰 본다(복사 실수 방지)."""
+    src = _read(os.path.join(ROOT, "build.py"))
+    assert "sha256" in src and "differs from node_modules" in src
+
+
+def _rel_browser():
+    r = _run_build("--out", REL_OUT)
+    assert r.returncode == 0, r.stdout + r.stderr
+    b = _Browser(REL_OUT)
+    b.external = []
+    b.seen = []
+    own = "http://127.0.0.1:%d/" % b.httpd.server_address[1]
+
+    def on_req(req):
+        b.seen.append(req.url)
+        if not req.url.startswith((own, "blob:", "data:")):
+            b.external.append(req.url)
+    b.context.on("request", on_req)   # 페이지·작업자·서비스 작업자의 요청 모두
+    return b
+
+
+def _wait_engine_cached(b):
+    deadline = time.monotonic() + 30
+    while True:
+        cached = b.cached_urls()
+        if all(any(u == b.url + "pyodide/" + f for u in cached) for f in PY_CORE_FILES) or time.monotonic() > deadline:
+            return cached
+        b.page.wait_for_timeout(200)
+
+
+def test_browser_same_origin_release():
+    """H-C1: 배포판 첫 방문(서비스 작업자 허용) → 파이썬 준비 → 1-1 코드 실행, 같은 출처가 아닌 요청 0개. 오프라인 새로 고침도 성공."""
+    b = _rel_browser()
+    try:
+        pg = b.page
+        pg.goto(b.url)
+        b.home()
+        assert pg.evaluate("() => window.__ria.ctx.py.indexURL") == b.url + "pyodide/"
+        pg.evaluate("() => window.__ria.ctx.show('lesson', { id: '1-1' })")
+        pg.wait_for_selector(".card-view", timeout=10_000)
+        cls = _play_to_write(_driver(pg), "1-1")   # 1-1 직접 쓰기 코드를 파이썬으로 실행해 정답 판정
+        assert "ok" in (cls or ""), cls
+        b.wait_controlled()
+        cached = _wait_engine_cached(b)
+        assert all(any(u == b.url + "pyodide/" + f for u in cached) for f in PY_CORE_FILES), cached
+        assert not any(CDN_HOST in u for u in cached), cached
+        assert any("/pyodide/pyodide.asm.wasm" in u for u in b.seen), "engine did not come from pyodide/"
+        assert b.external == [], b.external
+        b.context.set_offline(True)
+        resp = pg.reload()
+        assert resp is not None and resp.from_service_worker
+        b.home()
+        r = pg.evaluate("() => window.__ria.ctx.py.run('print(1)')")
+        assert r["stdout"] == "1\n" and r["error"] is None, r
+        b.context.set_offline(False)
+        assert b.external == [], b.external
+        assert not [e for e in b.errors if e.startswith("pageerror")], b.errors
+        print("    release: %d requests, 0 external; offline reload OK" % len(b.seen))
+    finally:
+        b.close()
+
+
+def test_browser_legacy_engine_cache():
+    """기존 학습자: 옛 저장소(ria-pyodide-314.0.7, jsDelivr 주소 키)가 있어도 새 판에서 파이썬이 준비되고 오프라인에서도 돈다."""
+    b = _rel_browser()
+    try:
+        pg = b.page
+        pg.goto(b.url + "manifest.webmanifest")   # 서비스 작업자가 아직 없는 같은 출처 문서
+        pg.evaluate("""async ([files, host]) => {
+            const c = await caches.open("ria-pyodide-314.0.7");
+            for (const f of files) await c.put("https://" + host + "/npm/pyodide@314.0.7/" + f, new Response("OLD-" + f));
+        }""", [list(PY_CORE_FILES), CDN_HOST])
+        pg.goto(b.url)
+        b.home()
+        b.wait_controlled()
+        r = pg.evaluate("() => window.__ria.ctx.py.run('print(2)')")
+        assert r["stdout"] == "2\n" and r["error"] is None, r
+        cached = _wait_engine_cached(b)
+        assert all(any(u == b.url + "pyodide/" + f for u in cached) for f in PY_CORE_FILES), cached
+        assert not any(CDN_HOST in u for u in cached), "legacy jsDelivr entries should be dropped: %r" % cached
+        b.context.set_offline(True)
+        resp = pg.reload()
+        assert resp is not None and resp.from_service_worker
+        b.home()
+        r = pg.evaluate("() => window.__ria.ctx.py.run('print(3)')")
+        assert r["stdout"] == "3\n" and r["error"] is None, r
+        b.context.set_offline(False)
+        assert b.external == [], b.external
     finally:
         b.close()
 
@@ -1282,7 +1418,7 @@ def test_third_party_notices():
         assert ("== %s " % pkg) in txt, pkg
     assert "Copyright (C) 2018-2021 by Marijn Haverbeke" in txt
     assert txt.count("Permission is hereby granted, free of charge") >= 8
-    assert "pyodide" in txt.lower() and "MPL-2.0" in txt and "cdn.jsdelivr.net/npm/pyodide@" in txt
+    assert "pyodide" in txt.lower() and "MPL-2.0" in txt and "npm pyodide 314.0.7" in txt and CDN_HOST not in txt
     assert "esbuild" not in txt, "build tool is not shipped, keep it out"
     # v0.15.1: 경비실 아이콘(Bootstrap Icons shield-check, MIT)
     assert "== Bootstrap Icons" in txt and "Copyright (c) 2019-2024 The Bootstrap Authors" in txt

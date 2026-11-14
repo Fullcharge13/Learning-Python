@@ -13,10 +13,13 @@
 // - GET이 아닌 요청, 다른 주소의 요청은 건드리지 않는다.
 // - 게임 저장본 이름에 판 번호와 내용 지문이 들어 있어, 새 판을 올리면 활성화 때 옛 저장본을 지운다.
 //   Pyodide 저장본은 Pyodide 버전으로만 이름이 바뀐다(판을 올려도 10MB를 다시 받지 않게).
+//   (v0.19.2: 엔진은 같은 사이트 pyodide/에서. 옛 jsDelivr 저장본은 새 이름 덕에 쓰이지 않고 activate에서 지워짐)
 
 const VERSION = "__RIA_VERSION__";
 const GAME_CACHE = "ria-game-__RIA_VERSION__-__RIA_HASH__";
-const PY_CACHE = "ria-pyodide-__RIA_PYODIDE_VERSION__";
+// v0.19.2(H-C1): 엔진을 같은 사이트 pyodide/에서 받으므로 저장소 이름을 새로 한다("-self").
+// 옛 저장소 ria-pyodide-<판>은 jsDelivr 주소가 키라 쓸 수 없고, 이름 앞부분(ria-)이 같아 activate가 지워 준다.
+const PY_CACHE = "ria-pyodide-__RIA_PYODIDE_VERSION__-self";
 const PYODIDE_PREFIX = new URL("__RIA_PYODIDE_URL__", self.location.href).href;
 const GAME_FILES = __RIA_GAME_FILES__;
 // v0.14.0(판정 C81): 영어 장 파일은 판과 상관없는 저장소에 둔다(이름이 내용 지문 → 새 판에도 그대로 쓸 수 있음).

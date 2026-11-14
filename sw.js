@@ -15,8 +15,8 @@
 //   Pyodide 저장본은 Pyodide 버전으로만 이름이 바뀐다(판을 올려도 10MB를 다시 받지 않게).
 //   (v0.19.2: 엔진은 같은 사이트 pyodide/에서. 옛 jsDelivr 저장본은 새 이름 덕에 쓰이지 않고 activate에서 지워짐)
 
-const VERSION = "v0.19.2";
-const GAME_CACHE = "ria-game-v0.19.2-9daeb90700";
+const VERSION = "v0.20.0";
+const GAME_CACHE = "ria-game-v0.20.0-f9af78332e";
 // v0.19.2(H-C1): 엔진을 같은 사이트 pyodide/에서 받으므로 저장소 이름을 새로 한다("-self").
 // 옛 저장소 ria-pyodide-<판>은 jsDelivr 주소가 키라 쓸 수 없고, 이름 앞부분(ria-)이 같아 activate가 지워 준다.
 const PY_CACHE = "ria-pyodide-314.0.7-self";
@@ -28,7 +28,7 @@ const GAME_FILES = ["./", "index.html", "manifest.webmanifest", "manifest.en.web
 const LANG_CACHE = "ria-lang-en";
 const LANG_CHAPTER_FILES = ["lessons/en/ch1-d67772a9.json", "lessons/en/ch10-56dcb00e.json", "lessons/en/ch11-135a31eb.json", "lessons/en/ch12-3f1d4216.json", "lessons/en/ch13-0af10dbe.json", "lessons/en/ch14-6cfdc76a.json", "lessons/en/ch15-7b8ae211.json", "lessons/en/ch16-b9d55954.json", "lessons/en/ch17-47ca806b.json", "lessons/en/ch2-d8af68e3.json", "lessons/en/ch3-081d5b36.json", "lessons/en/ch4-0912eb86.json", "lessons/en/ch5-c5450c84.json", "lessons/en/ch6-ae9efe89.json", "lessons/en/ch7-4513680e.json", "lessons/en/ch8-3854d93a.json", "lessons/en/ch9-85fc0189.json"];
 const LANG_CHAPTER_RE = /\/lessons\/en\/ch[1-9]\d*-[0-9a-f]{8}\.json$/;
-const CHAPTER_FILES = ["lessons/ch1-335d9e46.json", "lessons/ch2-89b60a90.json", "lessons/ch3-a4e6ec46.json", "lessons/ch4-a480e773.json", "lessons/ch5-cb9026b3.json", "lessons/ch6-ba5538f0.json", "lessons/ch7-6a49b6c8.json", "lessons/ch8-364dbb0d.json", "lessons/ch9-4b400353.json", "lessons/ch10-6c525f3e.json", "lessons/ch11-fcb52ebe.json", "lessons/ch12-f90cf7ba.json", "lessons/ch13-b92a0458.json", "lessons/ch14-b306b667.json", "lessons/ch15-eb9bff22.json", "lessons/ch16-dc387c35.json", "lessons/ch17-d4d588a5.json", "guard/ch3-32cf37d2.json", "guard/ch4-a4e4ec56.json", "guard/ch5-0e4f649e.json", "guard/ch6-8acd5fd7.json", "guard/ch7-f39a8ac2.json", "guard/ch8-393b9bb7.json", "guard/ch9-f4d05c44.json", "guard/ch10-79096d20.json", "guard/ch11-c9267007.json", "guard/ch12-c5fe5d8b.json", "guard/ch13-f1529cc7.json", "guard/ch14-4ddfe09c.json", "guard/ch15-43153200.json", "guard/ch16-769e87e1.json", "guard/ch17-aff6283c.json", "lang/en-9fa5a00f.json", "py/runner-29b6db5a.py", "js/editor-b5d0bce9.js", "js/errors-f0ba3d37.js"];
+const CHAPTER_FILES = ["lessons/ch1-335d9e46.json", "lessons/ch2-89b60a90.json", "lessons/ch3-a4e6ec46.json", "lessons/ch4-a480e773.json", "lessons/ch5-cb9026b3.json", "lessons/ch6-ba5538f0.json", "lessons/ch7-6a49b6c8.json", "lessons/ch8-364dbb0d.json", "lessons/ch9-4b400353.json", "lessons/ch10-6c525f3e.json", "lessons/ch11-fcb52ebe.json", "lessons/ch12-f90cf7ba.json", "lessons/ch13-b92a0458.json", "lessons/ch14-b306b667.json", "lessons/ch15-eb9bff22.json", "lessons/ch16-dc387c35.json", "lessons/ch17-d4d588a5.json", "guard/ch3-afb8cde4.json", "guard/ch4-b39d89df.json", "guard/ch5-f0869adb.json", "guard/ch6-a5e92e32.json", "guard/ch7-18e928d4.json", "guard/ch8-c8d4b777.json", "guard/ch9-89e9068c.json", "guard/ch10-557360a4.json", "guard/ch11-8f5cd760.json", "guard/ch12-1ae005e4.json", "guard/ch13-7e16c77b.json", "guard/ch14-2c9b4307.json", "guard/ch15-8e2f4282.json", "guard/ch16-98e0a1ce.json", "guard/ch17-8374bffa.json", "lang/en-42829d17.json", "py/runner-29b6db5a.py", "js/editor-b5d0bce9.js", "js/errors-f0ba3d37.js"];
 const CHAPTER_RE = /\/((lessons\/(en\/)?ch[1-9]\d*|guard\/ch[1-9]\d*|lang\/[a-z]{2})-[0-9a-f]{8}\.json|py\/runner-[0-9a-f]{8}\.py|js\/(editor|errors)-[0-9a-f]{8}\.js)$/; // 장 파일·경비실 장(v0.16.0)·언어 꾸러미(v0.13.0)·편집기/오류 안내 묶음(v0.17.0): 이름에 지문이 있어 저장본 먼저(?r=N 다시 받기 주소도 ignoreSearch로 같은 저장본)
 const NETWORK_TIMEOUT_MS = 4000; // 게임 파일: 이보다 느리면 저장본을 먼저 보여 줌
 // 처음 설치 때 미리 받아 두는 Pyodide 핵심 파일(실패해도 설치는 계속, 쓸 때 다시 받음)

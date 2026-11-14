@@ -258,6 +258,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404)  # 새 판을 올려 옛 이름의 장 파일이 없어진 서버 흉내
             return
         if p == "/sw.js" and self.STATE["block_sw"]:
+            self.STATE["sw_blocked"] = self.STATE.get("sw_blocked", 0) + 1
             self.send_error(404)  # 새 서비스 작업자 설치 실패 흉내
             return
         if p.startswith("/node_modules/pyodide/") and self.STATE["slow_pyodide_s"]:
@@ -1354,12 +1355,19 @@ def test_new_index_not_cached_without_new_sw():
         assert not _wait_chapters_cached(b, list(pg.evaluate("() => window.RIA_CHAPTER_FILES").values()))
         r = _run_build("--dev-pyodide", "--out", folder, "--lessons-dir", _snapshot())
         assert r.returncode == 0, r.stdout + r.stderr
+        _Handler.STATE["sw_blocked"] = 0
         _Handler.STATE["block_sw"] = True
         pg.reload()
         b.home()
         new_ch1 = pg.evaluate("() => window.RIA_CHAPTER_FILES['1']")
         assert new_ch1.rsplit("/", 1)[-1] in _chapter_files(folder), "online reload should show the new build"
-        pg.wait_for_timeout(500)
+        # 고정 대기 대신 조건: 브라우저가 막힌 sw.js를 실제로 요청해 갱신이 실패할 때까지 기다린다
+        # (v0.19.2: 이전엔 500ms 고정이라 느린 판에서 갱신 시도 전에 오프라인으로 바꿨다)
+        deadline = time.monotonic() + 15
+        while not _Handler.STATE.get("sw_blocked") and time.monotonic() < deadline:
+            pg.evaluate("async () => { const r = await navigator.serviceWorker.getRegistration(); try { await r.update(); } catch (_) {} }")
+            pg.wait_for_timeout(100)
+        assert _Handler.STATE.get("sw_blocked"), "browser never requested the blocked sw.js"
         b.context.set_offline(True)
         pg.reload()
         b.home()
@@ -1554,6 +1562,9 @@ def test_build_stops_over_chunk_caps():
 
 def main():
     tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]
+    only = os.environ.get("RIA_ONLY")  # 시험 이름 일부만 돌리기(예: RIA_ONLY=new_index_not_cached)
+    if only:
+        tests = [(n, f) for n, f in tests if only in n]
     fails = 0
     for name, f in tests:
         try:

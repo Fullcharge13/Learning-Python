@@ -57,6 +57,8 @@ function isFatal(e) {
 // 결과(sealed)는 준비 알림으로 화면에 보내 개발자 모드 설정에서 확인한다. fetch는 엔진이 쓰므로 남기고, 다른 출처
 // 요청은 index.html의 CSP(connect-src)가 막는다(Blob 작업자는 문서의 CSP를 물려받음). Python의 import js 막기는 우회되므로 하지 않는다.
 export const SEALED_NAMES = ["caches", "indexedDB", "Worker", "SharedWorker"];
+// navigator 쪽(StorageBucket마다 자기 caches·indexedDB가 있어 storageBuckets도 막는다)
+export const SEALED_NAV_NAMES = ["serviceWorker", "storageBuckets"];
 
 // 이름 k에 아직 닿을 수 있나: 일반 찾기 값, 또는 사슬 어딘가에 남은 getter·값
 function reachable(obj, k) {
@@ -71,7 +73,7 @@ function reachable(obj, k) {
 /** 막은 뒤 남은 이름이 없으면 true */
 export function isSealed(g = globalThis) {
   if (SEALED_NAMES.some((k) => reachable(g, k) || (g === globalThis ? false : reachable(globalThis, k)))) return false;
-  return !(g.navigator && reachable(g.navigator, "serviceWorker"));
+  return !(g.navigator && SEALED_NAV_NAMES.some((k) => reachable(g.navigator, k)));
 }
 
 /** 막기. 실패해도 던지지 않고 결과만 돌려준다(true = 모두 막음) */
@@ -89,9 +91,9 @@ export function sealRealm(g = globalThis) {
   };
   strip(g, SEALED_NAMES);
   const nav = g.navigator;
-  if (nav) strip(nav, ["serviceWorker"]);
+  if (nav) strip(nav, SEALED_NAV_NAMES);
   for (const k of SEALED_NAMES) shadow(g, k);
-  if (nav) shadow(nav, "serviceWorker");
+  if (nav) for (const k of SEALED_NAV_NAMES) shadow(nav, k);
   return isSealed(g);
 }
 

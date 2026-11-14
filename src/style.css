@@ -221,7 +221,8 @@ button { cursor: pointer; }
 .tab-dot { position: absolute; top: -2px; right: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--coral-ink); box-shadow: 0 0 0 2px var(--card); }
 .tab-lock { position: absolute; bottom: -3px; right: -8px; width: 15px; height: 15px; border-radius: 50%; background: var(--card); display: grid; place-items: center; }
 .tab-lock svg { width: 12px; height: 12px; }
-.tab.locked { color: #636B7A; } /* v0.20.3 밝게: 불투명도 대신 글자색(4.5 이상), 잠김은 자물쇠로도 보임 */
+.tab.locked { color: #636B7A; } /* v0.20.3 밝게: 글자는 불투명도 대신 글자색(4.5 이상), 아이콘만 흐리게 + 자물쇠 배지 */
+.tab.locked .tab-ic > svg { opacity: .5; } /* 자물쇠 배지(.tab-lock 안 svg)는 바로 아래 자식이 아니라 영향 없음 */
 
 main { padding: 16px calc(16px + var(--sar)) 0 calc(16px + var(--sal)); }
 .page-title { font-size: 1.6rem; margin: 6px 0 14px; }
@@ -1146,6 +1147,7 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 [data-theme="dark"] .star-node.locked .star-shape { stroke: #46536E; }
 [data-theme="dark"] .star-lock rect, [data-theme="dark"] .star-lock path { stroke: var(--muted-ink); }
 [data-theme="dark"] .tab.locked { opacity: .8; color: var(--ink-2); }
+[data-theme="dark"] .tab.locked .tab-ic > svg { opacity: 1; }
 /* 꺼진 단추·스위치 */
 [data-theme="dark"] .btn:disabled, [data-theme="dark"] .btn.is-off { background: #2A344A; color: #A3ACBC; }
 [data-theme="dark"] .switch span { background: #66759A; }

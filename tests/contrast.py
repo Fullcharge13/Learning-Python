@@ -11,7 +11,8 @@
 하는 일
 - `build.py --dev-pyodide`로 만든 앱(tests/flow.py의 빌드·서버·Chromium 하나를 같이 씀)을 `localStorage["ria-python.theme"]`를
   주어 연다. 설계서 §4 화면 목록(인사, 튜토리얼 4장+실행 결과, 홈, 레슨 카드·고르기·빈칸·순서·코드 쓰기·오류 카드·맞음/틀림 설명·완료,
-  배지, 의상실, 설정+확인 창, 텃밭(1장 통과 저장)+말풍선·노드 고르기 창·주문 완료 창, 경비실 빈칸·고르기 창·판정 칸·직접 쓰기)을 연다.
+  배지, 의상실, 설정+확인 창, 텃밭(1장 통과 저장)+말풍선·노드 고르기 창·주문 완료 창, 경비실 빈칸·고르기 창·판정 칸·직접 쓰기,
+  v0.20.0 응용 꼬리표가 있는 사건 목록·응용 사건 처음 해결 창(사건 파일 카드))을 연다.
 - 화면마다 「보이는 글자가 있는 요소」의 글자색과 실제 바탕색의 대비를 재어, 기준 미달을 목록으로 낸다.
   기준: 글자 4.5:1, 큰 글씨(24px 이상, 또는 굵기 700 이상이고 19px 이상) 3:1.
 - 같은 화면 목록의 스크린숏을 tests/out/contrast/<theme>/<화면>.png 로 저장한다(밝게 회귀 비교의 기준 사진).
@@ -415,6 +416,26 @@ def sc_guard(r):
         r.cap(a, "guard-write")
 
 
+def sc_guard_field(r):
+    """v0.20.0 작업 6: 응용 꼬리표가 있는 목록(잠김 「…개 남음」 + 열린 응용), 응용 사건 처음 해결 창(사건 파일 카드)"""
+    import flow
+    guard = flow._guard_g(solved={i: {"firstTry": True, "how": "blank"} for i in ("G1", "G2", "G7")}, seen=["G1", "G2", "G7"])
+    with _app(r.theme, save=flow._guard_seed(4, guard=guard)) as a:   # 3장 응용(G46)은 열림, 4장 응용(G47)은 「3개 남음」
+        flow._open_guard(a)
+        a.page.click("#gd-list")
+        a.page.wait_for_selector(".modal.g-sheet")
+        a.page.wait_for_timeout(300)
+        r.cap(a, "guard-field-list")
+        flow._sheet_pick(a, '[data-v="G46"]')
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card .gd-field-tag", timeout=15_000)
+        for n in range(3):
+            flow._gd_pick(a, n, 0)
+        flow._gd_run(a, skip=True)
+        a.page.wait_for_selector(".modal .gd-file", timeout=15_000)
+        a.page.wait_for_timeout(flow.GUARD_WAIT)
+        r.cap(a, "guard-field-card")
+
+
 def run_app(theme, skip_tokens, skip_art=False):
     import flow
     flow.env()
@@ -422,6 +443,7 @@ def run_app(theme, skip_tokens, skip_art=False):
     r.scenario("새 저장: 인사·튜토리얼·홈·레슨", lambda: sc_fresh(r))
     r.scenario("1장 통과 저장: 홈·배지·의상실·설정·텃밭", lambda: sc_garden_home(r))
     r.scenario("3장 통과 저장: 경비실", lambda: sc_guard(r))
+    r.scenario("4장 통과·3장 기본 해결 저장: 경비실 응용 사건", lambda: sc_guard_field(r))
     return r
 
 

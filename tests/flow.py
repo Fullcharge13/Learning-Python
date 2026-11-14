@@ -4388,28 +4388,37 @@ def test_guard_room_eval_warning():
 
 
 def test_guard_room_list_45():
-    """v0.16.0 작업 8: 17장까지 통과 → 머리 「0/45 해결」, 목록 시트에 사건 45개가 장 순서(3장 G1·G2·G7 …), 모두 열림."""
+    """v0.16.0 작업 8: 17장까지 통과 → 머리 「0/45 해결」, 목록 시트에 사건이 장 순서(3장 G1·G2·G7 …), 기본 45개 모두 열림.
+    v0.20.0 작업 6: 이름은 그대로 둔다(「45」는 등급·머리 줄이 세는 기본 사건 수). 목록에는 응용 15개가 더해져 60줄 —
+    장마다 기본 3 + 응용 1(장의 마지막), 머리 줄에 「사건 파일 0/15」, 응용은 기본을 안 풀었으니 잠김(「…개 남음」)."""
     fails = []
     with App("iPhone 17", save=_guard_seed(17)) as a:
         _open_guard(a)
         head = a.page.inner_text(".gd-head")
-        if "0/45 해결" not in head:
+        if "0/45 해결" not in head or "사건 파일 0/15" not in head:
             fails.append("head: %r" % head)
         a.page.click("#gd-list")
         a.page.wait_for_selector(".modal.g-sheet")
         ids = a.js("() => [...document.querySelectorAll('.modal.g-sheet .gd-item')].map(b => b.dataset.g)")
-        if len(ids) != 45 or set(ids) != {"G%d" % i for i in range(1, 46)}:
+        if len(ids) != 60 or set(ids) != {"G%d" % i for i in range(1, 61)}:
             fails.append("list ids: %r" % ids)
-        # 장 순서: 목록 차례대로 색인의 need가 줄지 않고, 3~17장 모두 3개씩(G7~G12처럼 뒤에 더한 사건도 제 장 자리에)
-        need_of = a.js("() => Object.fromEntries((window.RIA_GUARD_INDEX || []).map(e => [e.id, e.need]))")
-        need = [need_of.get(i) for i in ids]
-        if need != sorted(need, key=lambda x: x or 0) or [need.count(c) for c in range(3, 18)] != [3] * 15:
+        # 장 순서: 목록 차례대로 색인의 need가 줄지 않고, 3~17장 모두 기본 3 + 응용 1(G7~G12처럼 뒤에 더한 사건도 제 장 자리에)
+        idx = a.js("() => Object.fromEntries((window.RIA_GUARD_INDEX || []).map(e => [e.id, [e.need, e.tier || '']]))")
+        need = [idx.get(i, [None])[0] for i in ids]
+        if need != sorted(need, key=lambda x: x or 0) or [need.count(c) for c in range(3, 18)] != [4] * 15:
             fails.append("chapter order: %r" % list(zip(ids, need)))
-        dis = a.js("() => document.querySelectorAll('.modal.g-sheet .gd-item[disabled]').length")
-        if dis:
-            fails.append("%d locked at chapter 17" % dis)
-        if "끝내면 열려요" in a.page.inner_text(".modal.g-sheet"):
-            fails.append("lock note at chapter 17")
+        for c in range(3, 18):
+            row = [i for i in ids if idx.get(i, [None])[0] == c]
+            if [idx[i][1] for i in row] != ["", "", "", "field"]:
+                fails.append("chapter %d: field case is not last: %r" % (c, row))
+        locked = a.js("() => [...document.querySelectorAll('.modal.g-sheet .gd-item[disabled]')].map(b => b.dataset.g)")
+        if set(locked) != {"G%d" % i for i in range(46, 61)}:
+            fails.append("locked at chapter 17 (only field cases): %r" % locked)
+        sheet_txt = a.page.inner_text(".modal.g-sheet")
+        if "끝내면 열려요" in sheet_txt:
+            fails.append("chapter lock note at chapter 17")
+        if sheet_txt.count("기본 사건 3개를 풀면 열려요 · 3개 남음") != 15:
+            fails.append("field lock notes: %r" % sheet_txt[:300])
         a.shot("guard-list-45.png")
         _gd_check_layout(a, "guard-list-45", fails)
         if a.errors:
@@ -4436,6 +4445,189 @@ def test_guard_room_locked_chapters():
                 fails.append("%s note: %r" % (gid, note))
         if "8장을 끝내면 열려요" not in a.page.inner_text('.modal.g-sheet [data-g="G16"]'):
             fails.append("G16 note")
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+# ---------------------------------------------------------------- v0.20.0 응용 사건(작업 6)
+
+def _solved(*ids):
+    return {i: {"firstTry": True, "how": "blank"} for i in ids}
+
+
+def _dev_init(save):
+    """개발자 모드 저장으로 열기: 깃발과 개발자 저장 칸을 처음 한 번만 넣는다"""
+    dev = dict(save, dev_mode=True)
+    return ("if (!sessionStorage.getItem('flow-dev-seeded')) { localStorage.setItem(%s, '1'); localStorage.setItem(%s, %s);"
+            " sessionStorage.setItem('flow-dev-seeded', '1'); }" % (json.dumps(DEV_FLAG_KEY), json.dumps(DEV_SAVE_KEY), json.dumps(json.dumps(dev))))
+
+
+def _gd_list_item(a, gid):
+    a.page.click("#gd-list")
+    a.page.wait_for_selector(".modal.g-sheet")
+    b = '.modal.g-sheet [data-g="%s"]' % gid
+    return b
+
+
+def test_guard_field_locked_list():
+    """3장 통과·기본 1개(G1) 해결: 목록의 G46은 잠김, 「기본 사건 3개를 풀면 열려요 · 2개 남음」(영어 "2 left"), 「응용」 꼬리표."""
+    fails = []
+    for en in (False, True):
+        save = _guard_seed(3, guard=_guard_g(solved=_solved("G1"), seen=["G1"]), en=en)
+        with App("iPhone 17", locale="en-US" if en else None, save=save) as a:
+            _open_guard(a)
+            b = _gd_list_item(a, "G46")
+            if not a.page.is_disabled(b):
+                fails.append("en=%s: G46 should be locked" % en)
+            note = a.page.inner_text(b)
+            want = "Opens after the 3 basic cases · 2 left" if en else "기본 사건 3개를 풀면 열려요 · 2개 남음"
+            if want not in note:
+                fails.append("en=%s: G46 note %r" % (en, note))
+            if not a.page.query_selector(b + " .gd-field-tag"):
+                fails.append("en=%s: G46 has no field tag" % en)
+            tag = a.page.inner_text(b + " .gd-field-tag") if a.page.query_selector(b + " .gd-field-tag") else ""
+            if tag.strip() != ("Field" if en else "응용"):
+                fails.append("en=%s: tag %r" % (en, tag))
+            if a.page.query_selector('.modal.g-sheet [data-g="G1"] .gd-field-tag'):
+                fails.append("en=%s: basic case has a field tag" % en)
+            if en and re.search(r"[가-힣]", a.page.inner_text(".modal.g-sheet")):
+                fails.append("English list has Hangul")
+            if not en:
+                a.shot("guard-field-locked.png")
+                _gd_check_layout(a, "guard-field-locked", fails)
+            if a.errors:
+                fails.append("en=%s: console errors %r" % (en, a.errors))
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_field_locked_param():
+    """같은 저장(기본 1개 해결)에서 G46을 화면 인자로 열어도 잠긴 응용 사건은 열리지 않는다."""
+    with App("iPhone 17", save=_guard_seed(3, guard=_guard_g(solved=_solved("G1"), seen=["G1"]))) as a:
+        _open_guard(a)
+        a.js("() => window.__ria.ctx.show('guard', { id: 'G46' })")
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+        a.page.wait_for_timeout(150)
+        gid = a.js("() => document.querySelector('#gd-card .gd-id')?.textContent")
+        assert gid and gid != "G46", gid
+        assert not a.page.query_selector("#gd-card .gd-field-tag"), "locked field case card"
+        assert not a.errors, a.errors
+
+
+def _gd_field_solve(a, fails, en=False):
+    """3장 기본 3개를 푼 저장: G46이 처음 열리고 「응용」 꼬리표 → 정답 빈칸으로 해결 → 처음 해결 창의 사건 파일 카드 글을 돌려줌"""
+    gid = a.js("() => document.querySelector('#gd-card .gd-id')?.textContent")
+    if gid != "G46":
+        fails.append("first open card is %r, not G46" % gid)
+    tag = a.page.query_selector("#gd-card .gd-field-tag")
+    if not tag or tag.inner_text().strip() != ("Field" if en else "응용"):
+        fails.append("card field tag: %r" % (tag and tag.inner_text()))
+    if a.page.query_selector("#gd-fileview"):
+        fails.append("case file button before solving")
+    for n in range(3):
+        _gd_pick(a, n, 0)
+    _gd_run(a)
+    a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
+    card = a.page.query_selector(".modal .gd-file")
+    text = card.inner_text() if card else ""
+    if not card:
+        fails.append("no case file card in the solved dialog: %r" % a.page.inner_text(".modal"))
+    return text
+
+
+def _gd_field_fileview(a, fails, label):
+    """처음 해결 창을 닫고 → 「사건 파일 보기」 단추 → 같은 카드 창. 다른 사건을 열었다 다시 와도 단추가 있다."""
+    a.page.wait_for_timeout(GUARD_WAIT)
+    a.page.click(".modal .btn.primary")
+    a.page.wait_for_selector(".modal .gd-done", state="detached")
+    a.page.click("#gd-list")
+    _sheet_pick(a, '[data-v="G1"]')
+    a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+    if a.page.query_selector("#gd-fileview"):
+        fails.append("basic case shows the case file button")
+    a.page.click("#gd-list")
+    _sheet_pick(a, '[data-v="G46"]')
+    a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-fileview", timeout=15_000)
+    btn = a.page.inner_text("#gd-fileview")
+    if label not in btn:
+        fails.append("file view button: %r" % btn)
+    a.page.click("#gd-fileview")
+    a.page.wait_for_selector(".modal .gd-file")
+    return a.page.inner_text(".modal .gd-file")
+
+
+def test_guard_field_solve_card():
+    """3장 기본 3개 해결 → G46 열림·「응용」 꼬리표 → 해결 → 처음 해결 창에 사건 파일 카드(공격 이름) → 다시 열면 「사건 파일 보기」 → 같은 카드."""
+    fails = []
+    guard = _guard_g(solved=_solved("G1", "G2", "G7"), seen=["G1", "G2", "G7"])
+    with App("iPhone 17", save=_guard_seed(3, guard=guard)) as a:
+        _open_guard(a)
+        head = a.page.inner_text(".gd-head")
+        if "3/45 해결" not in head or "사건 파일 0/15" not in head:
+            fails.append("head before: %r" % head)
+        first = _gd_field_solve(a, fails)
+        for s in ("사건 파일", "MFA 피로 공격", "MFA fatigue", "현실에서는", "나를 지키려면", "더 찾아볼 말", "푸시 폭탄"):
+            if s not in first:
+                fails.append("solved card misses %r: %r" % (s, first))
+        a.shot("guard-field-solved.png")
+        _gd_check_layout(a, "guard-field-solved", fails)
+        head = a.page.inner_text(".gd-head")
+        if "3/45 해결" not in head or "사건 파일 1/15" not in head:
+            fails.append("head after: %r" % head)
+        again = _gd_field_fileview(a, fails, "사건 파일 보기")
+        if again != first:
+            fails.append("file view card differs:\n%r\n%r" % (first, again))
+        a.shot("guard-field-fileview.png")
+        _gd_check_layout(a, "guard-field-fileview", fails)
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_field_english():
+    """영어: 처음 해결 창·다시 보기 카드 글이 영어 열쇠 글(공격 이름은 한 번), 카드에 한글 없음."""
+    fails = []
+    guard = _guard_g(solved=_solved("G1", "G2", "G7"), seen=["G1", "G2", "G7"])
+    with App("iPhone 17", locale="en-US", save=_guard_seed(3, guard=guard, en=True)) as a:
+        _open_guard(a)
+        head = a.page.inner_text(".gd-head")
+        if "Case files 0/15" not in head:
+            fails.append("head: %r" % head)
+        first = _gd_field_solve(a, fails, en=True)
+        for s in ("Case file", "MFA fatigue", "In real life", "To protect yourself", "Search terms", "push bombing",
+                  "An attacker who already has the password"):
+            if s not in first:
+                fails.append("card misses %r: %r" % (s, first))
+        if first.count("MFA fatigue") != 2:   # 공격 이름 1번 + 검색어 「MFA fatigue attack」 1번(원어 줄은 생략)
+            fails.append("attack name repeated: %r" % first)
+        if re.search(r"[가-힣]", first):
+            fails.append("card has Hangul: %r" % first)
+        left = _hangul_left(a)
+        if left:
+            fails.append("solved dialog: %r" % left)
+        again = _gd_field_fileview(a, fails, "View case file")
+        if again != first:
+            fails.append("file view card differs")
+        if a.errors:
+            fails.append("console errors %r" % a.errors)
+    assert not fails, "\n".join(fails)
+
+
+def test_guard_field_dev():
+    """개발자 모드 저장(해결 없음): G46이 바로 열린다(목록에서 골라 카드가 G46)."""
+    fails = []
+    with App("iPhone 17", init_js=_dev_init(_guard_seed(3))) as a:
+        _open_guard(a)
+        b = _gd_list_item(a, "G46")
+        if a.page.is_disabled(b):
+            fails.append("G46 locked in dev mode: %r" % a.page.inner_text(b))
+        else:
+            a.page.click(b)
+            a.page.wait_for_selector(".modal.g-sheet", state="detached")
+            a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+            gid = a.js("() => document.querySelector('#gd-card .gd-id')?.textContent")
+            if gid != "G46":
+                fails.append("card %r" % gid)
         if a.errors:
             fails.append("console errors %r" % a.errors)
     assert not fails, "\n".join(fails)

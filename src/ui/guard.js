@@ -8,7 +8,7 @@ import { isDev } from "../devgate.js";
 import { BADGES } from "../../data/badges.js";
 import { crowSVG } from "../guard/crow.js";
 import { fillBlanks, optionOrder } from "../guard/blanks.js";
-import { cleanGuard, markSeen, guardInput, guardConsistent, rankOf, applyGuardRun, incidentOpen } from "../guard/state.js";
+import { cleanGuard, markSeen, guardInput, guardConsistent, rankOf, applyGuardRun, incidentOpen, isField, basicLeft } from "../guard/state.js";
 import { passedChapters } from "../garden/state.js";
 import { sheet } from "./garden.js";
 import { esc, icon, dialog, toast, riaSays, celebrate } from "./dom.js";
@@ -17,6 +17,7 @@ import { errorPanel, waitForClues } from "./write.js";
 import { SYMBOL_ORDER } from "../kbd.js";
 import { t, tx } from "../i18n.js";
 import { definedNames } from "../grade.js";
+import { fileCardHTML } from "./guardfile.js";
 
 const SYSTEM_ERRORS = new Set(["LoadError", "WorkerError", "NotReady"]);
 const STEP_MS = 450;     // 재생 1배: 시도 한 칸(2배는 반)
@@ -42,6 +43,8 @@ const NAMES = { script: ["attempt", "allow()", "block()"], loop: ["has_try()", "
 
 /** 보기 글자: 빈 보기("")는 이름표로(코드에는 빈 글자가 그대로 들어감) */
 const optLabel = (o) => (o === "" ? t`(비워 두기)` : o);
+/** v0.20.0: 응용 사건 꼬리표(목록·사건 카드) */
+const fieldTag = () => `<span class="gd-field-tag" title="${esc(t`응용 사건`)}">${t`응용`}</span>`;
 
 /** 시작 코드를 빈칸 단추와 고정 글자로({{ }}는 글자 { }) */
 function startHTML(inc, picks) {
@@ -114,9 +117,14 @@ export function render(root, ctx, params = {}) {
   const setCrow = (pose) => { $("#gd-crow2").innerHTML = crowSVG({ pose, size: 64 }); };
 
   // ---- 머리·카드 ----
+  // v0.20.0: 머리 줄은 기본 사건만 「해결」로 세고, 응용은 「사건 파일 m/n」(응용이 없으면 생략)
+  const BASIC = LIST.filter((i) => !isField(i));
+  const FIELD = LIST.filter(isField);
   function paintHead() {
     const g = G();
-    $("#gd-rank").textContent = `${RANK[rankOf(g)]()} · ${t`${Object.keys(g.solved).length}/${LIST.length} 해결`}`;
+    const done = (list) => list.filter((i) => g.solved[i.id]).length;
+    $("#gd-rank").textContent = `${RANK[rankOf(g)]()} · ${t`${done(BASIC)}/${BASIC.length} 해결`}`
+      + (FIELD.length ? ` · ${t`사건 파일 ${done(FIELD)}/${FIELD.length}`}` : "");
   }
   /** 본문을 받는 동안·못 받았을 때의 카드(제목은 색인에서). 코드 칸·시도 줄은 비운다.
    *  stale(새 판이 나와 옛 장 파일이 없음): 다시 시도 대신 「새로 고치기」(lesson.js와 같은 글·동작) */
@@ -134,11 +142,20 @@ export function render(root, ctx, params = {}) {
   }
   function paintCard(lose = false) {
     const inc = S.inc;
-    cardEl.innerHTML = `<div class="gd-crow-row"><div class="gd-crow">${crowSVG({ pose: lose ? inc.crow.lose : inc.crow.intro, size: 84 })}</div><p class="bubble gd-say">${esc(txt(inc, lose ? "crowLose" : "crowIntro"))}</p></div><p class="gd-tags"><span class="gd-tag ${inc.tag}">${inc.tag === "prevent" ? t`예방` : t`대응`}</span><span class="gd-id">${inc.id}</span></p>
+    cardEl.innerHTML = `<div class="gd-crow-row"><div class="gd-crow">${crowSVG({ pose: lose ? inc.crow.lose : inc.crow.intro, size: 84 })}</div><p class="bubble gd-say">${esc(txt(inc, lose ? "crowLose" : "crowIntro"))}</p></div><p class="gd-tags"><span class="gd-tag ${inc.tag}">${inc.tag === "prevent" ? t`예방` : t`대응`}</span><span class="gd-id">${inc.id}</span>${isField(inc) ? fieldTag() : ""}</p>
       <h2 id="gd-title">${esc(txt(inc, "title"))}</h2>
       ${riaSays({ outfit: ctx.save.outfit, face: "smile", text: txt(inc, "ria"), size: 56, cls: "small" })}
       <p class="gd-brief">${esc(txt(inc, "brief"))}</p>
-      <p class="gd-concept">${icon("bulb")}<span><b>${t`개념 한 줄`}</b> ${esc(txt(inc, "concept"))}</span></p>`;
+      <p class="gd-concept">${icon("bulb")}<span><b>${t`개념 한 줄`}</b> ${esc(txt(inc, "concept"))}</span></p>`
+      + (isField(inc) && inc.file && G().solved[inc.id]
+        ? `<button class="btn ghost small gd-fileview" id="gd-fileview" aria-haspopup="dialog">${icon("book")}<span>${t`사건 파일 보기`}</span></button>` : "");
+  }
+  /** 해결한 응용 사건: 처음 해결 창과 같은 사건 파일 카드를 창으로 */
+  async function showFile() {
+    const inc = S.inc;
+    if (!inc || !inc.file) return;
+    await dialog({ title: t`사건 파일`, body: fileCardHTML(inc), buttons: [{ label: t`좋아요`, value: true, kind: "primary" }] });
+    if (!S.destroyed) $("#gd-fileview")?.focus({ preventScroll: true });
   }
 
   // ---- 코드 칸 ----
@@ -430,7 +447,7 @@ export function render(root, ctx, params = {}) {
     await dialog({
       title: t`사건 해결!`,
       body: `<div class="gd-done g-done-body"><div class="gd-crow-row"><div class="gd-crow">${crowSVG({ pose: inc.crow.lose, size: 64 })}</div><p class="bubble gd-say">${esc(txt(inc, "crowLose"))}</p></div>${riaSays({ outfit: ctx.save.outfit, face: "joy", text: t`「${txt(inc, "title")}」 사건을 해결했어요. 문을 잘 지켰어요!`, size: 64 })}
-        <p class="g-done-xp">${icon("xp")}<span>XP +${out.xp}</span></p></div>`,
+        <p class="g-done-xp">${icon("xp")}<span>XP +${out.xp}</span></p>${fileCardHTML(inc)}</div>`,
       buttons: [{ label: t`좋아요`, value: true, kind: "primary" }],
     });
     if (S.destroyed) return;
@@ -446,9 +463,12 @@ export function render(root, ctx, params = {}) {
       title: t`사건 목록`,
       html: `<ul class="g-pick">${LIST.map((i) => {
         const on = incidentOpen(i, passed, ctx.save.guard, isDev(ctx.save));
-        const note = !on ? `${icon("lock")}${esc(t`${i.need}장을 끝내면 열려요`)}` : g.solved[i.id] ? `${icon("check")}${t`해결`}` : "";
-        return `<li><button class="g-pick-btn gd-item${i.id === S.entry.id ? " on" : ""}" data-g="${i.id}"${on ? ` data-v="${i.id}"` : " disabled"}>
-          <span>${i.id} · ${esc(txt(i, "title"))}</span><small>${note}</small></button></li>`;
+        // 응용: 장을 끝냈는데 기본이 남았으면 남은 수(v0.20.0)
+        const lock = !passed.has(i.need) ? t`${i.need}장을 끝내면 열려요` : t`기본 사건 3개를 풀면 열려요 · ${basicLeft(i, ctx.save.guard)}개 남음`;
+        const note = !on ? `${icon("lock")}${esc(lock)}` : g.solved[i.id] ? `${icon("check")}${t`해결`}` : "";
+        const field = isField(i);
+        return `<li><button class="g-pick-btn gd-item${i.id === S.entry.id ? " on" : ""}${field ? " field" : ""}" data-g="${i.id}"${on ? ` data-v="${i.id}"` : " disabled"}>
+          <span>${field ? icon("book") : ""}${i.id} · ${esc(txt(i, "title"))}${field ? ` ${fieldTag()}` : ""}</span><small>${note}</small></button></li>`;
       }).join("")}</ul>`,
     });
     if (!id || S.destroyed) return;
@@ -462,6 +482,7 @@ export function render(root, ctx, params = {}) {
   root.addEventListener("click", (e) => {
     if (modalOpen()) return;
     if (e.target.closest("#gd-retry") && S.state === "failed") { openIncident(S.entry); return; }
+    if (e.target.closest("#gd-fileview") && S.state === "idle") { showFile(); return; }
     if (e.target.closest("#gd-refresh") && S.state === "failed") { location.reload(); return; }
     const b = e.target.closest(".gd-blank");
     if (b && S.state === "idle") { pickBlank(+b.dataset.n); return; }

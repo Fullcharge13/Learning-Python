@@ -1054,7 +1054,7 @@ def test_advanced_branch():
         a.shot("adv-settings.png")
         m = measure(a, "settings-adv")
         assert not m["problems"] and not m["small"], m
-        # 배지: 15개
+        # 배지: 18개(v0.20.0 사건 파일 수집가 포함)
         a.page.click('[data-go="badges"]')
         a.page.wait_for_selector(".screen.badges")
         assert "/18" in a.page.inner_text(".page-title"), a.page.inner_text(".page-title")

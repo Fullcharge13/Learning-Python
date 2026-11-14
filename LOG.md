@@ -65,7 +65,7 @@
 | 센 것 | 등급·「n/45 해결」·`guard_perfect`는 기본 45개만(기존 학습자의 등급이 내려가지 않음). 응용 해결 XP 5(기본과 같음, 바이트 없음), 15개 모두 풀면 응용 XP 75 |
 | 저장 | `saveVer` 2와 `save.guard.solved[id]` 모양 그대로 |
 | 판 번호·문서 | `VERSION = "v0.20.0"`, README(`tools/readme_gen.py`), 실기기 목록 42~44번(응용 사건 풀기·카드 읽기·어둡게 대비와 기존 학습자 등급) |
-| 시험 보정 | `tests/flow.py` 「심화 가지」의 배지 총 개수 기대값 `/17` → `/18`. 밝게 대비 기준 `contrast-light-baseline.json`의 요약 칸(`checked` 1163, `fail_count` 11, `fail_elements` 24)을 화면 목록에 맞춰 고침(`--compare`는 화면별 색 기록만 보며 차이 0) |
+| 시험 보정 | `tests/flow.py` 「심화 가지」의 배지 총 개수 기대값 `/17` → `/18`. 밝게 대비 기준 `contrast-light-baseline.json`의 요약 칸을 새 경비실 화면 2개를 넣은 밝게 실행 결과 전체로 교체(`checked` 1166, `fail_count` 11, `fail_elements` 24) |
 
 **크기**: 첫 파일 `index.html` 491,646 B(한도 614,400 B), gzip 154.3KB(v0.19.2 대비 +5,015 B). 경비실 장 파일 15개 149.5KB.
 
@@ -82,7 +82,7 @@
 | `python3 tests/contrast.py --theme light --compare tests/fixtures/contrast-light-baseline.json` | 차이 0 |
 | `python3 tools/readme_gen.py --check` | 최신 상태 |
 
-**남은 문제**: 실기기 42~44번 확인 전. 하루 바이트 경제 기준(위)은 다음 작업.
+**남은 문제**: 실기기 42~44번 확인 전. 하루 바이트 경제 기준(위)은 다음 작업. **밝게 대비 시험의 받아들인 미달 2건**(`guard-field-list`): 잠긴 응용 사건 줄 제목 3.05:1(`#8a8578` on `#f2e9d5`)과 비활성 「실행」 단추 4.17:1. 둘 다 눌리지 않는 잠금·비활성 조작부라 WCAG 1.4.3의 예외(비활성 구성요소)에 해당해 받아들였어요(판정 T6-R1). 잠긴 줄의 회색 `#8a8578`은 이번에 새로 만든 색이 아니라 기본 사건의 잠긴 줄이 이미 쓰던 색이에요. 기준 파일 `contrast-light-baseline.json`은 한 번의 밝게 실행 결과 전체(화면·`checked` 1166·`excluded`·`info`·`digests`)로 교체해 한 출처에서 나오게 했어요(`--compare` 차이 0).
 
 ---
 

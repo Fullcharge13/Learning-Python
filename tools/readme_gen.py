@@ -44,7 +44,7 @@ const ria = await imp("src/ria.js");
 const garden = await imp("data/garden.js");
 const gnodes = await imp("src/garden/nodes.js");
 const guard = await imp("data/guard.js");
-const GUARD = { xp: guard.GUARD_XP, incidents: guard.INCIDENTS.map((i) => ({ id: i.id, need: i.need, mode: i.mode, tag: i.tag, concept: i.concept, title: i.title })) };
+const GUARD = { xp: guard.GUARD_XP, incidents: guard.INCIDENTS.map((i) => ({ id: i.id, need: i.need, mode: i.mode, tag: i.tag, tier: i.tier || 'basic', concept: i.concept, title: i.title })) };
 const GARDEN = { orders: garden.ORDERS.map((o) => ({ id: o.id, need: o.need, title: o.title, xp: o.xp })),
   upgrades: garden.UPGRADES.map((u) => ({ id: u.id, label: u.label || u.id, cost: u.cost })),
   nodes: Object.entries(gnodes.NODES).map(([k, v]) => ({ kind: k, chapter: v.chapter, label: v.label })) };
@@ -244,27 +244,39 @@ def build(d):
           f"처음 해결하면 XP {gd['xp']}. 방어하는 쪽의 글만 있고, 사람·기관은 모두 가상이에요.")
         w("")
         incs = gd["incidents"]
-        n_inc = len(incs)
-        chs = sorted({i["need"] for i in incs})
-        per = {c: sum(1 for i in incs if i["need"] == c) for c in chs}
+        basic = [i for i in incs if i["tier"] != "field"]
+        field = [i for i in incs if i["tier"] == "field"]
+        n_inc = len(basic)
+        n_field = len(field)
+        chs = sorted({i["need"] for i in basic})
+        per = {c: sum(1 for i in basic if i["need"] == c) for c in chs}
         per_txt = f"장마다 {per[chs[0]]}개" if len(set(per.values())) == 1 else " · ".join(f"{c}장 {k}개" for c, k in per.items())
-        w(f"사건 {n_inc}개({chs[0]}~{chs[-1]}장, {per_txt}). 그 장을 끝내면 그 장의 사건이 열려요. "
+        w(f"기본 사건 {n_inc}개({chs[0]}~{chs[-1]}장, {per_txt}). 그 장을 끝내면 그 장의 기본 사건이 열려요. "
           "사건 본문은 장마다 따로 파일(`guard/chN-지문.json`)로 두고 처음 열 때 받아요(첫 파일에는 목록용 색인만).")
         w("")
+        if n_field:
+            w(f"여기에 「응용 사건」 {n_field}개가 더 있어요(장마다 1개). 그 장의 기본 사건 3개를 모두 해결하면 열리고, "
+              "풀면 실제 공격 이름·현실 모습·내가 할 일·검색어가 담긴 「사건 파일」 카드가 열려요. 응용 사건은 보안 등급과 「n/45 해결」에 세지 않아요.")
+            w("")
         w("| 장 | 사건 | 제목 | 개념 | 꼬리표 |")
         w("|---|---|---|---|---|")
         for i in sorted(incs, key=lambda i: i["need"]):   # 같은 장 안에서는 원본 순서(정렬은 안정)
             tag = {"respond": "대응", "prevent": "예방"}.get(i["tag"], i["tag"])
+            if i["tier"] == "field":
+                tag = "응용 · " + tag
             w(f"| {i['need']}장 | {i['id']} | {cell(i['title'])} | {cell(i['concept'])} | {tag} |")
         w("")
-        # 등급 기준: src/guard/state.js rankThresholds(n)와 같은 계산(설계 §5-3)
+        # 등급 기준: src/guard/state.js rankThresholds(n)와 같은 계산(설계 §5-3). 기본 사건만 센다.
         th = [0, -(-n_inc // 3), -(-2 * n_inc // 3), n_inc]
-        w(f"보안 등급(해결한 사건 수): 사건 총수 N에서 0 견습 문지기 · ⌈N/3⌉ 문지기 · ⌈2N/3⌉ 경비 반장 · N 텃밭 보안관. "
+        w(f"보안 등급(해결한 기본 사건 수): 기본 사건 총수 N에서 0 견습 문지기 · ⌈N/3⌉ 문지기 · ⌈2N/3⌉ 경비 반장 · N 텃밭 보안관. "
           f"지금은 N={n_inc} → {th[0]} · {th[1]} · {th[2]} · {th[3]}.")
         w("")
-        w(f"경비실 XP는 모두 {n_inc * gd['xp']}(사건 {n_inc}개 × {gd['xp']}). 「완벽한 문지기」 배지는 {n_inc}개 모두 첫 실행에 해결하면 받아요.")
+        xp_f = f" + 응용 {n_field * gd['xp']}(응용 {n_field}개 × {gd['xp']})" if n_field else ""
+        w(f"경비실 XP는 기본 {n_inc * gd['xp']}(기본 사건 {n_inc}개 × {gd['xp']}){xp_f}. "
+          f"「완벽한 문지기」 배지는 기본 사건 {n_inc}개 모두 첫 실행에 해결하면 받아요(응용 사건은 안 셈).")
         w("")
-        w(f"배지는 모두 {n_badges}개예요(경비실 배지 2개 포함).")
+        n_gb = sum(1 for b in d["BADGES"] if b["id"].startswith("guard_"))
+        w(f"배지는 모두 {n_badges}개예요(경비실 배지 {n_gb}개 포함).")
     w("")
     for ch in d["chapters"]:
         c = ch["chapter"]

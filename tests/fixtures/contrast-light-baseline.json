@@ -2,7 +2,7 @@
  "theme": "light",
  "skip_editor_tokens": false,
  "skip_art_text": [],
- "seconds": 32.0,
+ "seconds": 37.6,
  "screens": [
   {
    "screen": "splash",
@@ -132,7 +132,7 @@
   },
   {
    "screen": "badges",
-   "checked": 86,
+   "checked": 89,
    "minRatio": 2.34,
    "theme_applied": "light",
    "fails": 1
@@ -236,7 +236,7 @@
    "fails": 0
   }
  ],
- "checked": 1163,
+ "checked": 1166,
  "fail_count": 11,
  "fail_elements": 24,
  "excluded": {
@@ -934,6 +934,7 @@
    ".badge > span.b-desc|#555f72|#fbf6ea",
    ".badge > span.b-desc|#555f72|#fbf6ea",
    ".badge > span.b-desc|#555f72|#fbf6ea",
+   ".badge > span.b-desc|#555f72|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
@@ -951,6 +952,8 @@
    ".badge > span.b-name|#22304a|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
+   ".badge > span.b-name|#22304a|#fbf6ea",
+   ".badge-art > text|#9a8f78|#e4dccb",
    ".badge-art > text|#9a8f78|#e4dccb",
    ".badge-art > text|#9a8f78|#e4dccb",
    ".badge-art > text|#9a8f78|#e4dccb",

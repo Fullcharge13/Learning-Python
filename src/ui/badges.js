@@ -19,7 +19,7 @@ const COL = { teal: ["#1F9E93", "#12756D"], coral: ["#F08A5D", "#C4512F"], navy:
 
 /** 코드로 그린 배지. 얻기 전에는 회색 실루엣 */
 export function badgeArt(id, earned, size = 64) {
-  const [c, g] = ART[id] || ["navy", "?"];
+  const [c, g] = Object.hasOwn(ART, id) ? ART[id] : ["navy", "?"];   // 가져온 저장의 배지 id가 "constructor" 같은 글자여도
   const glyph = typeof g === "function" ? g() : g;
   const [fill, edge] = earned ? COL[c] : ["#E4DCCB", "#C9BEA6"];
   const ink = earned ? (c === "sun" ? "#3A2E00" : "#FFFFFF") : "#9A8F78";

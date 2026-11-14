@@ -2,6 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<!-- v0.19.2 판정 H-C4: 다른 출처로 보내는 요청(fetch·XHR·WebSocket)을 막음. Blob 작업자(학습자 파이썬)도 이 정책을 물려받는다.
+     인라인 스크립트를 쓰므로 script-src 등은 두지 않음 -->
+<meta http-equiv="Content-Security-Policy" content="connect-src 'self' blob: data:">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#FBF6EA">
 <meta name="apple-mobile-web-app-capable" content="yes">

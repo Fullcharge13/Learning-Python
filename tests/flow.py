@@ -5555,7 +5555,9 @@ def test_xss_garden_output():
 
 
 def test_xss_guard_why():
-    """경비실 직접 쓰기: print·「왜?」·오류 카드에 공격 글자 → 요소 없음, 오류 원문은 글자 그대로."""
+    """경비실 직접 쓰기: print·「왜?」·오류 카드에 공격 글자 → 요소 없음, 오류 원문은 글자 그대로.
+    「왜?」 칸은 학습자 출력(print)을 그리지 않는다(시도 값·까닭은 사건 데이터, 판정은 정해진 표시) — 그래서 여기서는
+    글자 그대로 보이는지가 아니라 새 요소가 생기지 않는지만 본다."""
     with App("iPhone 17", save=_guard_seed(3, guard=_guard_solved_g1()), reduced=True) as a:
         _open_guard(a)
         _gd_open_g1(a)
@@ -5587,11 +5589,97 @@ def test_xss_garden_tampered_worker():
         a.wait_py()
         a.page.click("#g-run")
         a.page.wait_for_selector(".screen.garden[data-state=replay]", timeout=30_000)
-        a.page.wait_for_selector("#g-now:not([hidden])")
-        assert XSS[0] in _xss_text(a, "#g-now .g-ln"), _xss_text(a, "#g-now")
         _xss_clean(a, "garden replay line")
         a.page.wait_for_selector(".screen.garden[data-state=idle]", timeout=30_000)
+        assert XSS[0] not in (_xss_text(a, "#g-now") or ""), "정수가 아닌 줄 번호는 표시하지 않음"
         _xss_clean(a, "garden after replay")
+
+
+# ---- v0.19.2 판정 H-C4: 학습자 파이썬(가져온 텃밭 코드 포함)이 작업자에서 js로 저장본을 바꾸지 못함 ----
+# 같은 출처 작업자는 caches·indexedDB를 볼 수 있어, 막지 않으면 편집기 묶음 저장본을 바꿔 다음에 열 때마다 앱 화면에서 스크립트가 돈다.
+CACHE_POISON = ("import js\njs.eval(\"caches.keys().then(ks=>ks.filter(k=>k.startsWith('ria-game-')).forEach(k=>caches.open(k)"
+                ".then(c=>c.keys().then(rs=>rs.filter(r=>/js\\\\/editor-/.test(r.url)).forEach(r=>c.put(r,new Response("
+                "'window.__xss=1',{headers:{'content-type':'text/javascript'}})))))))\")\n")
+_EDITOR_CACHED = """async () => { const out = [];
+  for (const k of await caches.keys()) { const c = await caches.open(k);
+    for (const r of await c.keys()) if (/\\/js\\/editor-[0-9a-f]{8}\\.js$/.test(r.url)) out.push((await (await c.match(r)).text()).slice(0, 40)); }
+  return out; }"""
+
+
+def _editor_cache_ok(a, where):
+    a.page.wait_for_timeout(1500)   # 학습자 코드가 남긴 약속(promise)이 작업자에서 끝날 시간
+    got = a.js(_EDITOR_CACHED)
+    assert got and all("window.__xss" not in x for x in got), (where, got)
+
+
+def test_sandbox_cache_poison_garden():
+    """가져온 저장의 텃밭 코드(코드 모드)가 js.eval로 편집기 묶음 저장본을 바꾸려 해도 그대로 → 새로 고쳐 편집기를 열어도 window.__xss 없음."""
+    code = CACHE_POISON + 'move("오른쪽")\n'
+    with App("iPhone 17", save=_garden_seed(17, garden=_garden(order_idx=2, mode="code", code=code)), reduced=True, sw=True) as a:
+        _sw_controlled(a)
+        _open_garden(a)
+        a.page.wait_for_selector("#g-ed .cm-content", timeout=15_000)
+        _garden_run(a)
+        _editor_cache_ok(a, "garden")
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        _open_garden(a)
+        a.page.wait_for_selector("#g-ed .cm-content", timeout=15_000)
+        _xss_clean(a, "garden after reload")
+        assert not _app_errors(a), a.errors
+
+
+def test_sandbox_cache_poison_lesson():
+    """레슨 직접 작성에서 같은 코드 → 저장본 그대로, 새로 고친 뒤 편집기를 열어도 window.__xss 없음.
+    작업자 안에서 caches·indexedDB·Worker·SharedWorker가 없고 프로토타입 사슬로도 되찾을 수 없음."""
+    with App("iPhone 17", sw=True) as a:
+        _sw_controlled(a)
+        a.start()
+        a.page.click("#continue")
+        _to_write(a)
+        a.wait_py()
+        a.set_code(CACHE_POISON + 'print("done")')
+        a.page.click("#run")
+        a.page.wait_for_selector("#console pre.out")
+        _editor_cache_ok(a, "lesson")
+        probe = ("import js\nprint(js.eval(\"(()=>{const f=[];for(let o=globalThis;o;o=Object.getPrototypeOf(o))"
+                 "for(const k of ['caches','indexedDB','Worker','SharedWorker'])if(Object.getOwnPropertyDescriptor(o,k))f.push(k);"
+                 "for(let o=navigator;o;o=Object.getPrototypeOf(o))if(Object.getOwnPropertyDescriptor(o,'serviceWorker'))f.push('sw');"
+                 "return [typeof self.caches, typeof indexedDB, typeof Worker, f.join(',') || 'none'].join(' ')})()\"))")
+        a.set_code(probe)
+        a.page.click("#run")
+        a.page.wait_for_function("() => /none|,|caches|Worker/.test(document.querySelector('#console pre.out')?.textContent || '')")
+        out = a.page.text_content("#console pre.out").strip()
+        assert out == "undefined undefined undefined none", out
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.start()
+        a.page.click("#continue")
+        a.page.wait_for_selector(".modal .btn.primary, .card-view, article.item", timeout=15_000)
+        if a.page.query_selector(".modal .btn.primary"):   # 초안이 남아 「이어서 하기」를 물음
+            a.page.click(".modal .btn.primary")
+        _to_write(a)
+        _xss_clean(a, "lesson after reload")
+        assert not _app_errors(a), a.errors
+
+
+def test_sandbox_csp_fetch():
+    """작업자에서 학습자가 다른 출처로 요청(js.fetch)해도 나가지 않음(CSP connect-src). 같은 출처 엔진·레슨은 그대로 동작."""
+    hits = []
+    with App("iPhone 17") as a:
+        a.context.route("https://example.com/**", lambda r: (hits.append(r.request.url), r.fulfill(status=200, body="ok")))
+        a.start()
+        a.page.click("#continue")
+        _to_write(a)
+        a.wait_py()
+        a.set_code('import js\njs.fetch("https://example.com/ria-csp-probe")\nprint("sent")')
+        a.page.click("#run")
+        a.page.wait_for_selector("#console pre.out")
+        a.page.wait_for_timeout(1500)
+        assert not hits, hits
+        assert "sent" in a.page.text_content("#console pre.out")
+        csp = a.js("() => document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]')?.content")
+        assert csp == "connect-src 'self' blob: data:", csp
 
 
 if __name__ == "__main__":

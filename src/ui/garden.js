@@ -542,6 +542,7 @@ export function render(root, ctx, params = {}) {
   // ---- 지금 줄 표시(재생 중) ----
   let lastNow = null;
   function markNow(line, lineMap, code) {
+    if (!Number.isInteger(line)) line = null;   // 작업자 결과의 줄 번호는 정수만(바뀐 작업자가 글자를 줘도 표시·편집기 표시 안 함)
     if (lastNow === line) return;
     lastNow = line;
     root.querySelectorAll(".g-node.now, .g-line.now").forEach((e) => e.classList.remove("now"));

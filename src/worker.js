@@ -47,11 +47,37 @@ function isFatal(e) {
   return /fatal|already fatally failed/i.test(msg) || (name === "RangeError" && /Maximum call stack/i.test(msg));
 }
 
+// v0.19.2 판정 H-C4: 학습자 코드(가져온 저장의 텃밭 코드 포함)는 `import js`로 이 작업자의 전역을 그대로 본다.
+// 같은 출처라 caches·indexedDB로 서비스 작업자 저장본(편집기 묶음·언어 묶음·index.html)을 바꿔 다음에 열 때마다
+// 앱 화면에서 스크립트를 돌릴 수 있었다 → 엔진을 올린 뒤, 학습자 코드가 처음 돌기 전에 이 이름들을 전역과
+// 프로토타입 사슬에서 모두 지운다(WebIDL 속성은 지울 수 있음). fetch는 엔진이 쓰므로 남기고, 다른 출처 요청은
+// index.html의 CSP(connect-src)가 막는다(Blob 작업자는 문서의 CSP를 물려받음). Python의 import js 막기는 우회되므로 하지 않는다.
+export const SEALED_NAMES = ["caches", "indexedDB", "Worker", "SharedWorker"];
+export function sealRealm(g = self) {
+  const strip = (start, names) => {
+    for (let o = start; o; o = Object.getPrototypeOf(o)) {
+      for (const k of names) {
+        if (!Object.getOwnPropertyDescriptor(o, k)) continue;
+        if (!Reflect.deleteProperty(o, k)) {
+          // 지울 수 없으면(이상한 엔진) 값을 undefined로 덮어 둔다
+          try { Object.defineProperty(o, k, { value: undefined, writable: false, configurable: false }); } catch (_) { /* 아래에서 확인 */ }
+        }
+      }
+    }
+  };
+  strip(g, SEALED_NAMES);
+  if (g.navigator) strip(g.navigator, ["serviceWorker"]);
+  const left = SEALED_NAMES.filter((k) => typeof g[k] !== "undefined");
+  if (g.navigator && typeof g.navigator.serviceWorker !== "undefined") left.push("navigator.serviceWorker");
+  if (left.length) throw new Error("sandbox: could not remove " + left.join(", "));
+}
+
 async function init(msg) {
   const t0 = performance.now();
   try {
     const { loadPyodide } = await import(msg.indexURL + "pyodide.mjs");
     pyodide = await loadPyodide({ indexURL: msg.indexURL, packageBaseUrl: msg.indexURL });  // v0.19.2: loadPackage 기본 주소(jsDelivr)가 쓰일 길을 막음
+    sealRealm();   // v0.19.2 H-C4: 학습자 코드가 돌기 전에(아래 runner 올리기·한 번 돌리기보다 먼저)
     // runner.py를 진짜 모듈(ria_runner)로 올린다. 파일 이름이 있어야 오류 원문이 깔끔하다.
     pyodide.globals.set("__ria_src", String(msg.runnerSource));
     pyodide.runPython(

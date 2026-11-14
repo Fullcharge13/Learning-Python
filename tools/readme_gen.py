@@ -255,8 +255,11 @@ def build(d):
           "사건 본문은 장마다 따로 파일(`guard/chN-지문.json`)로 두고 처음 열 때 받아요(첫 파일에는 목록용 색인만).")
         w("")
         if n_field:
-            w(f"여기에 「응용 사건」 {n_field}개가 더 있어요(장마다 1개). 그 장의 기본 사건 3개를 모두 해결하면 열리고, "
-              "풀면 실제 공격 이름·현실 모습·내가 할 일·검색어가 담긴 「사건 파일」 카드가 열려요. 응용 사건은 보안 등급과 「n/45 해결」에 세지 않아요.")
+            fper = {c: sum(1 for i in field if i["need"] == c) for c in sorted({i["need"] for i in field})}
+            f_txt = f"(장마다 {next(iter(fper.values()))}개)" if len(set(fper.values())) == 1 and set(fper) == set(chs) else ""
+            b_txt = f"그 장의 기본 사건 {per[chs[0]]}개를 모두" if len(set(per.values())) == 1 else "그 장의 기본 사건을 모두"
+            w(f"여기에 「응용 사건」 {n_field}개가 더 있어요{f_txt}. {b_txt} 해결하면 열리고, "
+              f"풀면 실제 공격 이름·현실 모습·내가 할 일·검색어가 담긴 「사건 파일」 카드가 열려요. 응용 사건은 보안 등급과 「n/{n_inc} 해결」에 세지 않아요.")
             w("")
         w("| 장 | 사건 | 제목 | 개념 | 꼬리표 |")
         w("|---|---|---|---|---|")

@@ -28,7 +28,7 @@ function mkSave(over = {}) {
 }
 const stats = (o) => ({ lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0, ...o });
 
-test("BADGES table: 18 ids (ledger 12 + streak100 + v0.7 심화 2 + v0.15 경비실 2) with Korean name/desc", () => {
+test("BADGES table: 18 ids (ledger 12 + streak100 + v0.7 심화 2 + v0.15 경비실 3) with Korean name/desc", () => {
   assert.equal(BADGES.length, 18);
   assert.deepEqual(BADGES.map((b) => b.id), ["first_print", "ch1", "ch2", "ch3", "streak7", "streak30", "streak100",
     "fixer", "hintfree10", "perfectionist", "reviewer", "collector", "night_owl", "advanced1", "advancedAll", "guard_first", "guard_perfect", "guard_files"]);

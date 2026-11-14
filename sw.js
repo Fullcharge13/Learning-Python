@@ -15,8 +15,8 @@
 //   Pyodide 저장본은 Pyodide 버전으로만 이름이 바뀐다(판을 올려도 10MB를 다시 받지 않게).
 //   (v0.19.2: 엔진은 같은 사이트 pyodide/에서. 옛 jsDelivr 저장본은 새 이름 덕에 쓰이지 않고 activate에서 지워짐)
 
-const VERSION = "v0.20.2";
-const GAME_CACHE = "ria-game-v0.20.2-45dcb65d72";
+const VERSION = "v0.20.3";
+const GAME_CACHE = "ria-game-v0.20.3-d09a77f439";
 // v0.19.2(H-C1): 엔진을 같은 사이트 pyodide/에서 받으므로 저장소 이름을 새로 한다("-self").
 // 옛 저장소 ria-pyodide-<판>은 jsDelivr 주소가 키라 쓸 수 없고, 이름 앞부분(ria-)이 같아 activate가 지워 준다.
 const PY_CACHE = "ria-pyodide-314.0.7-self";

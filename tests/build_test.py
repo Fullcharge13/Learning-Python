@@ -1565,6 +1565,9 @@ def main():
     only = os.environ.get("RIA_ONLY")  # 시험 이름 일부만 돌리기(예: RIA_ONLY=new_index_not_cached)
     if only:
         tests = [(n, f) for n, f in tests if only in n]
+        if not tests:
+            print('RIA_ONLY=%r matched no test' % only)
+            return 2
     fails = 0
     for name, f in tests:
         try:

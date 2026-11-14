@@ -59,7 +59,7 @@ self.addEventListener("install", (event) => {
       }
       await Promise.all(missing.map(async (url) => {
         try {
-          const res = await fetch(new Request(url, { mode: "cors", credentials: "omit", cache: "reload" }));
+          const res = await fetch(new Request(url, { mode: "cors", credentials: "omit", cache: "no-cache" }));
           if (res.ok) await py.put(url, res);
         } catch (_) { /* 아래에서 빠진 것을 다시 센다 */ }
       }));

@@ -5219,6 +5219,25 @@ def test_theme_no_flash():
         assert not _app_errors(a), a.errors
 
 
+def test_theme_character_outline():
+    """v0.19.1: 어둡게에서 리아·크로우 그림에 밝은 테두리(drop-shadow)가 생겨 남색 바탕과 구분된다.
+    그림 데이터는 그대로, 밝게는 filter 없음(지금과 같음)."""
+    probe = """() => { const box = document.createElement('div');
+      box.innerHTML = '<svg class="ria"></svg><svg class="crow"></svg>'; document.body.appendChild(box);
+      const r = [...box.querySelectorAll('svg')].map((s) => getComputedStyle(s).filter); box.remove(); return r; }"""
+    for theme in ("light", "dark"):
+        init = "localStorage.setItem(%s, %s);" % (json.dumps(THEME_KEY), json.dumps(theme))
+        with App("iPhone 17", init_js=init) as a:
+            a.page.wait_for_selector("svg.ria")
+            got = a.js(probe)
+            real = a.js("() => getComputedStyle(document.querySelector('svg.ria')).filter")
+            if theme == "light":
+                assert got == ["none", "none"] and real == "none", (got, real)
+            else:
+                assert all("drop-shadow" in f for f in got) and "drop-shadow" in real, (got, real)
+            assert not _app_errors(a), a.errors
+
+
 def _contrast_main(argv):
     """tests/contrast.py를 같은 빌드·서버·Chromium으로 돌린다(flow.py를 직접 실행할 때 `import flow`가 빌드를 다시 하지 않게)."""
     sys.modules.setdefault("flow", sys.modules[__name__])

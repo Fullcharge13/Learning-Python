@@ -1,7 +1,8 @@
 {
  "theme": "light",
  "skip_editor_tokens": false,
- "seconds": 32.9,
+ "skip_art_text": [],
+ "seconds": 32.0,
  "screens": [
   {
    "screen": "splash",
@@ -33,8 +34,8 @@
   },
   {
    "screen": "tutorial-4",
-   "checked": 6,
-   "minRatio": 5.96,
+   "checked": 5,
+   "minRatio": 5.54,
    "theme_applied": "light",
    "fails": 0
   },
@@ -117,7 +118,7 @@
   },
   {
    "screen": "done",
-   "checked": 37,
+   "checked": 38,
    "minRatio": 4.17,
    "theme_applied": "light",
    "fails": 1
@@ -225,13 +226,14 @@
  "fail_count": 9,
  "fail_elements": 21,
  "excluded": {
-  "noLetterSkipped": 134,
-  "invisible": 1204,
+  "noLetterSkipped": 135,
+  "invisible": 1205,
   "tiny": 32,
   "offscreen": 26,
   "clippedHoriz": 0,
   "disabledSkipped": 16,
   "editorToken": 0,
+  "artText": 0,
   "svgSkipped": 0
  },
  "info": {
@@ -360,8 +362,7 @@
   "tutorial-4": [
    ".code > span|#f4eedd|#1f2b3d",
    ".tut-card > p.bubble.center|#22304a|#fffdf8",
-   ".tut-load > p.load-text|#555f72|#fbf6ea",
-   "button#tut-home|#22304a|#fffdf8",
+   "button#tut-run|#ffffff|#12756d",
    "button#tut-skip|#22304a|#fffdf8",
    "input#tut-input|#22304a|#fffdf8"
   ],
@@ -695,6 +696,7 @@
    "li > span.ins-no|#ffffff|#22304a",
    "li > span.ins-no|#ffffff|#22304a",
    "li > span.ins-no|#ffffff|#22304a",
+   "li > span|#22304a|#fffdf8",
    "li > span|#22304a|#fffdf8",
    "li > span|#22304a|#fffdf8",
    "li > span|#22304a|#fffdf8",

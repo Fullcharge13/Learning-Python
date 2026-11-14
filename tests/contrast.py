@@ -287,9 +287,20 @@ class Runner:
         print("  (%.1fs)" % (time.time() - t0), flush=True)
 
 
+# 화면 내용이 요일·날짜에 따라 달라지면(완료 화면의 「새 배지」 줄, 바이트 나눔 문장 등) 밝게 색 비교가
+# 날마다 다르게 나온다. 페이지 시계를 늘 같은 날(수요일 2026-11-11 12:00 KST)에서 시작하게 하고,
+# 흐르는 시간은 그대로 둔다(애니메이션·타이머 정상). 인자를 준 new Date(...)는 그대로.
+FROZEN_DATE_JS = ("(function(){var D=Date,b=D.now(),F=D.parse('2026-11-11T12:00:00+09:00');"
+                  "function now(){return F+(D.now()-b);}"
+                  "function FD(){var a=Array.prototype.slice.call(arguments);"
+                  "if(!(this instanceof FD))return new D(now()).toString();"
+                  "return a.length?new(Function.prototype.bind.apply(D,[null].concat(a)))():new D(now());}"
+                  "FD.prototype=D.prototype;FD.now=now;FD.parse=D.parse;FD.UTC=D.UTC;window.Date=FD;})();")
+
+
 def _app(theme, **kw):
     import flow
-    init = "try{localStorage.setItem(%s,%s)}catch(e){}" % (json.dumps(THEME_KEY), json.dumps(theme))
+    init = FROZEN_DATE_JS + "try{localStorage.setItem(%s,%s)}catch(e){}" % (json.dumps(THEME_KEY), json.dumps(theme))
     return flow.App("iPhone 17", init_js=init, **kw)
 
 
@@ -302,6 +313,9 @@ def sc_fresh(r):
         for i in range(2, 5):
             a.page.click("#tut-next")
             a.page.wait_for_timeout(250)
+            if i == 4:   # 4장의 「▶ 실행」은 엔진이 준비돼야 보임 → 늘 같은 상태로 찍게 준비를 기다림
+                a.wait_py()
+                a.page.wait_for_selector("#tut-run:not([disabled])", timeout=60_000)
             r.cap(a, "tutorial-%d" % i)
         flow._tut_run(a)
         a.page.wait_for_selector("#tut-ok", timeout=60_000)
@@ -429,7 +443,9 @@ def summarize(r, theme, skip_tokens, secs, skip_art=False):
 
 
 def compare(base_path, rep):
-    """기준 JSON의 화면별 (선택자|글자색|바탕색) 목록과 지금 것을 견줌. 다른 줄을 돌려준다(없으면 [])."""
+    """기준 JSON의 화면별 (선택자|글자색|바탕색) 목록과 지금 것을 견줌. 다른 줄을 돌려준다(없으면 []).
+    같은 줄이 몇 번 나오는지는 보지 않는다 — 요일·날짜에 따라 같은 색의 줄이 하나 더 붙는 화면(완료 화면의
+    「새 배지」 등)이 있어서. 색이 바뀌거나 새 색 조합이 생기면 차이로 잡는다."""
     with open(base_path, encoding="utf-8") as f:
         base = json.load(f)["digests"]
     diffs = []
@@ -438,8 +454,7 @@ def compare(base_path, rep):
         if new is None:
             diffs.append("%s: screen missing" % name)
             continue
-        from collections import Counter
-        co, cn = Counter(old), Counter(new)
+        co, cn = set(old), set(new)
         for k in sorted((co - cn)):
             diffs.append("%s: - %s" % (name, k))
         for k in sorted((cn - co)):

@@ -1122,6 +1122,10 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 [data-theme="dark"] .node { box-shadow: 0 5px 0 var(--line); }
 [data-theme="dark"] .node.locked { color: var(--muted-ink); border-color: #46536E; box-shadow: 0 5px 0 #2A3550; }
 [data-theme="dark"] .node:active { box-shadow: none; }
+/* v0.19.1: 남색 바탕에서 캐릭터 윤곽선이 묻히지 않게 — 그림은 그대로, 바깥에 얇은 크림색 테두리만(어둡게 전용) */
+[data-theme="dark"] svg.ria, [data-theme="dark"] svg.crow {
+  filter: drop-shadow(0 0 1px rgba(241, 235, 221, .9)) drop-shadow(0 0 2.5px rgba(241, 235, 221, .35));
+}
 [data-theme="dark"] .star-node.locked .star-svg { filter: drop-shadow(0 3px 0 #2A3550); }
 [data-theme="dark"] .star-node.locked .star-shape { stroke: #46536E; }
 [data-theme="dark"] .star-lock rect, [data-theme="dark"] .star-lock path { stroke: var(--muted-ink); }

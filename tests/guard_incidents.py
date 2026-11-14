@@ -84,16 +84,19 @@ WRONG_SOLUTIONS = {
         'if attempt == "asleep" or attempt == "lunch":\n    block()\nelse:\n    allow()\n',
     ],
     "G47": [
-        'def check(attempt):\n    return attempt != "agency:transfer"\n',
-        'def check(attempt):\n    if "agency" in attempt:\n        return False\n    return True\n',
-        'def check(attempt):\n    if "agency" in attempt or "transfer" in attempt:\n        return False\n    return True\n',
+        'def check(attempt):\n    return attempt != "transfer"\n',
+        'def asks_money(request):\n    return request == "transfer" or request == "safe_account"\n\n'
+        "def check(attempt):\n    return not asks_money(attempt)\n",
     ],
     "G48": [
         "count = 0\nwhile has_try():\n    next_try()\n    count = count + 1\n    if count >= 3:\n        block()\n    else:\n        allow()\n",
-        'last = ""\naccounts = 0\nwhile has_try():\n    name = next_try()\n    if name != last:\n        accounts = accounts + 1\n'
-        "    if accounts >= 3:\n        block()\n    else:\n        allow()\n",
-        'last = ""\naccounts = 0\nwhile has_try():\n    name = next_try()\n    if name != last:\n        accounts = accounts + 1\n'
-        "        last = name\n        if accounts >= 3:\n            block()\n        else:\n            allow()\n    else:\n        allow()\n",
+        # 기본 G5의 정답(5개까지 들이고 그 뒤 막기) — 같은 판정 규칙이 아님을 확인
+        "count = 0\nwhile has_try():\n    next_try()\n    if count < 5:\n        allow()\n        count = count + 1\n    else:\n        block()\n",
+        'last = ""\nswitches = 0\nwhile has_try():\n    name = next_try()\n    if last != "" and name != last:\n'
+        "        switches = switches + 1\n    if switches >= 2:\n        block()\n    else:\n        allow()\n",
+        'last = ""\nswitches = 0\nwhile has_try():\n    name = next_try()\n    if last != "" and name != last:\n'
+        "        switches = switches + 1\n        last = name\n        if switches >= 2:\n            block()\n        else:\n            allow()\n"
+        "    else:\n        last = name\n        allow()\n",
     ],
     "G49": [
         'def check(attempt):\n    return "exe" not in attempt.lower()\n',
@@ -102,9 +105,9 @@ WRONG_SOLUTIONS = {
         "        return False\n    return True\n",
     ],
     "G50": [
-        'real = ["lotusbank.example", "mail.pi.example", "farm.pi.example"]\n\ndef check(attempt):\n    return attempt.lower() in real\n',
+        'real = ["pinebank.example", "login.pi.example", "farm.pi.example"]\n\ndef check(attempt):\n    return attempt.lower() in real\n',
         'def check(attempt):\n    if "1" in attempt or "0" in attempt:\n        return False\n    return True\n',
-        'real = ["lotusbank.example", "mail.pi.example", "farm.pi.example"]\n\ndef check(attempt):\n    name = attempt.lower()\n    if name in real:\n        return True\n'
+        'real = ["pinebank.example", "login.pi.example", "farm.pi.example"]\n\ndef check(attempt):\n    name = attempt.lower()\n    if name in real:\n        return True\n'
         '    if name.replace("1", "l") in real:\n        return False\n    return True\n',
     ],
     "G6": [

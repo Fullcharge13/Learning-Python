@@ -7,7 +7,7 @@
   ④ 「전부 막기」·「전부 들이기」 코드는 해결에 실패
   ⑤ solution이 그 장까지 배운 문법(AST 마디·부르는 이름)만 씀
   ⑥ 시도 1~20개, block·allow 각 1개 이상  ⑦ 사건 id 순서(장 순서), need 오름차순
-  ⑧ 3~17장마다 기본 정확히 3개 + 응용(tier "field") 0~1개, 응용은 장의 마지막
+  ⑧ 3~17장마다 기본 정확히 3개 + 응용(tier "field") 정확히 1개, 응용은 장의 마지막
   ⑨ 기본 id G1~G45 한 번씩, 응용 id = FIELD_IDS
   ⑩ WRONG_SOLUTIONS(어설픈 풀이)는 해결에 실패, 응용 사건은 어설픈 풀이 1개 이상
   ⑪ tier는 없거나 "field", 응용에만 사건 파일 카드(file)와 영어 카드 열쇠(check_file)
@@ -59,16 +59,17 @@ METHODS_BY_CH = {7: {"append", "remove", "sort"}, 8: {"get", "keys", "values", "
 WANT_IDS = ["G1", "G2", "G7", "G46", "G3", "G8", "G9", "G47", "G4", "G5", "G10", "G48", "G6", "G11", "G12", "G49",
             "G13", "G14", "G15", "G50", "G16", "G17", "G18", "G51", "G19", "G20", "G21", "G52",
             "G22", "G23", "G24", "G53", "G25", "G26", "G27", "G54", "G28", "G29", "G30", "G55",
-            "G31", "G32", "G33", "G34", "G35", "G36", "G37", "G38", "G39",
-            "G40", "G41", "G42", "G43", "G44", "G45"]
+            "G31", "G32", "G33", "G56", "G34", "G35", "G36", "G57", "G37", "G38", "G39", "G58",
+            "G40", "G41", "G42", "G59", "G43", "G44", "G45", "G60"]
 WANT_CHAPTERS = [3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9,
-                 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16, 16, 17, 17, 17]
+                 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15,
+                 16, 16, 16, 16, 17, 17, 17, 17]
 BASIC_IDS = ["G%d" % n for n in range(1, 46)]
 # 응용 사건(tier "field", 설계 docs/specs/2026-11-14-경비실-응용-사건-설계.md §4-1·§6). 작업마다 늘린다.
-FIELD_IDS = ["G46", "G47", "G48", "G49", "G50", "G51", "G52", "G53", "G54", "G55"]
+FIELD_IDS = ["G46", "G47", "G48", "G49", "G50", "G51", "G52", "G53", "G54", "G55", "G56", "G57", "G58", "G59", "G60"]
 # 겹침 검사(설계 §8): (응용, 기본) — 응용의 solution을 기본 사건의 시도로 돌리면 해결에 실패해야 한다
 # (같은 판정 규칙이 아님). 방식(mode)이 같은 짝만 넣는다. 작업 4·5가 채운다.
-OVERLAP_PAIRS = [("G55", "G11"), ("G55", "G29")]
+OVERLAP_PAIRS = [("G55", "G11"), ("G55", "G29"), ("G56", "G31"), ("G57", "G12")]
 
 
 # ⑩ 틀린 풀이: 초보·대학생이 흔히 쓰는 어설픈 풀이. 시도를 보강한 뒤에는 각각 해결에 실패해야 한다
@@ -196,6 +197,100 @@ WRONG_SOLUTIONS = {
         'bait = ["택배", "과태료", "청첩장", "parcel", "penalty", "invitation"]\n\ndef check(attempt):\n'
         '    text = attempt.lower()\n    if "sl.example/" not in text:\n        return True\n'
         '    for word in bait:\n        if word in text:\n            return False\n    return True\n',
+    ],
+    "G56": [
+        # 주소 글자 어딘가에 우리 도메인이 들었는지만 보기 — 경로에 넣은 가짜를 들여 버림
+        'def check(attempt):\n    return "farm.pi.example" in attempt or "pay.pi.example" in attempt\n',
+        # 앞부분만 보기 — farm.pi.example.evil.example, @ 주소를 들여 버림
+        'def check(attempt):\n    return attempt.startswith("https://farm.pi.example") or attempt.startswith("https://pay.pi.example")\n',
+        # netloc 끝만 보기 — evilpi.example을 들여 버림
+        'from urllib.parse import urlparse\n\ndef check(attempt):\n    return urlparse(attempt).netloc.endswith("pi.example")\n',
+        # 기본 G31 정답 그대로(https + 호스트가 farm.pi.example 하나) — 결제 도메인을 막아 버림
+        'from urllib.parse import urlparse\n\ndef check(attempt):\n    if "\\\\" in attempt:\n        return False\n    url = urlparse(attempt)\n'
+        '    return url.scheme == "https" and url.hostname == "farm.pi.example"\n',
+        # 기본 G31 모양을 목록으로 넓힌 것(hostname) — 포트를 붙인 QR을 들여 버림
+        'from urllib.parse import urlparse\n\nshops = ["farm.pi.example", "pay.pi.example"]\n\ndef check(attempt):\n'
+        '    url = urlparse(attempt)\n    return url.scheme == "https" and url.hostname in shops\n',
+    ],
+    "G57": [
+        # JSON을 풀지 않고 글자 그대로 태그를 찾기 — 「\u003c」로 숨긴 태그를 놓침
+        'tags = ["<script", "<img", "<iframe"]\n\ndef check(attempt):\n    for tag in tags:\n'
+        '        if tag in attempt.lower():\n            return False\n    return True\n',
+        # 기본 G12 정답 그대로(< > ' 글자가 있으면 막기) — 하트 <3을 막아 버림
+        "def check(attempt):\n    for ch in attempt:\n        if ch in \"<>'\":\n            return False\n    return True\n",
+        # 풀고 나서 < 글자가 있으면 다 막기 — 하트와 비교 기호까지 막아 버림
+        'import json\n\ndef check(attempt):\n    post = json.loads(attempt)\n'
+        '    return "<" not in post["title"] and "<" not in post["body"]\n',
+        # 본문만 보기 — 제목에 넣은 태그를 놓침
+        'import json\n\ntags = ["<script", "<img", "<iframe"]\n\ndef check(attempt):\n    post = json.loads(attempt)\n'
+        '    for tag in tags:\n        if tag in post["body"].lower():\n            return False\n    return True\n',
+        # <script만 보기 — <img, <iframe을 놓침
+        'import json\n\ndef check(attempt):\n    post = json.loads(attempt)\n    for text in [post["title"], post["body"]]:\n'
+        '        if "<script" in text.lower():\n            return False\n    return True\n',
+    ],
+    "G58": [
+        # 막은 로그인까지 기억하기 — 공격자 위치가 기준이 되어 진짜 주인을 막음
+        'home = {"seoul": "kr", "busan": "kr", "jeju": "kr", "lisbon": "pt", "lima": "pe"}\n\nclass Account:\n'
+        '    def __init__(self):\n        self.city = ""\n        self.hour = 0\n\n    def login(self, city, hour):\n'
+        '        ok = not (self.city != "" and home[city] != home[self.city] and hour - self.hour < 6)\n'
+        '        self.city = city\n        self.hour = hour\n        return ok\n\nacct = Account()\nwhile has_try():\n'
+        '    city, hour = next_try().split(",")\n    if acct.login(city, int(hour)):\n        allow()\n    else:\n        block()\n',
+        # 나라가 아니라 도시가 바뀌면 막기
+        'class Account:\n    def __init__(self):\n        self.city = ""\n        self.hour = 0\n\n    def login(self, city, hour):\n'
+        '        if self.city != "" and city != self.city and hour - self.hour < 6:\n            return False\n'
+        '        self.city = city\n        self.hour = hour\n        return True\n\nacct = Account()\nwhile has_try():\n'
+        '    city, hour = next_try().split(",")\n    if acct.login(city, int(hour)):\n        allow()\n    else:\n        block()\n',
+        # 시간을 보지 않고 나라가 바뀌면 막기
+        'home = {"seoul": "kr", "busan": "kr", "jeju": "kr", "lisbon": "pt", "lima": "pe"}\n\nclass Account:\n'
+        '    def __init__(self):\n        self.city = ""\n\n    def login(self, city):\n'
+        '        if self.city != "" and home[city] != home[self.city]:\n            return False\n'
+        '        self.city = city\n        return True\n\nacct = Account()\nwhile has_try():\n'
+        '    city, hour = next_try().split(",")\n    if acct.login(city):\n        allow()\n    else:\n        block()\n',
+        # 첫 로그인만 기억하기(그 뒤로 기억을 바꾸지 않음)
+        'home = {"seoul": "kr", "busan": "kr", "jeju": "kr", "lisbon": "pt", "lima": "pe"}\n\nclass Account:\n'
+        '    def __init__(self):\n        self.city = ""\n        self.hour = 0\n\n    def login(self, city, hour):\n'
+        '        if self.city == "":\n            self.city = city\n            self.hour = hour\n            return True\n'
+        '        return not (home[city] != home[self.city] and hour - self.hour < 6)\n\nacct = Account()\nwhile has_try():\n'
+        '    city, hour = next_try().split(",")\n    if acct.login(city, int(hour)):\n        allow()\n    else:\n        block()\n',
+        # 기본 G38 모양(한 번 이상하면 계정을 잠가 그 뒤로 다 막기) — 막은 뒤 진짜 주인도 막음
+        'home = {"seoul": "kr", "busan": "kr", "jeju": "kr", "lisbon": "pt", "lima": "pe"}\n\nclass Account:\n'
+        '    def __init__(self):\n        self.city = ""\n        self.hour = 0\n        self.locked = False\n\n'
+        '    def login(self, city, hour):\n        if self.locked:\n            return False\n'
+        '        if self.city != "" and home[city] != home[self.city] and hour - self.hour < 6:\n'
+        '            self.locked = True\n            return False\n        self.city = city\n        self.hour = hour\n'
+        '        return True\n\nacct = Account()\nwhile has_try():\n'
+        '    city, hour = next_try().split(",")\n    if acct.login(city, int(hour)):\n        allow()\n    else:\n        block()\n',
+    ],
+    "G59": [
+        # 글자 어딘가에 password가 있으면 막기 — password_hash 표를 막고 pw를 놓침
+        'def check(attempt):\n    return "password" not in attempt.lower()\n',
+        # 칸 이름에 pw나 pass가 들어 있으면 막기 — 해시 칸과 bus_pass를 막아 버림
+        'def check(attempt):\n    cols = attempt.split("(")[1].split(")")[0]\n    for col in cols.split(","):\n'
+        '        name = col.strip().split(" ")[0].lower()\n        if "pw" in name or "pass" in name:\n            return False\n'
+        '    return True\n',
+        # hash라는 글자가 있으면 다 괜찮다고 보기 — pw_hash 옆의 pw를 놓침
+        'plain = ["password", "pw", "passwd"]\n\ndef check(attempt):\n    if "hash" in attempt.lower():\n        return True\n'
+        '    cols = attempt.split("(")[1].split(")")[0]\n    for col in cols.split(","):\n'
+        '        if col.strip().split(" ")[0].lower() in plain:\n            return False\n    return True\n',
+        # 정규표현식으로 「이름 TEXT」만 찾기 — 칸 종류를 뺀 password 칸을 놓침
+        'import re\n\ndef check(attempt):\n    return re.search(r"(password|pw|passwd) text", attempt.lower()) is None\n',
+        # 기본 G41 모양(대문자로 바꾼 쿼리에 PASSWORD·PW 글자가 있으면 막기) — 해시 칸을 막아 버림
+        'def check(attempt):\n    q = attempt.upper()\n    if "PASSWORD" in q or "PW" in q:\n        return False\n    return True\n',
+    ],
+    "G60": [
+        # 기본 G17 모양(출처마다 요청 횟수를 세기) — 같은 포트를 여러 번 오는 보통 손님을 막음
+        'counts = {}\nwhile has_try():\n    src, port = next_try().split(",")\n    counts[src] = counts.get(src, 0) + 1\n'
+        '    if counts[src] >= 4:\n        block()\n    else:\n        allow()\n',
+        # 출처를 가리지 않고 모든 포트를 한데 세기
+        'seen = set()\nwhile has_try():\n    src, port = next_try().split(",")\n    seen.add(port)\n'
+        '    if len(seen) >= 4:\n        block()\n    else:\n        allow()\n',
+        # 기본 G21 모양(이미 본 것은 들이고 새것만 따지기): 새 포트일 때만 막기 — 이미 두드린 포트로 다시 오면 들여 버림
+        'ports = {}\nwhile has_try():\n    src, port = next_try().split(",")\n    if src not in ports:\n        ports[src] = set()\n'
+        '    new = port not in ports[src]\n    ports[src].add(port)\n    if new and len(ports[src]) >= 4:\n        block()\n'
+        '    else:\n        allow()\n',
+        # 기본 G45 정답 그대로(가장 시끄러운 출처)
+        "counts = {}\ntotal = 0\nwhile has_try():\n    src = next_try()\n    total = total + 1\n    counts[src] = counts.get(src, 0) + 1\n"
+        "    if counts[src] >= 5 and counts[src] * 2 > total:\n        block()\n    else:\n        allow()\n",
     ],
     "G6": [
         'def check(attempt):\n    if len(attempt) <= 8:\n        return False\n    if "pie" in attempt.lower():\n        return False\n'
@@ -335,7 +430,7 @@ def check_file(inc, en=None):
 
 
 def chapter_problems(incs):
-    """장마다 기본 정확히 3개 + 응용 0~1개, 응용은 그 장의 마지막(작업 5가 「응용 정확히 1개」로 조인다)."""
+    """장마다 기본 정확히 3개 + 응용 정확히 1개, 응용은 그 장의 마지막."""
     bad = []
     by_ch = {}
     for i in incs:
@@ -347,7 +442,7 @@ def chapter_problems(incs):
         field = [i for i in lst if i.get("tier") == "field"]
         if len(basic) != 3:
             bad.append("%d장 기본 %d개" % (ch, len(basic)))
-        if len(field) > 1:
+        if len(field) != 1:
             bad.append("%d장 응용 %d개" % (ch, len(field)))
         if field and lst[-1] is not field[0]:
             bad.append("%d장 응용 %s가 장의 마지막이 아님" % (ch, field[0]["id"]))
@@ -468,11 +563,11 @@ def self_test():
     def chs(spec):
         out = []
         for ch in range(3, 18):
-            for k in spec.get(ch, "bbb"):
+            for k in spec.get(ch, "bbbf"):
                 out.append({"id": "%d%s%d" % (ch, k, len(out)), "need": ch, **({"tier": "field"} if k == "f" else {})})
         return out
     ch_cases = [({}, True), ({3: "bbbf", 17: "bbbf"}, True), ({3: "bbfb"}, False), ({4: "bbbff"}, False),
-                ({5: "bbf"}, False), ({6: "bbbb"}, False)]
+                ({5: "bbf"}, False), ({6: "bbbb"}, False), ({7: "bbb"}, False), ({17: "bbb"}, False)]
     for spec, want in ch_cases:
         if (not chapter_problems(chs(spec))) != want:
             bad += 1
@@ -527,7 +622,7 @@ def main():
 
     check([i["id"] for i in incs] == WANT_IDS and [i["need"] for i in incs] == WANT_CHAPTERS, "⑦ 사건 id 순서·장 번호")
     bad = chapter_problems(incs)
-    check(not bad, "⑧ 3~17장 모두 있고 장마다 기본 정확히 3개 + 응용 0~1개(응용은 장의 마지막)", ", ".join(bad))
+    check(not bad, "⑧ 3~17장 모두 있고 장마다 기본 정확히 3개 + 응용 정확히 1개(응용은 장의 마지막)", ", ".join(bad))
     ids = [i["id"] for i in incs]
     basic_ids = [i["id"] for i in incs if i.get("tier") != "field"]
     field_ids = [i["id"] for i in incs if i.get("tier") == "field"]

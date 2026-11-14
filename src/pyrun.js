@@ -115,6 +115,7 @@ export class PyRun {
     this.phase = "first-load";
     this.onstatus = null;
     this.loadMs = null;      // 마지막 작업자 준비에 걸린 시간(작업자 안에서 잼)
+    this.sealed = null;      // v0.19.2 H-C5: 작업자 격리(caches 등 지움) 결과. null 아직 모름 · true 켜짐 · false 일부
     this._everReady = false;
     this._worker = null;
     this._workerDead = false;
@@ -208,6 +209,7 @@ export class PyRun {
         isReady = true;
         this._everReady = true;
         this.loadMs = m.loadMs;
+        this.sealed = m.sealed === true;
         this._setStatus("ready");
         resolveReady();
       } else if (m.type === "init-error") {

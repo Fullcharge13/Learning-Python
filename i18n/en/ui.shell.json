@@ -245,5 +245,8 @@
  "크롬에서 「인터넷 사용 기록 삭제」로 쿠키·사이트 데이터를 지우면 기록도 함께 지워져요. 가끔 설정의 「저장 내보내기」로 백업해 두세요.": "If you clear cookies and site data in Chrome (“Delete browsing data”), your progress is deleted too. Back it up now and then with “Export Save” in Settings.",
  "사용법 다시 보기": "Replay the intro",
  "리아의 첫 인사 카드 네 장을 다시 봐요. 기록은 그대로예요.": "See Ria's four intro cards again. Your progress stays as it is.",
- "replay::보기": "View"
+ "replay::보기": "View",
+ "파이썬 격리: 켜짐": "Python sandbox: on",
+ "파이썬 격리: 일부": "Python sandbox: partial",
+ "파이썬 격리: 확인 전": "Python sandbox: not checked yet"
 }

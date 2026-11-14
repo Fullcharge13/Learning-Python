@@ -5631,7 +5631,7 @@ def test_sandbox_cache_poison_garden():
 
 def test_sandbox_cache_poison_lesson():
     """레슨 직접 작성에서 같은 코드 → 저장본 그대로, 새로 고친 뒤 편집기를 열어도 window.__xss 없음.
-    작업자 안에서 caches·indexedDB·Worker·SharedWorker가 없고 프로토타입 사슬로도 되찾을 수 없음."""
+    작업자 안에서 caches·indexedDB·Worker·SharedWorker가 없고 프로토타입 사슬로도 되찾을 수 없음(남은 것은 값 undefined인 가림 속성뿐)."""
     with App("iPhone 17", sw=True) as a:
         _sw_controlled(a)
         a.start()
@@ -5643,8 +5643,8 @@ def test_sandbox_cache_poison_lesson():
         a.page.wait_for_selector("#console pre.out")
         _editor_cache_ok(a, "lesson")
         probe = ("import js\nprint(js.eval(\"(()=>{const f=[];for(let o=globalThis;o;o=Object.getPrototypeOf(o))"
-                 "for(const k of ['caches','indexedDB','Worker','SharedWorker'])if(Object.getOwnPropertyDescriptor(o,k))f.push(k);"
-                 "for(let o=navigator;o;o=Object.getPrototypeOf(o))if(Object.getOwnPropertyDescriptor(o,'serviceWorker'))f.push('sw');"
+                 "for(const k of ['caches','indexedDB','Worker','SharedWorker']){const d=Object.getOwnPropertyDescriptor(o,k);if(d&&(d.get||d.value!==undefined))f.push(k)}"
+                 "for(let o=navigator;o;o=Object.getPrototypeOf(o)){const d=Object.getOwnPropertyDescriptor(o,'serviceWorker');if(d&&(d.get||d.value!==undefined))f.push('sw')}"
                  "return [typeof self.caches, typeof indexedDB, typeof Worker, f.join(',') || 'none'].join(' ')})()\"))")
         a.set_code(probe)
         a.page.click("#run")
@@ -5680,6 +5680,53 @@ def test_sandbox_csp_fetch():
         assert "sent" in a.page.text_content("#console pre.out")
         csp = a.js("() => document.querySelector('meta[http-equiv=\"Content-Security-Policy\"]')?.content")
         assert csp == "connect-src 'self' blob: data:", csp
+
+
+# 작업자를 감싸 caches를 고칠 수 없는 자기 속성으로 못 박음(지우기가 안 되는 브라우저 흉내). 감싼 모듈이 원래 작업자를 정적 import하므로
+# 원래 작업자의 onmessage가 먼저 걸리고, 못 박기는 첫 메시지(init)보다 먼저 끝난다.
+PIN_CACHES_JS = """(() => { const W = window.Worker; window.Worker = function (url, opts) {
+  const src = 'import ' + JSON.stringify(String(url)) + '; Object.defineProperty(self, "caches", { value: { pinned: 1 }, writable: false, configurable: false });';
+  return new W(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })), opts); };
+  window.Worker.prototype = W.prototype; })();"""
+
+
+def _dev_sandbox_line(a):
+    _to_settings_dev(a)
+    a.page.click("#dev")
+    a.page.wait_for_selector(".modal [data-i='1']")
+    a.page.click(".modal [data-i='1']")
+    a.page.wait_for_selector("#dev-sandbox")
+    return a.page.text_content("#dev-sandbox").strip()
+
+
+def test_sandbox_fail_open():
+    """판정 H-C5: 작업자 격리를 못 하는 브라우저(caches를 못 지움 흉내)에서도 파이썬은 준비되고 sealed=false를 알림 →
+    레슨 코드 실행은 그대로, 개발자 모드 설정에 「파이썬 격리: 일부」. 보통 Chromium은 sealed=true · 「켜짐」/영어 「on」."""
+    with App("iPhone 17", init_js=PIN_CACHES_JS) as a:
+        a.start()
+        a.wait_py()
+        assert a.js("() => window.__ria.ctx.py.sealed") is False
+        a.page.click("#continue")
+        _to_write(a)
+        a.set_code('print(6 * 7)')
+        a.page.click("#run")
+        a.page.wait_for_selector("#console pre.out")
+        assert a.page.text_content("#console pre.out").strip() == "42"
+        a.page.click("#quit")
+        a.page.wait_for_selector(".modal [data-i='1']")
+        a.page.click(".modal [data-i='1']")
+        a.page.wait_for_selector(".screen.home")
+        assert _dev_sandbox_line(a) == "파이썬 격리: 일부"
+        assert not _app_errors(a), a.errors
+    with App("iPhone 17") as a:
+        a.start()
+        a.wait_py()
+        assert a.js("() => window.__ria.ctx.py.sealed") is True
+        assert _dev_sandbox_line(a) == "파이썬 격리: 켜짐"
+    with App("iPhone 17", locale="en-US") as a:
+        a.start()
+        a.wait_py()
+        assert _dev_sandbox_line(a) == "Python sandbox: on"
 
 
 if __name__ == "__main__":

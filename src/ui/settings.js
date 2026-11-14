@@ -61,6 +61,12 @@ function courseCard(ctx) {
   </section>`;
 }
 
+// v0.19.2 H-C5: 파이썬 작업자 격리 결과(개발자 모드에서만 — 아이폰에서 확인용)
+function sandboxLine(ctx) {
+  const v = ctx.py ? ctx.py.sealed : null;
+  return v === true ? t`파이썬 격리: 켜짐` : v === false ? t`파이썬 격리: 일부` : t`파이썬 격리: 확인 전`;
+}
+
 export function render(root, ctx) {
   const s = ctx.save;
   const goal = DAILY_GOALS.includes(s.settings.dailyGoal) ? s.settings.dailyGoal : 20;
@@ -126,7 +132,8 @@ export function render(root, ctx) {
           <p class="row-label" id="dev-label">${t`개발자 모드`}<small>${t`잠긴 곳을 모두 열어 검수해요. 학습 기록과 따로 저장돼요.`}</small></p>
           <button class="switch" id="dev" role="switch" aria-checked="${dev}" aria-labelledby="dev-label"><span></span></button>
         </div>
-        ${dev ? `<p class="dev-note" id="dev-note">${t`켜져 있어요 · 끄면 학습 기록으로 돌아가요`}</p>` : ""}
+        ${dev ? `<p class="dev-note" id="dev-note">${t`켜져 있어요 · 끄면 학습 기록으로 돌아가요`}</p>
+        <p class="dev-note" id="dev-sandbox">${sandboxLine(ctx)}</p>` : ""}
       </section>
       <p class="ver center">${t`리아와 파이썬!`} ${esc(ctx.version)} · <a class="lic-link" href="licenses.txt" target="_blank" rel="noopener">${t`사용한 프로그램`}</a></p>
     </main>

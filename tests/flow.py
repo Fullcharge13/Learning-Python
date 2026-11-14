@@ -3814,6 +3814,57 @@ def test_guard_room_reenter_blanks():
     assert not fails, fails
 
 
+def test_guard_all_cases_blanks_after_reenter():
+    """v0.20.1 사용자 보고 뒤 전수 검사: 사건 60개 모두, 5개마다 텃밭에 나갔다 다시 들어오면서
+    빈칸마다 ① 고르기 창이 한 장 ② 보기가 그 사건 데이터의 보기와 같음 ③ 정답을 고르면 저장·화면에 채워짐."""
+    import glob
+    bodies = {}
+    for f in glob.glob(os.path.join(ROOT, "dist", "guard", "ch*-*.json")):
+        for inc in json.load(open(f, encoding="utf-8")):
+            bodies[inc["id"]] = inc
+    basics = {i: {"firstTry": True, "how": "blank"} for i, b in bodies.items() if b.get("tier") != "field"}
+    fails = []
+    with App("iPhone 17", save=_guard_seed(17, guard={"v": 1, "solved": basics, "code": {}, "blanks": {}, "seen": [], "attempts": {}, "runs": 0})) as a:
+        a.start()
+        a.page.click('.tabbar [data-go="garden"]')
+        a.page.wait_for_selector(".screen.garden")
+        a.page.click("#g-guard")
+        a.page.wait_for_selector(".screen.guard[data-state=idle]")
+        order = [e["id"] for e in json.loads(a.js("() => JSON.stringify(window.RIA_GUARD_INDEX)"))]
+        if len(order) != 60:
+            fails.append("index has %d cases" % len(order))
+        for k, gid in enumerate(order):
+            if k and k % 5 == 0:   # 나갔다 다시 들어오기
+                a.page.click("#gd-back")
+                a.page.wait_for_selector(".screen.garden")
+                a.page.click("#g-guard")
+                a.page.wait_for_selector(".screen.guard[data-state=idle]")
+            a.page.click("#gd-list")
+            a.page.wait_for_selector(".modal.g-sheet")
+            a.page.click('.modal.g-sheet [data-v="%s"]' % gid)
+            a.page.wait_for_selector(".modal-back", state="detached")
+            a.page.wait_for_function("(id) => document.querySelector('.screen.guard')?.dataset.state === 'idle' && document.querySelector('#gd-card')?.innerText.includes(id)", arg=gid, timeout=15_000)
+            inc = bodies[gid]
+            for n, b in enumerate(inc["blanks"]):
+                a.page.click('.gd-blank[data-n="%d"]' % n)
+                a.page.wait_for_selector(".modal.g-sheet")
+                sheets = len(a.page.query_selector_all(".modal-back"))
+                got = sorted(a.js("() => [...document.querySelectorAll('.modal.g-sheet .gd-opt')].map(e => e.textContent)"))
+                want = sorted("(비워 두기)" if o == "" else o for o in b["options"])
+                if sheets != 1:
+                    fails.append("%s blank %d: %d sheets" % (gid, n, sheets))
+                if got != want:
+                    fails.append("%s blank %d options %r != %r" % (gid, n, got, want))
+                a.page.click('.modal.g-sheet .g-pick-btn[data-v="%d"]' % b["answer"])
+                a.page.wait_for_selector(".modal-back", state="detached")
+            picks = ((a.save().get("guard") or {}).get("blanks") or {}).get(gid)
+            if picks != [b["answer"] for b in inc["blanks"]]:
+                fails.append("%s saved picks %r" % (gid, picks))
+            if "___" in a.page.inner_text(".gd-start"):
+                fails.append("%s still has empty blanks" % gid)
+    assert not fails, fails[:20]
+
+
 def test_garden_reenter_nodes():
     """v0.20.1: 텃밭을 나갔다 다시 들어와도 노드의 값 칸을 누르면 고르기 창이 한 장만 뜨고 고른 값이 들어감."""
     fails = []

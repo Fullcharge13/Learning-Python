@@ -399,7 +399,7 @@ THE SOFTWARE.
 
 == pyodide 314.0.7 (MPL-2.0)
 
-Python 실행기 Pyodide는 앱에 묶지 않고 실행할 때 아래 주소에서 받습니다(고치지 않은 원본).
-https://cdn.jsdelivr.net/npm/pyodide@314.0.7/
+Python 실행기 Pyodide는 앱 파일에 묶지 않고, 고치지 않은 원본 파일 그대로 같은 사이트의 pyodide/ 폴더에서 내려받습니다.
+배포 주소: 같은 사이트의 pyodide/ (원본: npm pyodide 314.0.7)
 라이선스: Mozilla Public License 2.0 — https://www.mozilla.org/MPL/2.0/
 소스: https://github.com/pyodide/pyodide

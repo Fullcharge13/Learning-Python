@@ -122,6 +122,9 @@ WRONG_SOLUTIONS = {
         '            return False\n        return True\n',
         'phones = {"minji": "010-0000-1234", "jun": "010-0001-5678", "sora": "010-0002-9012"}\n\n'
         'def check(attempt):\n    return "010-0000" not in attempt\n',
+        # 사전 없이 숫자 개수만 세기(11자리 이상이면 막기) — 주문 번호를 막아 버림
+        'def check(attempt):\n    n = 0\n    for ch in attempt:\n        if ch in "0123456789":\n            n = n + 1\n'
+        '    return n < 11\n',
     ],
     "G52": [
         'allowed = {"pi-garden", "seed-calc", "weather-pi"}\n\ndef check(attempt):\n'
@@ -160,17 +163,20 @@ WRONG_SOLUTIONS = {
     ],
     "G54": [
         'recorded = {}\nwith open("fingerprints.txt") as f:\n    for line in f:\n'
-        '        name, mark = line.strip().split(",")\n        recorded[name] = mark\n\ndef check(attempt):\n'
+        '        mark, name = line.strip().split("  ")\n        recorded[name] = mark\n\ndef check(attempt):\n'
         '    name, mark = attempt.split(",")\n    return mark in recorded.values()\n',
         'recorded = {}\nwith open("fingerprints.txt") as f:\n    for line in f:\n'
-        '        name, mark = line.strip().split(",")\n        recorded[name] = mark\n\ndef check(attempt):\n'
+        '        mark, name = line.strip().split("  ")\n        recorded[name] = mark\n\ndef check(attempt):\n'
         '    name, mark = attempt.split(",")\n    return name in recorded\n',
         'recorded = {}\nwith open("fingerprints.txt") as f:\n    for line in f:\n'
-        '        name, mark = line.strip().split(",")\n        recorded[name] = mark\n\ndef check(attempt):\n'
+        '        mark, name = line.strip().split("  ")\n        recorded[name] = mark\n\ndef check(attempt):\n'
         '    name, mark = attempt.split(",")\n    return name in recorded and recorded[name].startswith(mark)\n',
-        # 기본 G25처럼 파일 글에 들어 있는지만 보기 — 모자란 지문도 들어감
-        'with open("fingerprints.txt") as f:\n    lines = f.read()\n\ndef check(attempt):\n'
-        '    return attempt in lines\n',
+        # 기본 G25 정답(파일 이름만 바꾸고 판정을 뒤집음): 요청이 파일의 한 줄과 똑같으면 들이기
+        'with open("fingerprints.txt", encoding="utf-8") as f:\n    lines = f.readlines()\n\ndef check(attempt):\n'
+        '    for line in lines:\n        if line.strip() == attempt:\n            return True\n    return False\n',
+        # 파일 이름과 지문이 기록 글 어딘가에 따로따로 있기만 하면 들이기 — 다른 파일의 지문도 들어감
+        'with open("fingerprints.txt") as f:\n    text = f.read()\n\ndef check(attempt):\n'
+        '    name, mark = attempt.split(",")\n    return name in text and mark in text\n',
     ],
     "G55": [
         # 짧은 주소만 보고 막기
@@ -185,6 +191,10 @@ WRONG_SOLUTIONS = {
         '    return True\n',
         'import re\n\nbait = ["택배", "과태료", "청첩장", "parcel", "penalty", "invitation"]\n\ndef check(attempt):\n'
         '    text = attempt\n    if not re.search(r"https?://sl.example/\\w+", text):\n        return True\n'
+        '    for word in bait:\n        if word in text:\n            return False\n    return True\n',
+        # 정규표현식 없이 글자 "sl.example/"가 들었는지만 보기 — 링크가 없는 주의 안내를 막아 버림
+        'bait = ["택배", "과태료", "청첩장", "parcel", "penalty", "invitation"]\n\ndef check(attempt):\n'
+        '    text = attempt.lower()\n    if "sl.example/" not in text:\n        return True\n'
         '    for word in bait:\n        if word in text:\n            return False\n    return True\n',
     ],
     "G6": [

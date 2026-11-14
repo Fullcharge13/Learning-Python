@@ -3826,11 +3826,28 @@ def test_garden_reenter_nodes():
             a.page.wait_for_selector(".screen.home")
         a.page.click('.tabbar [data-go="garden"]')
         a.page.wait_for_selector(".screen.garden[data-state=idle]")
+        before = a.js("() => document.querySelectorAll('.g-node').length")
+        prog0 = len(((a.save().get("garden") or {}).get("program")) or [])
         a.page.click('.g-add[data-parent=""]')
         a.page.wait_for_selector(".modal-back")
         cnt = len(a.page.query_selector_all(".modal-back"))
         if cnt != 1:
             fails.append("sheets open after re-enter: %d" % cnt)
+        _sheet_pick(a, "[data-kind=say]")
+        a.page.wait_for_timeout(200)
+        after = a.js("() => document.querySelectorAll('.g-node').length")
+        if after != before + 1:
+            fails.append("node not added on screen: %d -> %d" % (before, after))
+        prog1 = len(((a.save().get("garden") or {}).get("program")) or [])
+        if prog1 != prog0 + 1:
+            fails.append("node not saved: %d -> %d" % (prog0, prog1))
+        # 값 칸 누르기도 지금 화면에서 받는지
+        a.page.click('.g-node[data-kind=say] .g-arg[data-arg=text]')
+        a.page.wait_for_selector(".modal.g-sheet input")
+        a.page.fill(".modal.g-sheet input", "다시 왔어요")
+        _sheet_pick(a, "#g-ok")
+        if "다시 왔어요" not in _code_preview(a):
+            fails.append("arg not applied: %r" % _code_preview(a))
     assert not fails, fails
 
 

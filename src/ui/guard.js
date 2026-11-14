@@ -481,6 +481,7 @@ export function render(root, ctx, params = {}) {
   const modalOpen = () => !!document.querySelector(".modal-back");
   // v0.20.1: #app은 화면이 바뀌어도 그대로라 떠날 때 이 묶음을 꼭 뗀다(남으면 떠난 화면이 먼저 눌림을 받음)
   const onRootClick = (e) => {
+    if (S.destroyed) return;   // 떠난 화면은 아무것도 열지 않음(묶음을 못 뗀 경우의 두 번째 안전장치)
     if (modalOpen()) return;
     if (e.target.closest("#gd-retry") && S.state === "failed") { openIncident(S.entry); return; }
     if (e.target.closest("#gd-fileview") && S.state === "idle") { showFile(); return; }

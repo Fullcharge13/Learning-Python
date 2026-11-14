@@ -1437,6 +1437,7 @@ export function render(root, ctx, params = {}) {
   const whenFree = (fn) => () => { if (!modalOpen()) fn(); };
   // v0.20.1: #app은 화면이 바뀌어도 그대로라 떠날 때 이 묶음을 꼭 뗀다(남으면 떠난 화면이 먼저 눌림을 받음)
   const onRootClick = (e) => {
+    if (S.destroyed) return;   // 떠난 화면은 아무것도 열지 않음(묶음을 못 뗀 경우의 두 번째 안전장치)
     const el0 = e.target;
     if (S.state !== "idle") return; // 실행·재생 중에는 편집하지 않음(나가기·재생 단추는 따로 묶음)
     if (modalOpen()) return;

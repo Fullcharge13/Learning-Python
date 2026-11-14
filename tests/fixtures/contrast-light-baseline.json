@@ -236,14 +236,14 @@
    "fails": 0
   }
  ],
- "checked": 1065,
- "fail_count": 9,
- "fail_elements": 21,
+ "checked": 1163,
+ "fail_count": 11,
+ "fail_elements": 24,
  "excluded": {
-  "noLetterSkipped": 135,
-  "invisible": 1205,
+  "noLetterSkipped": 165,
+  "invisible": 1226,
   "tiny": 32,
-  "offscreen": 26,
+  "offscreen": 143,
   "clippedHoriz": 0,
   "disabledSkipped": 16,
   "editorToken": 0,
@@ -251,7 +251,7 @@
   "svgSkipped": 0
  },
  "info": {
-  "ariaHiddenChecked": 88,
+  "ariaHiddenChecked": 89,
   "bgimgChecked": 0
  },
  "errors": [],
@@ -283,7 +283,7 @@
    "bg": "#e4dccb",
    "ratio": 2.34,
    "need": 4.5,
-   "count": 13,
+   "count": 14,
    "screen": "badges"
   },
   {
@@ -345,6 +345,26 @@
    "need": 4.5,
    "count": 1,
    "screen": "guard-write"
+  },
+  {
+   "selector": "#gd-run > span",
+   "text": "실행",
+   "fg": "#6f6a5e",
+   "bg": "#e9e2d2",
+   "ratio": 4.17,
+   "need": 4.5,
+   "count": 1,
+   "screen": "guard-field-list"
+  },
+  {
+   "selector": ".g-pick-btn > span",
+   "text": "G47 · 가온수사청이라는 전화",
+   "fg": "#8a8578",
+   "bg": "#f2e9d5",
+   "ratio": 3.05,
+   "need": 4.5,
+   "count": 1,
+   "screen": "guard-field-list"
   }
  ],
  "digests": {

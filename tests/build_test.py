@@ -983,6 +983,34 @@ def test_guard_chapter_files():
         assert r.stdout == want, (p, r.stdout)
 
 
+def test_guard_field_in_chapter_files():
+    """v0.20.0: 응용 사건(tier=="field") 15개가 장별 파일에 장마다 정확히 1개, file.attack은 있고 solution은 없다.
+    색인(RIA_GUARD_INDEX)에서는 응용 15개만 tier를 가진다."""
+    _build()
+    d = os.path.join(DIST, "guard")
+    seen = {}
+    for f in sorted(os.listdir(d)):
+        m = re.match(r"ch(\d+)-[0-9a-f]{8}\.json$", f)
+        assert m, f
+        items = json.loads(_read(os.path.join(d, f)))
+        field = [x for x in items if x.get("tier") == "field"]
+        assert len(field) == 1, (f, [x["id"] for x in field])
+        x = field[0]
+        assert x["need"] == int(m.group(1)), (f, x["id"], x["need"])
+        assert x.get("file", {}).get("attack"), (f, "file.attack missing")
+        assert "solution" not in x, (f, "field case must not carry a solution")
+        seen[int(m.group(1))] = x["id"]
+    assert sorted(seen) == list(range(3, 18)), sorted(seen)
+    html = _read(os.path.join(DIST, "index.html"))
+    mi = re.search(r"window\.RIA_GUARD_INDEX = (\[.*?\]);\n", html)
+    assert mi, "RIA_GUARD_INDEX not in index.html"
+    idx = json.loads(mi.group(1))
+    tiered = sorted(e["id"] for e in idx if "tier" in e)
+    assert tiered == sorted(seen.values()), tiered
+    assert all(e["tier"] == "field" for e in idx if "tier" in e)
+    assert len(tiered) == 15, len(tiered)
+
+
 def test_runner_has_guard():
     """경비실: py/runner-*.py 한 개에 guard.py가 앞에 이어 붙어 있고, 첫 파일은 MAX_RAW(600KB) 아래."""
     _build()

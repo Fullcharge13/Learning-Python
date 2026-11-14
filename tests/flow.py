@@ -1057,7 +1057,7 @@ def test_advanced_branch():
         # 배지: 15개
         a.page.click('[data-go="badges"]')
         a.page.wait_for_selector(".screen.badges")
-        assert "/17" in a.page.inner_text(".page-title"), a.page.inner_text(".page-title")
+        assert "/18" in a.page.inner_text(".page-title"), a.page.inner_text(".page-title")
         assert "끝낸 심화" in a.page.inner_text(".stat-grid")
         a.shot("adv-badges.png", full=True)
         m = measure(a, "badges-adv")

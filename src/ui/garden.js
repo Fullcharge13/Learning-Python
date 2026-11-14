@@ -240,6 +240,7 @@ let gardenGen = 0;
 
 export function render(root, ctx, params = {}) {
   const gen = ++gardenGen;
+  const dev0 = !!ctx.dev;   // 개발자 칸이 바뀐 뒤 끝난 실행이 다른 칸에 저장되지 않게
   const passed = passedChapters(ctx.save, ctx.chapters);
   const unlocked = unlockedKinds(passed);
   const tomatoOpen = unlocked.has(TOMATO_LOCK);
@@ -1191,9 +1192,9 @@ export function render(root, ctx, params = {}) {
         if (bad) bad.scrollIntoView({ block: "center", behavior: reduced() ? "auto" : "smooth" });
         return;
       }
-      const gen = codegen(program);
-      code = gen.code;
-      lineMap = gen.lineMap;
+      const cg = codegen(program);
+      code = cg.code;
+      lineMap = cg.lineMap;
     } else {
       flushCode();
       code = S.ed ? S.ed.getCode() : S.garden.code;
@@ -1223,7 +1224,7 @@ export function render(root, ctx, params = {}) {
     // 실행 중 화면을 떠났어도 결과는 저장한다(그리기만 건너뜀). 그 사이 저장의 텃밭이 바뀌었으면(다시 들어와
     // 다른 일을 함) 이 결과는 옛 상태에서 나온 것이라 버린다.
     if (S.destroyed) {
-      if (gen !== gardenGen) return;   // 다시 들어온 새 텃밭 화면이 있음 → 이 실행은 세지 않음
+      if (gen !== gardenGen || !!ctx.dev !== dev0) return;   // 다시 들어온 새 텃밭 화면이 있거나 저장 칸이 바뀜 → 이 실행은 세지 않음
       const now = fillGarden(ctx.save).garden;
       if (JSON.stringify(runInput(now, passed)) !== JSON.stringify(start)) return;
       S.garden = now;

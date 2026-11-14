@@ -1462,7 +1462,9 @@ def test_garden_leave_running_and_return():
     규칙(v0.20.2): 실행 중 떠난 뒤 텃밭을 다시 열었으면 그 실행은 세지 않는다. 다시 열지 않았으면 예전처럼 저장한다."""
     slow = "n = 0\nfor i in range(6000000):\n    n += 1\nmove(\"오른쪽\")\nharvest()\n"
     # ① 나갔다가 실행이 끝나기 전에 다시 들어옴 → 그 실행은 버려지고, 새 화면에서 고치고 실행하면 XP는 한 번만
-    with App("iPhone 17", save=_garden_seed(1, _garden(order_idx=0, mode="code", code=slow)), reduced=True) as a:
+    ripe = [None] * 9
+    ripe[1] = {"crop": "당근", "planted_at": 8}   # 오른쪽 칸에 다 자란 당근: 실행이 몇 번 세졌는지 수확으로 보임
+    with App("iPhone 17", save=_garden_seed(1, _garden(order_idx=0, mode="code", code=slow, cells=ripe)), reduced=True) as a:
         _open_garden(a)
         a.page.wait_for_selector(".g-editor .cm-content")
         a.wait_py()
@@ -1495,6 +1497,7 @@ def test_garden_leave_running_and_return():
         s3 = a.save()
         assert s3["garden"]["runs"] == runs0 + 1, s3["garden"]["runs"]
         assert s3["garden"]["pie"] == {"x": 1, "y": 0}, s3["garden"]["pie"]   # 새 화면의 실행만 반영(옛 실행이 먼저 옮겼으면 x=2)
+        assert s3["garden"]["store"]["당근"] == s0["garden"]["store"]["당근"] + 1, s3["garden"]["store"]   # 수확은 새 실행 한 번만
         assert s3["garden"]["order"]["paid"].count("o_first") <= 1, s3["garden"]["order"]
     # ② 나간 뒤 다시 열지 않음 → 실행 결과는 예전처럼 저장됨
     with App("iPhone 17", save=_garden_seed(1, _garden(order_idx=0, mode="code", code=slow)), reduced=True) as a:

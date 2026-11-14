@@ -479,7 +479,8 @@ export function render(root, ctx, params = {}) {
 
   // ---- 누르기 ----
   const modalOpen = () => !!document.querySelector(".modal-back");
-  root.addEventListener("click", (e) => {
+  // v0.20.1: #app은 화면이 바뀌어도 그대로라 떠날 때 이 묶음을 꼭 뗀다(남으면 떠난 화면이 먼저 눌림을 받음)
+  const onRootClick = (e) => {
     if (modalOpen()) return;
     if (e.target.closest("#gd-retry") && S.state === "failed") { openIncident(S.entry); return; }
     if (e.target.closest("#gd-fileview") && S.state === "idle") { showFile(); return; }
@@ -493,7 +494,8 @@ export function render(root, ctx, params = {}) {
       S.mode = S.mode === "code" ? "blank" : "code";
       paintCode();
     }
-  });
+  };
+  root.addEventListener("click", onRootClick);
   const keep = (e) => e.preventDefault();
   root.querySelectorAll(".sym").forEach((b) => {
     b.addEventListener("mousedown", keep);
@@ -530,6 +532,7 @@ export function render(root, ctx, params = {}) {
 
   return () => {
     S.destroyed = true;
+    root.removeEventListener("click", onRootClick);
     cancelRun();
     dropEditor();
     offPy();

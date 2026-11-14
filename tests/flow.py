@@ -3783,6 +3783,57 @@ def test_guard_room_locked():
         assert not a.errors, a.errors
 
 
+def test_guard_room_reenter_blanks():
+    """v0.20.1 사용자 보고: 경비실을 나갔다 다시 들어오면 빈칸 고르기 창이 앞서 본 사건의 보기를 띄우고, 골라도 안 채워짐.
+    원인: 화면마다 바뀌지 않는 #app에 단 click 묶음이 떠난 화면 것까지 남음."""
+    fails = []
+    with App("iPhone 17", save=_guard_seed(17)) as a:
+        a.start()
+        a.page.click('.tabbar [data-go="garden"]')
+        a.page.wait_for_selector(".screen.garden")
+        for _ in range(2):   # 들어갔다 나오기 두 번 → 남은 묶음이 있으면 앞 화면 것이 먼저 받음
+            a.page.click("#g-guard")
+            a.page.wait_for_selector(".screen.guard[data-state=idle]")
+            a.page.click("#gd-back")
+            a.page.wait_for_selector(".screen.garden")
+        a.page.click("#g-guard")
+        a.page.wait_for_selector(".screen.guard[data-state=idle]")
+        a.page.click('.gd-blank[data-n="0"]')
+        a.page.wait_for_selector(".modal.g-sheet")
+        if len(a.page.query_selector_all(".modal-back")) != 1:
+            fails.append("sheets open: %d" % len(a.page.query_selector_all(".modal-back")))
+        opts = sorted(a.js("() => [...document.querySelectorAll('.modal.g-sheet .gd-opt')].map(e => e.textContent)"))
+        if opts != sorted(["==", "!=", "="]):
+            fails.append("G1 blank 1 options: %r" % opts)
+        a.page.click('.modal.g-sheet .g-pick-btn[data-v="0"]')
+        a.page.wait_for_selector(".modal-back", state="detached")
+        if ((a.save().get("guard") or {}).get("blanks") or {}).get("G1", [None])[0] != 0:
+            fails.append("pick not saved: %r" % (a.save().get("guard") or {}).get("blanks"))
+        if "==" not in a.page.inner_text(".gd-start"):
+            fails.append("blank not filled: %r" % a.page.inner_text(".gd-start"))
+    assert not fails, fails
+
+
+def test_garden_reenter_nodes():
+    """v0.20.1: 텃밭을 나갔다 다시 들어와도 노드의 값 칸을 누르면 고르기 창이 한 장만 뜨고 고른 값이 들어감."""
+    fails = []
+    with App("iPhone 17", save=_guard_seed(17)) as a:
+        a.start()
+        for _ in range(3):
+            a.page.click('.tabbar [data-go="garden"]')
+            a.page.wait_for_selector(".screen.garden")
+            a.page.click("#g-back")
+            a.page.wait_for_selector(".screen.home")
+        a.page.click('.tabbar [data-go="garden"]')
+        a.page.wait_for_selector(".screen.garden[data-state=idle]")
+        a.page.click('.g-add[data-parent=""]')
+        a.page.wait_for_selector(".modal-back")
+        cnt = len(a.page.query_selector_all(".modal-back"))
+        if cnt != 1:
+            fails.append("sheets open after re-enter: %d" % cnt)
+    assert not fails, fails
+
+
 def test_guard_room_g1():
     fails = []
     with App("iPhone 17", save=_guard_seed(3)) as a:

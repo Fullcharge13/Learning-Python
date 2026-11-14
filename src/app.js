@@ -40,7 +40,7 @@ import * as garden from "./ui/garden.js";
 import * as guard from "./ui/guard.js";
 import * as tutorial from "./ui/tutorial.js";
 
-export const VERSION = "v0.20.0";
+export const VERSION = "v0.20.1";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden, guard, tutorial };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----

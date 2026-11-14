@@ -1435,7 +1435,8 @@ export function render(root, ctx, params = {}) {
   // 같은 창이 두 장 겹쳐, 고른 뒤에도 아래 창이 남았다(사용자 보고)
   const modalOpen = () => !!document.querySelector(".modal-back");
   const whenFree = (fn) => () => { if (!modalOpen()) fn(); };
-  root.addEventListener("click", (e) => {
+  // v0.20.1: #app은 화면이 바뀌어도 그대로라 떠날 때 이 묶음을 꼭 뗀다(남으면 떠난 화면이 먼저 눌림을 받음)
+  const onRootClick = (e) => {
     const el0 = e.target;
     if (S.state !== "idle") return; // 실행·재생 중에는 편집하지 않음(나가기·재생 단추는 따로 묶음)
     if (modalOpen()) return;
@@ -1445,7 +1446,8 @@ export function render(root, ctx, params = {}) {
     if (menu) { openMenu(menu.closest(".g-node").dataset.id); return; }
     const add = el0.closest(".g-add");
     if (add) { openAdd(add.dataset.parent === "" ? null : add.dataset.parent, add.dataset.slot); return; }
-  });
+  };
+  root.addEventListener("click", onRootClick);
   // v0.12.5: 들어오기 전 화면(하단 메뉴에서 왔으면 그 화면)으로
   const BACK_TO = new Set(["home", "badges", "closet", "settings"]);
   const backTo = BACK_TO.has(params?.from) ? params.from : "home";
@@ -1481,6 +1483,7 @@ export function render(root, ctx, params = {}) {
 
   return () => {
     S.destroyed = true;
+    root.removeEventListener("click", onRootClick);
     dropUndo();
     if (S.wake) S.wake();
     flushCode();

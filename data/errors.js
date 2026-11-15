@@ -50,6 +50,13 @@ export const ERRORS = {
     detective:
       "정해 둔 무작위 값이 목록에서 보이지 않아요. 단서는 {line}번째 줄에 있어요. 단계 글에 적힌 자리에서 무작위를 한 번만 불러야 해요. 부르는 자리와 고르는 목록을 다시 대조해 봐요.",
   },
+  // 최종 검토 I1: randint 범위가 틀린 RandMismatch(메시지에 randint) — ERROR_VARIANTS가 고른다
+  RandMismatch_randint: {
+    title: "randint 범위가 단계 글과 달라요",
+    body: "random.randint(a, b)를 단계 글과 다른 범위로 불렀어요. 단서는 {line}번째 줄에 있어요. 채점 때는 무작위 값을 정해 두고 쓰기 때문에, 괄호 안 a와 b가 단계 글에 적힌 두 숫자와 똑같아야 해요. 단계 글의 두 숫자와 코드의 randint(a, b) 괄호 안 두 숫자를 하나씩 맞춰 보고, 적힌 자리에서 한 번만 부르는지도 확인해 볼까요?",
+    detective:
+      "무작위 범위가 단계 글과 어긋나 있어요. 단서는 {line}번째 줄에 있어요. randint(a, b)의 a와 b는 단계 글에 적힌 두 숫자 그대로여야 해요. 괄호 안 두 숫자를 단계 글과 대조해 봐요.",
+  },
   RandMissing: {
     title: "무작위를 너무 많이 불렀어요",
     body: "정해 둔 무작위 값이 다 떨어졌는데 random이 또 불렸어요. 단서는 {line}번째 줄에 있어요. 단계 글에 적힌 자리에서 무작위를 한 번만 불러야 해요. 반복문 안에서 불러서 횟수가 늘어나지 않았는지 확인해 볼까요?",
@@ -205,4 +212,5 @@ export const ERROR_VARIANTS = [
   { type: "NameError", pattern: "name '(re|json|csv|urlparse|parse_qs)' is not defined", key: "NameError_import" },
   { type: "NameError", pattern: "name '(\\w+)' is not defined", key: "NameError_starter" },
   { type: "SyntaxError", pattern: "Maybe you meant '=='", key: "SyntaxError_eq" },
+  { type: "RandMismatch", pattern: "randint", key: "RandMismatch_randint" },
 ];

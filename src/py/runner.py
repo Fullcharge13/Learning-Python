@@ -104,7 +104,7 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
   학습자가 except로 삼켜도 결과 error로 알린다(InputMissing과 같은 방식). 끝나면(오류 때도, rand 실행이 아니어도)
   불러올 때 잡아 둔 진짜 randint·choice로 되돌린다(학습자가 바꿔도 다음 실행에 안 샘).
   need_input으로 바뀌는 실행은 stderr를 비운다.
-  rand=None이면 진짜 random. seed=정수면 실행 전에 random.seed(seed).
+  rand=None이면 진짜 random. seed=정수면 실행 전에 random.seed(seed), 끝나면 그 전 전역 random 상태로 되돌린다.
 
 run(code, stdin, require, files=None, server=None, farm=None, lang=None, guard=None, interactive=False, rand=None, seed=None) -> {
     "stdout": str, "stderr": str,
@@ -343,6 +343,9 @@ def _make_input(values, out, state):
 # 학습자가 random.randint = …로 바꾼 것이 같은 작업자의 다음 실행에 남지 않게 한다(rand 실행과 상관없이).
 _REAL_RANDINT = random.randint
 _REAL_CHOICE = random.choice
+# seed 실행(주고받기)은 전역 random 상태를 잡아 두었다가 finally에서 되돌린다(최종 검토 M4: 다음 실행이 그 시드로 정해지지 않게)
+_REAL_GETSTATE = random.getstate
+_REAL_SETSTATE = random.setstate
 
 
 def _make_rand(values, state):
@@ -1363,10 +1366,12 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
     sys.stdout, sys.stderr = out, err
     builtins.input = _make_input(stdin, out, state)
     caught = None
+    rand_state = None
     try:
         if rand is not None:   # 채점용 정해 둔 무작위: 이 실행 동안만(finally에서 되돌림)
             random.randint, random.choice = _make_rand(rand, state)
         if seed is not None:
+            rand_state = _REAL_GETSTATE()
             random.seed(seed)
         _chdir(run_dir)
         if urlreq is not None:
@@ -1386,6 +1391,8 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         mod_globals.update(saved_globals)
         _restore_farm_tables()
         random.randint, random.choice = _REAL_RANDINT, _REAL_CHOICE
+        if rand_state is not None:
+            _REAL_SETSTATE(rand_state)
         if fs is not None and fs["trace_on"]:
             _settrace(old_trace)
         sys.stdout, sys.stderr = old_out, old_err

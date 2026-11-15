@@ -23,7 +23,7 @@ import { createGuardData } from "./guard/catalog.js";
 import { loadDevIncidents } from "./guard/guarddev.js";
 import { prefetchChunks } from "./chunks.js";
 import { setGuardIndex } from "./guard/state.js";
-import { createProjectData } from "./projects/catalog.js";
+import { createProjectData, projectWarmList } from "./projects/catalog.js";
 import { loadDevProjects } from "./projects/projectdev.js";
 import { setProjectIndex } from "./projects/state.js";
 import { watchSystem } from "./theme.js";
@@ -354,7 +354,9 @@ function warmLang(delayMs = 4000) {
   if (lang() !== "en" || !app.data) return;
   warmTimer = setTimeout(() => {
     if (lang() !== "en" || !app.data) return;
-    warmLangFiles(app.data.fileList().filter((f) => f.startsWith("lessons/en/"))).catch(() => {});
+    // 영어 장 파일 + 영어 프로젝트 본문(최종 검토 M2: 같은 규칙. 배포판 이름표가 없는 개발판은 빈 목록)
+    warmLangFiles(app.data.fileList().filter((f) => f.startsWith("lessons/en/"))
+      .concat(projectWarmList(window.RIA_PROJECT_FILES, "en"))).catch(() => {});
   }, delayMs);
 }
 /**

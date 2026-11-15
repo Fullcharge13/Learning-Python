@@ -19,6 +19,14 @@ export function projectFileName(id, hash, lang) {
   return `projects/${normLang(lang) === "en" ? "en/" : ""}${id}-${hash}.json`;
 }
 
+/** 영어 학습자가 미리 받아 둘 본문 파일(이름표 RIA_PROJECT_FILES.en 중 이름 모양이 맞는 것). 영어 장 파일과 같은 규칙(최종 검토 M2) */
+export function projectWarmList(files, lang) {
+  if (normLang(lang) !== "en") return [];
+  const en = files && files.en;
+  if (!en || typeof en !== "object" || Array.isArray(en)) return [];
+  return Object.values(en).filter((f) => typeof f === "string" && PROJECT_FILE_RE.test(f) && f.startsWith("projects/en/"));
+}
+
 /** 프로젝트 하나의 색인 칸(한·영 짝) */
 export function projectIndexEntry(ko, en) {
   return {

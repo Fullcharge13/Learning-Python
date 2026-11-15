@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  PROJECT_FILE_RE, buildProjectIndex, splitProjects, projectFileName, createProjectData, ProjectLoadError,
+  PROJECT_FILE_RE, buildProjectIndex, projectWarmList, splitProjects, projectFileName, createProjectData, ProjectLoadError,
 } from "../../src/projects/catalog.js";
 import { PROJECTS as KO } from "../../data/projects.js";
 import { PROJECTS as EN } from "../../data/projects.en.js";
@@ -103,4 +103,11 @@ test("createProjectData: 개발판은 원본에서(받지 않음)", async () => 
   assert.equal(d.index[0].title.en, "RPS");
   assert.equal((await d.load("P1", "en")).title, "RPS");
   await assert.rejects(d.load("P2", "ko"), ProjectLoadError);
+});
+
+test("projectWarmList: 영어 학습자가 미리 받아 둘 영어 본문 파일만(최종 검토 M2)", () => {
+  const files = { ko: { P1: "projects/P1-0123abcd.json" }, en: { P1: "projects/en/P1-89abcdef.json", P2: "projects/en/P2-00112233.json", P3: "../x.json" } };
+  assert.deepEqual(projectWarmList(files, "en"), ["projects/en/P1-89abcdef.json", "projects/en/P2-00112233.json"]);
+  assert.deepEqual(projectWarmList(files, "ko"), []);
+  for (const bad of [null, undefined, {}, { en: null }, { en: "x" }, { en: [1] }]) assert.deepEqual(projectWarmList(bad, "en"), []);
 });

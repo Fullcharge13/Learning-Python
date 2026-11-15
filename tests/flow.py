@@ -6810,5 +6810,29 @@ def test_workshop_auto_reveal_keeps_xp():
         assert not _app_errors(a), a.errors
 
 
+def test_workshop_randint_card():
+    """최종 검토 I1: P1 2단계에서 randint(1, 2)로 범위를 틀리면 오류 카드가 choice 목록이 아닌 randint 범위를 말한다(제출·실행 모두)."""
+    body = _pj_body("P1")
+    wrong = body["steps"][1]["solution"].replace("random.randint(1, 3)", "random.randint(1, 2)")
+    assert wrong != body["steps"][1]["solution"]
+    with App("iPhone 17", save=_ws_seed(3)) as a:
+        _open_workshop(a)
+        _open_project(a, "P1")
+        _pj_submit(a, body["steps"][0]["solution"])
+        _pj_next(a)
+        a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+        assert "2/4" in a.page.inner_text("#pj-step"), a.page.inner_text("#pj-step")
+        a.wait_py()
+        a.set_code(wrong)
+        for btn in ("#submit", "#run"):
+            a.page.click(btn)
+            a.page.wait_for_selector("#console .err-panel", timeout=30_000)
+            txt = a.page.inner_text("#console")
+            assert "randint 범위가 단계 글과 달라요" in txt, (btn, txt)
+            assert "randint(a, b)" in txt and "목록" not in txt and "choice" not in txt, (btn, txt)
+            a.page.wait_for_function("() => !document.querySelector('#submit').disabled && !document.querySelector('#run').disabled")
+        assert not _app_errors(a), a.errors
+
+
 if __name__ == "__main__":
     sys.exit(main())

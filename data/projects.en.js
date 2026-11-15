@@ -204,8 +204,8 @@ export const PROJECTS = [
   {
     id: "P3", need: 8, icon: "book",
     title: "Vocab Quiz",
-    blurb: "Three questions on Spanish words",
-    intro: "Let's make your own vocab quiz! Put Spanish words and their meanings in a dictionary, the kind you learned in Chapter 8. The computer asks three random questions, and you score a point for every meaning you get right.",
+    blurb: "One question per Spanish word",
+    intro: "Let's make your own vocab quiz! Put Spanish words and their meanings in a dictionary, the kind you learned in Chapter 8. The computer asks one question per word in random order, and you score a point for every meaning you get right. You start with three words.",
     finale: "You did it! Want to take on your vocab quiz against me? Add more words to words and you get more questions, all by itself.",
     play: { prompt: "Type what the word means" },
     steps: [

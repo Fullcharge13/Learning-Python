@@ -78,6 +78,16 @@ def test_rand_choice_list_of_dict_ok():
     assert r["stdout"].split() == ["b", "y"]
 
 
+def test_rand_mismatch_messages_name_the_call():
+    """최종 검토 I1: 오류 카드(ERROR_VARIANTS 「randint」)가 고를 수 있게 randint 범위 실패 메시지에는 randint가, choice 실패에는 없다."""
+    for code, rand in (("import random\nrandom.randint(1, 2)\n", [3]),
+                       ("import random\nrandom.randint(1, 2)\n", [[2, 1, 3]])):
+        r = run(code, "", [], rand=rand)
+        assert r["error"]["type"] == "RandMismatch" and "randint" in r["error"]["msg"], r["error"]
+    r = run("import random\nrandom.choice(['a'])\n", "", [], rand=["b"])
+    assert r["error"]["type"] == "RandMismatch" and "randint" not in r["error"]["msg"], r["error"]
+
+
 def test_rand_randint_out_of_range():
     """작업 3 검토 I1: 정해 준 값이 randint(a, b) 범위 밖이면 RandMismatch(범위를 잘못 쓴 코드를 채점이 걸러냄)."""
     for code, val in (("import random\nprint(random.randint(1, 2))\n", 3),
@@ -140,6 +150,22 @@ def test_seed_repeatable():
     assert a == b
     assert a != c
 
+
+
+def test_seed_does_not_leak_into_next_run():
+    """최종 검토 M4: 시드를 준 실행(주고받기)이 끝나면 전역 random 상태를 되돌린다 → 다음 보통 실행은 그 시드로 정해지지 않는다."""
+    import random as _r
+    code = "import random\nprint([random.randint(1, 10**9) for _ in range(5)])\n"
+    before = _r.getstate()
+    run(code, "", [], seed=7)
+    assert _r.getstate() == before
+    # 시드가 남았다면 다음 실행은 seed 7의 6~10번째 값과 같다
+    leak = _r.Random(7)
+    [leak.randint(1, 10**9) for _ in range(5)]
+    leaked = str([leak.randint(1, 10**9) for _ in range(5)])
+    run(code, "", [], seed=7)
+    after = run(code, "", [])["stdout"].strip()
+    assert after != leaked
 
 def test_rand_missing_swallowed_by_except_exception():
     code = "import random\ntry:\n    n = random.randint(1, 3)\n    m = random.randint(1, 3)\nexcept Exception:\n    pass\n"

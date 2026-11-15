@@ -65,12 +65,15 @@ const CASES = [
   ["NameError", "name 'urlparse' is not defined", "NameError_import"],
   ["NameError", "name 'parse_qs' is not defined", "NameError_import"],
   ["SyntaxError", "invalid syntax. Maybe you meant '==' or ':=' instead of '='?", "SyntaxError_eq"],
+  // v0.21.0 최종 검토 I1: randint 범위가 틀린 RandMismatch는 choice 목록 얘기가 아닌 randint 범위 안내(runner.py 메시지 그대로)
+  ["RandMismatch", "randint was called with a different range than expected", "RandMismatch_randint"],
+  ["RandMismatch", "the given random value is not in randint's range", "RandMismatch_randint"],
 ];
 
 test("variants_table: 모양과 열쇠", () => {
-  // 9개. NameError_import는 NameError_starter보다 앞(import re 줄을 지운 건 시작 코드 일반 안내보다 import 안내가 더 정확한 단서)
+  // 10개. NameError_import는 NameError_starter보다 앞(import re 줄을 지운 건 시작 코드 일반 안내보다 import 안내가 더 정확한 단서)
   assert.deepEqual(ERROR_VARIANTS.map((v) => v.key).sort(),
-    ["NameError_import", "NameError_starter", "SyntaxError_eq", "TypeError_call", "TypeError_compare", "TypeError_concat",
+    ["NameError_import", "NameError_starter", "RandMismatch_randint", "SyntaxError_eq", "TypeError_call", "TypeError_compare", "TypeError_concat",
       "TypeError_container", "TypeError_self", "TypeError_subscript"]);
   const ks = ERROR_VARIANTS.map((v) => v.key);
   assert.ok(ks.indexOf("NameError_import") < ks.indexOf("NameError_starter"));
@@ -188,4 +191,31 @@ test("typeerror_default_generic: 기본 TypeError는 +·[] 얘기가 없고, 변
 
 test("zerodiv_no_print: 경비실에서 쓸 수 없는 print()를 권하지 않는다", () => {
   for (const f of ["body", "detective"]) assert.doesNotMatch(ERRORS.ZeroDivisionError[f], /print/, f);
+});
+
+test("rand_randint: randint 범위 카드는 randint(a, b) 범위를, choice 카드는 목록을 말한다(최종 검토 I1)", () => {
+  const ri = { type: "RandMismatch", line: 2, msg: "the given random value is not in randint's range" };
+  const ch = { type: "RandMismatch", line: 2, msg: "the given random value is not in the sequence" };
+  for (const outfit of ["basic", "explorer"]) {
+    const r = explain(ri, outfit);
+    assert.match(r.body, /randint\(a, b\)/, outfit);
+    assert.match(r.body, /범위/, outfit);
+    assert.doesNotMatch(r.body, /choice|목록/, outfit);
+    const c = explain(ch, outfit);
+    assert.match(c.body, /목록/, outfit);
+    assert.doesNotMatch(c.body, /randint/, outfit);
+  }
+  const EN = JSON.parse(readFileSync(new URL("../../i18n/en/data.json", import.meta.url), "utf8"));
+  const UI = JSON.parse(readFileSync(new URL("../../i18n/en/ui.lesson.json", import.meta.url), "utf8"));
+  usePack("en", { ui: UI, data: EN });
+  setLang("en");
+  try {
+    for (const outfit of ["basic", "explorer"]) {
+      const r = explain(ri, outfit);
+      assert.match(r.body, /randint\(a, b\)/, outfit);
+      assert.match(r.body, /range/, outfit);
+      assert.doesNotMatch(r.body, /choice|list/, outfit);
+      assert.match(explain(ch, outfit).body, /list/, outfit);
+    }
+  } finally { setLang("ko"); }
 });

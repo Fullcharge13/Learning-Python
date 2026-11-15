@@ -2,7 +2,7 @@
  "theme": "light",
  "skip_editor_tokens": false,
  "skip_art_text": [],
- "seconds": 36.3,
+ "seconds": 46.1,
  "screens": [
   {
    "screen": "splash",
@@ -48,7 +48,7 @@
   },
   {
    "screen": "home",
-   "checked": 166,
+   "checked": 168,
    "minRatio": 4.71,
    "theme_applied": "light",
    "fails": 0
@@ -125,14 +125,14 @@
   },
   {
    "screen": "home-garden-save",
-   "checked": 172,
+   "checked": 174,
    "minRatio": 4.71,
    "theme_applied": "light",
    "fails": 0
   },
   {
    "screen": "badges",
-   "checked": 89,
+   "checked": 94,
    "minRatio": 2.34,
    "theme_applied": "light",
    "fails": 1
@@ -285,14 +285,14 @@
    "fails": 0
   }
  ],
- "checked": 1271,
+ "checked": 1280,
  "fail_count": 2,
- "fail_elements": 15,
+ "fail_elements": 16,
  "excluded": {
-  "noLetterSkipped": 165,
-  "invisible": 1226,
-  "tiny": 32,
-  "offscreen": 143,
+  "noLetterSkipped": 185,
+  "invisible": 1252,
+  "tiny": 38,
+  "offscreen": 147,
   "clippedHoriz": 0,
   "disabledSkipped": 16,
   "editorToken": 0,
@@ -300,7 +300,7 @@
   "svgSkipped": 0
  },
  "info": {
-  "ariaHiddenChecked": 89,
+  "ariaHiddenChecked": 96,
   "bgimgChecked": 0
  },
  "errors": [],
@@ -312,7 +312,7 @@
    "bg": "#e4dccb",
    "ratio": 2.34,
    "need": 4.5,
-   "count": 14,
+   "count": 15,
    "screen": "badges"
   },
   {
@@ -898,6 +898,8 @@
    ".badge > span.b-desc|#555f72|#fbf6ea",
    ".badge > span.b-desc|#555f72|#fbf6ea",
    ".badge > span.b-desc|#555f72|#fbf6ea",
+   ".badge > span.b-desc|#555f72|#fbf6ea",
+   ".badge > span.b-desc|#555f72|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
@@ -916,6 +918,9 @@
    ".badge > span.b-name|#22304a|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
    ".badge > span.b-name|#22304a|#fbf6ea",
+   ".badge > span.b-name|#22304a|#fbf6ea",
+   ".badge > span.b-name|#22304a|#fbf6ea",
+   ".badge-art > text|#9a8f78|#e4dccb",
    ".badge-art > text|#9a8f78|#e4dccb",
    ".badge-art > text|#9a8f78|#e4dccb",
    ".badge-art > text|#9a8f78|#e4dccb",

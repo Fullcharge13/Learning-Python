@@ -100,7 +100,10 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
   error None을 돌려준다(그 전까지의 출력은 stdout에, 안내 글은 stdout에 넣지 않음 → 다음 실행 출력의 앞부분과 같다).
   값이 충분하면 need_input 열쇠가 없다. interactive가 아니면 예전 그대로(InputMissing 오류).
   rand=[int|str, …]면 실행 동안 random.randint(a, b)·random.choice(seq)가 이 값을 차례로 돌려준다(randint는 범위를 보지 않음,
-  choice는 값이 seq 안에 있어야 하고 없으면 RandMismatch). 값이 떨어지면 RandMissing. 끝나면(오류 때도) 진짜 함수로 되돌린다.
+  choice는 값이 seq 안에 있어야 하고 없으면 RandMismatch). 값이 떨어지면 RandMissing. RandMissing·RandMismatch는 BaseException이고 처음 실패를 state에 적어 두어,
+  학습자가 except로 삼켜도 결과 error로 알린다(InputMissing과 같은 방식). 끝나면(오류 때도, rand 실행이 아니어도)
+  불러올 때 잡아 둔 진짜 randint·choice로 되돌린다(학습자가 바꿔도 다음 실행에 안 샘).
+  need_input으로 바뀌는 실행은 stderr를 비운다.
   rand=None이면 진짜 random. seed=정수면 실행 전에 random.seed(seed).
 
 run(code, stdin, require, files=None, server=None, farm=None, lang=None, guard=None, interactive=False, rand=None, seed=None) -> {
@@ -252,11 +255,12 @@ class InputMissing(BaseException):
     """
 
 
-class RandMissing(Exception):
-    """rand 값이 다 떨어졌는데 random.randint·random.choice가 또 불렸을 때(채점용 정해 둔 무작위)."""
+class RandMissing(BaseException):
+    """(BaseException: 학습자의 `except Exception:`에 삼켜지지 않게. 삼켜도 state에 남겨 결과 오류로 알린다.)
+    rand 값이 다 떨어졌는데 random.randint·random.choice가 또 불렸을 때(채점용 정해 둔 무작위)."""
 
 
-class RandMismatch(Exception):
+class RandMismatch(BaseException):
     """random.choice에 정해 준 값이 고르는 목록 안에 없을 때(채점용 정해 둔 무작위)."""
 
 
@@ -335,13 +339,25 @@ def _make_input(values, out, state):
     return fake_input
 
 
-def _make_rand(values):
+# 진짜 random.randint·choice는 불러올 때 한 번 잡아 둔다. 실행이 끝날 때마다 무조건 이것으로 되돌려,
+# 학습자가 random.randint = …로 바꾼 것이 같은 작업자의 다음 실행에 남지 않게 한다(rand 실행과 상관없이).
+_REAL_RANDINT = random.randint
+_REAL_CHOICE = random.choice
+
+
+def _make_rand(values, state):
     """채점용: randint·choice가 values를 차례로 돌려주는 두 함수(진짜 random은 손대지 않음)."""
     queue = list(values)
 
+    def _fail(exc):
+        # 처음 실패만 적는다. 학습자가 except로 삼켜도 결과 오류로 알리려고(InputMissing과 같은 방식).
+        if state["rand_fail"] is None:
+            state["rand_fail"] = (type(exc).__name__, _caller_user_line(), _str(exc.args[0]))
+        return exc
+
     def _next():
         if not queue:
-            raise RandMissing("random was called more times than the given values")
+            raise _fail(RandMissing("random was called more times than the given values"))
         return queue.pop(0)
 
     def randint(a, b):
@@ -350,7 +366,7 @@ def _make_rand(values):
     def choice(seq):
         v = _next()
         if v not in list(seq):
-            raise RandMismatch("the given random value is not in the sequence")
+            raise _fail(RandMismatch("the given random value is not in the sequence"))
         return v
 
     return randint, choice
@@ -1230,7 +1246,7 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
 
     # 학습자가 except로 삼켜도 알 수 있게 특수 중단은 여기에 적어 둔다.
     state = {"used": 0, "input_missing": None, "output_limit": None, "interactive": interactive is True,
-             "need_prompt": ""}
+             "need_prompt": "", "rand_fail": None}
     out = _CappedIO(state)
     err = _CappedIO(state)
     charts = []
@@ -1331,12 +1347,9 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
     sys.stdout, sys.stderr = out, err
     builtins.input = _make_input(stdin, out, state)
     caught = None
-    real_rand = (random.randint, random.choice)
-    rand_patched = False
     try:
         if rand is not None:   # 채점용 정해 둔 무작위: 이 실행 동안만(finally에서 되돌림)
-            random.randint, random.choice = _make_rand(rand)
-            rand_patched = True
+            random.randint, random.choice = _make_rand(rand, state)
         if seed is not None:
             random.seed(seed)
         _chdir(run_dir)
@@ -1356,8 +1369,7 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         mod_globals.clear()
         mod_globals.update(saved_globals)
         _restore_farm_tables()
-        if rand_patched:
-            random.randint, random.choice = real_rand
+        random.randint, random.choice = _REAL_RANDINT, _REAL_CHOICE
         if fs is not None and fs["trace_on"]:
             _settrace(old_trace)
         sys.stdout, sys.stderr = old_out, old_err
@@ -1402,12 +1414,21 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
     # 입력 부족·출력 초과는 학습자 코드가 except로 삼켰더라도 그것을 결과로 알린다(멈춘 경우는 빼고).
     if tired:
         pass
+    elif state["rand_fail"] is not None:
+        # 정해 둔 무작위 실패는 학습자가 except로 삼켰더라도 오류로 알린다(처음 실패의 종류·줄)
+        kind, line, msg = state["rand_fail"]
+        swallowed = (result["error"] or {}).get("type") != kind
+        result["error"] = {"type": kind, "line": line, "msg": msg}
+        if swallowed:
+            err.raw_write("%s (line %s): %s\n" % (kind, line, msg))
     elif state["input_missing"] is not None or (result["error"] or {}).get("type") == "InputMissing":
         line = state["input_missing"] or result["error"]["line"]
         if state["interactive"]:
             # 주고받기: 오류가 아니라 「입력 필요」(화면이 답을 받아 처음부터 다시 실행)
             result["error"] = None
             result["need_input"] = {"prompt": state["need_prompt"]}
+            err.seek(0)       # 입력창 옆에 삼켰다가 죽은 오류 글이 보이지 않게
+            err.truncate(0)
         else:
             result["error"] = {"type": "InputMissing", "line": line,
                                "msg": "input() needed more values than were given"}

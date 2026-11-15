@@ -60,7 +60,7 @@ function plainObj(v) {
   return v && typeof v === "object" && !Array.isArray(v) ? v : null;
 }
 
-function cleanResult(r) {
+export function cleanResult(r) {
   const e = r && r.error;
   return {
     stdout: typeof r?.stdout === "string" ? r.stdout : "",

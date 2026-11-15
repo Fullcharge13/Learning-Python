@@ -94,3 +94,43 @@ def test_seed_repeatable():
     c = run(code, "", [], seed=8)["stdout"]
     assert a == b
     assert a != c
+
+
+def test_rand_missing_swallowed_by_except_exception():
+    code = "import random\ntry:\n    n = random.randint(1, 3)\n    m = random.randint(1, 3)\nexcept Exception:\n    pass\n"
+    r = run(code, "", [], rand=[2])
+    assert r["error"]["type"] == "RandMissing"
+    assert r["error"]["line"] == 4
+
+
+def test_rand_mismatch_swallowed_by_bare_except():
+    code = 'import random\ntry:\n    random.choice(["a", "b"])\nexcept:\n    pass\n'
+    r = run(code, "", [], rand=["z"])
+    assert r["error"]["type"] == "RandMismatch"
+    assert r["error"]["line"] == 3
+
+
+def test_rand_swallowed_keeps_first_failure():
+    code = "import random\ntry:\n    random.randint(1, 3)\nexcept BaseException:\n    pass\nrandom.randint(1, 3)\n"
+    r = run(code, "", [], rand=[])
+    assert r["error"]["type"] == "RandMissing"
+    assert r["error"]["line"] == 3
+
+
+def test_learner_monkeypatch_does_not_leak():
+    real_randint, real_choice = random.randint, random.choice
+    run("import random\nrandom.randint = lambda a, b: 99\nrandom.choice = lambda s: 99\n", "", [])
+    assert random.randint is real_randint and random.choice is real_choice
+    r = run("import random\nprint(random.randint(1, 1))\n", "", [])
+    assert r["stdout"].strip() == "1"
+    # rand 실행 중 바꿔도 끝나면 진짜로
+    run("import random\nrandom.randint = lambda a, b: 99\n", "", [], rand=[1])
+    assert random.randint is real_randint and random.choice is real_choice
+
+
+def test_need_input_clears_stderr():
+    code = 'try:\n    a = input("값: ")\nexcept BaseException:\n    pass\nraise ValueError("죽음")\n'
+    r = run(code, [], [], interactive=True)
+    assert r["need_input"] == {"prompt": "값: "}
+    assert r["error"] is None
+    assert r["stderr"] == ""

@@ -99,7 +99,7 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
   interactive=True면 input() 값이 모자랄 때 InputMissing 오류 대신 result["need_input"] = {"prompt": 그 input()의 안내 글}과
   error None을 돌려준다(그 전까지의 출력은 stdout에, 안내 글은 stdout에 넣지 않음 → 다음 실행 출력의 앞부분과 같다).
   값이 충분하면 need_input 열쇠가 없다. interactive가 아니면 예전 그대로(InputMissing 오류).
-  rand=[int|str, …]면 실행 동안 random.randint(a, b)·random.choice(seq)가 이 값을 차례로 돌려준다(randint는 정수이고 a 이상 b 이하,
+  rand=[int|str|[int, a, b], …]면 실행 동안 random.randint(a, b)·random.choice(seq)가 이 값을 차례로 돌려준다(randint는 정수이고 a 이상 b 이하,
   choice는 값이 seq 안에 있어야 하고 아니면 RandMismatch). 값이 떨어지면 RandMissing. RandMissing·RandMismatch는 BaseException이고 처음 실패를 state에 적어 두어,
   학습자가 except로 삼켜도 결과 error로 알린다(InputMissing과 같은 방식). 끝나면(오류 때도, rand 실행이 아니어도)
   불러올 때 잡아 둔 진짜 randint·choice로 되돌린다(학습자가 바꿔도 다음 실행에 안 샘).
@@ -362,6 +362,12 @@ def _make_rand(values, state):
 
     def randint(a, b):
         v = _next()
+        # [값, a, b]: 「randint(a, b)를 불러 값」 — 범위를 넓게 쓴 코드(randint(1, 100))도 걸러낸다(작업 4 검토 I1).
+        # 값만 주면 범위가 좁은 코드만 걸러진다.
+        if _type(v) is list:
+            if not (_len(v) == 3 and all(_type(x) is int for x in v) and (a, b) == (v[1], v[2])):
+                raise _fail(RandMismatch("randint was called with a different range than expected"))
+            v = v[0]
         # 정해 준 값이 정수가 아니거나 [a, b] 밖이면 범위를 잘못 쓴 코드(randint(1, 2) 등) → RandMismatch (작업 3 검토 I1)
         if _type(v) is not int or not (a <= v <= b):
             raise _fail(RandMismatch("the given random value is not in randint's range"))
@@ -373,7 +379,7 @@ def _make_rand(values, state):
         n = _len(seq)
         if not n:
             raise IndexError("Cannot choose from an empty sequence")
-        seq[0]   # 사전·keys() 등은 여기서 진짜와 같은 오류
+        seq[0]   # 사전·keys() 등은 여기서 진짜와 같은 오류(키에 0이 있는 사전은 못 거름 — 지금 콘텐츠엔 없음)
         v = _next()
         if v not in _list(seq):
             raise _fail(RandMismatch("the given random value is not in the sequence"))

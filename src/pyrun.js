@@ -16,6 +16,7 @@
 //   // 경비실: { guard: { mode, tries:[{value, expect}], password? } } → g.guard = { events, stats, solved, stopped } (py/guard.py)
 // v0.21.0 주고받기·정해 둔 무작위: { interactive: true } → 입력이 모자라면 결과가 error 없이 need_input: { prompt }.
 //   { rand: [3, "바위", …] } → random.randint·choice가 그 값을 차례로(그 실행 동안만), 모자라면 RandMissing, choice에 없으면 RandMismatch.
+//   [37, 1, 50]처럼 정수 셋이면 「randint(1, 50)을 불러 37」 — 다른 범위로 부르면 RandMismatch(작업 4 검토 I1, 넓은 범위 거르기).
 //   { seed: 정수 } → 실행 전 random.seed(seed). (py/runner.py 설명 글)
 // farm을 넘기지 않았거나 실행이 시간 초과·작업자 오류로 끝나면 결과에 farm이 없다.
 //
@@ -36,6 +37,14 @@
 
 import { cleanCharts } from "./chart.js";
 import { lang as appLang } from "./i18n.js";
+
+
+// rand 한 칸: 수·글자는 그대로, 정수 셋 [값, a, b]는 그대로(randint 정확한 부름), 나머지는 글자로
+function randItem(v) {
+  if (typeof v === "number" || typeof v === "string") return v;
+  if (Array.isArray(v) && v.length === 3 && v.every(Number.isInteger)) return v.slice();
+  return String(v);
+}
 
 export const PYODIDE_VERSION = "314.0.7";
 // 배포용 기본 주소: 같은 사이트의 pyodide/(v0.19.2 H-C1, build.py가 dist/pyodide/에 싣는다).
@@ -143,7 +152,7 @@ export class PyRun {
     const timeoutMs = typeof o.timeoutMs === "number" ? o.timeoutMs : DEFAULT_TIMEOUT_MS;
     // v0.13.5: 학습자가 보는 문구(텃밭·차트·연습 서버)의 언어 — opts.lang, 없으면 앱의 지금 언어
     const env = { files: plainObj(o.files), server: plainObj(o.server), farm: plainObj(o.farm), guard: plainObj(o.guard),
-      interactive: o.interactive === true, rand: Array.isArray(o.rand) ? o.rand.map((v) => (typeof v === "number" || typeof v === "string" ? v : String(v))) : null,
+      interactive: o.interactive === true, rand: Array.isArray(o.rand) ? o.rand.map(randItem) : null,
       seed: Number.isInteger(o.seed) ? o.seed : null,
       lang: o.lang === "en" || o.lang === "ko" ? o.lang : appLang() };
     const job = this._queue.then(() => this._runOne(code, stdin, require, timeoutMs, env));

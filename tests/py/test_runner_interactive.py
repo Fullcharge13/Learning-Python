@@ -179,3 +179,26 @@ def test_need_input_clears_stderr():
     assert r["need_input"] == {"prompt": "값: "}
     assert r["error"] is None
     assert r["stderr"] == ""
+
+
+def test_rand_randint_exact_call():
+    """작업 4 검토 I1: rand 값 [v, a, b]는 「randint(a, b)를 불렀고 v를 돌려줌」. 범위가 넓은 코드(randint(1, 100))도
+    다른 범위로 부른 것이라 RandMismatch. 값만 주면 범위가 좁은 것만 걸러지고 넓은 것은 못 거른다."""
+    ok = run("import random\nprint(random.randint(1, 50))\n", "", [], rand=[[37, 1, 50]])
+    assert ok["error"] is None and ok["stdout"].strip() == "37"
+    for code in ("import random\nprint(random.randint(1, 100))\n", "import random\nprint(random.randint(0, 50))\n",
+                 "import random\nprint(random.randint(1, 51))\n", "import random\nprint(random.randint(2, 50))\n"):
+        r = run(code, "", [], rand=[[37, 1, 50]])
+        assert r["error"] is not None and r["error"]["type"] == "RandMismatch", (code, r["error"])
+
+
+def test_rand_randint_exact_bad_shape():
+    code = "import random\nprint(random.randint(1, 50))\n"
+    for val in ([37, 1], [37, 1, 50, 9], [True, 1, 50], [51, 1, 50], ["37", 1, 50]):
+        r = run(code, "", [], rand=[val])
+        assert r["error"] is not None and r["error"]["type"] == "RandMismatch", (val, r["error"])
+
+
+def test_rand_choice_exact_form_rejected():
+    r = run('import random\nprint(random.choice([1, 2]))\n', "", [], rand=[[1, 1, 2]])
+    assert r["error"]["type"] == "RandMismatch"

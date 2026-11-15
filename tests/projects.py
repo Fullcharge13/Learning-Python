@@ -152,26 +152,34 @@ P3_KO_HEAD = ('import random\n\nwords = {\n    "apple": "사과",\n    "cat": "�
               'print(f"단어 {len(words)}개로 퀴즈를 내요")\n')
 P3_EN_HEAD = ('import random\n\nwords = {\n    "manzana": "apple",\n    "gato": "cat",\n    "libro": "book",\n}\n'
               'print(f"{len(words)} words in this quiz")\n')
-P3_KO_ASK = ('    word = random.choice(list(words))\n    print(f"{word} 뜻은?")\n    answer = input()\n'
+P3_KO_ASK = ('    word = random.choice(pool)\n    print(f"{word} 뜻은?")\n    answer = input()\n'
              '    meaning = words[word]\n')
-P3_EN_ASK = ('    word = random.choice(list(words))\n    print(f"What does {word} mean?")\n    answer = input()\n'
+P3_EN_ASK = ('    word = random.choice(pool)\n    print(f"What does {word} mean?")\n    answer = input()\n'
              '    meaning = words[word]\n')
+# 4단계부터: 고른 단어를 pool에서 뺌(검토 I2 — 한 판에 같은 단어가 두 번 안 나옴)
+P3_KO_ASK_R = P3_KO_ASK.replace("(pool)\n", "(pool)\n    pool.remove(word)\n", 1)
+P3_EN_ASK_R = P3_EN_ASK.replace("(pool)\n", "(pool)\n    pool.remove(word)\n", 1)
 P3_KO_CHECK = '    if answer == meaning:\n        print("맞았어요!")\n'
 P3_EN_CHECK = '    if answer == meaning:\n        print("Correct!")\n'
 P3_KO_ELSE = '    else:\n        print(f"틀렸어요. 정답은 {meaning}")\n'
 P3_EN_ELSE = '    else:\n        print(f"Wrong. It means {meaning}")\n'
-
+P3_POOL = 'pool = list(words)\n'
+P3_LOOP = 'while len(pool) > 0:\n'
+P3_KO_SCORE = 'print(f"점수: {score}/{len(words)}")\n'
+P3_EN_SCORE = 'print(f"Score: {score}/{len(words)}")\n'
 
 def _dedent(code):
     return "\n".join(line[4:] if line.startswith("    ") else line for line in code.split("\n"))
 
 
 WRONG_P23 = {
-    # P2 1단계: 범위를 잘못 씀(1~10, 0~49), randint 없이 답을 정해 둠
+    # P2 1단계: 범위를 잘못 씀(좁게 1~10·0~49, 넓게 1~100·0~50 — 검토 I1), randint 없이 답을 정해 둠
     ("P2", 0): {
         "ko": [P2_KO_PICK.replace("(1, 50)", "(1, 10)"), P2_KO_PICK.replace("(1, 50)", "(0, 49)"),
+               P2_KO_PICK.replace("(1, 50)", "(1, 100)"), P2_KO_PICK.replace("(1, 50)", "(0, 50)"),
                'import random\n\nanswer = 25\nprint("1부터 50 사이 수를 하나 정했어요")\n'],
         "en": [P2_EN_PICK.replace("(1, 50)", "(1, 10)"), P2_EN_PICK.replace("(1, 50)", "(0, 49)"),
+               P2_EN_PICK.replace("(1, 50)", "(1, 100)"), P2_EN_PICK.replace("(1, 50)", "(0, 50)"),
                'import random\n\nanswer = 25\nprint("I picked a number from 1 to 50")\n'],
     },
     # P2 2단계: int 없이 글자와 수를 비교(늘 「아니에요」), 답 대신 고정된 수와 비교, 비교 없이 늘 정답
@@ -232,52 +240,72 @@ WRONG_P23 = {
     },
     # P3 2단계: 사전을 그대로 choice에(진짜 실행에선 KeyError), 뜻 목록에서 고름, keys()를 그대로(TypeError)
     ("P3", 1): {
-        "ko": [P3_KO_HEAD + 'word = random.choice(words)\nprint(f"{word} 뜻은?")\n',
-               P3_KO_HEAD + 'word = random.choice(list(words.values()))\nprint(f"{word} 뜻은?")\n',
-               P3_KO_HEAD + 'word = random.choice(words.keys())\nprint(f"{word} 뜻은?")\n'],
-        "en": [P3_EN_HEAD + 'word = random.choice(words)\nprint(f"What does {word} mean?")\n',
-               P3_EN_HEAD + 'word = random.choice(list(words.values()))\nprint(f"What does {word} mean?")\n',
-               P3_EN_HEAD + 'word = random.choice(words.keys())\nprint(f"What does {word} mean?")\n'],
+        "ko": [P3_KO_HEAD + P3_POOL + 'word = random.choice(words)\nprint(f"{word} 뜻은?")\n',
+               P3_KO_HEAD + 'pool = list(words.values())\nword = random.choice(pool)\nprint(f"{word} 뜻은?")\n',
+               P3_KO_HEAD + 'pool = words.keys()\nword = random.choice(pool)\nprint(f"{word} 뜻은?")\n'],
+        "en": [P3_EN_HEAD + P3_POOL + 'word = random.choice(words)\nprint(f"What does {word} mean?")\n',
+               P3_EN_HEAD + 'pool = list(words.values())\nword = random.choice(pool)\nprint(f"What does {word} mean?")\n',
+               P3_EN_HEAD + 'pool = words.keys()\nword = random.choice(pool)\nprint(f"What does {word} mean?")\n'],
     },
     # P3 3단계: 답을 단어(키)와 비교, 답이 사전에 있는지만 봄, 틀릴 때 정답을 안 알려 줌
     ("P3", 2): {
-        "ko": [P3_KO_HEAD + _dedent(P3_KO_ASK + '    if answer == word:\n        print("맞았어요!")\n' + P3_KO_ELSE),
-               P3_KO_HEAD + _dedent(P3_KO_ASK + '    if answer in words:\n        print("맞았어요!")\n' + P3_KO_ELSE),
-               P3_KO_HEAD + _dedent(P3_KO_ASK + P3_KO_CHECK + '    else:\n        print("틀렸어요")\n')],
-        "en": [P3_EN_HEAD + _dedent(P3_EN_ASK + '    if answer == word:\n        print("Correct!")\n' + P3_EN_ELSE),
-               P3_EN_HEAD + _dedent(P3_EN_ASK + '    if answer in words:\n        print("Correct!")\n' + P3_EN_ELSE),
-               P3_EN_HEAD + _dedent(P3_EN_ASK + P3_EN_CHECK + '    else:\n        print("Wrong")\n')],
+        "ko": [P3_KO_HEAD + P3_POOL + _dedent(P3_KO_ASK + '    if answer == word:\n        print("맞았어요!")\n' + P3_KO_ELSE),
+               P3_KO_HEAD + P3_POOL + _dedent(P3_KO_ASK + '    if answer in words:\n        print("맞았어요!")\n' + P3_KO_ELSE),
+               P3_KO_HEAD + P3_POOL + _dedent(P3_KO_ASK + P3_KO_CHECK + '    else:\n        print("틀렸어요")\n')],
+        "en": [P3_EN_HEAD + P3_POOL + _dedent(P3_EN_ASK + '    if answer == word:\n        print("Correct!")\n' + P3_EN_ELSE),
+               P3_EN_HEAD + P3_POOL + _dedent(P3_EN_ASK + '    if answer in words:\n        print("Correct!")\n' + P3_EN_ELSE),
+               P3_EN_HEAD + P3_POOL + _dedent(P3_EN_ASK + P3_EN_CHECK + '    else:\n        print("Wrong")\n')],
     },
-    # P3 4단계: 단어를 반복 밖에서 한 번만 고름, 두 번만 돎, 답을 반복 밖에서 한 번만 받음
+    # P3 4단계(검토 I2): remove를 빠뜨림(끝나지 않고 같은 단어도 또 나옴), pool을 반복 안에서 다시 만듦(늘 3개라
+    # 끝나지 않음), 하나 남기고 멈춤(> 1), 답을 반복 밖에서 한 번만 받음, 앞 단계처럼 for range(3)에 remove 없음
     ("P3", 3): {
-        "ko": [P3_KO_HEAD + 'word = random.choice(list(words))\nfor i in range(3):\n'
-               + P3_KO_ASK.replace("    word = random.choice(list(words))\n", "") + P3_KO_CHECK + P3_KO_ELSE,
-               P3_KO_HEAD + 'for i in range(2):\n' + P3_KO_ASK + P3_KO_CHECK + P3_KO_ELSE,
-               P3_KO_HEAD + 'answer = input()\nfor i in range(3):\n'
-               + P3_KO_ASK.replace("    answer = input()\n", "") + P3_KO_CHECK + P3_KO_ELSE],
-        "en": [P3_EN_HEAD + 'word = random.choice(list(words))\nfor i in range(3):\n'
-               + P3_EN_ASK.replace("    word = random.choice(list(words))\n", "") + P3_EN_CHECK + P3_EN_ELSE,
-               P3_EN_HEAD + 'for i in range(2):\n' + P3_EN_ASK + P3_EN_CHECK + P3_EN_ELSE,
-               P3_EN_HEAD + 'answer = input()\nfor i in range(3):\n'
-               + P3_EN_ASK.replace("    answer = input()\n", "") + P3_EN_CHECK + P3_EN_ELSE],
+        "ko": [P3_KO_HEAD + P3_POOL + P3_LOOP + P3_KO_ASK + P3_KO_CHECK + P3_KO_ELSE,
+               P3_KO_HEAD + P3_LOOP.replace("len(pool)", "len(words)") + '    pool = list(words)\n' + P3_KO_ASK_R
+               + P3_KO_CHECK + P3_KO_ELSE,
+               P3_KO_HEAD + P3_POOL + P3_LOOP.replace("> 0", "> 1") + P3_KO_ASK_R + P3_KO_CHECK + P3_KO_ELSE,
+               P3_KO_HEAD + P3_POOL + 'answer = input()\n' + P3_LOOP + P3_KO_ASK_R.replace("    answer = input()\n", "")
+               + P3_KO_CHECK + P3_KO_ELSE,
+               P3_KO_HEAD + P3_POOL + 'for i in range(3):\n' + P3_KO_ASK + P3_KO_CHECK + P3_KO_ELSE],
+        "en": [P3_EN_HEAD + P3_POOL + P3_LOOP + P3_EN_ASK + P3_EN_CHECK + P3_EN_ELSE,
+               P3_EN_HEAD + P3_LOOP.replace("len(pool)", "len(words)") + '    pool = list(words)\n' + P3_EN_ASK_R
+               + P3_EN_CHECK + P3_EN_ELSE,
+               P3_EN_HEAD + P3_POOL + P3_LOOP.replace("> 0", "> 1") + P3_EN_ASK_R + P3_EN_CHECK + P3_EN_ELSE,
+               P3_EN_HEAD + P3_POOL + 'answer = input()\n' + P3_LOOP + P3_EN_ASK_R.replace("    answer = input()\n", "")
+               + P3_EN_CHECK + P3_EN_ELSE,
+               P3_EN_HEAD + P3_POOL + 'for i in range(3):\n' + P3_EN_ASK + P3_EN_CHECK + P3_EN_ELSE],
     },
     # P3 5단계: 맞든 틀리든 셈, 반복 안에서 0으로 되돌림, 점수를 문제마다 출력
     ("P3", 4): {
-        "ko": [P3_KO_HEAD + 'score = 0\nfor i in range(3):\n' + P3_KO_ASK + '    score += 1\n' + P3_KO_CHECK
-               + P3_KO_ELSE + 'print(f"점수: {score}/3")\n',
-               P3_KO_HEAD + 'for i in range(3):\n    score = 0\n' + P3_KO_ASK + P3_KO_CHECK + '        score += 1\n'
-               + P3_KO_ELSE + 'print(f"점수: {score}/3")\n',
-               P3_KO_HEAD + 'score = 0\nfor i in range(3):\n' + P3_KO_ASK + P3_KO_CHECK + '        score += 1\n'
-               + P3_KO_ELSE + '    print(f"점수: {score}/3")\n'],
-        "en": [P3_EN_HEAD + 'score = 0\nfor i in range(3):\n' + P3_EN_ASK + '    score += 1\n' + P3_EN_CHECK
-               + P3_EN_ELSE + 'print(f"Score: {score}/3")\n',
-               P3_EN_HEAD + 'for i in range(3):\n    score = 0\n' + P3_EN_ASK + P3_EN_CHECK + '        score += 1\n'
-               + P3_EN_ELSE + 'print(f"Score: {score}/3")\n',
-               P3_EN_HEAD + 'score = 0\nfor i in range(3):\n' + P3_EN_ASK + P3_EN_CHECK + '        score += 1\n'
-               + P3_EN_ELSE + '    print(f"Score: {score}/3")\n'],
+        "ko": [P3_KO_HEAD + P3_POOL + 'score = 0\n' + P3_LOOP + P3_KO_ASK_R + '    score += 1\n' + P3_KO_CHECK
+               + P3_KO_ELSE + P3_KO_SCORE,
+               P3_KO_HEAD + P3_POOL + P3_LOOP + '    score = 0\n' + P3_KO_ASK_R + P3_KO_CHECK + '        score += 1\n'
+               + P3_KO_ELSE + P3_KO_SCORE,
+               P3_KO_HEAD + P3_POOL + 'score = 0\n' + P3_LOOP + P3_KO_ASK_R + P3_KO_CHECK + '        score += 1\n'
+               + P3_KO_ELSE + '    ' + P3_KO_SCORE],
+        "en": [P3_EN_HEAD + P3_POOL + 'score = 0\n' + P3_LOOP + P3_EN_ASK_R + '    score += 1\n' + P3_EN_CHECK
+               + P3_EN_ELSE + P3_EN_SCORE,
+               P3_EN_HEAD + P3_POOL + P3_LOOP + '    score = 0\n' + P3_EN_ASK_R + P3_EN_CHECK + '        score += 1\n'
+               + P3_EN_ELSE + P3_EN_SCORE,
+               P3_EN_HEAD + P3_POOL + 'score = 0\n' + P3_LOOP + P3_EN_ASK_R + P3_EN_CHECK + '        score += 1\n'
+               + P3_EN_ELSE + '    ' + P3_EN_SCORE],
     },
 }
 WRONG.update(WRONG_P23)
+
+# 범위를 넓게 쓴 오답(검토 I1): 단계 정답의 randint(1, 50)을 바꾼 것. 마지막 단계와 P1 2단계에 직접 둔다.
+def _widen(code, old, new):
+    assert old in code
+    return code.replace(old, new)
+
+
+P2_KO_LAST = (P2_KO_PICK + 'tries = 0\nwhile True:\n    guess = int(input())\n    tries += 1\n'
+              + P2_KO_JUDGE.replace("        break\n", '        print(f"{tries}번 만에 맞혔어요")\n        break\n'))
+P2_EN_LAST = (P2_EN_PICK + 'tries = 0\nwhile True:\n    guess = int(input())\n    tries += 1\n'
+              + P2_EN_JUDGE.replace("        break\n", '        print(f"Guesses: {tries}")\n        break\n'))
+for _lang, _code in (("ko", P2_KO_LAST), ("en", P2_EN_LAST)):
+    WRONG[("P2", 4)][_lang] += [_widen(_code, "(1, 50)", "(1, 100)"), _widen(_code, "(1, 50)", "(0, 50)")]
+WRONG[("P1", 1)]["ko"].append(_widen(P1_KO_HEAD, "(1, 3)", "(1, 4)"))
+WRONG[("P1", 1)]["en"].append(_widen(P1_EN_HEAD, "(1, 3)", "(1, 4)"))
 
 
 def node_data():
@@ -356,6 +384,16 @@ def randint_ranges(code):
             if len(args) != 2 or n.keywords or not all(isinstance(a, ast.Constant) and type(a.value) is int for a in args):
                 return None
             out.append((args[0].value, args[1].value))
+    return out
+
+
+def widened(code):
+    """정답의 randint(a, b)마다 범위를 바꾼 코드(넓게: b*2·a-1, 좁게: b-1·a+1)."""
+    out = []
+    for m in re.finditer(r"random\.randint\((-?\d+), (-?\d+)\)", code):
+        a, b = int(m.group(1)), int(m.group(2))
+        for na, nb in ((a, b * 2), (a - 1, b), (a, b - 1), (a + 1, b)):
+            out.append(code[:m.start()] + "random.randint(%d, %d)" % (na, nb) + code[m.end():])
     return out
 
 
@@ -501,8 +539,13 @@ def shape_problems(p, icons):
     return bad
 
 
+def _exact(v):
+    """[값, a, b]: 「randint(a, b)를 불러 값」. 값만 주면 범위를 넓게 쓴 코드(randint(1, 100))를 못 거른다(작업 4 검토 I1)."""
+    return isinstance(v, list) and len(v) == 3 and all(type(x) is int for x in v)
+
+
 def rand_problems(p):
-    """⑥ 무작위를 쓰는 단계는 시험마다 rand, randint를 쓰면 rand 값은 모두 정수(bool 아님). ⑦ 처음 쓰는 단계에 tool."""
+    """⑥ 무작위를 쓰는 단계는 시험마다 rand, randint를 쓰면 rand 값은 모두 [값, a, b](정답의 randint(a, b)와 같은 부름). ⑦ 처음 쓰는 단계에 tool."""
     bad = []
     first = True
     for k, s in enumerate(p["steps"]):
@@ -515,30 +558,36 @@ def rand_problems(p):
         for i, t in enumerate(s["tests"]):
             if "rand" not in t:
                 bad.append("%d단계 시험 %d: 무작위를 쓰는데 rand가 없음(채점이 매번 달라짐)" % (k + 1, i))
-            elif "randint" in used and not all(type(v) is int for v in t["rand"]):
-                bad.append("%d단계 시험 %d: randint에 넘길 rand 값이 정수가 아님 %r" % (k + 1, i, t["rand"]))
+            elif "randint" in used and not all(_exact(v) for v in t["rand"]):
+                bad.append("%d단계 시험 %d: randint의 rand 값은 [값, a, b](정수 셋, 작업 4 검토 I1)가 아님 %r"
+                           % (k + 1, i, t["rand"]))
             elif "randint" in used and "choice" not in used:
                 ranges = randint_ranges(s["solution"])
-                out = [v for v in t["rand"] if ranges is not None and not any(a <= v <= b for a, b in ranges)]
+                out = [v for v in t["rand"] if ranges is not None
+                       and not ((v[1], v[2]) in ranges and v[1] <= v[0] <= v[2])]
                 if out:
-                    bad.append("%d단계 시험 %d: rand 값 %r이 정답의 randint 범위 %r 밖" % (k + 1, i, out, ranges))
+                    bad.append("%d단계 시험 %d: rand 값 %r이 정답의 randint 부름 %r과 다름" % (k + 1, i, out, ranges))
     return bad
 
 
 def rand_self_test():
+    R = "import random\nn = random.randint(1, 3)\n"
     good = {"steps": [{"solution": "print(1)", "tests": [{}]},
-                      {"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [1]}]}]}
+                      {"solution": R, "tool": {}, "tests": [{"rand": [[1, 1, 3]]}]}]}
     cases = [
         (good, True),
-        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tests": [{"rand": [1]}]}]}, False),
-        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{}]}]}, False),
-        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": ["1"]}]}]}, False),
-        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [True]}]}]}, False),
-        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [1.0]}]}]}, False),
+        ({"steps": [{"solution": R, "tests": [{"rand": [[1, 1, 3]]}]}]}, False),        # 도구 카드 없음
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{}]}]}, False),                # rand 없음
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{"rand": ["1"]}]}]}, False),
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{"rand": [True]}]}]}, False),
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{"rand": [1.0]}]}]}, False),
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{"rand": [1]}]}]}, False),     # 값만(넓은 범위를 못 거름)
         ({"steps": [{"solution": 'import random\nn = random.choice("ab")\n', "tool": {}, "tests": [{"rand": ["a"]}]}]}, True),
-        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [7]}]}]}, False),
-        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [0]}]}]}, False),
-        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [3, 1]}]}]}, True),
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{"rand": [[7, 1, 3]]}]}]}, False),
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{"rand": [[0, 1, 3]]}]}]}, False),
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{"rand": [[2, 1, 4]]}]}]}, False),   # 정답과 다른 부름
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{"rand": [[True, 1, 3]]}]}]}, False),
+        ({"steps": [{"solution": R, "tool": {}, "tests": [{"rand": [[3, 1, 3], [1, 1, 3]]}]}]}, True),
     ]
     bad = 0
     for p, want in cases:
@@ -651,6 +700,10 @@ def main():
                 for j, code in enumerate(wrong):
                     failed = any(test_fails(code, s, t, lang) for t in s["tests"])
                     check(failed, "⑧ %s 오답 %d은 시험에서 실패" % (tag, j + 1))
+                # ⑧ randint 범위를 넓히거나 좁힌 정답은 모두 실패(검토 I1: 값만 주는 rand는 넓은 범위를 못 거름)
+                for code in widened(s["solution"]):
+                    failed = any(test_fails(code, s, t, lang) for t in s["tests"])
+                    check(failed, "⑧ %s randint 범위를 바꾼 정답은 실패: %s" % (tag, re.findall(r"randint\([^)]*\)", code)))
         # ⑫ 완성작(마지막 단계 정답)을 입력 없이 주고받기로 돌리면, 끝나거나 입력을 기다린다(끝없이 돌지 않음)
         for lang, q in (("ko", p), ("en", e)):
             last = q["steps"][-1]["solution"]

@@ -71,3 +71,9 @@ test("run: 정수가 아닌 seed·배열이 아닌 rand는 null, interactive는 
   assert.equal((await posted({ interactive: "yes" })).interactive, false);
   assert.deepEqual((await posted({ rand: [1, null, true] })).rand, [1, "null", "true"]);
 });
+
+test("run: rand의 [값, a, b](randint(a, b) 정확한 부름)는 그대로 보낸다 — 작업 4 검토 I1", async () => {
+  assert.deepEqual((await posted({ rand: [[37, 1, 50], "바위", 2] })).rand, [[37, 1, 50], "바위", 2]);
+  // 정수 셋이 아닌 배열은 예전처럼 글자로(러너에서 RandMismatch)
+  assert.deepEqual((await posted({ rand: [[1, 2], [1, "a", 3], [1.5, 1, 2]] })).rand, ["1,2", "1,a,3", "1.5,1,2"]);
+});

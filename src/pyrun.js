@@ -7,13 +7,16 @@
 //   // r = { stdout, stderr, error: null | {type, line, msg}, missing: [], charts: [], timeout, ms }
 //   // charts: chart.show()로 그린 그림(v0.5 E3, src/chart.js가 모양을 다듬음)
 //   py.run(code, "", [], { files: { "memo.txt": "…" }, server: { "https://ria.example/a": { status: 200, body: "…" } } });
-//   // 넷째 인자는 제한 시간(ms) 숫자 또는 { timeoutMs?, files?, server?, farm?, guard? } (v0.4 E1·E2, v0.10)
+//   // 넷째 인자는 제한 시간(ms) 숫자 또는 { timeoutMs?, files?, server?, farm?, guard?, interactive?, rand?, seed? } (v0.4 E1·E2, v0.10)
 //   const g = await py.run(code, "", [], { farm: { size, cells, pie, clock, store, upgrades } });
 //   // g.farm = { events: [{ t, line, … }], state: { size, cells, pie, clock, store, upgrades },
 //   //            stopped: null | "tired"(행동 500번) | "waited"(확인 2000번), actions }   (파이의 텃밭, 규칙은 py/runner.py의 farm 모듈)
 //   // v0.12: state에 seeds(토마토 씨앗), store에 "토마토". farm과 files를 함께 넘기면 농장일지.txt 말고는 읽기 전용이고
 //   //        g.farm.files = { "농장일지.txt": 끝 2000자 }가 붙는다(files를 안 넘기면 없음).
 //   // 경비실: { guard: { mode, tries:[{value, expect}], password? } } → g.guard = { events, stats, solved, stopped } (py/guard.py)
+// v0.21.0 주고받기·정해 둔 무작위: { interactive: true } → 입력이 모자라면 결과가 error 없이 need_input: { prompt }.
+//   { rand: [3, "바위", …] } → random.randint·choice가 그 값을 차례로(그 실행 동안만), 모자라면 RandMissing, choice에 없으면 RandMismatch.
+//   { seed: 정수 } → 실행 전 random.seed(seed). (py/runner.py 설명 글)
 // farm을 넘기지 않았거나 실행이 시간 초과·작업자 오류로 끝나면 결과에 farm이 없다.
 //
 // - 실행은 한 번에 하나씩 차례로 돈다(대기열).
@@ -70,6 +73,8 @@ function cleanResult(r) {
     ...(plainObj(r?.farm) ? { farm: cleanFarm(r.farm) } : {}),
     // 경비실: 모양만 지킨다(events·stats·solved·stopped는 guard.py가 만든 대로 화면이 읽는다)
     ...(plainObj(r?.guard) ? { guard: r.guard } : {}),
+    // 주고받기(v0.21.0): 입력이 모자라면 오류 대신 { prompt }(그 input()의 안내 글)
+    ...(plainObj(r?.need_input) ? { need_input: { prompt: r.need_input.prompt == null ? "" : String(r.need_input.prompt) } } : {}),
   };
 }
 
@@ -138,6 +143,8 @@ export class PyRun {
     const timeoutMs = typeof o.timeoutMs === "number" ? o.timeoutMs : DEFAULT_TIMEOUT_MS;
     // v0.13.5: 학습자가 보는 문구(텃밭·차트·연습 서버)의 언어 — opts.lang, 없으면 앱의 지금 언어
     const env = { files: plainObj(o.files), server: plainObj(o.server), farm: plainObj(o.farm), guard: plainObj(o.guard),
+      interactive: o.interactive === true, rand: Array.isArray(o.rand) ? o.rand.map((v) => (typeof v === "number" || typeof v === "string" ? v : String(v))) : null,
+      seed: Number.isInteger(o.seed) ? o.seed : null,
       lang: o.lang === "en" || o.lang === "ko" ? o.lang : appLang() };
     const job = this._queue.then(() => this._runOne(code, stdin, require, timeoutMs, env));
     this._queue = job.then(() => {}, () => {});
@@ -309,6 +316,7 @@ export class PyRun {
           stdin: Array.isArray(stdin) ? stdin.map(String) : (stdin == null ? "" : String(stdin)),
           require: Array.from(require || [], String),
           files: env.files, server: env.server, farm: env.farm, guard: env.guard, lang: env.lang,
+          interactive: env.interactive, rand: env.rand, seed: env.seed,
         });
       } catch (e) {
         finish(failResult("WorkerError", errMsg(e)));

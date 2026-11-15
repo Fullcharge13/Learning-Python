@@ -9,7 +9,7 @@
 // 주고받는 말:
 //   받음 { type: "init", indexURL, runnerSource }
 //   보냄 { type: "ready", loadMs } | { type: "init-error", name, msg }
-//   받음 { type: "run", id, code, stdin, require, files?, server?, farm?, guard?, lang? }   (lang v0.13.5: "ko"|"en")
+//   받음 { type: "run", id, code, stdin, require, files?, server?, farm?, guard?, lang?, interactive?, rand?, seed? }   (lang v0.13.5: "ko"|"en")
 //        files: { 이름: 글자 } (가상 파일, v0.4 E1), server: { 주소: { status, body, type? } } (연습 서버, E2)
 //        farm: { size, cells, pie:{x,y}, clock, store, upgrades, seeds? } (파이의 텃밭 상태, v0.10·v0.12)
 //        셋 다 JSON 글자로 바꿔 Python의 json.loads로 dict를 만든다(toPy의 객체 변환 차이를 피함).
@@ -147,6 +147,7 @@ function run(msg) {
     let farmOut = null;
     let guardPy;
     let guardOut = null;
+    let randPy;
     try {
       stdinPy = Array.isArray(msg.stdin) ? pyodide.toPy(msg.stdin) : String(msg.stdin == null ? "" : msg.stdin);
       reqPy = pyodide.toPy(Array.isArray(msg.require) ? msg.require : []);
@@ -154,8 +155,12 @@ function run(msg) {
       if (msg.server && typeof msg.server === "object") serverPy = loadsFn(JSON.stringify(msg.server));
       if (msg.farm && typeof msg.farm === "object") farmPy = loadsFn(JSON.stringify(msg.farm));
       if (msg.guard && typeof msg.guard === "object") guardPy = loadsFn(JSON.stringify(msg.guard));
-      out = runFn.callKwargs(String(msg.code == null ? "" : msg.code), stdinPy, reqPy, filesPy, serverPy, farmPy,
-        { lang: msg.lang === "en" ? "en" : "ko", guard: guardPy });
+      if (Array.isArray(msg.rand)) randPy = loadsFn(JSON.stringify(msg.rand));
+      const kw = { lang: msg.lang === "en" ? "en" : "ko", guard: guardPy };
+      if (msg.interactive === true) kw.interactive = true;
+      if (randPy !== undefined) kw.rand = randPy;
+      if (Number.isInteger(msg.seed)) kw.seed = msg.seed;
+      out = runFn.callKwargs(String(msg.code == null ? "" : msg.code), stdinPy, reqPy, filesPy, serverPy, farmPy, kw);
       result = out.toJs({ dict_converter: Object.fromEntries });
       delete result.farm;
       delete result.guard;
@@ -176,7 +181,7 @@ function run(msg) {
         result.fatal = true;
       }
     } finally {
-      for (const p of [out, reqPy, stdinPy, filesPy, serverPy, farmPy, farmOut, guardPy, guardOut]) {
+      for (const p of [out, reqPy, stdinPy, filesPy, serverPy, farmPy, farmOut, guardPy, guardOut, randPy]) {
         if (p && typeof p.destroy === "function") {
           try { p.destroy(); } catch (_) { /* 이미 해제됨 */ }
         }

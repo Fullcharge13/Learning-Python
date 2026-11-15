@@ -95,10 +95,19 @@ CPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다
                      "stats": {"attacks_blocked", "attacks_total", "guests_allowed", "guests_total"},
                      "solved": bool, "stopped": None | "error"}   # events는 오류 전까지만, guard=None이면 열쇠 없음
 
-run(code, stdin, require, files=None, server=None, farm=None, lang=None, guard=None) -> {
+주고받기·정해 둔 무작위(v0.21.0, 설계서 2026-11-15 프로젝트 공방 §4-3·§7):
+  interactive=True면 input() 값이 모자랄 때 InputMissing 오류 대신 result["need_input"] = {"prompt": 그 input()의 안내 글}과
+  error None을 돌려준다(그 전까지의 출력은 stdout에, 안내 글은 stdout에 넣지 않음 → 다음 실행 출력의 앞부분과 같다).
+  값이 충분하면 need_input 열쇠가 없다. interactive가 아니면 예전 그대로(InputMissing 오류).
+  rand=[int|str, …]면 실행 동안 random.randint(a, b)·random.choice(seq)가 이 값을 차례로 돌려준다(randint는 범위를 보지 않음,
+  choice는 값이 seq 안에 있어야 하고 없으면 RandMismatch). 값이 떨어지면 RandMissing. 끝나면(오류 때도) 진짜 함수로 되돌린다.
+  rand=None이면 진짜 random. seed=정수면 실행 전에 random.seed(seed).
+
+run(code, stdin, require, files=None, server=None, farm=None, lang=None, guard=None, interactive=False, rand=None, seed=None) -> {
     "stdout": str, "stderr": str,
     "error": None | {"type": str, "line": int | None, "msg": str},
     "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:/Def:/SQL:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr, NamedGroup·Reraise)
+    "need_input"?: {"prompt": str},   # interactive이고 입력이 모자랄 때만(그때 error는 None)
     "charts": [{"kind": "bar" | "line", "labels": [str], "values": [int | float],
                 "title"?: str, "xlabel"?: str, "ylabel"?: str}
                | {"kind": "line", "labels": [str], "series": [{"name"?: str, "values": [...]}, ...], ...}, ...],
@@ -112,6 +121,7 @@ import builtins
 import io
 import linecache
 import os
+import random
 import shutil
 import sys
 import tempfile
@@ -242,6 +252,14 @@ class InputMissing(BaseException):
     """
 
 
+class RandMissing(Exception):
+    """rand 값이 다 떨어졌는데 random.randint·random.choice가 또 불렸을 때(채점용 정해 둔 무작위)."""
+
+
+class RandMismatch(Exception):
+    """random.choice에 정해 준 값이 고르는 목록 안에 없을 때(채점용 정해 둔 무작위)."""
+
+
 class OutputLimit(BaseException):
     """출력이 OUTPUT_LIMIT 글자를 넘었을 때(끝없는 print 반복 등)."""
 
@@ -302,15 +320,40 @@ def _make_input(values, out, state):
 
     def fake_input(prompt=""):
         # 진짜 Python처럼 안내 문구를 줄바꿈 없이 표준 출력에 쓴다.
-        if prompt:
+        # 주고받기(interactive)에서 값이 떨어진 마지막 input()의 안내 글은 쓰지 않고 need_input에 담는다
+        # (그래야 stdout이 다음 실행 출력의 앞부분과 같다).
+        pending = not queue and state.get("interactive")
+        if prompt and not pending:
             out.write(_str(prompt))
         if not queue:
             if state["input_missing"] is None:
                 state["input_missing"] = _caller_user_line()
+                state["need_prompt"] = _str(prompt) if prompt else ""
             raise InputMissing("input() needed more values than were given")
         return _str(queue.pop(0))
 
     return fake_input
+
+
+def _make_rand(values):
+    """채점용: randint·choice가 values를 차례로 돌려주는 두 함수(진짜 random은 손대지 않음)."""
+    queue = list(values)
+
+    def _next():
+        if not queue:
+            raise RandMissing("random was called more times than the given values")
+        return queue.pop(0)
+
+    def randint(a, b):
+        return _next()
+
+    def choice(seq):
+        v = _next()
+        if v not in list(seq):
+            raise RandMismatch("the given random value is not in the sequence")
+        return v
+
+    return randint, choice
 
 
 def _user_line(tb):
@@ -1171,7 +1214,8 @@ def _restore_farm_tables():
     FARM_CROPS, FARM_GROW, FARM_GROW_FERTILIZED, FARM_DIRS = _farm_tables()
 
 
-def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang=None, guard=None):
+def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang=None, guard=None,
+        interactive=False, rand=None, seed=None):
     if guard is not None:
         farm = None   # 경비실과 텃밭을 함께 주면 경비실만
     # v0.13.5: 학습자가 보는 문구의 언어. 주지 않으면 텃밭(경비실) 입력의 "lang", 그것도 없으면 한국어
@@ -1185,7 +1229,8 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
     require = list(require or [])
 
     # 학습자가 except로 삼켜도 알 수 있게 특수 중단은 여기에 적어 둔다.
-    state = {"used": 0, "input_missing": None, "output_limit": None}
+    state = {"used": 0, "input_missing": None, "output_limit": None, "interactive": interactive is True,
+             "need_prompt": ""}
     out = _CappedIO(state)
     err = _CappedIO(state)
     charts = []
@@ -1286,7 +1331,14 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
     sys.stdout, sys.stderr = out, err
     builtins.input = _make_input(stdin, out, state)
     caught = None
+    real_rand = (random.randint, random.choice)
+    rand_patched = False
     try:
+        if rand is not None:   # 채점용 정해 둔 무작위: 이 실행 동안만(finally에서 되돌림)
+            random.randint, random.choice = _make_rand(rand)
+            rand_patched = True
+        if seed is not None:
+            random.seed(seed)
         _chdir(run_dir)
         if urlreq is not None:
             urlreq.urlopen = fake_urlopen
@@ -1304,6 +1356,8 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         mod_globals.clear()
         mod_globals.update(saved_globals)
         _restore_farm_tables()
+        if rand_patched:
+            random.randint, random.choice = real_rand
         if fs is not None and fs["trace_on"]:
             _settrace(old_trace)
         sys.stdout, sys.stderr = old_out, old_err
@@ -1350,9 +1404,14 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         pass
     elif state["input_missing"] is not None or (result["error"] or {}).get("type") == "InputMissing":
         line = state["input_missing"] or result["error"]["line"]
-        result["error"] = {"type": "InputMissing", "line": line,
-                           "msg": "input() needed more values than were given"}
-        err.raw_write("InputMissing (line %s): input() needed more values than were given\n" % line)
+        if state["interactive"]:
+            # 주고받기: 오류가 아니라 「입력 필요」(화면이 답을 받아 처음부터 다시 실행)
+            result["error"] = None
+            result["need_input"] = {"prompt": state["need_prompt"]}
+        else:
+            result["error"] = {"type": "InputMissing", "line": line,
+                               "msg": "input() needed more values than were given"}
+            err.raw_write("InputMissing (line %s): input() needed more values than were given\n" % line)
     elif state["output_limit"] is not None or (result["error"] or {}).get("type") == "OutputLimit":
         line = state["output_limit"] or result["error"]["line"]
         result["error"] = {"type": "OutputLimit", "line": line,

@@ -188,3 +188,11 @@ test("engine_crash: 치명 오류 안내(줄 번호 없음, 설계서 §2-1)", (
   assert.equal(explain({ type: "EngineCrash" }, "basic").body,
     "파이썬 엔진이 멈춰서 다시 켰어요. 아주 깊게 겹친 자료나 끝없이 자기를 부르는 함수가 원인일 때가 많아요. 코드를 줄여서 다시 실행해 보세요.");
 });
+
+test("errors_rand: RandMismatch·RandMissing 설명이 있다(v0.21.0)", () => {
+  for (const k of ["RandMismatch", "RandMissing"]) {
+    assert.ok(ERRORS[k] && ERRORS[k].title && ERRORS[k].body && ERRORS[k].detective, k);
+    assert.match(ERRORS[k].body, /한 번만/, k);
+    assert.match(explain({ type: k, line: 3 }, "basic").body, /3번째 줄/, k);
+  }
+});

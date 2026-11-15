@@ -8,8 +8,10 @@
   ④ solution[i]이 step[i+1]의 시작이 됨: 다음 단계 공개 시험 하나를 오류 없이 돎
   ⑤ 그 장까지 배운 문법만(경비실 tests/guard_incidents.py의 표) + 레슨 1~2장 기본(print·input·int·float·str, f-문자열)
      + 「새 도구」 예외: import random, random.randint, random.choice (프로젝트에서만)
+     + 레슨에서 배웠지만 경비실 표에 없는 것: list(7-4), f.write(11-3), json.load(14-A2)
   ⑥ 무작위를 쓰는 단계는 시험마다 rand가 있고, randint를 쓰는 단계의 rand 값은 모두 정수(bool 아님)
   ⑦ random을 처음 쓰는 단계에 새 도구 카드(tool)가 있음
+     + 심화 레슨에서만 배운 json.load(14-A2)를 처음 쓰는 단계에도 새 도구 카드(작업 5)
   ⑧ WRONG(흔한 오답)이 단계마다 한·영 1개 이상, 각각 그 단계 시험에서 하나 이상 실패
   ⑨ 영어 파일에 한글 없음, 한국어 단계 글에는 한글이 있음
   ⑪ 정답·시작 코드·도구 카드 코드의 한 줄이 휴대폰 편집기 폭(CODE_COLS칸, 한글 2칸) 안
@@ -37,7 +39,7 @@ HELPER = os.path.join(ROOT, "tests", "projects_helper.mjs")
 HANGUL = re.compile(r"[가-힣ㄱ-ㅎㅏ-ㅣ]")
 
 # 프로젝트 id와 열리는 장(원본 순서). 작업 4·5가 늘린다.
-WANT = [("P1", 3), ("P2", 5), ("P3", 8)]
+WANT = [("P1", 3), ("P2", 5), ("P3", 8), ("P4", 11), ("P5", 14)]
 
 # 레슨 1~2장에서 배워 3장 이후 어디서나 쓸 수 있는 것(경비실 표에는 없는 입출력)
 BASE_CALLS = {"print", "input", "int", "float", "str"}
@@ -45,6 +47,13 @@ BASE_NODES = {"JoinedStr", "FormattedValue"}
 # 레슨에서 가르치지만 경비실 표에 없는 부르는 이름(장 → 이름). list(a)는 7-4 「정렬과 복사」에서 배움
 # (P3의 random.choice(list(words)) — 작업 4). 경비실 표는 그대로.
 LESSON_CALLS_BY_CH = {7: {"list"}}
+# 레슨에서 가르치지만 경비실 표에 없는 메서드(장 → 이름, 작업 5).
+#  - write: 11-3 「파일에 쓰기」(본 레슨, f.write) — P4가 todo.txt에 씀
+#  - load: 14-A2 「JSON 만들어 저장」(심화 레슨, json.load(f)) — P5가 weather.json을 읽음. 심화는 건너뛸 수 있으니
+#    json.load를 처음 쓰는 단계에 새 도구 카드(tool)를 둔다(⑦, 아래 TOOL_INTRO_METHODS)
+LESSON_METHODS_BY_CH = {11: {"write"}, 14: {"load"}}
+# 심화 레슨에서만 배워 「새 도구 카드」로 다시 소개해야 하는 메서드(⑦)
+TOOL_INTRO_METHODS = {"load"}
 # 새 도구 카드로 소개하는 것(프로젝트 검사에서만, 경비실 표는 그대로)
 TOOL_MODULES = {"random"}
 TOOL_FUNCS = {"randint", "choice"}
@@ -308,6 +317,175 @@ WRONG[("P1", 1)]["ko"].append(_widen(P1_KO_HEAD, "(1, 3)", "(1, 4)"))
 WRONG[("P1", 1)]["en"].append(_widen(P1_EN_HEAD, "(1, 3)", "(1, 4)"))
 
 
+# ---------------------------------------------------------------- P4·P5 오답(작업 5)
+# 각 단계 정답을 조각으로 다시 만들고(데이터의 정답과 같은 코드), 오답은 그 정답을 한 군데 바꿔 만든다.
+P4_TXT = {
+    "ko": {"menu": "1 추가 · 2 보기 · 3 끝", "bye": "안녕히 가세요", "added": "추가했어요: ",
+           "none": "아직 할 일이 없어요", "loaded": "할 일 {n}개를 불러왔어요", "new": "새 목록을 시작해요"},
+    "en": {"menu": "1 Add · 2 View · 3 Quit", "bye": "Bye!", "added": "Added: ",
+           "none": "No tasks yet", "loaded": "Tasks loaded: {n}", "new": "Starting a new list"},
+}
+
+
+def p4(lang, step):
+    """P4 k단계(0부터) 정답"""
+    t = P4_TXT[lang]
+    quit_ = '    if menu == "3":\n        print("%s")\n        break\n' % t["bye"]
+    add = ('    elif menu == "1":\n        item = input()\n        with open("todo.txt", "a") as f:\n'
+           '            f.write(item + "\\n")\n        print(f"%s{item}")\n' % t["added"])
+    view = ('    elif menu == "2":\n        with open("todo.txt") as f:\n            for line in f:\n'
+            '                print("-", line.strip())\n')
+    view_try = ('    elif menu == "2":\n        try:\n            with open("todo.txt") as f:\n'
+                '                for line in f:\n                    print("-", line.strip())\n'
+                '        except FileNotFoundError:\n            print("%s")\n' % t["none"])
+    load = ('n = 0\ntry:\n    with open("todo.txt") as f:\n        for line in f:\n            n += 1\n'
+            '    print(f"%s")\nexcept FileNotFoundError:\n    print("%s")\n' % (t["loaded"], t["new"]))
+    loop = 'while True:\n    print("%s")\n    menu = input()\n' % t["menu"]
+    if step == 0:
+        return loop + quit_
+    if step == 1:
+        return loop + quit_ + add
+    if step == 2:
+        return loop + quit_ + add + view
+    if step == 3:
+        return loop + quit_ + add + view_try
+    return load + loop + quit_ + add + view_try
+
+
+def _swap(code, old, new):
+    assert old in code, (old, code)
+    return code.replace(old, new, 1)
+
+
+def p4_wrong(lang):
+    t = P4_TXT[lang]
+    s = [p4(lang, k) for k in range(5)]
+    return {
+        # 1단계: break 없음(끝나지 않아 입력이 모자람), input이 반복 밖(끝없이 메뉴 출력), 글자 "3" 대신 수 3과 비교,
+        #        메뉴를 반복 밖에서 한 번만 출력, 고른 것과 상관없이 바로 break
+        ("P4", 0): [_swap(s[0], "        break\n", ""),
+                    _swap(_swap(s[0], "    menu = input()\n", ""), "while True:\n", "menu = input()\nwhile True:\n"),
+                    _swap(s[0], 'menu == "3"', "menu == 3"),
+                    _swap(_swap(s[0], '    print("%s")\n' % t["menu"], ""), "while True:\n",
+                          'print("%s")\nwhile True:\n' % t["menu"]),
+                    _swap(s[0], '    if menu == "3":\n        print("%s")\n        break\n' % t["bye"],
+                          '    print("%s")\n    break\n' % t["bye"])],
+        # 2단계: 확인 글에 item 대신 menu, 할 일을 메뉴와 함께 반복 맨 위에서 받음, write를 빠뜨림(require)
+        ("P4", 1): [_swap(s[1], '{item}")', '{menu}")'),
+                    _swap(_swap(s[1], "        item = input()\n", ""), "    menu = input()\n",
+                          "    menu = input()\n    item = input()\n"),
+                    _swap(s[1], '            f.write(item + "\\n")\n', '            print(item)\n')],
+        # 3단계: 추가를 "w"로 열어 앞 할 일이 지워짐, strip 없이 출력(빈 줄), 줄바꿈 없이 써서 할 일이 붙음,
+        #        read()를 그대로 출력(「- 」 없음), 파일 대신 방금 받은 item만 보여 줌
+        ("P4", 2): [_swap(s[2], '"todo.txt", "a"', '"todo.txt", "w"'),
+                    _swap(s[2], 'print("-", line.strip())', 'print("-", line)'),
+                    _swap(s[2], 'f.write(item + "\\n")', "f.write(item)"),
+                    _swap(s[2], '            for line in f:\n                print("-", line.strip())\n',
+                          '            print(f.read())\n'),
+                    _swap(s[2], '        with open("todo.txt") as f:\n            for line in f:\n'
+                          '                print("-", line.strip())\n', '        print("-", item)\n')],
+        # 4단계: try가 반복 전체를 감쌈(안내 뒤 프로그램이 끝남), 다른 오류를 잡음, try가 open을 안 감쌈
+        ("P4", 3): [p4_try_outside(lang),
+                    _swap(s[3], "except FileNotFoundError", "except ValueError"),
+                    _swap(s[3], '        try:\n            with open("todo.txt") as f:\n'
+                          '                for line in f:\n                    print("-", line.strip())\n'
+                          '        except FileNotFoundError:\n            print("%s")\n' % t["none"],
+                          '        with open("todo.txt") as f:\n            try:\n'
+                          '                for line in f:\n                    print("-", line.strip())\n'
+                          '            except FileNotFoundError:\n                print("%s")\n' % t["none"])],
+        # 5단계: try 없이 엶(파일이 없으면 오류), n = 0을 반복 안에 둠(늘 1개), 글자 수를 셈,
+        #        개수 출력을 try 밖에 둠(파일이 없을 때 두 줄), 줄마다 개수를 출력
+        ("P4", 4): [s[4].replace('try:\n    with open("todo.txt") as f:\n        for line in f:\n            n += 1\n'
+                                 '    print(f"%s")\nexcept FileNotFoundError:\n    print("%s")\n'
+                                 % (t["loaded"], t["new"]),
+                                 'with open("todo.txt") as f:\n    for line in f:\n        n += 1\n'
+                                 'print(f"%s")\n' % t["loaded"], 1),
+                    _swap(s[4], "        for line in f:\n            n += 1\n",
+                          "        for line in f:\n            n = 0\n            n += 1\n"),
+                    _swap(s[4], "        for line in f:\n            n += 1\n", "        n = len(f.read())\n"),
+                    _swap(_swap(s[4], '    print(f"%s")\n' % t["loaded"], ""), 'except FileNotFoundError:\n    print("%s")\n'
+                          % t["new"], 'except FileNotFoundError:\n    print("%s")\nprint(f"%s")\n' % (t["new"], t["loaded"])),
+                    _swap(_swap(s[4], '    print(f"%s")\n' % t["loaded"], ""), "            n += 1\n",
+                          '            n += 1\n            print(f"%s")\n' % t["loaded"])],
+    }
+
+
+def p4_try_outside(lang):
+    """try가 while 전체를 감싼 4단계 오답(파일이 없으면 안내 한 줄 뒤 프로그램이 끝남)"""
+    t = P4_TXT[lang]
+    inner = p4(lang, 2)
+    ind = "".join("    " + line + "\n" if line else "\n" for line in inner.rstrip("\n").split("\n"))
+    return "try:\n" + ind + 'except FileNotFoundError:\n    print("%s")\n' % t["none"]
+
+
+P5_TXT = {
+    "ko": {"count": "도시 {len(data)}곳의 날씨가 있어요", "ask": "어느 도시를 볼까요?",
+           "sky": "하늘 ", "temp": "기온 ", "rain": "강수 ", "deg": "도", "none": "그 도시는 날씨 정보가 없어요",
+           "city": "서울"},
+    "en": {"count": "Cities in the file: {len(data)}", "ask": "Which city?",
+           "sky": "Sky  ", "temp": "Temp ", "rain": "Rain ", "deg": "°C", "none": "No weather for that city",
+           "city": "Seoul"},
+}
+
+
+def p5(lang, step):
+    """P5 k단계(0부터) 정답"""
+    t = P5_TXT[lang]
+    head = ('import json\n\nwith open("weather.json") as f:\n    data = json.load(f)\nprint(f"%s")\n' % t["count"])
+    lst = 'for city in data:\n    print("-", city)\n'
+    ask = 'print("%s")\ncity = input()\n' % t["ask"]
+    plain = ('info = data[city]\nprint(f"%s{info[\'sky\']}")\nprint(f"%s{info[\'temp\']}%s")\n'
+             % (t["sky"].strip() + ": ", t["temp"].strip() + ": ", t["deg"]))
+    card = ('print(f"{city:=^14}")\nprint(f"%s{info[\'sky\']:>6}")\nprint(f"%s{info[\'temp\']:>6}%s")\n'
+            'print(f"%s{info[\'rain\']:>6}%%")\nprint("=" * 14)\n' % (t["sky"], t["temp"], t["deg"], t["rain"]))
+    if step == 0:
+        return head
+    if step == 1:
+        return head + lst
+    if step == 2:
+        return head + lst + ask + plain
+    if step == 3:
+        return head + lst + ask + "info = data[city]\n" + card
+    ind = "".join("    " + line + "\n" for line in card.rstrip("\n").split("\n"))
+    return (head + lst + ask + "if city in data:\n    info = data[city]\n" + ind
+            + 'else:\n    print("%s")\n' % t["none"])
+
+
+def p5_wrong(lang):
+    t = P5_TXT[lang]
+    s = [p5(lang, k) for k in range(5)]
+    n = t["count"].replace("{len(data)}", "3")
+    return {
+        # 1단계: loads에 파일을 줌(TypeError), load에 파일 이름을 줌, 글자 수를 셈, 개수를 3으로 적음(require)
+        ("P5", 0): [_swap(s[0], "json.load(f)", "json.loads(f)"),
+                    _swap(s[0], "json.load(f)", 'json.load("weather.json")'),
+                    _swap(s[0], "json.load(f)", "f.read()"),
+                    'import json\n\nprint(f"%s")\n' % n],
+        # 2단계: 사전을 통째로 출력, 값(날씨)을 돎, 이름 대신 사전을 출력
+        ("P5", 1): [_swap(s[1], 'for city in data:\n    print("-", city)\n', "print(data)\n"),
+                    _swap(s[1], "for city in data:", "for city in data.values():"),
+                    _swap(s[1], 'print("-", city)', 'print("-", data)')],
+        # 3단계: 도시를 정해 둠, 사전에서 바로 sky를 찾음(KeyError), 기온 단위를 빠뜨림
+        ("P5", 2): [_swap(s[2], "info = data[city]", 'info = data["%s"]' % t["city"]),
+                    _swap(s[2], "info = data[city]", "info = data"),
+                    _swap(s[2], "{info['temp']}%s\")" % t["deg"], "{info['temp']}\")")],
+        # 4단계: 왼쪽 정렬, 제목에 = 채움 없음, 칸 수가 다름, 아래 줄 없음
+        ("P5", 3): [s[3].replace(":>6}", ":<6}"),
+                    _swap(s[3], "{city:=^14}", "{city:^14}"),
+                    s[3].replace(":>6}", ":>5}"),
+                    _swap(s[3], 'print("=" * 14)\n', "")],
+        # 5단계: if 없이 바로 찾음(없는 도시면 KeyError), 값에서 찾음(늘 「없어요」), 한 도시만 확인
+        ("P5", 4): [s[3],
+                    _swap(s[4], "if city in data:", "if city in data.values():"),
+                    _swap(s[4], "if city in data:", 'if city == "%s":' % t["city"])],
+    }
+
+
+for _lang in ("ko", "en"):
+    for _key, _codes in list(p4_wrong(_lang).items()) + list(p5_wrong(_lang).items()):
+        WRONG.setdefault(_key, {})[_lang] = _codes
+
+
 def node_data():
     p = subprocess.run(["node", HELPER], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=60)
     if p.returncode != 0:
@@ -341,6 +519,9 @@ def grammar_problems(code, need):
     for ch, names in LESSON_CALLS_BY_CH.items():
         if need >= ch:
             calls = calls | names
+    for ch, names in LESSON_METHODS_BY_CH.items():
+        if need >= ch:
+            methods = methods | names
     tree = ast.parse(code)
     defined = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
     tool_imports = {id(n) for n in ast.walk(tree)
@@ -397,6 +578,23 @@ def widened(code):
     return out
 
 
+def uses_intro_methods(code):
+    """새 도구 카드로 다시 소개할 메서드(TOOL_INTRO_METHODS)를 부르는 이름 집합(json.load 등)"""
+    return {n.func.attr for n in ast.walk(ast.parse(code)) if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute) and n.func.attr in TOOL_INTRO_METHODS}
+
+
+def intro_problems(p):
+    """⑦ 심화 레슨에서만 배운 메서드(json.load)를 처음 쓰는 단계에 새 도구 카드(tool)가 있음"""
+    bad, seen = [], set()
+    for k, s in enumerate(p["steps"]):
+        new = uses_intro_methods(s["solution"]) - seen
+        if new and "tool" not in s:
+            bad.append("%d단계: %s를 처음 쓰는데 새 도구 카드(tool)가 없음" % (k + 1, sorted(new)))
+        seen |= new
+    return bad
+
+
 def uses_random(code):
     """random.randint·random.choice를 부르는 이름 집합"""
     return {n.func.attr for n in ast.walk(ast.parse(code)) if isinstance(n, ast.Call) and _is_tool_attr(n.func)}
@@ -422,6 +620,14 @@ def self_test():
         (6, 'print(list("ab"))\n', False),
         (5, 'n = 0\nwhile True:\n    n += 1\n    if n > 2:\n        break\n', True),
         (5, 'd = {"a": 1}\n', False),
+        # 작업 5: write는 11-3, json.load는 14-A2(새 도구 카드로 다시 소개)
+        (11, 'with open("t.txt", "a") as f:\n    f.write("a\\n")\n', True),
+        (10, 'with open("t.txt", "a") as f:\n    f.write("a\\n")\n', False),
+        (11, 'try:\n    f = open("t.txt")\nexcept FileNotFoundError:\n    print("x")\n', True),
+        (14, 'import json\nwith open("w.json") as f:\n    d = json.load(f)\nprint(f"{d:>5}")\n', True),
+        (13, 'import json\nwith open("w.json") as f:\n    d = json.load(f)\n', False),
+        (14, 'import json\nwith open("w.json", "w") as f:\n    json.dump({}, f)\n', False),
+        (11, 'with open("t.txt") as f:\n    n = len(f.readlines())\n', True),
     ]
     bad = 0
     for ch, code, want in cases:
@@ -594,7 +800,18 @@ def rand_self_test():
         if (not rand_problems(p)) != want:
             bad += 1
             print("FAIL rand 검사기 자체 시험 %r: %s" % (p, rand_problems(p)))
-    print("%s rand 검사기 자체 시험 %d개" % ("ok  " if not bad else "FAIL", len(cases)))
+    # ⑦ json.load(심화 14-A2)를 처음 쓰는 단계에 새 도구 카드(작업 5)
+    L = 'import json\nwith open("w.json") as f:\n    d = json.load(f)\n'
+    icases = [
+        ({"steps": [{"solution": L, "tool": {}}, {"solution": L}]}, True),
+        ({"steps": [{"solution": "print(1)"}, {"solution": L}]}, False),
+        ({"steps": [{"solution": 'import json\nd = json.loads("{}")\n'}]}, True),
+    ]
+    for p, want in icases:
+        if (not intro_problems(p)) != want:
+            bad += 1
+            print("FAIL 새 도구 카드(json.load) 자체 시험 %r: %s" % (p, intro_problems(p)))
+    print("%s rand 검사기 자체 시험 %d개" % ("ok  " if not bad else "FAIL", len(cases) + len(icases)))
     return bad
 
 
@@ -659,7 +876,7 @@ def main():
 
         for lang, q in (("ko", p), ("en", e)):
             steps = q["steps"]
-            bad = rand_problems(q)
+            bad = rand_problems(q) + intro_problems(q)
             check(not bad, "⑥⑦ %s %s 무작위 시험 값·새 도구 카드" % (pid, lang), "; ".join(bad))
             for k, s in enumerate(steps):
                 tag = "%s %s %d단계" % (pid, lang, k + 1)

@@ -62,11 +62,15 @@ test("console: 같은 판은 같은 씨앗", async () => {
   const s = createSession({ code: "X", run, seed: 42, files: { "a.txt": "x" } });
   await s.start(); await s.answer("가위"); await s.answer("바위");
   for (const c of run.calls) { assert.equal(c.opts.seed, 42); assert.deepEqual(c.opts.files, { "a.txt": "x" }); }
+  // 씨앗을 안 주면 기본 씨앗이 start·answer 내내 같고, restart 뒤 답은 새 씨앗
   const r2 = fakeRun(rps);
   const t = createSession({ code: "X", run: r2 });
-  const u = createSession({ code: "X", run: r2 });
-  await t.start(); await u.start();
+  await t.start(); await t.answer("가위");
   assert.equal(Number.isInteger(r2.calls[0].opts.seed), true);
+  assert.equal(r2.calls[1].opts.seed, r2.calls[0].opts.seed);
+  await t.restart(); await t.answer("바위");
+  assert.notEqual(r2.calls[2].opts.seed, r2.calls[0].opts.seed);
+  assert.equal(r2.calls[3].opts.seed, r2.calls[2].opts.seed);
 });
 
 test("console: 다시 하기는 새 씨앗·입력 비움", async () => {
@@ -84,7 +88,7 @@ test("console: 다시 하기는 새 씨앗·입력 비움", async () => {
 });
 
 test("console: 앞부분이 다르면 전체를 바꿈", async () => {
-  const run = fakeRun((stdin, o, n) => stdin.length === 0 ? ask("시각 10:01\n", "답: ") : end("시각 10:02\n끝\n"));
+  const run = fakeRun((stdin) => stdin.length === 0 ? ask("시각 10:01\n", "답: ") : end("시각 10:02\n끝\n"));
   const s = createSession({ code: "X", run });
   await s.start();
   const f = await s.answer("네");
@@ -152,4 +156,93 @@ test("console: 끝난 뒤 답은 다시 돌리지 않음", async () => {
   assert.equal(f.done, true);
   assert.equal(f.appended, "");
   assert.deepEqual(s.inputs, []);
+});
+
+// 손으로 끝내는 가짜 run
+function deferredRun() {
+  const calls = [];
+  const run = (code, stdin, opts) => new Promise((resolve) => { calls.push({ stdin: [...stdin], opts, resolve }); });
+  run.calls = calls;
+  return run;
+}
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+test("console: 같은 답 더블 탭은 입력 하나, 실행 하나", async () => {
+  const run = deferredRun();
+  const s = createSession({ code: "X", run });
+  const f0 = s.start(); run.calls[0].resolve(ask("", "?")); await f0;
+  const both = Promise.all([s.answer("a"), s.answer("a")]);
+  await tick();
+  assert.equal(run.calls.length, 2);
+  run.calls[1].resolve(ask("줄\n", "?"));
+  const [x, y] = await both;
+  assert.equal(x, y);
+  assert.equal(run.calls.length, 2);
+  assert.deepEqual(s.inputs, ["a"]);
+});
+
+for (const order of ["옛것 먼저", "새것 먼저"]) {
+  test(`console: restart가 답보다 먼저 끝나도 새 판이 이김 (${order})`, async () => {
+    const run = deferredRun();
+    const s = createSession({ code: "X", run, seed: 1 });
+    const f0 = s.start(); run.calls[0].resolve(ask("옛\n", "?")); await f0;
+    const old = s.answer("a");
+    await tick();
+    const fresh = s.restart();
+    await tick();
+    assert.equal(run.calls.length, 3);
+    const doOld = () => run.calls[1].resolve(ask("옛\n답\n", "?"));
+    const doNew = () => run.calls[2].resolve(ask("새\n", "새?"));
+    if (order === "옛것 먼저") { doOld(); doNew(); } else { doNew(); doOld(); }
+    const [fo, fn] = [await old, await fresh];
+    assert.equal(fo.stale, true);
+    assert.equal(fn.stale, undefined);
+    assert.equal(fn.output, "새\n");
+    assert.equal(fn.appended, "새\n");
+    assert.deepEqual(s.inputs, []);
+    // 이어서 답하면 새 판에 이어짐(첫 줄 안 잃음)
+    const next = s.answer("b");
+    await tick();
+    assert.deepEqual(run.calls[3].stdin, ["b"]);
+    run.calls[3].resolve(ask("새\n둘\n", "?"));
+    const fb = await next;
+    assert.equal(fb.appended, "둘\n");
+  });
+}
+
+test("console: start가 끝나기 전의 answer는 시작을 또 만들지 않음", async () => {
+  const run = deferredRun();
+  const s = createSession({ code: "X", run });
+  const st = s.start();
+  const an = s.answer("a");
+  await tick();
+  assert.equal(run.calls.length, 1);
+  assert.deepEqual(run.calls[0].stdin, []);
+  run.calls[0].resolve(ask("시작\n", "?"));
+  await st;
+  await tick();
+  assert.equal(run.calls.length, 2);
+  assert.deepEqual(run.calls[1].stdin, ["a"]);
+  run.calls[1].resolve(end("시작\n끝\n"));
+  assert.equal((await an).done, true);
+});
+
+test("console: 실행이 거절되면 입력을 확정하지 않음", async () => {
+  let fail = false;
+  const run = async (c, stdin) => { if (fail) throw new Error("boom"); return ask("", "?"); };
+  const s = createSession({ code: "X", run });
+  await s.start();
+  fail = true;
+  await assert.rejects(s.answer("a"));
+  assert.deepEqual(s.inputs, []);
+  fail = false;
+  await s.answer("b");
+  assert.deepEqual(s.inputs, ["b"]);
+});
+
+test("console: 메서드를 떼어 써도 됨", async () => {
+  const run = fakeRun(rps);
+  const { start, answer, restart } = createSession({ code: "X", run });
+  await start(); await answer("가위"); await restart();
+  assert.equal(run.calls.length, 3);
 });

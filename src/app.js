@@ -46,7 +46,7 @@ import * as workshop from "./ui/workshop.js";
 import * as project from "./ui/project.js";
 import * as play from "./ui/console.js";
 
-export const VERSION = "v0.20.3";
+export const VERSION = "v0.21.0";
 const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden, guard, tutorial, workshop, project, play };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----

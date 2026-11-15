@@ -8,6 +8,7 @@
 - data/lessons/chN.js    레슨 표(LESSONS) + 심화 레슨(ADVANCED, v0.7, 없을 수 있음)
 - data/concepts.js       개념 이름
 - data/quests.js         일일 퀘스트
+- data/projects.js       프로젝트 공방(v0.21) 프로젝트 표, src/projects/state.js 보상 XP
 - data/badges.js         배지
 - data/outfits.js        의상(가격·얻는 법)
 - src/ria.js             의상·표정 한국어 이름(그림 시트 설명)
@@ -45,10 +46,16 @@ const garden = await imp("data/garden.js");
 const gnodes = await imp("src/garden/nodes.js");
 const guard = await imp("data/guard.js");
 const GUARD = { xp: guard.GUARD_XP, incidents: guard.INCIDENTS.map((i) => ({ id: i.id, need: i.need, mode: i.mode, tag: i.tag, tier: i.tier || 'basic', concept: i.concept, title: i.title })) };
+const wk = await imp("data/projects.js");
+const wkEn = await imp("data/projects.en.js");
+const wkr = await imp("src/projects/state.js");
+const WORKSHOP = { stepXp: wkr.PROJECT_STEP_XP, doneXp: wkr.PROJECT_DONE_XP,
+  projects: wk.PROJECTS.map((p) => ({ id: p.id, need: p.need, title: p.title, blurb: p.blurb, steps: p.steps.length,
+    stepsEn: (wkEn.PROJECTS.find((q) => q.id === p.id) || { steps: [] }).steps.length })) };
 const GARDEN = { orders: garden.ORDERS.map((o) => ({ id: o.id, need: o.need, title: o.title, xp: o.xp })),
   upgrades: garden.UPGRADES.map((u) => ({ id: u.id, label: u.label || u.id, cost: u.cost })),
   nodes: Object.entries(gnodes.NODES).map(([k, v]) => ({ kind: k, chapter: v.chapter, label: v.label })) };
-console.log(JSON.stringify({ chapters, CONCEPTS, QUESTS, BADGES, OUTFITS, GARDEN, GUARD,
+console.log(JSON.stringify({ chapters, CONCEPTS, QUESTS, BADGES, OUTFITS, GARDEN, GUARD, WORKSHOP,
   outfitKo: ria.OUTFIT_KO, faceKo: ria.FACE_KO, faces: ria.FACE_IDS }));
 """
 
@@ -280,6 +287,27 @@ def build(d):
         w("")
         n_gb = sum(1 for b in d["BADGES"] if b["id"].startswith("guard_"))
         w(f"배지는 모두 {n_badges}개예요(경비실 배지 {n_gb}개 포함).")
+    wk = d.get("WORKSHOP")
+    if wk:
+        w("")
+        w("## 프로젝트 공방 (v0.21)")
+        w("")
+        n_p = len(wk["projects"])
+        n_wb = sum(1 for b in d["BADGES"] if b["id"].startswith("project_"))
+        w(f"배운 파이썬으로 작은 프로그램 {n_p}개를 처음부터 끝까지 직접 만드는 곳이에요. 홈의 「프로젝트 공방」 카드로 들어가요. "
+          "한 프로젝트는 몇 단계로 나뉘고, 단계마다 할 일을 읽고 코드를 이어 쓰면 채점돼요(앞 단계에서 쓴 코드가 다음 단계의 시작 코드). "
+          "레슨에서 안 배운 도구(`import random` 등)는 「새 도구」 카드로 짧게 알려 줘요. 다 만들면 직접 입력하며 완성작을 해 볼 수 있고, 「진열장」에 올라가요.")
+        w("")
+        w("| 프로젝트 | 열리는 장 | 단계 | 한 줄 |")
+        w("|---|---|---|---|")
+        for p in wk["projects"]:
+            w(f"| {p['id']} {cell(p['title'])} | {p['need']}장을 끝내면 | {p['steps']}단계 | {cell(p['blurb'])} |")
+        w("")
+        w(f"보상: 직접 써서 단계를 통과하면 XP {wk['stepXp']}, 프로젝트를 처음 완성하면 XP {wk['doneXp']} 더. "
+          "「정답 보기」를 직접 열거나 「모범 코드에서 이어 하기」를 쓴 단계는 XP가 0이에요(완성 XP는 그대로). "
+          "세 번 틀려 정답이 저절로 열려도 XP는 그대로예요. 같은 단계 XP는 한 번만 줘요. "
+          f"배지 {n_wb}개: 「첫 작품」(하나 완성) · 「공방 장인」(전부 완성). 배지는 모두 {n_badges}개예요. "
+          "프로젝트 문구는 한국어·영어 모두 있고, 진행은 시작한 언어에 묶여요.")
     w("")
     for ch in d["chapters"]:
         c = ch["chapter"]

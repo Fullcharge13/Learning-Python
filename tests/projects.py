@@ -406,7 +406,9 @@ def p4_wrong(lang):
                     _swap(_swap(s[4], '    print(f"%s")\n' % t["loaded"], ""), 'except FileNotFoundError:\n    print("%s")\n'
                           % t["new"], 'except FileNotFoundError:\n    print("%s")\nprint(f"%s")\n' % (t["new"], t["loaded"])),
                     _swap(_swap(s[4], '    print(f"%s")\n' % t["loaded"], ""), "            n += 1\n",
-                          '            n += 1\n            print(f"%s")\n' % t["loaded"])],
+                          '            n += 1\n            print(f"%s")\n' % t["loaded"]),
+                    # 2단계 버그가 끝까지 남은 판: 줄바꿈 없이 씀(검토 M1 — 5단계 시험 3이 둘을 더함)
+                    _swap(s[4], 'f.write(item + "\\n")', "f.write(item)")],
     }
 
 
@@ -421,10 +423,10 @@ def p4_try_outside(lang):
 P5_TXT = {
     "ko": {"count": "도시 {len(data)}곳의 날씨가 있어요", "ask": "어느 도시를 볼까요?",
            "sky": "하늘 ", "temp": "기온 ", "rain": "강수 ", "deg": "도", "none": "그 도시는 날씨 정보가 없어요",
-           "city": "서울"},
+           "city": "서울", "tw": 12, "sw": 4},
     "en": {"count": "Cities in the file: {len(data)}", "ask": "Which city?",
-           "sky": "Sky  ", "temp": "Temp ", "rain": "Rain ", "deg": "°C", "none": "No weather for that city",
-           "city": "Seoul"},
+           "sky": "Sky  ", "temp": "Temp ", "rain": "Rain ", "deg": "C", "none": "No weather for that city",
+           "city": "Seoul", "tw": 14, "sw": 6},
 }
 
 
@@ -436,8 +438,10 @@ def p5(lang, step):
     ask = 'print("%s")\ncity = input()\n' % t["ask"]
     plain = ('info = data[city]\nprint(f"%s{info[\'sky\']}")\nprint(f"%s{info[\'temp\']}%s")\n'
              % (t["sky"].strip() + ": ", t["temp"].strip() + ": ", t["deg"]))
-    card = ('print(f"{city:=^14}")\nprint(f"%s{info[\'sky\']:>6}")\nprint(f"%s{info[\'temp\']:>6}%s")\n'
-            'print(f"%s{info[\'rain\']:>6}%%")\nprint("=" * 14)\n' % (t["sky"], t["temp"], t["deg"], t["rain"]))
+    # 검토 M5: 한글은 화면에서 두 칸이라 ko는 제목 :=^12(두 글자 도시 → 14칸), 하늘 :>4(두 글자 → 6칸)
+    card = ('print(f"{city:=^%d}")\nprint(f"%s{info[\'sky\']:>%d}")\nprint(f"%s{info[\'temp\']:>6}%s")\n'
+            'print(f"%s{info[\'rain\']:>6}%%")\nprint("=" * 14)\n'
+            % (t["tw"], t["sky"], t["sw"], t["temp"], t["deg"], t["rain"]))
     if step == 0:
         return head
     if step == 1:
@@ -471,7 +475,10 @@ def p5_wrong(lang):
                     _swap(s[2], "{info['temp']}%s\")" % t["deg"], "{info['temp']}\")")],
         # 4단계: 왼쪽 정렬, 제목에 = 채움 없음, 칸 수가 다름, 아래 줄 없음
         ("P5", 3): [s[3].replace(":>6}", ":<6}"),
-                    _swap(s[3], "{city:=^14}", "{city:^14}"),
+                    _swap(s[3], "{city:=^%d}" % t["tw"], "{city:^%d}" % t["tw"]),
+                    # 화면 너비를 생각하지 않은 판(ko: 글자 수 14·6 그대로) / 반대로 en에 ko 너비
+                    _swap(_swap(s[3], "{city:=^%d}" % t["tw"], "{city:=^%d}" % (26 - t["tw"])),
+                          "{info['sky']:>%d}" % t["sw"], "{info['sky']:>%d}" % (10 - t["sw"])),
                     s[3].replace(":>6}", ":>5}"),
                     _swap(s[3], 'print("=" * 14)\n', "")],
         # 5단계: if 없이 바로 찾음(없는 도시면 KeyError), 값에서 찾음(늘 「없어요」), 한 도시만 확인
@@ -484,6 +491,23 @@ def p5_wrong(lang):
 for _lang in ("ko", "en"):
     for _key, _codes in list(p4_wrong(_lang).items()) + list(p5_wrong(_lang).items()):
         WRONG.setdefault(_key, {})[_lang] = _codes
+
+
+
+# ⑬ 맞게 받아야 하는 다른 정답(작업 5 검토 M2·M3): 단계 시험을 모두 통과해야 함
+def p_accept(lang):
+    a4 = p4(lang, 4)
+    a5 = p5(lang, 0)
+    return {
+        ("P4", 4): [_swap(a4, "n += 1", "n = n + 1")],          # 11-2 레슨의 줄 세기 모양
+        ("P5", 0): [_swap(a5, "json.load(f)", "json.loads(f.read())")],  # 새 도구 카드가 같다고 한 것
+    }
+
+
+ACCEPT = {}
+for _lang in ("ko", "en"):
+    for _key, _codes in p_accept(_lang).items():
+        ACCEPT.setdefault(_key, {})[_lang] = _codes
 
 
 def node_data():
@@ -917,6 +941,10 @@ def main():
                 for j, code in enumerate(wrong):
                     failed = any(test_fails(code, s, t, lang) for t in s["tests"])
                     check(failed, "⑧ %s 오답 %d은 시험에서 실패" % (tag, j + 1))
+                # ⑬ 다른 정답은 통과
+                for j, code in enumerate(ACCEPT.get((pid, k), {}).get(lang, [])):
+                    why = [w for w in (test_fails(code, s, t, lang) for t in s["tests"]) if w]
+                    check(not why, "⑬ %s 다른 정답 %d은 시험 통과" % (tag, j + 1), "; ".join(why[:2]))
                 # ⑧ randint 범위를 넓히거나 좁힌 정답은 모두 실패(검토 I1: 값만 주는 rand는 넓은 범위를 못 거름)
                 for code in widened(s["solution"]):
                     failed = any(test_fails(code, s, t, lang) for t in s["tests"])

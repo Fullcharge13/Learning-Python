@@ -369,8 +369,8 @@ export const PROJECTS = [
         ],
         require: ["For", "With", "Method:strip"],
         hints: [
-          "읽을 때는 모드를 비워 둬요. for line in f:는 파일을 한 줄씩 꺼내 줘요(11장).",
-          "꺼낸 줄 끝에는 \\n이 붙어 있어요. strip()으로 떼지 않으면 할 일 사이에 빈 줄이 생겨요.",
+          "읽을 때는 모드를 비워 둬요. for line in f:는 파일을 한 줄씩 꺼내 줘요(11장). 줄 끝의 \\n은 strip()으로 떼요.",
+          "앞에 적은 할 일이 사라지면 1번 갈래가 \"a\"로 여는지, 「- 빨래장보기」처럼 붙어 나오면 item 뒤에 \"\\n\"을 붙였는지 봐요. 2단계 코드가 범인일 수 있어요.",
           "elif menu == \"2\":\n    with open(___) as f:\n        for line in ___:\n            print(\"-\", ___.strip())",
         ],
         solution: "while True:\n    print(\"1 추가 · 2 보기 · 3 끝\")\n    menu = input()\n    if menu == \"3\":\n        print(\"안녕히 가세요\")\n        break\n    elif menu == \"1\":\n        item = input()\n        with open(\"todo.txt\", \"a\") as f:\n            f.write(item + \"\\n\")\n        print(f\"추가했어요: {item}\")\n    elif menu == \"2\":\n        with open(\"todo.txt\") as f:\n            for line in f:\n                print(\"-\", line.strip())\n",
@@ -399,11 +399,11 @@ export const PROJECTS = [
         tests: [
           { stdin: "2\n3", expect: "할 일 2개를 불러왔어요\n1 추가 · 2 보기 · 3 끝\n- 빨래\n- 장보기\n1 추가 · 2 보기 · 3 끝\n안녕히 가세요", public: true, files: { "todo.txt": "빨래\n장보기\n" } },
           { stdin: "3", expect: "새 목록을 시작해요\n1 추가 · 2 보기 · 3 끝\n안녕히 가세요", public: true },
-          { stdin: "1\n빨래\n2\n3", expect: "할 일 1개를 불러왔어요\n1 추가 · 2 보기 · 3 끝\n추가했어요: 빨래\n1 추가 · 2 보기 · 3 끝\n- 물 마시기\n- 빨래\n1 추가 · 2 보기 · 3 끝\n안녕히 가세요", public: false, files: { "todo.txt": "물 마시기\n" } },
+          { stdin: "1\n빨래\n1\n장보기\n2\n3", expect: "할 일 1개를 불러왔어요\n1 추가 · 2 보기 · 3 끝\n추가했어요: 빨래\n1 추가 · 2 보기 · 3 끝\n추가했어요: 장보기\n1 추가 · 2 보기 · 3 끝\n- 물 마시기\n- 빨래\n- 장보기\n1 추가 · 2 보기 · 3 끝\n안녕히 가세요", public: false, files: { "todo.txt": "물 마시기\n" } },
           { stdin: "2\n1\n빨래\n2\n3", expect: "새 목록을 시작해요\n1 추가 · 2 보기 · 3 끝\n아직 할 일이 없어요\n1 추가 · 2 보기 · 3 끝\n추가했어요: 빨래\n1 추가 · 2 보기 · 3 끝\n- 빨래\n1 추가 · 2 보기 · 3 끝\n안녕히 가세요", public: false },
           { stdin: "3", expect: "할 일 0개를 불러왔어요\n1 추가 · 2 보기 · 3 끝\n안녕히 가세요", public: false, files: { "todo.txt": "" } },
         ],
-        require: ["Try", "AugAssign"],
+        require: ["Try"],
         hints: [
           "11장에서 줄 수를 셀 때처럼, 한 줄 꺼낼 때마다 n을 1씩 늘려요. n = 0은 반복 밖에서 한 번만 써요.",
           "개수 출력은 try 안, with 블록 아래에 둬요. try 밖에 두면 파일이 없을 때도 「0개를 불러왔어요」가 같이 나와요.",
@@ -420,7 +420,7 @@ export const PROJECTS = [
     blurb: "JSON 날씨 자료로 도시 카드 뽑기",
     intro: "이번엔 날씨 카드를 만들어요! weather.json 파일에 도시마다 하늘·기온·강수 확률이 들어 있어요(연습용으로 지어낸 자료예요). 14장의 JSON으로 읽고, 고른 도시를 1장의 정렬 서식으로 카드처럼 보여 줘요.",
     finale: "완성이에요! 도시 이름을 넣어 카드를 뽑아 봐요. weather.json에 도시를 더하면 목록과 카드도 저절로 늘어나요.",
-    play: { prompt: "날씨를 볼 도시 이름을 입력해요", files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"비\", \"temp\": 19, \"rain\": 90}\n}\n" } },
+    play: { prompt: "날씨를 볼 도시 이름을 입력해요", files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"폭우\", \"temp\": 19, \"rain\": 90}\n}\n" } },
     steps: [
       {
         goal: "weather.json 읽기",
@@ -432,11 +432,11 @@ export const PROJECTS = [
         task: "시작 코드 아래에서 with open(\"weather.json\") as f:로 파일을 열고, 그 안에서 json.load(f)로 읽은 사전을 data에 담아요. with 밖에서 f-문자열과 len(data)로 「도시 3곳의 날씨가 있어요」를 출력해요.",
         starter: "import json\n\n",
         tests: [
-          { stdin: "", expect: "도시 3곳의 날씨가 있어요", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"비\", \"temp\": 19, \"rain\": 90}\n}\n" } },
-          { stdin: "", expect: "도시 2곳의 날씨가 있어요", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"눈\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
-          { stdin: "", expect: "도시 5곳의 날씨가 있어요", public: false, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"비\", \"temp\": 19, \"rain\": 90},\n  \"대전\": {\"sky\": \"눈\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
+          { stdin: "", expect: "도시 3곳의 날씨가 있어요", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"폭우\", \"temp\": 19, \"rain\": 90}\n}\n" } },
+          { stdin: "", expect: "도시 2곳의 날씨가 있어요", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"폭설\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
+          { stdin: "", expect: "도시 5곳의 날씨가 있어요", public: false, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"폭우\", \"temp\": 19, \"rain\": 90},\n  \"대전\": {\"sky\": \"폭설\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
         ],
-        require: ["With", "Method:load", "Call:len"],
+        require: ["With", "Call:len"],
         hints: [
           "json.load에는 파일 이름이 아니라 with로 연 파일 f를 넘겨요.",
           "data는 도시 이름이 키인 사전이에요. 3을 직접 쓰지 말고 len(data)로 세요. 시험마다 도시 수가 달라요.",
@@ -449,8 +449,8 @@ export const PROJECTS = [
         goal: "도시 목록 보여 주기",
         task: "맨 아래에서 for city in data:로 사전의 키(도시 이름)를 하나씩 꺼내 print(\"-\", city)로 「- 서울」처럼 출력해요.",
         tests: [
-          { stdin: "", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"비\", \"temp\": 19, \"rain\": 90}\n}\n" } },
-          { stdin: "", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"눈\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
+          { stdin: "", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"폭우\", \"temp\": 19, \"rain\": 90}\n}\n" } },
+          { stdin: "", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"폭설\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
         ],
         require: ["For"],
         hints: [
@@ -465,9 +465,9 @@ export const PROJECTS = [
         goal: "도시 고르기",
         task: "맨 아래에서 「어느 도시를 볼까요?」를 출력하고 city = input()으로 도시 이름을 받아요. info = data[city]로 그 도시의 날씨 사전을 꺼내 「하늘: 흐림」과 「기온: 24도」를 두 줄로 출력해요. f-문자열 안에서는 info['sky']처럼 작은따옴표를 써요.",
         tests: [
-          { stdin: "부산", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n하늘: 흐림\n기온: 24도", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"비\", \"temp\": 19, \"rain\": 90}\n}\n" } },
-          { stdin: "서울", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n하늘: 맑음\n기온: 21도", public: false, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"비\", \"temp\": 19, \"rain\": 90}\n}\n" } },
-          { stdin: "대전", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n하늘: 눈\n기온: -2도", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"눈\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
+          { stdin: "부산", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n하늘: 흐림\n기온: 24도", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"폭우\", \"temp\": 19, \"rain\": 90}\n}\n" } },
+          { stdin: "서울", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n하늘: 맑음\n기온: 21도", public: false, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"폭우\", \"temp\": 19, \"rain\": 90}\n}\n" } },
+          { stdin: "대전", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n하늘: 폭설\n기온: -2도", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"폭설\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
         ],
         require: ["Call:input", "Subscript"],
         hints: [
@@ -480,29 +480,29 @@ export const PROJECTS = [
       },
       {
         goal: "카드 모양으로 꾸미기",
-        task: "info = data[city] 아래의 두 print를 카드 다섯 줄로 바꿔요. 첫 줄은 {city:=^14}로 도시 이름을 = 사이 가운데에 둬요. 하늘·기온·강수 줄은 「하늘 」 뒤에 {info['sky']:>6}처럼 값을 오른쪽 6칸에 맞춰요. 기온 뒤엔 「도」, 강수(info['rain']) 뒤엔 「%」를 붙이고, 마지막 줄은 \"=\" * 14예요.",
+        task: "info = data[city] 아래의 두 print를 카드 다섯 줄로 바꿔요. 첫 줄은 {city:=^12}로 도시 이름을 = 사이 가운데에 둬요. 하늘 줄은 「하늘 」 뒤에 {info['sky']:>4}, 기온·강수 줄은 {info['temp']:>6}처럼 값을 오른쪽에 맞춰요. 기온 뒤엔 「도」, 강수(info['rain']) 뒤엔 「%」를 붙이고, 마지막 줄은 \"=\" * 14예요. 한글은 화면에서 한 글자가 두 칸이라 칸 수가 서로 달라요.",
         tests: [
-          { stdin: "부산", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n======부산======\n하늘     흐림\n기온     24도\n강수     60%\n==============", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"비\", \"temp\": 19, \"rain\": 90}\n}\n" } },
-          { stdin: "대전", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n======대전======\n하늘      눈\n기온     -2도\n강수     80%\n==============", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"눈\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
-          { stdin: "광주", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n======광주======\n하늘     맑음\n기온      5도\n강수      0%\n==============", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"눈\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
+          { stdin: "부산", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n=====부산=====\n하늘   흐림\n기온     24도\n강수     60%\n==============", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"폭우\", \"temp\": 19, \"rain\": 90}\n}\n" } },
+          { stdin: "대전", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n=====대전=====\n하늘   폭설\n기온     -2도\n강수     80%\n==============", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"폭설\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
+          { stdin: "광주", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n=====광주=====\n하늘   맑음\n기온      5도\n강수      0%\n==============", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"폭설\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
         ],
         require: ["FormatSpec"],
         hints: [
-          ":=^14는 14칸 가운데 정렬에 빈칸을 =로 채워요. :>6은 오른쪽 6칸 정렬이에요(1장 서식).",
-          "세 값 모두 :>6으로 맞춰야 숫자 끝이 한 줄로 서요. 「하늘」 뒤 띄어쓰기 한 칸도 잊지 마요.",
+          ":=^12는 12글자 가운데 정렬에 빈칸을 =로 채워요. :>6은 오른쪽 6글자 정렬이에요(1장 서식).",
+          "한글은 화면에서 한 글자가 두 칸이에요. 두 글자 도시를 12글자에 맞추면 화면 14칸, 두 글자 하늘을 :>4에 맞추면 화면 6칸이 되어 숫자의 :>6과 끝이 맞아요.",
           "print(f\"{city:___}\")\nprint(f\"하늘 {info['sky']:___}\")\nprint(f\"기온 {info['temp']:>6}도\")\nprint(f\"강수 {info[___]:>6}%\")\nprint(\"=\" * ___)",
         ],
-        solution: "import json\n\nwith open(\"weather.json\") as f:\n    data = json.load(f)\nprint(f\"도시 {len(data)}곳의 날씨가 있어요\")\nfor city in data:\n    print(\"-\", city)\nprint(\"어느 도시를 볼까요?\")\ncity = input()\ninfo = data[city]\nprint(f\"{city:=^14}\")\nprint(f\"하늘 {info['sky']:>6}\")\nprint(f\"기온 {info['temp']:>6}도\")\nprint(f\"강수 {info['rain']:>6}%\")\nprint(\"=\" * 14)\n",
-        explain: "서식 :>6으로 값을 오른쪽에 맞추니 숫자가 가지런히 섰어요. 도시 이름이 길든 짧든 제목 줄은 늘 14칸이에요.",
+        solution: "import json\n\nwith open(\"weather.json\") as f:\n    data = json.load(f)\nprint(f\"도시 {len(data)}곳의 날씨가 있어요\")\nfor city in data:\n    print(\"-\", city)\nprint(\"어느 도시를 볼까요?\")\ncity = input()\ninfo = data[city]\nprint(f\"{city:=^12}\")\nprint(f\"하늘 {info['sky']:>4}\")\nprint(f\"기온 {info['temp']:>6}도\")\nprint(f\"강수 {info['rain']:>6}%\")\nprint(\"=\" * 14)\n",
+        explain: "값을 오른쪽에 맞추니 하늘·기온·강수의 끝이 한 줄로 섰어요. 한글은 화면에서 두 칸이라 글자 수가 아니라 화면 칸 수로 맞췄어요. 제목 줄(두 글자 도시)과 맨 아래 줄은 둘 다 화면 14칸이에요.",
       },
       {
         goal: "없는 도시를 골랐을 때",
         task: "목록에 없는 도시를 입력하면 data[city]에서 KeyError가 나요. info = data[city]부터 카드 마지막 줄까지를 if city in data: 안으로 넣고(한 단계, 4칸 들여 써요), else:에서 「그 도시는 날씨 정보가 없어요」를 출력해요.",
         tests: [
-          { stdin: "부산", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n======부산======\n하늘     흐림\n기온     24도\n강수     60%\n==============", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"비\", \"temp\": 19, \"rain\": 90}\n}\n" } },
-          { stdin: "인천", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n그 도시는 날씨 정보가 없어요", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"비\", \"temp\": 19, \"rain\": 90}\n}\n" } },
-          { stdin: "서울", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n그 도시는 날씨 정보가 없어요", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"눈\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
-          { stdin: "광주", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n======광주======\n하늘     맑음\n기온      5도\n강수      0%\n==============", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"눈\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
+          { stdin: "부산", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n=====부산=====\n하늘   흐림\n기온     24도\n강수     60%\n==============", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"폭우\", \"temp\": 19, \"rain\": 90}\n}\n" } },
+          { stdin: "인천", expect: "도시 3곳의 날씨가 있어요\n- 서울\n- 부산\n- 제주\n어느 도시를 볼까요?\n그 도시는 날씨 정보가 없어요", public: true, files: { "weather.json": "{\n  \"서울\": {\"sky\": \"맑음\", \"temp\": 21, \"rain\": 10},\n  \"부산\": {\"sky\": \"흐림\", \"temp\": 24, \"rain\": 60},\n  \"제주\": {\"sky\": \"폭우\", \"temp\": 19, \"rain\": 90}\n}\n" } },
+          { stdin: "서울", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n그 도시는 날씨 정보가 없어요", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"폭설\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
+          { stdin: "광주", expect: "도시 2곳의 날씨가 있어요\n- 대전\n- 광주\n어느 도시를 볼까요?\n=====광주=====\n하늘   맑음\n기온      5도\n강수      0%\n==============", public: false, files: { "weather.json": "{\n  \"대전\": {\"sky\": \"폭설\", \"temp\": -2, \"rain\": 80},\n  \"광주\": {\"sky\": \"맑음\", \"temp\": 5, \"rain\": 0}\n}\n" } },
         ],
         require: ["If", "Else", "In"],
         hints: [
@@ -510,8 +510,8 @@ export const PROJECTS = [
           "in data.values()가 아니라 in data예요. 도시 이름은 키에 있어요.",
           "if ___ in data:\n    info = data[city]\n    ...\nelse:\n    print(\"___\")",
         ],
-        solution: "import json\n\nwith open(\"weather.json\") as f:\n    data = json.load(f)\nprint(f\"도시 {len(data)}곳의 날씨가 있어요\")\nfor city in data:\n    print(\"-\", city)\nprint(\"어느 도시를 볼까요?\")\ncity = input()\nif city in data:\n    info = data[city]\n    print(f\"{city:=^14}\")\n    print(f\"하늘 {info['sky']:>6}\")\n    print(f\"기온 {info['temp']:>6}도\")\n    print(f\"강수 {info['rain']:>6}%\")\n    print(\"=\" * 14)\nelse:\n    print(\"그 도시는 날씨 정보가 없어요\")\n",
-        explain: "꺼내기 전에 키가 있는지 먼저 물어 KeyError를 막았어요. try와 except KeyError로 잡아도 돼요. 이제 어떤 이름을 넣어도 프로그램이 멈추지 않아요!",
+        solution: "import json\n\nwith open(\"weather.json\") as f:\n    data = json.load(f)\nprint(f\"도시 {len(data)}곳의 날씨가 있어요\")\nfor city in data:\n    print(\"-\", city)\nprint(\"어느 도시를 볼까요?\")\ncity = input()\nif city in data:\n    info = data[city]\n    print(f\"{city:=^12}\")\n    print(f\"하늘 {info['sky']:>4}\")\n    print(f\"기온 {info['temp']:>6}도\")\n    print(f\"강수 {info['rain']:>6}%\")\n    print(\"=\" * 14)\nelse:\n    print(\"그 도시는 날씨 정보가 없어요\")\n",
+        explain: "꺼내기 전에 키가 있는지 먼저 물어 KeyError를 막았어요. 다음엔 try와 except KeyError로 막는 방법도 써 볼 수 있어요(이 단계는 if로 연습해요). 이제 어떤 이름을 넣어도 프로그램이 멈추지 않아요!",
       },
     ],
   },

@@ -16,6 +16,8 @@
                           장 파일에 ADVANCED(심화 레슨, v0.7)가 있으면 함께 넣고, 목록에는 그 stub을 장의 advanced 칸에
                           매일 도전 틀 TEMPLATES(v0.9)도 있으면 함께 넣고, 목록에는 장의 templates 칸에 id·개념만
   guard/chN-<지문>.json    경비실 그 장 사건들의 본문(solution 뺌, v0.16.0). 색인·이름표는 window.RIA_GUARD_INDEX·RIA_GUARD_FILES
+  projects/<id>-<지문>.json, projects/en/<id>-<지문>.json
+                          프로젝트 공방 본문(v0.21.0, 단계 solution 남김). 색인·이름표는 window.RIA_PROJECT_INDEX·RIA_PROJECT_FILES
   manifest.webmanifest    홈 화면 앱 설명
   sw.js                   서비스 작업자(판 번호·내용 지문·Pyodide 주소를 채움)
   icons/*.png             리아 얼굴 아이콘(tools/icon.py)
@@ -59,15 +61,17 @@ const a = JSON.parse(argsJson);
 const common = { bundle: true, minify: true, write: false, metafile: true, target: a.target, legalComments: "none", logLevel: "warning", charset: "utf8" };
 // 배포판에는 개발용 레슨 import(src/lessondev.js)를 빈 모듈로 (레슨 내용은 장 파일로 따로 나감)
 // 경비실 사건 원본 import(src/guard/guarddev.js, v0.16.0)도 같은 방법으로 (사건 본문은 guard/chN-<지문>.json으로)
+// 프로젝트 원본 import(src/projects/projectdev.js, v0.21.0)도 (본문은 projects/<id>-<지문>.json으로)
 // v0.17.0: 따로 나간 묶음의 개발판 import(src/chunkdev.js)도 바꿔 끼운다. 편집기는 js/editor-<지문>.js,
 // 오류 안내(data/errors.js)는 js/errors-<지문>.js로 나가므로 첫 파일에 묶지 않는다
 const STUBS = {
   lessondev: "export async function loadDevChapters() { return []; }",
   guarddev: "export async function loadDevIncidents() { return []; }",
   chunkdev: "export function devChunk(name) { return Promise.reject(new Error(\"chunk \" + name + \" is not in this build\")); }",
+  projectdev: "export async function loadDevProjects() { return { ko: [], en: [] }; }",
 };
 const noDevLessons = { name: "ria-no-dev-lessons", setup(b) {
-  b.onResolve({ filter: /(^|\/)(lessondev|guarddev|chunkdev)\.js$/ }, (args) => ({ path: args.path.match(/(lessondev|guarddev|chunkdev)\.js$/)[1], namespace: "ria-stub" }));
+  b.onResolve({ filter: /(^|\/)(lessondev|guarddev|chunkdev|projectdev)\.js$/ }, (args) => ({ path: args.path.match(/(lessondev|guarddev|chunkdev|projectdev)\.js$/)[1], namespace: "ria-stub" }));
   b.onLoad({ filter: /.*/, namespace: "ria-stub" }, (args) => ({ contents: STUBS[args.path], loader: "js", resolveDir: a.src }));
 } };
 const app = await esbuild.build({ ...common, entryPoints: [a.app], format: "iife", plugins: [noDevLessons],
@@ -160,8 +164,30 @@ for (const [n, list] of Object.entries(chapters)) {
 process.stdout.write(JSON.stringify({ index, files, contents }));
 """
 
+# 프로젝트 공방 나누기(v0.21.0 작업 3): data/projects.js·projects.en.js → 색인 + projects/(en/)<id>-<지문>.json
+# (src/projects/catalog.js가 나눔. 영어에 같은 id·단계 수가 없으면 buildProjectIndex가 던져 빌드가 멈춤)
+NODE_PROJECTS = r"""
+const [koUrl, enUrl, libUrl] = process.argv.slice(1);
+const crypto = await import("node:crypto");
+const ko = await import(koUrl); const en = await import(enUrl); const lib = await import(libUrl);
+const { index, bodies } = lib.splitProjects(ko.PROJECTS, en.PROJECTS);
+const files = { ko: {}, en: {} }, contents = {}, tasks = [];
+for (const lang of ["ko", "en"]) {
+  for (const [id, body] of Object.entries(bodies[lang])) {
+    const text = JSON.stringify(body);
+    const hash = crypto.createHash("sha256").update(Buffer.from(text, "utf8")).digest("hex").slice(0, 8);
+    const name = lib.projectFileName(id, hash, lang);
+    if (!lib.PROJECT_FILE_RE.test(name)) throw new Error(`bad project file name ${name}`);
+    files[lang][id] = name;
+    contents[name] = text;
+    for (const s of body.steps) tasks.push(s.task);
+  }
+}
+process.stdout.write(JSON.stringify({ index, files, contents, tasks }));
+"""
 
-OWNED = ("index.html", "pyodide", "manifest.webmanifest", "manifest.en.webmanifest", "sw.js", "icons", "lessons", "guard", "lang", "py",
+
+OWNED = ("index.html", "pyodide", "manifest.webmanifest", "manifest.en.webmanifest", "sw.js", "icons", "lessons", "guard", "projects", "lang", "py",
          "licenses.txt", "js")
 HOOKS = ("RIA_WORKER_URL", "RIA_RUNNER_URL")
 
@@ -316,6 +342,19 @@ def split_guard():
     return json.loads(r.stdout)
 
 
+def split_projects():
+    """프로젝트 나누기 결과: {index, files: {ko: {id: 이름}, en: {...}}, contents: {이름: JSON 글자}, tasks: [단계 글]}"""
+    r = subprocess.run(["node", "--input-type=module", "-e", NODE_PROJECTS,
+                        "file://" + os.path.join(ROOT, "data", "projects.js"),
+                        "file://" + os.path.join(ROOT, "data", "projects.en.js"),
+                        "file://" + os.path.join(SRC, "projects", "catalog.js")],
+                       cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr)
+        raise SystemExit("build: could not split data/projects.js / data/projects.en.js")
+    return json.loads(r.stdout)
+
+
 def check_no_lesson_text(html, tasks):
     """index.html에 문제 문장이 남지 않았는지 (장 파일로만 나가야 함)"""
     leaked = [t for t in tasks if t and t in html]
@@ -390,6 +429,8 @@ window.RIA_LESSON_INDEX = {lesson_index};
 window.RIA_CHAPTER_FILES = {chapter_files};
 window.RIA_GUARD_INDEX = {guard_index};
 window.RIA_GUARD_FILES = {guard_files};
+window.RIA_PROJECT_INDEX = {project_index};
+window.RIA_PROJECT_FILES = {project_files};
 window.RIA_LANG_FILES = {lang_files};
 window.RIA_CHUNKS = {chunks};
 (function () {{
@@ -452,6 +493,7 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
         en_split["contents"] = {name.replace("lessons/", "lessons/en/", 1): body for name, body in en_split["contents"].items()}
     packs = lang_packs(en_split)
     guard = split_guard()
+    projects = split_projects()
     b = bundle()
     if not all(h in b["app"] for h in HOOKS):
         raise SystemExit("build: bundled app lost %s" % "/".join(HOOKS))
@@ -490,13 +532,14 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
                            runner_url=js_string(runner_name), worker=js_string(b["worker"]),
                            lesson_index=js_value(split["index"]), chapter_files=js_value(split["files"]),
                            guard_index=js_value(guard["index"]), guard_files=js_value(guard["files"]),
+                           project_index=js_value(projects["index"]), project_files=js_value(projects["files"]),
                            lang_files=js_value({k: v[0] for k, v in packs.items()}), chunks=js_value(chunks))
     if "<!-- RIA:CONFIG -->" not in html:
         raise SystemExit("build: marker CONFIG not found in src/index.html")
     html = html.replace("<!-- RIA:CONFIG -->", config, 1)
     html = replace_block(html, "SCRIPT", "<script>" + inline_script(b["app"]) + "</script>")
     check_output(html)
-    check_no_lesson_text(html, split["tasks"] + (en_split["tasks"] if en_split else []))
+    check_no_lesson_text(html, split["tasks"] + (en_split["tasks"] if en_split else []) + projects["tasks"])
 
     os.makedirs(out, exist_ok=True)
     clean(out)
@@ -538,6 +581,19 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
             f.write(body)
         guard_sizes.append((name, len(body)))
     chapter_files += [name for name, _ in guard_sizes]
+    # 프로젝트 파일(v0.21.0): 한국어는 장 파일처럼 미리 받고, 영어는 영어 장처럼 처음 열 때 받음(LANG_CHAPTER_FILES)
+    os.makedirs(os.path.join(out, "projects", "en"))
+    project_sizes = []
+    for lang in ("ko", "en"):
+        for pid, name in sorted(projects["files"][lang].items(), key=lambda kv: int(kv[0][1:])):
+            body = projects["contents"][name].encode("utf-8")
+            if hashlib.sha256(body).hexdigest()[:8] != re.search(r"-([0-9a-f]{8})\.json$", name).group(1):
+                raise SystemExit("build: project file hash mismatch for " + name)
+            with open(os.path.join(out, name), "wb") as f:
+                f.write(body)
+            project_sizes.append((name, len(body)))
+    chapter_files += [name for name, _ in project_sizes if not name.startswith("projects/en/")]
+    lang_project_files = [name for name, _ in project_sizes if name.startswith("projects/en/")]
     lang_sizes = []
     if packs:
         os.makedirs(os.path.join(out, "lang"))
@@ -580,7 +636,8 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
             .replace("__RIA_PYODIDE_VERSION__", PYODIDE_VERSION).replace("__RIA_PYODIDE_URL__", pyodide_url)
             .replace("__RIA_GAME_FILES__", json.dumps(game_files))
             .replace("__RIA_CHAPTER_FILES__", json.dumps(chapter_files))
-            .replace("__RIA_LANG_CHAPTER_FILES__", json.dumps(sorted(n for n, _ in chapter_sizes if n.startswith("lessons/en/")))))
+            .replace("__RIA_LANG_CHAPTER_FILES__", json.dumps(sorted([n for n, _ in chapter_sizes if n.startswith("lessons/en/")]
+                                                                    + lang_project_files))))
     if "__RIA_" in sw:
         raise SystemExit("build: placeholder left in sw.js")
     with open(os.path.join(out, "sw.js"), "w", encoding="utf-8") as f:
@@ -600,6 +657,8 @@ def build(out, dev_pyodide=False, update_docs_icons=False, build_id="", lessons_
     for name, sz in chapter_sizes:
         print("  %s %.1f KB" % (name, sz / 1024))
     print("guard: %d chapter files, %.1f KB total" % (len(guard_sizes), sum(sz for _, sz in guard_sizes) / 1024))
+    print("projects: %d files, %.1f KB total, index %d B in first file" % (
+        len(project_sizes), sum(sz for _, sz in project_sizes) / 1024, len(js_value(projects["index"]).encode("utf-8"))))
     for name, sz in lang_sizes:
         print("lang: %s %.1f KB" % (name, sz / 1024))
     print("chunk: %s %.1f KB (%d B)" % (editor_name, len(editor_body) / 1024, len(editor_body)))

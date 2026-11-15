@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { SAVE_KEY, SAVE_VER, newSave, migrate, load, loadEx, store, takeRefundNotice, refundNoticeText } from "../../src/save.js";
 import { newGarden } from "../../src/garden/state.js";
 import { newGuard } from "../../src/guard/state.js";
+import { newProjects } from "../../src/projects/state.js";
 
 function fakeStorage(initial = {}) {
   const data = { ...initial };
@@ -35,6 +36,7 @@ const LEDGER_SHAPE = {
   daily: { date: null, picks: [], done: [], streak: 0, best: 0, last_done_date: null }, // v0.9 매일 도전(saveVer 그대로)
   garden: newGarden(), // v0.10 파이의 텃밭(saveVer 그대로, 없으면 기본값)
   guard: newGuard(),   // v0.15 경비실(saveVer 그대로, 없으면 기본값)
+  projects: newProjects(), // v0.21.0 프로젝트 공방(saveVer 그대로, 없으면 기본값)
   goal_pending: null,  // v0.12.1 하루 목표 예약(내일부터)
   broken_notice: null, // v0.12.1 깨진 저장 안내(한 번)
   tutorial: null,      // v0.18.0 첫 사용 튜토리얼(null|"done"|"skipped")

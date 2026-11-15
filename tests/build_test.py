@@ -1011,6 +1011,80 @@ def test_guard_field_in_chapter_files():
     assert len(tiered) == 15, len(tiered)
 
 
+PROJECT_SRC = r"""
+const [koUrl, enUrl, libUrl] = process.argv.slice(1);
+const ko = await import(koUrl); const en = await import(enUrl); const lib = await import(libUrl);
+process.stdout.write(JSON.stringify({ index: lib.buildProjectIndex(ko.PROJECTS, en.PROJECTS), re: lib.PROJECT_FILE_RE.source,
+  tasks: [...ko.PROJECTS, ...en.PROJECTS].flatMap((p) => p.steps.map((s) => s.task)) }));
+"""
+
+
+def test_project_files():
+    """v0.21.0 작업 3: 프로젝트 본문은 projects/<id>-<지문>.json(한국어)·projects/en/<id>-<지문>.json(영어)으로 따로.
+    첫 파일에는 작은 색인(RIA_PROJECT_INDEX)과 이름표(RIA_PROJECT_FILES)만, 단계 글은 없다.
+    한국어 파일은 서비스 작업자가 미리 받고(장 파일과 같음), 영어 파일은 영어 장처럼 처음 열 때 받는다(LANG_CHAPTER_FILES)."""
+    _build()
+    r = subprocess.run(["node", "--input-type=module", "-e", PROJECT_SRC,
+                        "file://" + os.path.join(ROOT, "data", "projects.js"),
+                        "file://" + os.path.join(ROOT, "data", "projects.en.js"),
+                        "file://" + os.path.join(ROOT, "src", "projects", "catalog.js")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    src = json.loads(r.stdout)
+    file_re = re.compile(src["re"])
+    ids = [e["id"] for e in src["index"]]
+    assert "P1" in ids and len(ids) <= 5, ids
+    d = os.path.join(DIST, "projects")
+    assert os.path.isdir(d) and os.path.isdir(os.path.join(d, "en")), "dist/projects/ and dist/projects/en/ missing"
+    ko_files = sorted("projects/" + f for f in os.listdir(d) if f.endswith(".json"))
+    en_files = sorted("projects/en/" + f for f in os.listdir(os.path.join(d, "en")))
+    assert len(ko_files) == len(ids) and len(en_files) == len(ids), (ko_files, en_files)
+    assert any(f.startswith("projects/P1-") for f in ko_files) and any(f.startswith("projects/en/P1-") for f in en_files)
+    for rel in ko_files + en_files:
+        m = file_re.match(rel)
+        assert m, rel
+        assert (m.group(1) == "en/") == rel.startswith("projects/en/"), rel
+        with open(os.path.join(DIST, rel), "rb") as fh:
+            body = fh.read()
+        assert hashlib.sha256(body).hexdigest()[:8] == m.group(3), rel
+        p = json.loads(body)
+        assert p["id"] == m.group(2), rel
+        entry = next(e for e in src["index"] if e["id"] == p["id"])
+        assert len(p["steps"]) == entry["steps"], rel
+        assert all(s.get("solution") for s in p["steps"]), rel + " keeps step solutions (W-P1)"
+    html = _read(os.path.join(DIST, "index.html"))
+    mi = re.search(r"window\.RIA_PROJECT_INDEX = (\[.*?\]);\n", html)
+    mf = re.search(r"window\.RIA_PROJECT_FILES = (\{.*?\});\n", html)
+    assert mi and mf, "RIA_PROJECT_INDEX / RIA_PROJECT_FILES not in index.html"
+    assert json.loads(mi.group(1)) == src["index"]
+    table = json.loads(mf.group(1))
+    assert sorted(table) == ["en", "ko"], table
+    assert sorted(table["ko"].values()) == ko_files and sorted(table["en"].values()) == en_files, table
+    for lang in ("ko", "en"):
+        for pid, rel in table[lang].items():
+            assert file_re.match(rel).group(2) == pid, (pid, rel)
+    for task in src["tasks"]:
+        assert task not in html, "project step text must not be in the first file: %r" % task[:40]
+    assert len(html.encode("utf-8")) < FIRST_FILE_MAX
+    sw_path = os.path.join(DIST, "sw.js")
+    sw = _read(sw_path)
+    pre = json.loads(re.search(r"const CHAPTER_FILES = (\[.*?\]);", sw).group(1))
+    lang_pre = json.loads(re.search(r"const LANG_CHAPTER_FILES = (\[.*?\]);", sw).group(1))
+    for rel in ko_files:
+        assert rel in pre, "sw.js must precache " + rel
+    for rel in en_files:
+        assert rel not in pre and rel in lang_pre, "sw.js must treat %s like English chapters" % rel
+    for p, want in (("/projects/P1-0123abcd.json", "true"), ("/projects/en/P1-0123abcd.json", "true"),
+                    ("/projects/P1-0123abc.json", "false"), ("/projects/index.json", "false")):
+        r = subprocess.run(["node", "--input-type=module", "-e", SW_CHAPTER_RE, sw_path, p], capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        assert r.stdout == want, (p, r.stdout)
+    m = re.search(r"const LANG_CHAPTER_RE = (/.+/);", sw)
+    probe = subprocess.run(["node", "-e", "const re=%s; console.log(JSON.stringify(process.argv.slice(1).map(p=>re.test(p))))" % m.group(1),
+                            "/app/projects/en/P1-0123abcd.json", "/app/projects/P1-0123abcd.json"], capture_output=True, text=True)
+    assert probe.returncode == 0, probe.stderr
+    assert json.loads(probe.stdout) == [True, False], probe.stdout
+
+
 def test_runner_has_guard():
     """경비실: py/runner-*.py 한 개에 guard.py가 앞에 이어 붙어 있고, 첫 파일은 MAX_RAW(600KB) 아래."""
     _build()

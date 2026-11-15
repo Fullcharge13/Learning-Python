@@ -102,10 +102,10 @@ test("projectOpen: 필요한 장 통과 또는 개발자 모드", () => {
 
 test("stepState: 처음·이어 하기·다른 언어", () => {
   const s = quietSave();
-  assert.deepEqual(stepState(s, "P1", "ko"), { step: 0, code: "", langMismatch: null });
+  assert.deepEqual(stepState(s, "P1", "ko"), { step: 0, code: "", langMismatch: null, resume: null });
   const s2 = saveDraft(s, "P1", "ko", 0, "me = input()");
-  assert.deepEqual(stepState(s2, "P1", "ko"), { step: 0, code: "me = input()", langMismatch: null });
-  assert.deepEqual(stepState(s2, "P1", "en"), { step: 0, code: "me = input()", langMismatch: "ko" });
+  assert.deepEqual(stepState(s2, "P1", "ko"), { step: 0, code: "me = input()", langMismatch: null, resume: null });
+  assert.deepEqual(stepState(s2, "P1", "en"), { step: 0, code: "me = input()", langMismatch: "ko", resume: null });
   assert.equal(s.projects.open.P1, undefined, "saveDraft는 원본 저장을 바꾸지 않음");
 });
 
@@ -130,7 +130,7 @@ test("passStep: 첫 통과 XP 5, 다음 단계로 코드가 이어짐, XP는 ear
   assert.equal(r.save.streak.todayXp, s0.streak.todayXp + PROJECT_STEP_XP);
   assert.equal(r.save.quests.progress.q_xp20, PROJECT_STEP_XP);
   assert.equal(s0.xp, 0, "원본 저장은 그대로");
-  assert.deepEqual(stepState(r.save, "P1", "ko"), { step: 1, code: "me = input()\nprint(me)", langMismatch: null });
+  assert.deepEqual(stepState(r.save, "P1", "ko"), { step: 1, code: "me = input()\nprint(me)", langMismatch: null, resume: null });
 });
 
 test("passStep: usedSolution이면 그 단계 XP 0(진행은 넘어감)", () => {
@@ -197,8 +197,8 @@ test("restartInLang: 다른 언어로 처음부터, 앞 언어 진행은 kept에
   const xp = s.xp;
   const r0 = restartInLang(s, "P1", "en");
   assert.deepEqual(r0.projects.open.P1, { lang: "en", step: 0, code: "", best: 2, kept: { ko: { step: 2, code: "ko draft" } } });
-  assert.deepEqual(stepState(r0, "P1", "en"), { step: 0, code: "", langMismatch: null });
-  assert.deepEqual(stepState(r0, "P1", "ko"), { step: 0, code: "", langMismatch: "en" });
+  assert.deepEqual(stepState(r0, "P1", "en"), { step: 0, code: "", langMismatch: null, resume: null });
+  assert.deepEqual(stepState(r0, "P1", "ko"), { step: 0, code: "", langMismatch: "en", resume: { step: 2 } });
   // 영어로 다시 1·2단계: 이미 XP를 받은 단계라 0, 3단계(처음)는 5
   let t = pass(r0, 0, "en0", {}, "en");
   assert.equal(t.xp, 0);
@@ -207,9 +207,51 @@ test("restartInLang: 다른 언어로 처음부터, 앞 언어 진행은 kept에
   t = pass(t.save, 2, "en2", {}, "en");
   assert.equal(t.xp, PROJECT_STEP_XP);
   assert.equal(t.save.xp, xp + PROJECT_STEP_XP);
-  // 다시 한국어로 처음부터: kept의 ko는 처음부터 하므로 버리고, en 진행이 kept로
+  // 다시 한국어로: kept에 남겨 둔 한국어 진행(2단계 초안)에서 이어 하고, 영어 진행이 kept로(검토 I2, §7 지우지 않음)
   const back = restartInLang(t.save, "P1", "ko");
-  assert.deepEqual(back.projects.open.P1, { lang: "ko", step: 0, code: "", best: 3, kept: { en: { step: 3, code: "en2" } } });
+  assert.deepEqual(back.projects.open.P1, { lang: "ko", step: 2, code: "ko draft", best: 3, kept: { en: { step: 3, code: "en2" } } });
+  assert.deepEqual(stepState(back, "P1", "ko"), { step: 2, code: "ko draft", langMismatch: null, resume: null });
+  assert.deepEqual(stepState(back, "P1", "en"), { step: 2, code: "ko draft", langMismatch: "ko", resume: { step: 3 } });
+  // 또 영어로: 영어 3단계 진행이 돌아오고 한국어는 다시 kept에
+  const again = restartInLang(back, "P1", "en");
+  assert.deepEqual(again.projects.open.P1, { lang: "en", step: 3, code: "en2", best: 3, kept: { ko: { step: 2, code: "ko draft" } } });
+});
+
+test("restartInLang: 몇 번을 오가도 어느 언어 진행도 지워지지 않음", () => {
+  let s = quietSave();
+  s = pass(s, 0, "k0").save;                       // ko 1단계
+  s = restartInLang(s, "P1", "en");
+  s = pass(s, 0, "e0", {}, "en").save;
+  s = pass(s, 1, "e1", {}, "en").save;             // en 2단계
+  for (let n = 0; n < 3; n++) {
+    s = restartInLang(s, "P1", "ko");
+    assert.equal(s.projects.open.P1.step, 1);
+    assert.equal(s.projects.open.P1.code, "k0");
+    assert.deepEqual(s.projects.open.P1.kept, { en: { step: 2, code: "e1" } });
+    s = restartInLang(s, "P1", "en");
+    assert.equal(s.projects.open.P1.step, 2);
+    assert.equal(s.projects.open.P1.code, "e1");
+    assert.deepEqual(s.projects.open.P1.kept, { ko: { step: 1, code: "k0" } });
+  }
+});
+
+test("restartInLang: 같은 언어로 부르면 그 언어만 처음부터(다른 언어 kept는 그대로)", () => {
+  let s = quietSave();
+  s = pass(s, 0, "k0").save;
+  s = restartInLang(s, "P1", "en");
+  s = pass(s, 0, "e0", {}, "en").save;
+  s = restartInLang(s, "P1", "en");
+  assert.deepEqual(s.projects.open.P1, { lang: "en", step: 0, code: "", best: 1, kept: { ko: { step: 1, code: "k0" } } });
+});
+
+test("완성 뒤에도 다른 언어 진행은 남음", () => {
+  let s = quietSave();
+  s = pass(s, 0, "k0").save;
+  s = restartInLang(s, "P1", "en");
+  for (let k = 0; k < 4; k++) s = pass(s, k, "e" + k, {}, "en").save;
+  assert.ok(s.projects.done.P1);
+  assert.deepEqual(s.projects.open.P1, { lang: "ko", step: 1, code: "k0", best: 4 });
+  assert.deepEqual(stepState(s, "P1", "ko"), { step: 1, code: "k0", langMismatch: null, resume: null });
 });
 
 test("restartInLang: 진행이 없으면 그 언어로 새로 시작, 모르는 id는 그대로", () => {

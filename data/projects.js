@@ -24,7 +24,7 @@ export const PROJECTS = [
     steps: [
       {
         goal: "내가 낸 손을 받아 보여 주기",
-        task: "내가 낸 손을 input()으로 받아 변수 me에 담아요(질문 글자 없이). 그다음 print로 「나:」 뒤에 me를 출력해요. 예: 가위를 입력하면 「나: 가위」",
+        task: "시작 코드의 me = input()이 내가 낸 손을 받아 변수 me에 담아 둬요. 그 아래에 print를 한 줄 더해 「나:」 뒤에 me를 출력해요. 예: 가위를 입력하면 「나: 가위」",
         starter: "me = input()\n",
         tests: [
           { stdin: "가위", expect: "나: 가위", public: true },
@@ -50,8 +50,8 @@ export const PROJECTS = [
         task: "맨 위에 import random을 써요. 「나:」 줄 아래에서 random.randint(1, 3)으로 고른 수를 num에 담아요(무작위는 이 줄에서 한 번만). num이 1이면 「가위」, 2면 「바위」, 3이면 「보」를 com에 담고, print로 「컴퓨터:」 뒤에 com을 출력해요.",
         tests: [
           { stdin: "가위", rand: [2], expect: "나: 가위\n컴퓨터: 바위", public: true },
-          { stdin: "보", rand: [1], expect: "나: 보\n컴퓨터: 가위", public: false },
-          { stdin: "바위", rand: [3], expect: "나: 바위\n컴퓨터: 보", public: false },
+          { stdin: "보", rand: [3], expect: "나: 보\n컴퓨터: 보", public: false },
+          { stdin: "바위", rand: [1], expect: "나: 바위\n컴퓨터: 가위", public: false },
         ],
         require: ["Import", "Method:randint", "If"],
         hints: [
@@ -73,6 +73,8 @@ export const PROJECTS = [
           { stdin: "가위", rand: [2], expect: "나: 가위\n컴퓨터: 바위\n결과: 졌어요", public: false },
           { stdin: "보", rand: [1], expect: "나: 보\n컴퓨터: 가위\n결과: 졌어요", public: false },
           { stdin: "바위", rand: [3], expect: "나: 바위\n컴퓨터: 보\n결과: 졌어요", public: false },
+          { stdin: "가위", rand: [1], expect: "나: 가위\n컴퓨터: 가위\n결과: 비겼어요", public: false },
+          { stdin: "보", rand: [3], expect: "나: 보\n컴퓨터: 보\n결과: 비겼어요", public: false },
         ],
         require: ["Elif", "Else"],
         hints: [

@@ -4,10 +4,11 @@
 //   { v: 1,
 //     open: { P1: { lang: "ko"|"en", step: 지금 단계(0부터), code: 지금 단계 코드(""이면 시작 코드),
 //                   best: XP를 받은 단계 수(다시 해도 같은 단계 XP를 또 주지 않음),
-//                   kept?: { ko|en: { step, code } } — 다른 언어로 처음부터 할 때 남겨 둔 앞 언어 진행(지우지 않음, §7) } },
+//                   kept?: { ko|en: { step, code } } — 지금 언어가 아닌 언어의 진행(지우지 않음, §7). 그 언어로 돌아오면 이어 함 } },
 //     done: { P1: { at: "YYYY-MM-DD"|null, code: 완성작, lang } } }   — 진열장에서 실행하는 완성작
 // 진행은 시작한 언어에 묶인다(open.<id>.lang). 다른 언어로 열면 stepState가 langMismatch로 알려 주고,
-// 화면은 「그 언어로 바꿔 이어 하기」 또는 restartInLang(이 언어로 처음부터)을 고르게 한다.
+// 화면은 「그 언어로 바꿔 이어 하기」 또는 restartInLang(이 언어로 — kept에 그 언어 진행이 있으면 거기서 이어,
+// 없으면 처음부터. stepState의 resume으로 미리 앎)을 고르게 한다. 어느 언어 진행도 지우지 않는다(검토 I2).
 // 보상: 단계 첫 통과 XP 5(「모범 코드에서 이어 하기」면 0), 마지막 단계 통과 때 완성 XP 20(처음 완성할 때만).
 //   XP는 경비실(src/guard/state.js applyGuardRun)과 같은 길: earnXp → 퀘스트 "xp" tick → 배지. 바이트는 없음.
 // 단계 수는 색인(catalog.js의 projectIndexEntry 모양)에서 안다. 앱은 setProjectIndex로 한 번 넣는다
@@ -105,12 +106,15 @@ export const projectOpen = (entry, passed, dev = false) => dev === true || (!!en
 /**
  * 지금 단계와 코드. 진행이 없으면 { step: 0, code: "" }(코드가 ""이면 화면은 시작 코드).
  * langMismatch: 진행이 다른 언어에 묶여 있으면 그 언어("ko"|"en"), 아니면 null. 그때 step·code는 그 언어의 것이다.
+ * resume: langMismatch일 때 lang 쪽에 남겨 둔 진행이 있으면 { step }(restartInLang이 거기서 이어 함), 아니면 null.
  */
 export function stepState(save, id, lang) {
   const p = cleanProjects(save?.projects);
   const cur = knownId(id) ? p.open[id] : undefined;
-  if (!cur) return { step: 0, code: "", langMismatch: null };
-  return { step: cur.step, code: cur.code, langMismatch: cur.lang === lang ? null : cur.lang };
+  if (!cur) return { step: 0, code: "", langMismatch: null, resume: null };
+  if (cur.lang === lang) return { step: cur.step, code: cur.code, langMismatch: null, resume: null };
+  const k = cur.kept && cur.kept[lang];
+  return { step: cur.step, code: cur.code, langMismatch: cur.lang, resume: k ? { step: k.step } : null };
 }
 
 function withProjects(save, projects) {
@@ -154,7 +158,10 @@ export function passStep(save, id, lang, step, code, { usedSolution = false } = 
   if (last) {
     if (!already) xp += PROJECT_DONE_XP;
     p.done[id] = { at: date, code: codeOf(code), lang };
-    delete p.open[id];
+    // 다른 언어에 남겨 둔 진행이 있으면 그것이 open으로 돌아온다(지우지 않음, §7). 없으면 open에서 뺌
+    const other = cur.kept && LANGS.find((l) => l !== lang && cur.kept[l]);
+    if (other) p.open[id] = { lang: other, step: cur.kept[other].step, code: cur.kept[other].code, best };
+    else delete p.open[id];
   } else {
     p.open[id] = { ...cur, step: step + 1, code: codeOf(code), best };
   }
@@ -182,8 +189,9 @@ export function passStep(save, id, lang, step, code, { usedSolution = false } = 
 }
 
 /**
- * 이 언어로 처음부터(§7 「아니면 이 언어로 처음부터」). 앞 언어 진행은 kept에 남기고(지우지 않음),
- * 받은 XP 기록(best)은 그대로(같은 단계 XP를 또 주지 않음). 같은 언어면 그 언어로 처음부터.
+ * 이 언어로 하기(§7 「아니면 이 언어로」). 지금 언어 진행은 kept로 옮기고(지우지 않음), kept에 이 언어 진행이 있으면
+ * 거기서 이어, 없으면 처음부터. 받은 XP 기록(best)은 그대로(같은 단계 XP를 또 주지 않음).
+ * 지금 언어와 같은 언어면 그 언어만 처음부터(다른 언어 kept는 그대로).
  */
 export function restartInLang(save, id, lang) {
   if (!knownId(id) || !okLang(lang)) return save;
@@ -193,9 +201,14 @@ export function restartInLang(save, id, lang) {
     p.open[id] = { lang, step: 0, code: "", best: 0 };
     return withProjects(save, p);
   }
-  const kept = { ...(cur.kept || {}), [cur.lang]: { step: cur.step, code: cur.code } };
-  delete kept[lang];
-  const next = { lang, step: 0, code: "", best: cur.best };
+  const kept = { ...(cur.kept || {}) };
+  let from = null;
+  if (cur.lang !== lang) {
+    from = kept[lang] || null;
+    delete kept[lang];
+    kept[cur.lang] = { step: cur.step, code: cur.code };
+  }
+  const next = { lang, step: from ? from.step : 0, code: from ? from.code : "", best: cur.best };
   if (Object.keys(kept).length) next.kept = kept;
   p.open[id] = next;
   return withProjects(save, p);

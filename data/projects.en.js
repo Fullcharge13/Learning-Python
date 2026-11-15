@@ -12,7 +12,7 @@ export const PROJECTS = [
     steps: [
       {
         goal: "Read your hand and show it",
-        task: "Read your hand with input() and store it in the variable me (no prompt text). Then print me after \"Me:\". Example: typing rock shows Me: rock",
+        task: "The starter line me = input() already reads your hand into the variable me. Below it, add one print line that shows me after \"Me:\". Example: typing rock shows Me: rock",
         starter: "me = input()\n",
         tests: [
           { stdin: "rock", expect: "Me: rock", public: true },
@@ -38,8 +38,8 @@ export const PROJECTS = [
         task: "Write import random at the top. Below the \"Me:\" line, store a number from random.randint(1, 3) in num (call random only once, on this line). If num is 1, store \"rock\" in com; if 2, \"paper\"; if 3, \"scissors\". Then print com after \"Computer:\".",
         tests: [
           { stdin: "rock", rand: [2], expect: "Me: rock\nComputer: paper", public: true },
-          { stdin: "scissors", rand: [1], expect: "Me: scissors\nComputer: rock", public: false },
-          { stdin: "paper", rand: [3], expect: "Me: paper\nComputer: scissors", public: false },
+          { stdin: "scissors", rand: [3], expect: "Me: scissors\nComputer: scissors", public: false },
+          { stdin: "paper", rand: [1], expect: "Me: paper\nComputer: rock", public: false },
         ],
         require: ["Import", "Method:randint", "If"],
         hints: [
@@ -61,6 +61,8 @@ export const PROJECTS = [
           { stdin: "rock", rand: [2], expect: "Me: rock\nComputer: paper\nResult: You lose", public: false },
           { stdin: "scissors", rand: [1], expect: "Me: scissors\nComputer: rock\nResult: You lose", public: false },
           { stdin: "paper", rand: [3], expect: "Me: paper\nComputer: scissors\nResult: You lose", public: false },
+          { stdin: "rock", rand: [1], expect: "Me: rock\nComputer: rock\nResult: It's a tie", public: false },
+          { stdin: "scissors", rand: [3], expect: "Me: scissors\nComputer: scissors\nResult: It's a tie", public: false },
         ],
         require: ["Elif", "Else"],
         hints: [
@@ -73,12 +75,12 @@ export const PROJECTS = [
       },
       {
         goal: "Catch hands that aren't rock, paper or scissors",
-        task: "Right now else handles \"You lose\", so even a made-up hand loses. In place of that else, add the three losing cases (rock-paper, paper-scissors, scissors-rock) as elif branches that store \"You lose\" in result. Then add a final else that stores \"Please pick again\".",
+        task: "Right now else handles \"You lose\", so even a made-up hand loses. In place of that else, add the three losing cases (rock-paper, paper-scissors, scissors-rock) as elif branches that store \"You lose\" in result. Then add a final else that stores \"Only rock, paper or scissors\".",
         tests: [
-          { stdin: "banana", rand: [1], expect: "Me: banana\nComputer: rock\nResult: Please pick again", public: true },
+          { stdin: "banana", rand: [1], expect: "Me: banana\nComputer: rock\nResult: Only rock, paper or scissors", public: true },
           { stdin: "rock", rand: [3], expect: "Me: rock\nComputer: scissors\nResult: You win", public: false },
           { stdin: "scissors", rand: [3], expect: "Me: scissors\nComputer: scissors\nResult: It's a tie", public: false },
-          { stdin: "Rock", rand: [2], expect: "Me: Rock\nComputer: paper\nResult: Please pick again", public: false },
+          { stdin: "Rock", rand: [2], expect: "Me: Rock\nComputer: paper\nResult: Only rock, paper or scissors", public: false },
           { stdin: "rock", rand: [2], expect: "Me: rock\nComputer: paper\nResult: You lose", public: false },
           { stdin: "paper", rand: [3], expect: "Me: paper\nComputer: scissors\nResult: You lose", public: false },
           { stdin: "scissors", rand: [1], expect: "Me: scissors\nComputer: rock\nResult: You lose", public: false },
@@ -87,9 +89,9 @@ export const PROJECTS = [
         hints: [
           "A made-up hand never ties and never wins. Once every losing case has its own branch too, whatever reaches the last else must be a made-up hand.",
           "Losing is winning flipped around: rock loses to paper, paper loses to scissors, scissors loses to rock.",
-          'elif me == "rock" and com == "paper":\n    result = "You lose"\nelif me == "paper" and com == ___:\n    result = "You lose"\nelif ___:\n    result = "You lose"\nelse:\n    result = "Please pick again"\nprint("Result:", result)',
+          'elif me == "rock" and com == "paper":\n    result = "You lose"\nelif me == "paper" and com == ___:\n    result = "You lose"\nelif ___:\n    result = "You lose"\nelse:\n    result = "Only rock, paper or scissors"\nprint("Result:", result)',
         ],
-        solution: 'import random\n\nme = input()\nprint("Me:", me)\nnum = random.randint(1, 3)\nif num == 1:\n    com = "rock"\nelif num == 2:\n    com = "paper"\nelse:\n    com = "scissors"\nprint("Computer:", com)\nif me == com:\n    result = "It\'s a tie"\nelif me == "rock" and com == "scissors":\n    result = "You win"\nelif me == "paper" and com == "rock":\n    result = "You win"\nelif me == "scissors" and com == "paper":\n    result = "You win"\nelif me == "rock" and com == "paper":\n    result = "You lose"\nelif me == "paper" and com == "scissors":\n    result = "You lose"\nelif me == "scissors" and com == "rock":\n    result = "You lose"\nelse:\n    result = "Please pick again"\nprint("Result:", result)\n',
+        solution: 'import random\n\nme = input()\nprint("Me:", me)\nnum = random.randint(1, 3)\nif num == 1:\n    com = "rock"\nelif num == 2:\n    com = "paper"\nelse:\n    com = "scissors"\nprint("Computer:", com)\nif me == com:\n    result = "It\'s a tie"\nelif me == "rock" and com == "scissors":\n    result = "You win"\nelif me == "paper" and com == "rock":\n    result = "You win"\nelif me == "scissors" and com == "paper":\n    result = "You win"\nelif me == "rock" and com == "paper":\n    result = "You lose"\nelif me == "paper" and com == "scissors":\n    result = "You lose"\nelif me == "scissors" and com == "rock":\n    result = "You lose"\nelse:\n    result = "Only rock, paper or scissors"\nprint("Result:", result)\n',
         explain: "Tie, win and lose all have their own branches now, so only a hand that matches none of them reaches the last else. When you cover every case, else takes care of everything else. Now you can play a real round!",
       },
     ],

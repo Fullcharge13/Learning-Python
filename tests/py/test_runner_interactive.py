@@ -61,6 +61,34 @@ def test_rand_choice_not_in_seq():
     assert r["error"]["type"] == "RandMismatch"
 
 
+def test_rand_randint_out_of_range():
+    """작업 3 검토 I1: 정해 준 값이 randint(a, b) 범위 밖이면 RandMismatch(범위를 잘못 쓴 코드를 채점이 걸러냄)."""
+    for code, val in (("import random\nprint(random.randint(1, 2))\n", 3),
+                      ("import random\nprint(random.randint(1, 3))\n", 7),
+                      ("import random\nprint(random.randint(1, 3))\n", 0)):
+        r = run(code, "", [], rand=[val])
+        assert r["error"] is not None and r["error"]["type"] == "RandMismatch", (code, val, r["error"])
+        assert r["error"]["line"] == 2
+
+
+def test_rand_randint_edges_ok():
+    for val in (1, 3):
+        r = run("import random\nprint(random.randint(1, 3))\n", "", [], rand=[val])
+        assert r["error"] is None
+        assert r["stdout"].strip() == str(val)
+
+
+def test_rand_randint_non_int_value():
+    r = run("import random\nprint(random.randint(1, 3))\n", "", [], rand=["2"])
+    assert r["error"]["type"] == "RandMismatch"
+
+
+def test_rand_randint_mismatch_swallowed_still_reported():
+    code = "import random\ntry:\n    random.randint(1, 2)\nexcept BaseException:\n    pass\nprint('ok')\n"
+    r = run(code, "", [], rand=[3])
+    assert r["error"]["type"] == "RandMismatch"
+
+
 def test_rand_missing():
     code = "import random\nrandom.randint(1, 6)\nrandom.randint(1, 6)\n"
     r = run(code, "", [], rand=[2])

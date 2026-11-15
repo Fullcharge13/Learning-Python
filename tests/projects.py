@@ -72,21 +72,33 @@ WRONG = {
                'me = input()\nprint("Me:" + me)\n'],
     },
     ("P1", 1): {
-        # 무작위를 두 번 부름(한 번만이어야 함), 숫자와 손이 어긋남
-        "ko": ['import random\n\nme = input()\nprint("나:", me)\n'
+        # 무작위를 두 번 부름(한 번만이어야 함), 숫자와 손이 어긋남, 범위를 1~2로 씀(보가 안 나옴, 검토 I1),
+        # num은 부르기만 하고 내 손을 이기는 손을 고름(검토 M1)
+        "ko": ['import random\n\nme = input()\nprint("나:", me)\nnum = random.randint(1, 2)\n'
+               'if num == 1:\n    com = "가위"\nelif num == 2:\n    com = "바위"\nelse:\n    com = "보"\nprint("컴퓨터:", com)\n',
+               'import random\n\nme = input()\nprint("나:", me)\nnum = random.randint(1, 3)\n'
+               'if me == "가위":\n    com = "바위"\nelif me == "바위":\n    com = "보"\nelse:\n    com = "가위"\nprint("컴퓨터:", com)\n',
+               'import random\n\nme = input()\nprint("나:", me)\n'
                'if random.randint(1, 3) == 1:\n    com = "가위"\nelif random.randint(1, 3) == 2:\n    com = "바위"\n'
                'else:\n    com = "보"\nprint("컴퓨터:", com)\n',
                'import random\n\nme = input()\nprint("나:", me)\nnum = random.randint(1, 3)\n'
                'if num == 1:\n    com = "바위"\nelif num == 2:\n    com = "가위"\nelse:\n    com = "보"\nprint("컴퓨터:", com)\n'],
-        "en": ['import random\n\nme = input()\nprint("Me:", me)\n'
+        "en": ['import random\n\nme = input()\nprint("Me:", me)\nnum = random.randint(1, 2)\n'
+               'if num == 1:\n    com = "rock"\nelif num == 2:\n    com = "paper"\nelse:\n    com = "scissors"\nprint("Computer:", com)\n',
+               'import random\n\nme = input()\nprint("Me:", me)\nnum = random.randint(1, 3)\n'
+               'if me == "rock":\n    com = "paper"\nelif me == "paper":\n    com = "scissors"\nelse:\n    com = "rock"\nprint("Computer:", com)\n',
+               'import random\n\nme = input()\nprint("Me:", me)\n'
                'if random.randint(1, 3) == 1:\n    com = "rock"\nelif random.randint(1, 3) == 2:\n    com = "paper"\n'
                'else:\n    com = "scissors"\nprint("Computer:", com)\n',
                'import random\n\nme = input()\nprint("Me:", me)\nnum = random.randint(1, 3)\n'
                'if num == 1:\n    com = "paper"\nelif num == 2:\n    com = "rock"\nelse:\n    com = "scissors"\nprint("Computer:", com)\n'],
     },
     ("P1", 2): {
-        # 이기는 경우를 하나만 봄, 비김을 빠뜨림
-        "ko": ['import random\n\nme = input()\nprint("나:", me)\nnum = random.randint(1, 3)\n'
+        # 이기는 경우를 하나만 봄, 비김을 빠뜨림, 비김을 바위끼리만 봄(검토 M2)
+        "ko": [P1_KO_HEAD + 'if me == "바위" and com == "바위":\n    result = "비겼어요"\nelif me == "가위" and com == "보":\n'
+               '    result = "이겼어요"\nelif me == "바위" and com == "가위":\n    result = "이겼어요"\n'
+               'elif me == "보" and com == "바위":\n    result = "이겼어요"\nelse:\n    result = "졌어요"\nprint("결과:", result)\n',
+               'import random\n\nme = input()\nprint("나:", me)\nnum = random.randint(1, 3)\n'
                'if num == 1:\n    com = "가위"\nelif num == 2:\n    com = "바위"\nelse:\n    com = "보"\nprint("컴퓨터:", com)\n'
                'if me == com:\n    result = "비겼어요"\nelif me == "가위" and com == "보":\n    result = "이겼어요"\n'
                'else:\n    result = "졌어요"\nprint("결과:", result)\n',
@@ -94,7 +106,10 @@ WRONG = {
                'if num == 1:\n    com = "가위"\nelif num == 2:\n    com = "바위"\nelse:\n    com = "보"\nprint("컴퓨터:", com)\n'
                'if me == "가위" and com == "보" or me == "바위" and com == "가위" or me == "보" and com == "바위":\n'
                '    result = "이겼어요"\nelse:\n    result = "졌어요"\nprint("결과:", result)\n'],
-        "en": ['import random\n\nme = input()\nprint("Me:", me)\nnum = random.randint(1, 3)\n'
+        "en": [P1_EN_HEAD + 'if me == "paper" and com == "paper":\n    result = "It\'s a tie"\nelif me == "rock" and com == "scissors":\n'
+               '    result = "You win"\nelif me == "paper" and com == "rock":\n    result = "You win"\n'
+               'elif me == "scissors" and com == "paper":\n    result = "You win"\nelse:\n    result = "You lose"\nprint("Result:", result)\n',
+               'import random\n\nme = input()\nprint("Me:", me)\nnum = random.randint(1, 3)\n'
                'if num == 1:\n    com = "rock"\nelif num == 2:\n    com = "paper"\nelse:\n    com = "scissors"\nprint("Computer:", com)\n'
                'if me == com:\n    result = "It\'s a tie"\nelif me == "rock" and com == "scissors":\n    result = "You win"\n'
                'else:\n    result = "You lose"\nprint("Result:", result)\n',
@@ -115,8 +130,8 @@ WRONG = {
         "en": [P1_EN_JUDGE + 'else:\n    result = "You lose"\nprint("Result:", result)\n',
                P1_EN_JUDGE + 'elif me == "rock" and com == "scissors":\n    result = "You lose"\nelif me == "paper" and com == "scissors":\n'
                '    result = "You lose"\nelif me == "scissors" and com == "rock":\n    result = "You lose"\n'
-               'else:\n    result = "Please pick again"\nprint("Result:", result)\n',
-               P1_EN_HEAD + 'if me != "rock" or me != "paper" or me != "scissors":\n    result = "Please pick again"\n'
+               'else:\n    result = "Only rock, paper or scissors"\nprint("Result:", result)\n',
+               P1_EN_HEAD + 'if me != "rock" or me != "paper" or me != "scissors":\n    result = "Only rock, paper or scissors"\n'
                'elif me == com:\n    result = "It\'s a tie"\nelse:\n    result = "You lose"\nprint("Result:", result)\n'],
     },
 }
@@ -151,7 +166,7 @@ def grammar_problems(code, need):
     """경비실 표(gi.allowed) + 기본 입출력 + 새 도구 예외로 code를 검사. 문제 목록(빈 목록이면 통과)."""
     nodes, calls, methods, modules, from_names = gi.allowed(need)
     nodes = nodes | BASE_NODES
-    calls = calls | BASE_CALLS
+    calls = (calls - gi.ENGINE_CMDS) | BASE_CALLS   # 경비실 명령(block·allow…)은 프로젝트에 없음
     tree = ast.parse(code)
     defined = {n.name for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
     tool_imports = {id(n) for n in ast.walk(tree)
@@ -186,6 +201,18 @@ def grammar_problems(code, need):
     return bad
 
 
+def randint_ranges(code):
+    """randint(a, b)의 (a, b) 목록. 인자가 정수 상수가 아닌 호출이 하나라도 있으면 None(범위 검사 건너뜀)"""
+    out = []
+    for n in ast.walk(ast.parse(code)):
+        if isinstance(n, ast.Call) and _is_tool_attr(n.func) and n.func.attr == "randint":
+            args = n.args
+            if len(args) != 2 or n.keywords or not all(isinstance(a, ast.Constant) and type(a.value) is int for a in args):
+                return None
+            out.append((args[0].value, args[1].value))
+    return out
+
+
 def uses_random(code):
     """random.randint·random.choice를 부르는 이름 집합"""
     return {n.func.attr for n in ast.walk(ast.parse(code)) if isinstance(n, ast.Call) and _is_tool_attr(n.func)}
@@ -204,6 +231,8 @@ def self_test():
         (3, 'for i in range(3):\n    print(i)\n', False),
         (5, 'n = 0\nwhile n < 3:\n    n += 1\n', True),
         (3, 'print(len("ab"))\n', False),
+        (3, 'block()\n', False),
+        (3, 'if ___ == 1:\n    x = "___"\n', True),
         (3, 'print("a", end="")\n', False),
         (8, 'import random\nd = {"a": 1}\nprint(random.choice(list(d)))\n', False),   # list()는 경비실 표에 없음
     ]
@@ -251,8 +280,23 @@ def _text(v):
     return isinstance(v, str) and v.strip() != ""
 
 
+PROJECT_KEYS = {"id", "need", "icon", "title", "blurb", "intro", "finale", "play", "steps"}
+STEP_KEYS = {"goal", "task", "starter", "tool", "tests", "require", "hints", "solution", "explain", "files"}
+
+
+def code_hints(step):
+    """여러 줄인 힌트 = 코드 뼈대(___ 빈칸은 이름으로 읽힘). elif·else로 시작하는 조각은 앞에 if를 붙여 읽는다"""
+    out = []
+    for h in step.get("hints") or []:
+        if isinstance(h, str) and "\n" in h:
+            out.append(("if ___:\n    ___ = 0\n" + h) if re.match(r"(elif\b|else\s*:)", h) else h)
+    return out
+
+
 def shape_problems(p, icons):
     bad = []
+    if set(p) - PROJECT_KEYS:
+        bad.append("모르는 칸 %s" % sorted(set(p) - PROJECT_KEYS))
     for k in TEXT_KEYS:
         if not _text(p.get(k)):
             bad.append("%s 칸이 빈 글" % k)
@@ -269,6 +313,10 @@ def shape_problems(p, icons):
         return bad
     for k, s in enumerate(steps):
         where = "%d단계 " % (k + 1)
+        if set(s) - STEP_KEYS:
+            bad.append(where + "모르는 칸 %s" % sorted(set(s) - STEP_KEYS))
+        if "explain" in s and not _text(s["explain"]):
+            bad.append(where + "explain이 빈 글")
         for key in STEP_TEXT_KEYS:
             if not _text(s.get(key)):
                 bad.append(where + key + " 칸이 빈 글")
@@ -320,6 +368,11 @@ def rand_problems(p):
                 bad.append("%d단계 시험 %d: 무작위를 쓰는데 rand가 없음(채점이 매번 달라짐)" % (k + 1, i))
             elif "randint" in used and not all(type(v) is int for v in t["rand"]):
                 bad.append("%d단계 시험 %d: randint에 넘길 rand 값이 정수가 아님 %r" % (k + 1, i, t["rand"]))
+            elif "randint" in used and "choice" not in used:
+                ranges = randint_ranges(s["solution"])
+                out = [v for v in t["rand"] if ranges is not None and not any(a <= v <= b for a, b in ranges)]
+                if out:
+                    bad.append("%d단계 시험 %d: rand 값 %r이 정답의 randint 범위 %r 밖" % (k + 1, i, out, ranges))
     return bad
 
 
@@ -334,6 +387,9 @@ def rand_self_test():
         ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [True]}]}]}, False),
         ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [1.0]}]}]}, False),
         ({"steps": [{"solution": 'import random\nn = random.choice("ab")\n', "tool": {}, "tests": [{"rand": ["a"]}]}]}, True),
+        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [7]}]}]}, False),
+        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [0]}]}]}, False),
+        ({"steps": [{"solution": "import random\nn = random.randint(1, 3)\n", "tool": {}, "tests": [{"rand": [3, 1]}]}]}, True),
     ]
     bad = 0
     for p, want in cases:
@@ -415,6 +471,7 @@ def main():
                     codes.append(("starter", s["starter"]))
                 if "tool" in s:
                     codes.append(("tool.code", s["tool"]["code"]))
+                codes += [("hint %d" % (h + 1), c) for h, c in enumerate(code_hints(s))]
                 gbad = []
                 for what, code in codes:
                     try:

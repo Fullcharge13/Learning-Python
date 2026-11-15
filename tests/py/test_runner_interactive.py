@@ -61,6 +61,23 @@ def test_rand_choice_not_in_seq():
     assert r["error"]["type"] == "RandMismatch"
 
 
+def test_rand_choice_needs_real_sequence():
+    """작업 4: 진짜 random.choice는 순서 있는 것(목록·글자)에서만 고른다. 사전·keys()를 그대로 주면
+    진짜 실행(완성작)에서 KeyError·TypeError가 나므로, 정해 둔 rand로 채점할 때도 같은 오류여야 한다."""
+    head = 'import random\nd = {"a": 1, "b": 2}\n'
+    for expr, err in (("d", "KeyError"), ("d.keys()", "TypeError"), ("d.values()", "TypeError"),
+                      ("[]", "IndexError"), ("5", "TypeError")):
+        r = run(head + "print(random.choice(%s))\n" % expr, "", [], rand=["b"])
+        assert r["error"] is not None and r["error"]["type"] == err, (expr, r["error"])
+
+
+def test_rand_choice_list_of_dict_ok():
+    code = 'import random\nd = {"a": 1, "b": 2}\nprint(random.choice(list(d)))\nprint(random.choice("xy"))\n'
+    r = run(code, "", [], rand=["b", "y"])
+    assert r["error"] is None
+    assert r["stdout"].split() == ["b", "y"]
+
+
 def test_rand_randint_out_of_range():
     """작업 3 검토 I1: 정해 준 값이 randint(a, b) 범위 밖이면 RandMismatch(범위를 잘못 쓴 코드를 채점이 걸러냄)."""
     for code, val in (("import random\nprint(random.randint(1, 2))\n", 3),

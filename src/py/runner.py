@@ -368,8 +368,14 @@ def _make_rand(values, state):
         return v
 
     def choice(seq):
+        # 진짜 random.choice처럼 seq[번호]로 꺼낼 수 있어야 한다: 사전은 KeyError, keys()·values()·숫자는
+        # TypeError, 빈 목록은 IndexError(작업 4: random.choice(words)가 채점은 통과하고 완성작에서 깨지던 것).
+        n = _len(seq)
+        if not n:
+            raise IndexError("Cannot choose from an empty sequence")
+        seq[0]   # 사전·keys() 등은 여기서 진짜와 같은 오류
         v = _next()
-        if v not in list(seq):
+        if v not in _list(seq):
             raise _fail(RandMismatch("the given random value is not in the sequence"))
         return v
 

@@ -140,14 +140,15 @@ export function render(root, ctx, params = {}) {
       ctx, item, body: writeEl, foot, initial: { code },
       flushOnDestroy: true,
       // 검토 M3: 단추 글에 XP를 잃는다는 것을, M2: 정답 칸에 「정답을 보면 XP 없음」을
-      useSolution: { label: t`모범 코드에서 이어 하기 (이 단계 XP 없음)`, note: t`정답을 보면 이 단계 XP는 없어요`, onUse: (sol) => passed(sol, true, true) },
+      useSolution: { label: t`모범 코드에서 이어 하기 (이 단계 XP 없음)`, note: (auto) => (auto ? t`직접 써서 통과하면 XP를 받아요. 모범 코드로 넘어가면 이 단계 XP는 없어요` : t`정답을 보면 이 단계 XP는 없어요`), onUse: (sol) => passed(sol, true, true) },
       onState(w) {
         if (!alive()) return;
         const next = saveDraft(ctx.save, id, lang(), S.step, w.code);
         if (next !== ctx.save) ctx.commit(next);
       },
-      // 검토 M2: 정답을 본 뒤의 통과는 모범 코드를 쓴 것과 같이(그 단계 XP 없음)
-      onPass({ code: mine, solutionSeen }) { passed(mine, !!solutionSeen); },
+      // 검토 M2·재검토 N2: 「정답 보기」를 직접 누른 뒤의 통과는 모범 코드를 쓴 것과 같이(그 단계 XP 없음).
+      // 세 번 틀려 저절로 열린 정답은 XP를 잃지 않는다
+      onPass({ code: mine, solutionChosen }) { passed(mine, !!solutionChosen); },
       onWrong() {},
       onHint() {},
       log() {},

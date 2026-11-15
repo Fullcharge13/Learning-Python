@@ -285,9 +285,9 @@
    "fails": 0
   }
  ],
- "checked": 1280,
+ "checked": 1271,
  "fail_count": 2,
- "fail_elements": 16,
+ "fail_elements": 15,
  "excluded": {
   "noLetterSkipped": 165,
   "invisible": 1226,

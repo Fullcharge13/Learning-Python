@@ -43,6 +43,7 @@
  "정답을 보면 이 단계 XP는 없어요": "Once you've seen the answer, this step gives no XP",
  "정답을 봤으니 이 단계 XP는 없어요": "You saw the answer, so this step gives no XP",
  "지금까지 한 답: {}": "Your answers so far: {}",
+ "직접 써서 통과하면 XP를 받아요. 모범 코드로 넘어가면 이 단계 XP는 없어요": "Write it yourself and pass to get XP. Continuing from the model code gives no XP for this step",
  "진열장": "Showcase",
  "진열장에 놓았어요. 언제든 다시 실행할 수 있어요.": "It's on your showcase now. You can run it any time.",
  "처음부터 다시": "Restart from the beginning",

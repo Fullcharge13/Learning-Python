@@ -6785,5 +6785,30 @@ def test_workshop_replay_other_language():
     assert not fails, fails
 
 
+def test_workshop_auto_reveal_keeps_xp():
+    """재검토 N2 판정: 세 번 틀려 정답이 저절로 열린 것은 XP를 잃지 않는다(직접 「정답 보기」를 누른 때만 그 단계 XP 없음).
+    정답 칸 안내도 그에 맞게: 저절로 열리면 「직접 써서 통과하면 XP를 받아요」."""
+    body = _pj_body("P1")
+    with App("iPhone 17", save=_ws_seed(3)) as a:
+        _open_workshop(a)
+        _open_project(a, "P1")
+        xp0 = a.save()["xp"]
+        a.wait_py()
+        a.set_code('me = input()\nprint(me)\n')
+        for _ in range(3):
+            a.page.click("#submit")
+            a.page.wait_for_selector("#console .submit-count", timeout=30_000)
+            a.page.wait_for_function("() => !document.querySelector('#submit').disabled")
+        a.page.wait_for_selector("#solution:not([hidden]) #pj-usesol")
+        note = a.page.inner_text("#solution .sol-note")
+        assert "직접 써서 통과하면 XP를 받아요" in note, note
+        _pj_submit(a, body["steps"][0]["solution"])
+        txt = a.page.inner_text(".modal .pj-pass")
+        assert "XP +5" in txt, txt
+        _pj_next(a)
+        assert a.save()["xp"] == xp0 + 5, (a.save()["xp"], xp0)
+        assert not _app_errors(a), a.errors
+
+
 if __name__ == "__main__":
     sys.exit(main())

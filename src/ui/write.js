@@ -49,8 +49,9 @@ export function errorPanel(err, outfit, over = null, opts = {}) {
 // onState(state): 같은 모양으로 지금 상태를 알림. 초안은 DRAFT_DEBOUNCE_MS 뒤에, 힌트·정답·틀린 제출은 바로.
 // (통과한 제출은 알리지 않음 — 그 뒤 상태는 레슨 쪽이 다음 문제로 넘기며 저장)
 // v0.21.0 프로젝트 공방(src/ui/project.js)이 더 넘기는 것:
-//   useSolution: { label, note?, onUse(code) } — 정답 칸의 「정답을 입력창에 넣기」 대신 이 단추(「모범 코드에서 이어 하기」),
-//                note는 정답 칸에 붙는 한 줄(「정답을 보면 이 단계 XP는 없어요」)
+//   useSolution: { label, note?(auto), onUse(code) } — 정답 칸의 「정답을 입력창에 넣기」 대신 이 단추(「모범 코드에서 이어 하기」),
+//                note(auto)는 정답 칸에 붙는 한 줄. auto: 세 번 틀려 저절로 열림(직접 누름이 아님)
+//   onPass에는 solutionChosen(학습자가 「정답 보기」를 직접 눌렀나 — 저절로 열린 것은 false)도 넘긴다
 //   (「실행」은 레슨과 같이 공개 시험 환경 그대로 — 작업 6 검토 I2: 다른 파일을 끼우면 기대 출력과 달라짐)
 //   flushOnDestroy: 떠날 때 남은 초안을 onState로 바로 알림(레슨은 끄고 둠 — 그만두기가 이어 하기 기록을 지운 뒤라)
 //   onPass에는 통과한 코드 code도 같이 넘긴다
@@ -59,7 +60,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
   const tests = Array.isArray(item.tests) ? item.tests : [];
   const pub = tests.find((t) => t.public) || tests[0] || { stdin: "", expect: "" };
   const hints = Array.isArray(item.hints) ? item.hints : [];
-  const st = { hintsShown: 0, solutionSeen: false, submits: 0, hadError: false, busy: false, destroyed: false };
+  const st = { hintsShown: 0, solutionSeen: false, solutionChosen: false, submits: 0, hadError: false, busy: false, destroyed: false };
   const init = initial && typeof initial === "object" ? initial : null;
   if (init) {
     st.submits = Math.max(0, init.submits | 0);
@@ -308,7 +309,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       log({ pass: v.pass });
       if (v.pass) {
         consoleEl.innerHTML = `<p class="pass-line">${icon("check")}${t`시험 ${tests.length}개 모두 통과`}</p>`;
-        onPass({ solutionSeen: st.solutionSeen, hintUsed: st.hintsShown > 0, hadError: st.hadError, firstSubmit: st.submits === 1, code });
+        onPass({ solutionSeen: st.solutionSeen, hintUsed: st.hintsShown > 0, hadError: st.hadError, firstSubmit: st.submits === 1, code, solutionChosen: st.solutionChosen });
         return;
       }
       onWrong();
@@ -394,6 +395,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
   const solEl = body.querySelector("#solution");
   function revealSolution(auto) {
     if (!st.solutionSeen) onHint();
+    if (!auto) st.solutionChosen = true;
     paintSolution(auto);
     if (!auto) { solEl.scrollIntoView({ block: "nearest" }); notify(); }
   }
@@ -403,7 +405,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     solEl.innerHTML = `<h2>${auto ? t`세 번 제출했으니 정답을 같이 볼까요?` : t`정답과 해설`}</h2>
       ${codeBlock(item.solution || "")}
       ${item.explain ? `<p>${esc(item.explain)}</p>` : ""}
-      ${useSolution && useSolution.note ? `<p class="sol-note">${icon("xp")}<span>${esc(useSolution.note)}</span></p>` : ""}
+      ${useSolution && useSolution.note ? `<p class="sol-note">${icon("xp")}<span>${esc(useSolution.note(auto))}</span></p>` : ""}
       ${useSolution ? `<button class="btn ghost small" id="pj-usesol">${esc(useSolution.label)}</button>`
         : `<button class="btn ghost small" id="usesol">${t`정답을 입력창에 넣기`}</button>`}`;
     if (useSolution) {

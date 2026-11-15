@@ -16,6 +16,7 @@
   ⑨ 영어 파일에 한글 없음, 한국어 단계 글에는 한글이 있음
   ⑪ 정답·시작 코드·도구 카드 코드의 한 줄이 휴대폰 편집기 폭(CODE_COLS칸, 한글 2칸) 안
   ⑩ 보상 상수 PROJECT_STEP_XP = 5, PROJECT_DONE_XP = 20
+  ⑭ 파일을 여는 단계: 읽기만 하면 첫 공개 시험(「실행」 환경)에 files가 있고, 정답의 「실행」 출력이 기대 출력과 같음
 
 실행: python3 tests/projects.py   (하나라도 실패하면 종료 코드 1)
 """
@@ -671,6 +672,10 @@ def normalize(text):
     return re.sub(r"\n+$", "", "\n".join(line.rstrip() for line in s.split("\n")))
 
 
+FILE_OPEN = re.compile(r"\bopen\(|\bjson\.load\(")
+FILE_WRITE = re.compile(r"\bopen\([^)]*,\s*[\"'][wa]")
+
+
 def run_test(code, step, t, lang):
     files = t.get("files") or step.get("files")
     kw = {"lang": lang}
@@ -932,6 +937,15 @@ def main():
                     r = run_test(s["solution"], nxt, t, lang)
                     check(not r.get("error"), "④ %s solution이 %d단계 공개 시험에서 오류 없이 돎" % (tag, k + 2),
                           str(r.get("error")))
+                # ⑭ 「실행」(채점 전 자유 실행)은 첫 공개 시험 환경 그대로 돈다(src/ui/write.js runEnv, 작업 6 검토 I2).
+                #    파일을 여는 단계: 읽기만 하면(쓰기 "w"/"a" 없음) 그 공개 시험에 files가 있어야 하고,
+                #    어느 쪽이든 정답의 자유 실행 출력이 화면의 「기대 출력」과 같아야 한다.
+                if FILE_OPEN.search(s["solution"]):
+                    pub = next((t for t in s["tests"] if t.get("public")), s["tests"][0])
+                    writes = bool(FILE_WRITE.search(s["solution"]))
+                    check(writes or bool(pub.get("files")), "⑭ %s 파일을 읽는 단계의 공개 시험에 files" % tag)
+                    check(test_fails(s["solution"], s, pub, lang) is None, "⑭ %s 정답의 「실행」 출력 = 기대 출력" % tag,
+                          str(test_fails(s["solution"], s, pub, lang)))
                 # ⑫ 한 판 입력 상한(50번) 안: 시험마다 입력 줄 수 ≤ PLAY_MAX_INPUTS
                 many = [i for i, t in enumerate(s["tests"]) if len(runner._split_stdin(t.get("stdin"))) > PLAY_MAX_INPUTS]
                 check(not many, "⑫ %s 시험 입력 %d줄 이하" % (tag, PLAY_MAX_INPUTS), str(many))

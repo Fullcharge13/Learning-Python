@@ -20,7 +20,8 @@ let playGen = 0;
 /** 오류 위에 붙일 쉬운 한 줄 */
 function friendly(err) {
   if (err.type === "ValueError" && NUMBER_ERR.test(err.msg || "")) return t`숫자로 입력해야 해요. 「다시 하기」를 눌러 새 판을 시작해요.`;
-  if (err.type === "Timeout") return t`프로그램이 끝나지 않아요. 입력 없이 계속 도는 반복이 있는지 살펴봐요.`;
+  // 검토 M6(b): 이 화면에서는 코드를 못 고치므로 고칠 곳(공방의 「다시 만들기」)을 알려 줌
+  if (err.type === "Timeout") return t`프로그램이 끝나지 않아요. 공방에서 이 작품을 누르고 「다시 만들기」로 코드를 고쳐 봐요.`;
   return t`프로그램이 오류로 멈췄어요. 아래 단서를 보고 「다시 하기」로 새 판을 시작해요.`;
 }
 
@@ -104,7 +105,7 @@ export function render(root, ctx, params = {}) {
     if (frame.limit) {
       S.need = null;
       paintLog();
-      msgEl.innerHTML = `<p class="pl-line pl-limit">${icon("cross")}<span>${t`한 판이 너무 길어요. 입력을 ${PLAY_MAX_INPUTS}번 받아서 멈췄어요. 「다시 하기」로 새 판을 시작해요.`}</span></p>`;
+      msgEl.innerHTML = `<p class="pl-line pl-limit">${icon("cross")}<span>${esc(t`한 판이 너무 길어요. 입력을 ${PLAY_MAX_INPUTS}번 받아서 멈췄어요. 「다시 하기」로 새 판을 시작해요.`)}</span></p>`;
       scr.dataset.turn = String(S.turn);
       setState("limit");
       return;
@@ -114,7 +115,7 @@ export function render(root, ctx, params = {}) {
       // 출력 앞부분이 앞 실행과 달라짐(프로그램이 스스로 무작위 씨앗·시각을 바꿈 등): 처음부터 다시 보여 준다
       const answers = sess.inputs;
       S.log = [{ out: frame.output }];
-      note = `<p class="pl-line pl-note">${icon("review")}<span>${t`출력이 앞과 달라져서 처음부터 다시 보여 줘요.`}${answers.length ? ` ${t`지금까지 한 답: ${answers.map((a) => `「${a}」`).join(", ")}`}` : ""}</span></p>`;
+      note = `<p class="pl-line pl-note">${icon("review")}<span>${esc(t`출력이 앞과 달라져서 처음부터 다시 보여 줘요.`)}${answers.length ? ` ${esc(t`지금까지 한 답: ${answers.map((a) => `「${a}」`).join(", ")}`)}` : ""}</span></p>`;
     } else if (frame.appended) {
       S.log.push({ out: frame.appended });
     }

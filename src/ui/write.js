@@ -49,12 +49,13 @@ export function errorPanel(err, outfit, over = null, opts = {}) {
 // onState(state): 같은 모양으로 지금 상태를 알림. 초안은 DRAFT_DEBOUNCE_MS 뒤에, 힌트·정답·틀린 제출은 바로.
 // (통과한 제출은 알리지 않음 — 그 뒤 상태는 레슨 쪽이 다음 문제로 넘기며 저장)
 // v0.21.0 프로젝트 공방(src/ui/project.js)이 더 넘기는 것:
-//   useSolution: { label, onUse(code) } — 정답 칸의 「정답을 입력창에 넣기」 대신 이 단추(「모범 코드에서 이어 하기」)
-//   runFiles: 「실행」(채점 전 자유 실행)에서 공개 시험에 files가 없을 때 쓸 가상 파일(프로젝트 play.files). 채점은 시험마다 제 files
+//   useSolution: { label, note?, onUse(code) } — 정답 칸의 「정답을 입력창에 넣기」 대신 이 단추(「모범 코드에서 이어 하기」),
+//                note는 정답 칸에 붙는 한 줄(「정답을 보면 이 단계 XP는 없어요」)
+//   (「실행」은 레슨과 같이 공개 시험 환경 그대로 — 작업 6 검토 I2: 다른 파일을 끼우면 기대 출력과 달라짐)
 //   flushOnDestroy: 떠날 때 남은 초안을 onState로 바로 알림(레슨은 끄고 둠 — 그만두기가 이어 하기 기록을 지운 뒤라)
 //   onPass에는 통과한 코드 code도 같이 넘긴다
 export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log, showCards, initial = null, onState = null,
-  useSolution = null, runFiles = null, flushOnDestroy = false }) {
+  useSolution = null, flushOnDestroy = false }) {
   const tests = Array.isArray(item.tests) ? item.tests : [];
   const pub = tests.find((t) => t.public) || tests[0] || { stdin: "", expect: "" };
   const hints = Array.isArray(item.hints) ? item.hints : [];
@@ -270,9 +271,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     ed.markLine(null);
     showRunning();
     try {
-      const env = runEnv(item, pub);
-      if (!env.files && runFiles) env.files = runFiles;
-      const r = await ctx.py.run(ed.getCode(), stdinOf(pub), item.require || [], env);
+      const r = await ctx.py.run(ed.getCode(), stdinOf(pub), item.require || [], runEnv(item, pub));
       if (st.destroyed) return; // 화면을 떠난 뒤 도착한 결과는 버림
       if (r.error && SYSTEM_ERRORS.has(r.error.type)) { systemError(r); return; }
       const out = normalize(r.stdout);
@@ -404,6 +403,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     solEl.innerHTML = `<h2>${auto ? t`세 번 제출했으니 정답을 같이 볼까요?` : t`정답과 해설`}</h2>
       ${codeBlock(item.solution || "")}
       ${item.explain ? `<p>${esc(item.explain)}</p>` : ""}
+      ${useSolution && useSolution.note ? `<p class="sol-note">${icon("xp")}<span>${esc(useSolution.note)}</span></p>` : ""}
       ${useSolution ? `<button class="btn ghost small" id="pj-usesol">${esc(useSolution.label)}</button>`
         : `<button class="btn ghost small" id="usesol">${t`정답을 입력창에 넣기`}</button>`}`;
     if (useSolution) {

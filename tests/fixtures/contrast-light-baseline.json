@@ -251,7 +251,7 @@
   },
   {
    "screen": "project-solution",
-   "checked": 27,
+   "checked": 28,
    "minRatio": 4.63,
    "theme_applied": "light",
    "fails": 0
@@ -285,9 +285,9 @@
    "fails": 0
   }
  ],
- "checked": 1166,
+ "checked": 1280,
  "fail_count": 2,
- "fail_elements": 15,
+ "fail_elements": 16,
  "excluded": {
   "noLetterSkipped": 165,
   "invisible": 1226,
@@ -1635,6 +1635,7 @@
    ".goal-line > span|#12756d|#ddf1ec",
    ".panel > p|#22304a|#fff3c4",
    ".ria-row > p.bubble|#22304a|#fffdf8",
+   ".sol-note > span|#b03a25|#fffdf8",
    ".symbols > button.sym.word|#22304a|#fffdf8",
    "button#pj-usesol|#22304a|#fffdf8",
    "p#pychip|#6b4f00|#fff3c4",

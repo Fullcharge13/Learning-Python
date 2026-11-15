@@ -33,12 +33,12 @@ export function workshopCard(ctx) {
   if (rows.every((r) => r.state === "locked")) {
     return `<section class="panel workshop-card locked" aria-labelledby="wsc-title">
       <span class="wsc-ic" aria-hidden="true">${icon("lock")}</span>
-      <div class="wsc-text"><h2 id="wsc-title">${t`프로젝트 공방`}</h2><p>${t`${first}장을 끝내면 첫 프로젝트가 열려요`}</p></div>
+      <div class="wsc-text"><h2 id="wsc-title">${t`프로젝트 공방`}</h2><p>${esc(t`${first}장을 끝내면 첫 프로젝트가 열려요`)}</p></div>
     </section>`;
   }
   const done = rows.filter((r) => r.state === "done").length;
   const cur = rows.find((r) => r.state === "progress");
-  const note = cur ? t`만드는 중: ${esc(nameOf(cur.entry))} ${cur.step + 1}/${cur.entry.steps}단계` : t`완성한 작품 ${done}/${rows.length}`;
+  const note = esc(cur ? t`만드는 중: ${nameOf(cur.entry)} ${cur.step + 1}/${cur.entry.steps}단계` : t`완성한 작품 ${done}/${rows.length}`);
   return `<section class="panel workshop-card" aria-labelledby="wsc-title">
     <span class="wsc-ic" aria-hidden="true">${icon("code")}</span>
     <div class="wsc-text"><h2 id="wsc-title">${t`프로젝트 공방`}</h2><p>${note}</p></div>
@@ -52,10 +52,10 @@ export function bindWorkshopCard(root, ctx) {
 }
 
 function stateText(r) {
-  if (r.state === "locked") return `${icon("lock")}<span>${t`${r.entry.need}장을 끝내면 열려요`}</span>`;
+  if (r.state === "locked") return `${icon("lock")}<span>${esc(t`${r.entry.need}장을 끝내면 열려요`)}</span>`;
   if (r.state === "done") return `${icon("check")}<span>${t`완성`}</span>`;
-  if (r.state === "progress") return `<span>${t`만드는 중 ${r.step + 1}/${r.entry.steps}단계`}</span>`;
-  return `<span>${t`새 작품 · ${r.entry.steps}단계`}</span>`;
+  if (r.state === "progress") return `<span>${esc(t`만드는 중 ${r.step + 1}/${r.entry.steps}단계`)}</span>`;
+  return `<span>${esc(t`새 작품 · ${r.entry.steps}단계`)}</span>`;
 }
 
 export function render(root, ctx) {

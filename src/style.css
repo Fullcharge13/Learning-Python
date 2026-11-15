@@ -1265,3 +1265,5 @@ body.kbd-compact .pj-head { display: none; }
 [data-theme="dark"] .ws-item:not(.locked) { box-shadow: 0 3px 0 rgba(0, 0, 0, .35); }
 [data-theme="dark"] .pl-input { background: var(--paper-2); border-color: var(--ink-2); }
 [data-theme="dark"] .pl-input[readonly] { border-color: var(--line); }
+.sol-note { display: flex; gap: 6px; align-items: center; margin: 0 0 8px; font-size: .88rem; font-weight: 700; color: var(--coral-ink); }
+.sol-note .ic { width: 18px; height: 18px; flex: none; }

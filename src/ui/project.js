@@ -17,7 +17,10 @@ let projectGen = 0;
 /** 다른 언어로 시작한 진행: 고르기 창. "switch"(그 언어로 바꿔 이어 하기) | "here"(이 언어로) | null */
 function askLang(st) {
   const ko = st.langMismatch === "ko";
-  const here = st.resume ? t`이 언어로 이어서 (${st.resume.step + 1}단계)` : t`이 언어로 처음부터`;
+  // 검토 M6(a): 「이 언어」 대신 지금 언어 이름으로
+  const en = lang() === "en";
+  const here = st.resume ? (en ? t`영어로 이어서 (${st.resume.step + 1}단계)` : t`한국어로 이어서 (${st.resume.step + 1}단계)`)
+    : (en ? t`영어로 처음부터` : t`한국어로 처음부터`);
   return dialog({
     title: ko ? t`이 프로젝트는 한국어로 시작했어요` : t`이 프로젝트는 영어로 시작했어요`,
     body: `<div class="pj-lang"><p>${ko ? t`한국어로 바꾸면 하던 곳에서 이어 해요. 이 언어로 하면 따로 만들고, 한국어 진행은 그대로 남아요.`
@@ -130,20 +133,21 @@ export function render(root, ctx, params = {}) {
     setState("ready");
     head.innerHTML = `<h1 class="pj-title">${esc(title)}</h1>`
       + (S.step === 0 ? riaSays({ outfit: ctx.save.outfit, face: "smile", text: body.intro, size: 56, cls: "small" }) : "")
-      + `<p class="goal-line pj-goal">${icon("path")}<span>${t`${S.step + 1}단계`} · ${esc(step.goal)}</span></p>`
+      + `<p class="goal-line pj-goal">${icon("path")}<span>${esc(t`${S.step + 1}단계`)} · ${esc(step.goal)}</span></p>`
       + (step.tool ? toolHTML(step.tool) : "");
     const item = { type: "write", task: step.task, tests: step.tests, require: step.require, hints: step.hints, solution: step.solution, explain: step.explain, starter: "" };
     S.cleanupItem = mountWrite({
       ctx, item, body: writeEl, foot, initial: { code },
       flushOnDestroy: true,
-      runFiles: (body.play && body.play.files) || null,
-      useSolution: { label: t`모범 코드에서 이어 하기`, onUse: (sol) => passed(sol, true) },
+      // 검토 M3: 단추 글에 XP를 잃는다는 것을, M2: 정답 칸에 「정답을 보면 XP 없음」을
+      useSolution: { label: t`모범 코드에서 이어 하기 (이 단계 XP 없음)`, note: t`정답을 보면 이 단계 XP는 없어요`, onUse: (sol) => passed(sol, true, true) },
       onState(w) {
         if (!alive()) return;
         const next = saveDraft(ctx.save, id, lang(), S.step, w.code);
         if (next !== ctx.save) ctx.commit(next);
       },
-      onPass({ code: mine }) { passed(mine, false); },
+      // 검토 M2: 정답을 본 뒤의 통과는 모범 코드를 쓴 것과 같이(그 단계 XP 없음)
+      onPass({ code: mine, solutionSeen }) { passed(mine, !!solutionSeen); },
       onWrong() {},
       onHint() {},
       log() {},
@@ -151,7 +155,7 @@ export function render(root, ctx, params = {}) {
     });
   }
 
-  async function passed(code, usedSolution) {
+  async function passed(code, usedSolution, viaButton = false) {
     if (S.busy || !alive() || typeof code !== "string") return;
     S.busy = true;
     const n = S.step;
@@ -166,16 +170,16 @@ export function render(root, ctx, params = {}) {
       v = await dialog({
         title: t`완성!`,
         body: `<div class="pj-done">${say(S.body.finale, "joy")}
-          <p class="g-done-xp">${icon("xp")}<span>${r.xp ? `XP +${r.xp}` : t`이미 완성한 작품이라 XP는 없어요`}</span></p>
+          <p class="g-done-xp">${icon("xp")}<span>${esc(r.xp ? `XP +${r.xp}` : t`이미 완성한 작품이라 XP는 없어요`)}</span></p>
           <p class="pj-shelf-note">${icon("star")}<span>${t`진열장에 놓았어요. 언제든 다시 실행할 수 있어요.`}</span></p></div>`,
         buttons: [{ label: t`한 판 해 보기`, value: "play", kind: "primary" }, { label: t`공방으로`, value: "list" }],
       });
     } else {
-      const xpLine = usedSolution ? t`모범 코드를 썼으니 이 단계 XP는 없어요` : r.xp ? `XP +${r.xp}` : t`이미 XP를 받은 단계예요`;
+      const xpLine = usedSolution ? t`정답을 봤으니 이 단계 XP는 없어요` : r.xp ? `XP +${r.xp}` : t`이미 XP를 받은 단계예요`;
       v = await dialog({
-        title: usedSolution ? t`모범 코드로 넘어가요` : t`${n + 1}단계 통과!`,
-        body: `<div class="pj-pass">${say(S.body.steps[n].explain || ctx.say("correct").text, usedSolution ? "smile" : "joy")}
-          <p class="g-done-xp">${icon("xp")}<span>${xpLine}</span></p></div>`,
+        title: viaButton ? t`모범 코드로 넘어가요` : t`${n + 1}단계 통과!`,
+        body: `<div class="pj-pass">${say(S.body.steps[n].explain || ctx.say("correct").text, viaButton ? "smile" : "joy")}
+          <p class="g-done-xp">${icon("xp")}<span>${esc(xpLine)}</span></p></div>`,
         buttons: [{ label: t`다음 단계`, value: "next", kind: "primary" }],
       });
     }

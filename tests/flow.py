@@ -6359,6 +6359,21 @@ def test_workshop_use_solution():
         _pj_next(a)
         if a.save()["xp"] != xp0 + 5:
             fails.append("own step 2 xp %d (want %d)" % (a.save()["xp"], xp0 + 5))
+        # 검토 M2: 정답을 본 뒤 손으로 모범 코드를 써서 통과해도 그 단계 XP는 없음(정답 칸에 미리 알림)
+        a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+        a.page.click("#sol")
+        a.page.wait_for_selector("#pj-usesol")
+        sol_txt = a.page.inner_text("#solution")
+        if "정답을 보면 이 단계 XP는 없어요" not in sol_txt:
+            fails.append("solution area does not warn about XP: %r" % sol_txt[-120:])
+        if "XP" not in a.page.inner_text("#pj-usesol"):
+            fails.append("model-code button does not mention XP: %r" % a.page.inner_text("#pj-usesol"))
+        _pj_submit(a, body["steps"][2]["solution"])
+        if "XP +5" in a.page.inner_text(".modal .pj-pass"):
+            fails.append("step after viewing the answer still pays XP: %r" % a.page.inner_text(".modal"))
+        _pj_next(a)
+        if a.save()["xp"] != xp0 + 5:
+            fails.append("xp after answer viewed %d (want %d)" % (a.save()["xp"], xp0 + 5))
         assert not _app_errors(a), a.errors
     assert not fails, fails
 
@@ -6581,12 +6596,19 @@ def test_workshop_play_edges():
         _pl_answer(a, "")
         if "0" not in _pl_log(a).split("\n"):
             fails.append("empty answer: %r" % _pl_log(a))
+        # 검토 M4: 실행기를 1초 늦춰 「실행 중」을 반드시 보고 잠김을 잰다
+        a.js("() => { const py = window.__ria.app.py; const orig = py.run.bind(py); window.__slowPy = true;"
+             " py.run = (...x) => new Promise((r) => setTimeout(r, window.__slowPy ? 1000 : 0)).then(() => orig(...x)); }")
         a.page.fill("#pl-input", "abc")
         a.page.press("#pl-input", "Enter")
         locked = a.js("() => { const i = document.querySelector('#pl-input'), b = document.querySelector('#pl-send'); return [i.readOnly, b.disabled, document.querySelector('.screen.play').dataset.state]; }")
-        if locked[2] == "running" and not (locked[0] and locked[1]):
+        if locked != [True, True, "running"]:
             fails.append("input not locked while running %r" % locked)
+        a.page.press("#pl-input", "Enter")   # 잠긴 동안 보낸 답은 버려짐(답 줄이 늘지 않음)
+        a.js("() => { window.__slowPy = false; }")
         _pl_wait(a, 3)
+        if len(a.page.query_selector_all("#pl-log .pl-in")) != 2:
+            fails.append("answer lines after locked Enter: %d" % len(a.page.query_selector_all("#pl-log .pl-in")))
         if _pl_state(a) != "error":
             fails.append("state after ValueError %r" % _pl_state(a))
         if "숫자로 입력해야 해요" not in a.page.inner_text(".screen.play"):
@@ -6683,6 +6705,83 @@ def test_workshop_narrow():
             _gd_check_layout(a, "play-error-" + tag, fails)
             a.shot("workshop-narrow-play-%s.png" % tag)
             assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_xss_play_answer():
+    """검토 I1: 주고받기 화면의 학습자 답(출력 앞부분이 달라진 안내 목록 포함)은 글자 그대로. 새 요소·스크립트 없음."""
+    bad = '<img src=x onerror="window.__xss=1"><b id=injected>B</b>'
+    code = "import random\nrandom.seed()\nprint(random.randint(1, 10 ** 9))\na = input()\nprint(len(a))\n"
+    with App("iPhone 17", save=_ws_seed(3, projects=_done_projects(P1=code))) as a:
+        _open_workshop(a)
+        _open_play(a, "P1")
+        _pl_answer(a, bad)
+        a.page.wait_for_timeout(300)
+        assert a.page.query_selector(".pl-note"), "prefix mismatch note expected"
+        assert not a.page.query_selector("#injected"), "answer became HTML"
+        assert not a.page.query_selector(".screen.play img"), "img element created"
+        assert a.js("() => window.__xss") is None, "script ran"
+        assert bad in a.page.inner_text(".pl-note"), a.page.inner_text(".pl-note")
+        assert not _app_errors(a), a.errors
+
+
+def test_workshop_p4_free_run():
+    """검토 I2: P4 3단계 「실행」은 공개 시험 환경 그대로(파일 없음) → 모범 코드의 실행 결과가 「기대 출력」과 같다."""
+    body = _pj_body("P4")
+    st = body["steps"][2]
+    pub = next(t for t in st["tests"] if t.get("public"))
+    with App("iPhone 17", save=_ws_seed(11)) as a:
+        _open_workshop(a)
+        _open_project(a, "P4")
+        for _ in range(2):
+            a.page.click("#sol")
+            a.page.click("#pj-usesol")
+            a.page.wait_for_selector(".modal .pj-pass")
+            _pj_next(a)
+            a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+        assert "3/" in a.page.inner_text("#pj-step"), a.page.inner_text("#pj-step")
+        a.wait_py()
+        a.set_code(st["solution"])
+        a.page.click("#run")
+        a.page.wait_for_selector("#console pre.out", timeout=30_000)
+        got = a.page.inner_text("#console pre.out").strip()
+        assert got == pub["expect"].strip(), (got, pub["expect"])
+        assert not _app_errors(a), a.errors
+
+
+def test_workshop_replay_other_language():
+    """검토 ⚠️: 영어로 완성한 P1을 한국어로 바꾼 뒤 진열장에서 다시 실행 → 만든 언어(영어) 본문·코드로 한 판."""
+    fails = []
+    with App("iPhone 17", save=_ws_seed(3, en=True), locale="en-US") as a:
+        _open_workshop(a)
+        _open_project(a, "P1")
+        for i in range(4):
+            a.page.click("#sol")
+            a.page.click("#pj-usesol")
+            a.page.wait_for_selector(".modal .pj-pass, .modal .pj-done")
+            if i < 3:
+                _pj_next(a)
+                a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal [data-i='1']")   # 공방으로
+        a.page.wait_for_selector(".screen.workshop .ws-list")
+        if ((a.save().get("projects") or {}).get("done", {}).get("P1") or {}).get("lang") != "en":
+            fails.append("P1 not done in English: %r" % a.save().get("projects"))
+        a.js("() => window.__ria.ctx.setLanguage('ko')")
+        a.page.wait_for_function("() => document.documentElement.lang === 'ko'")
+        a.page.wait_for_selector(".screen.workshop .ws-list")
+        if "진열장" not in a.page.inner_text(".ws-shelf"):
+            fails.append("workshop not in Korean after switch")
+        _open_play(a, "P1")
+        if _pl_state(a) != "need":
+            fails.append("replay state %r: %r" % (_pl_state(a), a.page.inner_text(".screen.play")[-200:]))
+        if "rock, paper or scissors" not in a.page.inner_text("#pl-prompt"):
+            fails.append("replay prompt not from the English body: %r" % a.page.inner_text("#pl-prompt"))
+        _pl_answer(a, "rock")
+        log = _pl_log(a)
+        if "Me: rock" not in log or "Result:" not in log:
+            fails.append("replay log %r" % log)
+        assert not _app_errors(a), a.errors
     assert not fails, fails
 
 

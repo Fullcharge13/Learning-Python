@@ -23,6 +23,9 @@ import { createGuardData } from "./guard/catalog.js";
 import { loadDevIncidents } from "./guard/guarddev.js";
 import { prefetchChunks } from "./chunks.js";
 import { setGuardIndex } from "./guard/state.js";
+import { createProjectData } from "./projects/catalog.js";
+import { loadDevProjects } from "./projects/projectdev.js";
+import { setProjectIndex } from "./projects/state.js";
 import { watchSystem } from "./theme.js";
 import { createSound } from "./sound.js";
 import { toast } from "./ui/dom.js";
@@ -39,9 +42,12 @@ import * as settings from "./ui/settings.js";
 import * as garden from "./ui/garden.js";
 import * as guard from "./ui/guard.js";
 import * as tutorial from "./ui/tutorial.js";
+import * as workshop from "./ui/workshop.js";
+import * as project from "./ui/project.js";
+import * as play from "./ui/console.js";
 
 export const VERSION = "v0.20.3";
-const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden, guard, tutorial };
+const SCREENS = { splash, home, lesson, done, badges, closet, settings, garden, guard, tutorial, workshop, project, play };
 
 // ---- 저장소 (사파리 사생활 보호 모드 등에서 localStorage 접근이 막혀도 앱은 돈다) ----
 function pickStorage() {
@@ -107,11 +113,23 @@ async function initGuard() {
   app.guard = data;
 }
 
+// 프로젝트 공방(v0.21.0). 배포판: build.py가 넣은 색인·파일 이름표 → 본문은 프로젝트를 열 때 받음.
+// 개발판: 둘 다 없음 → data/projects*.js 원본(projectdev.js, 배포판에서는 빈 모듈).
+// 색인은 저장을 읽기 전에 넣는다(passStep·배지 「공방 장인」이 색인을 씀. cleanProjects는 색인이 있으면 단계 범위까지 맞춤)
+async function initProjects() {
+  const data = window.RIA_PROJECT_INDEX && window.RIA_PROJECT_FILES
+    ? createProjectData({ index: window.RIA_PROJECT_INDEX, files: window.RIA_PROJECT_FILES, base: location.href })
+    : createProjectData({ projects: await loadDevProjects() });
+  setProjectIndex(data.index);
+  app.projects = data;
+}
+
 const app = {
   save: null, screen: null, params: null, modal: null,
   chapters: [], lessons: [],   // 레슨 목록(문제·카드 없음). 전체는 ctx.getLesson / getChapter. lessons는 본 과정만
   advanced: [],                // 심화 레슨 목록(v0.7, 선택 레슨)
   data: null,
+  projects: null,        // 프로젝트 공방 { index, load(id, 언어) } (v0.21.0, src/projects/catalog.js createProjectData)
   guard: null,           // 경비실 사건 { index, load(장) } (v0.16.0, src/guard/catalog.js createGuardData)
   dataLang: null,        // app.data(레슨 목록·장 파일)가 어느 언어로 불러온 것인지(v0.13.4)
   swChanged: false,      // 이 페이지를 다루던 서비스 작업자가 새 판으로 바뀜 → 장 파일 이름표가 옛것일 수 있음
@@ -399,6 +417,7 @@ const ctx = {
   get chapters() { return app.chapters; },
   get lessons() { return app.lessons; },
   get guard() { return app.guard; },
+  get projects() { return app.projects; },
   get advanced() { return app.advanced; },
   advancedIds: () => advancedIds(app.chapters),
   lessonById,
@@ -448,6 +467,7 @@ const ctx = {
 async function boot() {
   const root = document.getElementById("app");
   await initGuard();   // 저장을 읽기 전에(판정 G2-C3)
+  await initProjects();   // 저장을 읽기 전에(v0.21.0)
   app.dev = readDevFlag(storage);
   paintDev();
   watchSystem();   // v0.19.0: 「시스템 따라가기」일 때 휴대폰 어두운 모드 전환을 바로 따라감

@@ -436,6 +436,40 @@ def sc_guard_field(r):
         r.cap(a, "guard-field-card")
 
 
+def sc_workshop(r):
+    """v0.21.0 작업 6: 공방 목록·진열장, 프로젝트 단계(새 도구 카드)·정답 칸·단계 통과 창, 주고받기(입력 기다림·오류 카드)"""
+    import flow
+    body = flow._pj_body("P1")
+    proj = flow._done_projects(P1=body["steps"][-1]["solution"], P2="a = input()\nn = int(a)\nprint(n)\n")
+    proj["done"].pop("P2")
+    with _app(r.theme, save=flow._ws_seed(5, projects=proj)) as a:
+        flow._open_workshop(a)
+        r.cap(a, "workshop")
+        flow._open_project(a, "P2")
+        r.cap(a, "project-step")
+        a.page.click("#sol")
+        a.page.wait_for_selector("#pj-usesol")
+        a.page.eval_on_selector("#solution", "e => e.scrollIntoView({block: 'center'})")
+        r.cap(a, "project-solution")
+        a.page.click("#pj-usesol")
+        a.page.wait_for_selector(".modal .pj-pass")
+        a.page.wait_for_timeout(flow.GUARD_WAIT)
+        r.cap(a, "project-pass")
+        flow._pj_next(a)
+        a.page.click("#pj-back")
+        a.page.wait_for_selector(".screen.workshop .ws-list")
+        flow._open_play(a, "P1")
+        r.cap(a, "play-need")
+        flow._pl_answer(a, "가위")
+        r.cap(a, "play-done")
+    with _app(r.theme, save=flow._ws_seed(5, projects=flow._done_projects(P2="n = int(input())\nprint(n)\n"))) as a:
+        flow._open_workshop(a)
+        flow._open_play(a, "P2")
+        flow._pl_answer(a, "abc")
+        a.page.wait_for_selector(".screen.play .err-panel")
+        r.cap(a, "play-error")
+
+
 def run_app(theme, skip_tokens, skip_art=False):
     import flow
     flow.env()
@@ -444,6 +478,7 @@ def run_app(theme, skip_tokens, skip_art=False):
     r.scenario("1장 통과 저장: 홈·배지·의상실·설정·텃밭", lambda: sc_garden_home(r))
     r.scenario("3장 통과 저장: 경비실", lambda: sc_guard(r))
     r.scenario("4장 통과·3장 기본 해결 저장: 경비실 응용 사건", lambda: sc_guard_field(r))
+    r.scenario("5장 통과·P1 완성 저장: 프로젝트 공방", lambda: sc_workshop(r))
     return r
 
 

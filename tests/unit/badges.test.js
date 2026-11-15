@@ -5,6 +5,10 @@ import { BADGES } from "../../data/badges.js";
 import { setGuardIndex, basicIndex } from "../../src/guard/state.js";
 import { buildGuardIndex } from "../../src/guard/catalog.js";
 import { INCIDENTS } from "../../data/guard.js";
+import { setProjectIndex, clearProjectIndex } from "../../src/projects/state.js";
+import { buildProjectIndex } from "../../src/projects/catalog.js";
+import { PROJECTS as PROJ_KO } from "../../data/projects.js";
+import { PROJECTS as PROJ_EN } from "../../data/projects.en.js";
 
 // 판정 G2-C3: 앱처럼 색인을 먼저 넣는다
 const FULL = buildGuardIndex(INCIDENTS);
@@ -28,10 +32,11 @@ function mkSave(over = {}) {
 }
 const stats = (o) => ({ lessons: 0, perfect: 0, hintfree: 0, fixed: 0, review_items: 0, ...o });
 
-test("BADGES table: 18 ids (ledger 12 + streak100 + v0.7 심화 2 + v0.15 경비실 3) with Korean name/desc", () => {
-  assert.equal(BADGES.length, 18);
+test("BADGES table: 20 ids (ledger 12 + streak100 + v0.7 심화 2 + v0.15 경비실 3 + v0.21 공방 2) with Korean name/desc", () => {
+  assert.equal(BADGES.length, 20);
   assert.deepEqual(BADGES.map((b) => b.id), ["first_print", "ch1", "ch2", "ch3", "streak7", "streak30", "streak100",
-    "fixer", "hintfree10", "perfectionist", "reviewer", "collector", "night_owl", "advanced1", "advancedAll", "guard_first", "guard_perfect", "guard_files"]);
+    "fixer", "hintfree10", "perfectionist", "reviewer", "collector", "night_owl", "advanced1", "advancedAll", "guard_first", "guard_perfect", "guard_files",
+    "project_first", "project_all"]);
   for (const b of BADGES) {
     assert.match(b.name, /[가-힣]/);
     assert.match(b.desc, /[가-힣]/);
@@ -199,5 +204,51 @@ test("badge_guard_files: 응용 모두 해결, 응용이 0개면 받지 않음",
     assert.equal(RULES.guard_files(mkSave({ guard: { solved: solvedFT(...basics.map((e) => e.id)) } })), false);
   } finally {
     setGuardIndex(FULL);
+  }
+});
+
+// v0.21.0 프로젝트 공방: 「첫 작품」(하나 완성), 「공방 장인」(색인의 프로젝트 모두 완성)
+const PINDEX = buildProjectIndex(PROJ_KO, PROJ_EN);
+const doneOf = (...ids) => ({ v: 1, open: {}, done: Object.fromEntries(ids.map((id) => [id, { at: "2026-11-15", code: "print(1)", lang: "ko" }])) });
+
+test("badge_project_first: 프로젝트 하나 완성(save.projects.done)", () => {
+  setProjectIndex(PINDEX);
+  try {
+    assert.deepEqual(checkBadges(mkSave(), {}), []);
+    assert.deepEqual(checkBadges(mkSave({ projects: { v: 1, open: { P1: { lang: "ko", step: 3, code: "", best: 3 } }, done: {} } }), {}), []);
+    assert.deepEqual(checkBadges(mkSave({ projects: doneOf("P1") }), {}), ["project_first"]);
+    assert.deepEqual(checkBadges(mkSave({ projects: doneOf("P3") }), {}), ["project_first"]);
+  } finally {
+    clearProjectIndex();
+  }
+});
+
+test("badge_project_all: 색인의 프로젝트 5개 모두 완성일 때만", () => {
+  setProjectIndex(PINDEX);
+  try {
+    assert.equal(PINDEX.length, 5);
+    const ids = PINDEX.map((e) => e.id);
+    assert.equal(RULES.project_all(mkSave({ projects: doneOf(...ids.slice(0, 4)) })), false);
+    assert.equal(RULES.project_all(mkSave({ projects: doneOf(...ids) })), true);
+    assert.deepEqual(checkBadges(mkSave({ projects: doneOf(...ids) }), {}), ["project_first", "project_all"]);
+    assert.deepEqual(checkBadges(mkSave({ projects: doneOf(...ids), badges: ["project_first", "project_all"] }), {}), []);
+  } finally {
+    clearProjectIndex();
+  }
+});
+
+test("badge_project_all: 색인이 없으면(시험·옛 흐름) 받지 않고 던지지도 않음", () => {
+  clearProjectIndex();
+  assert.equal(RULES.project_all(mkSave({ projects: doneOf("P1", "P2", "P3", "P4", "P5") })), false);
+  assert.deepEqual(checkBadges(mkSave({ projects: doneOf("P1") }), {}), ["project_first"]);
+});
+
+test("project badge art: 「공방 장인」 글자는 색인 수(5/5)", async () => {
+  const { badgeArt } = await import("../../src/ui/badges.js");
+  setProjectIndex(PINDEX);
+  try {
+    assert.ok(badgeArt("project_all", true).includes(">5/5</text>"));
+  } finally {
+    clearProjectIndex();
   }
 });

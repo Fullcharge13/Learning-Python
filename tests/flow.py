@@ -71,6 +71,12 @@
 - test_xss_*: v0.19.2 작업 2 출력 보안(docs/security/2026-11-14-출력-점검표.md). 공격 글자(<img onerror>·"><svg onload>·
                  </textarea><b>x</b>·" onmouseover=")를 저장 가져오기(이름·텃밭 노드 id·조건 숫자 등)·레슨 출력·그래프·오류 카드·
                  텃밭 출력·경비실 「왜?」·작업자를 바꾼 텃밭 줄 번호에 넣음 → 글자 그대로, 새 요소·속성 없음, window.__xss 없음
+- test_workshop_*: 프로젝트 공방(v0.21.0 작업 6, 설계서 2026-11-15). 2장 저장은 홈 공방 카드 잠김 「3장을 끝내면 첫 프로젝트가 열려요」 /
+                 3장 → 공방 → P1 정답 코드로 4단계 통과(단계 창 → 완성 창 XP) → 주고받기 한 판(「가위」 → 결과 줄) → 진열장 P1 /
+                 정답 보기 → 「모범 코드에서 이어 하기」 그 단계 XP 0 / 2단계에서 나갔다 와도 코드 그대로 / 한국어로 시작한 진행을
+                 영어로 열면 고르기 창(이 언어로·한국어로 바꾸기) / 들락날락해도 한 번만 / 영어 화면에 한글 없음 / 개발자 칸은 따로 /
+                 주고받기: 빈 답·긴 답(500자), 숫자 아닌 답 「숫자로 입력해야 해요」+「다시 하기」, 입력 50번 상한, 끝나지 않는 반복(시간 제한),
+                 출력 앞부분이 달라짐(처음부터 다시 보여 줌). 넘침·터치 44px. 캡처: workshop-*.png (iPhone 17)
 """
 
 import atexit
@@ -1054,10 +1060,10 @@ def test_advanced_branch():
         a.shot("adv-settings.png")
         m = measure(a, "settings-adv")
         assert not m["problems"] and not m["small"], m
-        # 배지: 18개(v0.20.0 사건 파일 수집가 포함)
+        # 배지: 20개(v0.20.0 사건 파일 수집가·v0.21.0 공방 2개 포함)
         a.page.click('[data-go="badges"]')
         a.page.wait_for_selector(".screen.badges")
-        assert "/18" in a.page.inner_text(".page-title"), a.page.inner_text(".page-title")
+        assert "/20" in a.page.inner_text(".page-title"), a.page.inner_text(".page-title")
         assert "끝낸 심화" in a.page.inner_text(".stat-grid")
         a.shot("adv-badges.png", full=True)
         m = measure(a, "badges-adv")
@@ -6095,6 +6101,589 @@ def test_sandbox_fail_open():
         a.start()
         a.wait_py()
         assert _dev_sandbox_line(a) == "Python sandbox: on"
+
+
+# ---------------------------------------------------------------- v0.21.0 프로젝트 공방 (작업 6)
+
+def _ws_seed(chapters, projects=None, en=False, xp=40):
+    """공방 시험 저장. 텃밭·퀘스트는 경비실 시험과 같은 조용한 상태(새 소식·XP 퀘스트 없음)."""
+    s = _garden_seed(chapters, garden=_garden(order_idx=2), xp=xp)
+    s["quests"] = {"date": today(), "ids": ["q_lessons2", "q_hintfree", "q_garden"], "progress": {}, "done": [], "chest": False}
+    if en:
+        s["settings"] = {"sound": False, "dailyGoal": 10, "name": "", "lang": "en", "langChosen": True}
+    if projects is not None:
+        s["projects"] = projects
+    return s
+
+
+def _pj_body(pid, lang="ko"):
+    """빌드한 프로젝트 본문(단계 solution 포함)"""
+    import glob
+    env()
+    sub = os.path.join("projects", "en") if lang == "en" else "projects"
+    f = glob.glob(os.path.join(DIST, sub, "%s-*.json" % pid))
+    assert len(f) == 1, f
+    with open(f[0], encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _done_projects(**codes):
+    return {"v": 1, "open": {}, "done": {pid: {"at": today(), "code": code, "lang": "ko"} for pid, code in codes.items()}}
+
+
+def _open_workshop(a, start=True):
+    if start:
+        a.start()
+    a.page.click("#workshop")
+    a.page.wait_for_selector(".screen.workshop .ws-list")
+    a.page.wait_for_timeout(150)
+
+
+def _open_project(a, pid, ready=True):
+    a.page.click('.ws-item[data-id="%s"]' % pid)
+    a.page.wait_for_selector(".screen.project")
+    if ready:
+        a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+        a.page.wait_for_timeout(150)
+
+
+def _pj_code(a):
+    return a.js("() => [...document.querySelectorAll('.cm-content .cm-line')].map(e => e.textContent).join('\\n')")
+
+
+def _pj_submit(a, code):
+    a.wait_py()
+    a.set_code(code)
+    a.page.click("#submit")
+    try:
+        a.page.wait_for_selector(".modal .pj-pass, .modal .pj-done", timeout=30_000)
+    except Exception:
+        raise AssertionError("step not passed, console: " + a.page.inner_text("#console"))
+
+
+def _pj_next(a):
+    """단계·완성 창의 첫째 단추(다음 단계 / 한 판 해 보기)"""
+    a.page.wait_for_timeout(GUARD_WAIT)
+    a.page.click(".modal .btn.primary")
+    a.page.wait_for_selector(".modal-back", state="detached")
+
+
+def _pl_turn(a):
+    return a.js("() => +(document.querySelector('.screen.play') || {dataset: {}}).dataset.turn || 0")
+
+
+def _pl_wait(a, turn=0):
+    """turn번째 실행 결과가 그려질 때까지(시작 실행이 1)"""
+    a.page.wait_for_function("(n) => { const s = document.querySelector('.screen.play'); return s && +s.dataset.turn >= n && s.dataset.state !== 'running'; }",
+                             arg=turn, timeout=60_000)
+
+
+def _pl_answer(a, text):
+    a.page.wait_for_selector(".screen.play[data-state=need] #pl-input:not([readonly])", timeout=60_000)
+    n = _pl_turn(a)
+    a.page.fill("#pl-input", text)
+    a.page.press("#pl-input", "Enter")
+    _pl_wait(a, n + 1)
+
+
+def _pl_state(a):
+    return a.js("() => document.querySelector('.screen.play').dataset.state")
+
+
+def _pl_log(a):
+    return a.js("() => document.querySelector('#pl-log').innerText")
+
+
+def _open_play(a, pid):
+    a.page.click('.ws-play[data-id="%s"]' % pid)
+    a.page.wait_for_selector(".screen.play")
+    a.wait_py()
+    _pl_wait(a, 1)
+
+
+def test_workshop_locked():
+    """2장 저장: 홈 공방 카드는 잠김 글 「3장을 끝내면 첫 프로젝트가 열려요」(누를 단추 없음). 공방 목록은 모두 잠김.
+    3장 저장: 카드가 열리고 P1은 열림, P2는 「5장을 끝내면 열려요」."""
+    fails = []
+    with App("iPhone 17", save=_ws_seed(2)) as a:
+        a.start()
+        card = a.page.query_selector(".workshop-card")
+        if not card:
+            fails.append("no workshop card on home")
+        else:
+            if "3장을 끝내면 첫 프로젝트가 열려요" not in card.inner_text():
+                fails.append("locked text: %r" % card.inner_text())
+            if "locked" not in (card.get_attribute("class") or ""):
+                fails.append("card not locked")
+        if a.page.query_selector("#workshop"):
+            fails.append("locked card has an open button")
+        a.js("() => window.__ria.ctx.show('workshop')")
+        a.page.wait_for_selector(".screen.workshop .ws-list")
+        locked = a.js("() => [...document.querySelectorAll('.ws-item')].map(b => [b.dataset.id, b.classList.contains('locked'), b.innerText])")
+        if [x[0] for x in locked] != ["P1", "P2", "P3", "P4", "P5"] or not all(x[1] for x in locked):
+            fails.append("list: %r" % locked)
+        if locked and "3장을 끝내면 열려요" not in locked[0][2]:
+            fails.append("P1 lock text: %r" % locked[0][2])
+        a.page.click('.ws-item[data-id="P1"]')
+        a.page.wait_for_timeout(300)
+        if a.page.query_selector(".screen.project"):
+            fails.append("locked project opened")
+        _gd_check_layout(a, "workshop-locked", fails)
+        a.shot("workshop-locked.png")
+        assert not _app_errors(a), a.errors
+    with App("iPhone 17", save=_ws_seed(3)) as a:
+        _open_workshop(a)
+        st = a.js("() => Object.fromEntries([...document.querySelectorAll('.ws-item')].map(b => [b.dataset.id, b.className + ' | ' + b.innerText]))")
+        if "locked" in st.get("P1", "locked"):
+            fails.append("P1 locked at chapter 3: %r" % st.get("P1"))
+        if "5장을 끝내면 열려요" not in st.get("P2", ""):
+            fails.append("P2: %r" % st.get("P2"))
+        if a.page.query_selector(".ws-shelf .ws-play"):
+            fails.append("empty shelf has items")
+    assert not fails, fails
+
+
+def test_workshop_p1_complete():
+    """3장 저장 → 공방 → P1 정답 코드로 4단계 통과 → 완성 창(XP +25) → 주고받기 한 판(「가위」 → 결과 줄) → 진열장에 P1."""
+    fails = []
+    body = _pj_body("P1")
+    with App("iPhone 17", save=_ws_seed(3)) as a:
+        _open_workshop(a)
+        _gd_check_layout(a, "workshop", fails)
+        a.shot("workshop-list.png")
+        _open_project(a, "P1")
+        if _pj_code(a) != body["steps"][0]["starter"]:
+            fails.append("step 1 starts with %r" % _pj_code(a))
+        if "1/4" not in a.page.inner_text("#pj-step"):
+            fails.append("step head: %r" % a.page.inner_text("#pj-step"))
+        _gd_check_layout(a, "project-step1", fails)
+        a.shot("workshop-project.png")
+        xp0 = a.save()["xp"]
+        for i, st in enumerate(body["steps"]):
+            if i == 1 and not a.page.query_selector(".pj-tool"):
+                fails.append("step 2 has no new-tool card")
+            _pj_submit(a, st["solution"])
+            last = i == len(body["steps"]) - 1
+            if last:
+                a.page.wait_for_selector(".modal .pj-done")
+                txt = a.page.inner_text(".modal")
+                if "XP +25" not in txt:
+                    fails.append("done dialog xp: %r" % txt)
+                if body["finale"][:10] not in txt:
+                    fails.append("no finale line")
+                a.shot("workshop-done.png")
+            else:
+                if "XP +5" not in a.page.inner_text(".modal .pj-pass"):
+                    fails.append("step %d xp: %r" % (i + 1, a.page.inner_text(".modal")))
+            _pj_next(a)
+            if not last:
+                a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+                if "%d/4" % (i + 2) not in a.page.inner_text("#pj-step"):
+                    fails.append("step head after %d: %r" % (i + 1, a.page.inner_text("#pj-step")))
+                if _pj_code(a) != st["solution"]:
+                    fails.append("step %d does not start from my code" % (i + 2))
+        s = a.save()
+        if s["xp"] != xp0 + 40:
+            fails.append("xp %d -> %d (want +40)" % (xp0, s["xp"]))
+        p = s.get("projects") or {}
+        if "P1" in p.get("open", {}) or (p.get("done", {}).get("P1") or {}).get("code") != body["steps"][-1]["solution"]:
+            fails.append("projects after done: %r" % p)
+        if "project_first" not in s.get("badges", []):
+            fails.append("badge project_first missing: %r" % s.get("badges"))
+        # 완성 창 「한 판 해 보기」 → 주고받기
+        a.page.wait_for_selector(".screen.play")
+        a.wait_py()
+        _pl_wait(a, 1)
+        if _pl_state(a) != "need":
+            fails.append("play first state %r" % _pl_state(a))
+        attrs = a.js("() => { const i = document.querySelector('#pl-input'); return ['autocapitalize', 'autocorrect', 'spellcheck', 'autocomplete'].map(k => i.getAttribute(k)); }")
+        if attrs != ["off", "off", "false", "off"]:
+            fails.append("input attrs %r" % attrs)
+        if body["play"]["prompt"] not in a.page.inner_text(".screen.play"):
+            fails.append("play prompt missing")
+        _gd_check_layout(a, "play-need", fails)
+        a.shot("workshop-play.png")
+        _pl_answer(a, "가위")
+        log = _pl_log(a)
+        if "나: 가위" not in log or "결과:" not in log or log.count("가위") < 2:
+            fails.append("play log: %r" % log)
+        if _pl_state(a) != "done" or not a.page.is_visible("#pl-again"):
+            fails.append("play not done: %r" % _pl_state(a))
+        a.shot("workshop-play-done.png")
+        a.page.click("#pl-back")
+        a.page.wait_for_selector(".screen.workshop .ws-list")
+        if not a.page.query_selector('.ws-shelf .ws-play[data-id="P1"]'):
+            fails.append("P1 not on the shelf")
+        if "done" not in (a.page.get_attribute('.ws-item[data-id="P1"]', "class") or ""):
+            fails.append("P1 not marked done")
+        _gd_check_layout(a, "workshop-shelf", fails)
+        a.shot("workshop-shelf.png")
+        _open_play(a, "P1")
+        _pl_answer(a, "보")
+        if "나: 보" not in _pl_log(a):
+            fails.append("shelf replay: %r" % _pl_log(a))
+        assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_workshop_use_solution():
+    """정답 보기 → 「모범 코드에서 이어 하기」: 그 단계 XP 0, 다음 단계는 모범 코드에서. 다음 단계를 스스로 풀면 XP +5."""
+    fails = []
+    body = _pj_body("P1")
+    with App("iPhone 17", save=_ws_seed(3)) as a:
+        _open_workshop(a)
+        _open_project(a, "P1")
+        xp0 = a.save()["xp"]
+        if a.page.query_selector("#pj-usesol"):
+            fails.append("continue-from-model button before the answer is shown")
+        a.page.click("#sol")
+        a.page.wait_for_selector("#pj-usesol")
+        if a.page.query_selector("#usesol"):
+            fails.append("lesson 「정답을 입력창에 넣기」 still shown in a project")
+        a.shot("workshop-solution.png")
+        a.page.click("#pj-usesol")
+        a.page.wait_for_selector(".modal .pj-pass")
+        if "XP +5" in a.page.inner_text(".modal .pj-pass") or "XP" not in a.page.inner_text(".modal .pj-pass"):
+            fails.append("model-code dialog should say no XP: %r" % a.page.inner_text(".modal .pj-pass"))
+        _pj_next(a)
+        a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+        s = a.save()
+        if s["xp"] != xp0:
+            fails.append("xp after model code %d -> %d" % (xp0, s["xp"]))
+        o = (s.get("projects") or {}).get("open", {}).get("P1") or {}
+        if o.get("step") != 1:
+            fails.append("open.P1 %r" % o)
+        if _pj_code(a) != body["steps"][0]["solution"]:
+            fails.append("step 2 starts with %r" % _pj_code(a))
+        _pj_submit(a, body["steps"][1]["solution"])
+        _pj_next(a)
+        if a.save()["xp"] != xp0 + 5:
+            fails.append("own step 2 xp %d (want %d)" % (a.save()["xp"], xp0 + 5))
+        assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_workshop_draft_kept():
+    """2단계에서 코드를 고치고 곧바로 나가도(초안 기다림 전) 다시 열면 그대로, 새로 고침 뒤에도 그대로. 목록은 「2/4」."""
+    fails = []
+    with App("iPhone 17", save=_ws_seed(3)) as a:
+        _open_workshop(a)
+        _open_project(a, "P1")
+        a.page.click("#sol")
+        a.page.click("#pj-usesol")
+        a.page.wait_for_selector(".modal .pj-pass")
+        _pj_next(a)
+        a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+        a.page.click(".cm-content")
+        a.page.keyboard.press("Control+End")
+        a.page.keyboard.type("# memo")
+        a.page.click("#pj-back")   # 초안 기다림(500ms) 전에 바로 나감
+        a.page.wait_for_selector(".screen.workshop .ws-list")
+        o = (a.save().get("projects") or {}).get("open", {}).get("P1") or {}
+        if not str(o.get("code", "")).endswith("# memo"):
+            fails.append("draft not saved on leave: %r" % o.get("code", "")[-20:])
+        if "2/4" not in a.page.inner_text('.ws-item[data-id="P1"]'):
+            fails.append("list progress: %r" % a.page.inner_text('.ws-item[data-id="P1"]'))
+        _open_project(a, "P1")
+        if not _pj_code(a).endswith("# memo"):
+            fails.append("draft not restored: %r" % _pj_code(a)[-20:])
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go")
+        _open_workshop(a)
+        _open_project(a, "P1")
+        if not _pj_code(a).endswith("# memo") or "2/4" not in a.page.inner_text("#pj-step"):
+            fails.append("after reload: %r" % _pj_code(a)[-20:])
+        assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_workshop_language_switch():
+    """한국어로 시작한 P1(2단계)을 영어로 열면 고르기 창. 「이 언어로 처음부터」 → 영어 1단계, 한국어 진행은 kept에 남음.
+    「한국어로 바꾸기」 → 앱이 한국어로 바뀌고 2단계 내 코드에서 이어 함. 영어 진행이 남아 있으면 「…이어서 (3단계)」."""
+    fails = []
+    ko_code = "me = input()\nprint(\"나:\", me)\n# ko draft"
+    proj = {"v": 1, "open": {"P1": {"lang": "ko", "step": 1, "code": ko_code, "best": 1}}, "done": {}}
+    en_body = _pj_body("P1", "en")
+    with App("iPhone 17", save=_ws_seed(3, projects=proj, en=True), locale="en-US") as a:
+        _open_workshop(a)
+        _open_project(a, "P1", ready=False)
+        a.page.wait_for_selector(".modal .pj-lang")
+        btns = a.js("() => [...document.querySelectorAll('.modal .modal-actions .btn')].map(b => b.innerText)")
+        if not any("Korean" in b for b in btns) or not any("English" in b for b in btns):
+            fails.append("lang dialog buttons %r" % btns)
+        if _hangul_left(a):
+            fails.append("hangul in lang dialog: %r" % _hangul_left(a))
+        a.shot("workshop-lang.png")
+        a.page.click(".modal [data-i='1']")   # 이 언어(영어)로
+        a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+        if _pj_code(a) != en_body["steps"][0]["starter"] or "1/4" not in a.page.inner_text("#pj-step"):
+            fails.append("english restart: %r %r" % (_pj_code(a), a.page.inner_text("#pj-step")))
+        o = (a.save().get("projects") or {}).get("open", {}).get("P1") or {}
+        if o.get("lang") != "en" or (o.get("kept") or {}).get("ko", {}).get("code") != ko_code:
+            fails.append("save after restart %r" % o)
+        a.page.click("#pj-back")
+        a.page.wait_for_selector(".screen.workshop .ws-list")
+        _open_project(a, "P1")
+        if a.page.query_selector(".modal .pj-lang"):
+            fails.append("dialog again in the bound language")
+    proj2 = {"v": 1, "open": {"P1": {"lang": "ko", "step": 1, "code": ko_code, "best": 2, "kept": {"en": {"step": 2, "code": "x = 1"}}}}, "done": {}}
+    with App("iPhone 17", save=_ws_seed(3, projects=proj2, en=True), locale="en-US") as a:
+        _open_workshop(a)
+        _open_project(a, "P1", ready=False)
+        a.page.wait_for_selector(".modal .pj-lang")
+        btns = a.js("() => [...document.querySelectorAll('.modal .modal-actions .btn')].map(b => b.innerText)")
+        if not any("step 3" in b for b in btns):
+            fails.append("resume label %r" % btns)
+        a.page.click(".modal [data-i='0']")   # 한국어로 바꾸기
+        a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+        a.page.wait_for_function("() => document.documentElement.lang === 'ko'")
+        if _pj_code(a) != ko_code or "2/4" not in a.page.inner_text("#pj-step"):
+            fails.append("korean resume: %r %r" % (_pj_code(a)[-12:], a.page.inner_text("#pj-step")))
+        if a.save()["settings"].get("lang") != "ko":
+            fails.append("language not switched")
+        assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_workshop_reenter():
+    """v0.20.1 같은 묶음 남기 막이: 공방·프로젝트를 들락날락한 뒤 단계 통과 창은 한 장, XP +5 한 번.
+    주고받기도 들락날락·실행 중 나갔다 들어와도 답은 한 줄, 늦게 온 결과는 그리지 않음."""
+    fails = []
+    with App("iPhone 17", save=_ws_seed(3)) as a:
+        _open_workshop(a)
+        for _ in range(2):
+            _open_project(a, "P1")
+            a.page.click("#pj-back")
+            a.page.wait_for_selector(".screen.workshop .ws-list")
+        _open_project(a, "P1")
+        xp0 = a.save()["xp"]
+        _pj_submit(a, _pj_body("P1")["steps"][0]["solution"])
+        a.page.wait_for_timeout(600)
+        if len(a.page.query_selector_all(".modal-back")) != 1:
+            fails.append("pass dialogs: %d" % len(a.page.query_selector_all(".modal-back")))
+        _pj_next(a)
+        if a.save()["xp"] != xp0 + 5:
+            fails.append("xp %d (want %d)" % (a.save()["xp"], xp0 + 5))
+        assert not _app_errors(a), a.errors
+    slow = "n = 0\nfor i in range(3000000):\n    n += 1\nme = input()\nprint(\"나:\", me)\n"
+    with App("iPhone 17", save=_ws_seed(3, projects=_done_projects(P1=slow))) as a:
+        _open_workshop(a)
+        a.wait_py()
+        a.page.click('.ws-play[data-id="P1"]')
+        a.page.wait_for_selector(".screen.play[data-state=running]")
+        a.page.click("#pl-back")   # 실행 중 나감
+        a.page.wait_for_selector(".screen.workshop .ws-list")
+        for _ in range(2):
+            a.page.click('.ws-play[data-id="P1"]')
+            a.page.wait_for_selector(".screen.play")
+            a.page.click("#pl-back")
+            a.page.wait_for_selector(".screen.workshop .ws-list")
+        _open_play(a, "P1")
+        a.page.wait_for_timeout(1500)   # 옛 실행이 끝날 시간
+        _pl_answer(a, "가위")
+        log = _pl_log(a)
+        if log.count("나: 가위") != 1 or len(a.page.query_selector_all("#pl-log .pl-in")) != 1:
+            fails.append("play log after re-enter: %r" % log)
+        assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_workshop_english():
+    """영어 3장 저장: 공방·프로젝트(1단계·새 도구 카드가 있는 2단계)·주고받기 화면에 한글이 없다."""
+    fails = []
+    en = _pj_body("P1", "en")
+    with App("iPhone 17", save=_ws_seed(3, en=True), locale="en-US") as a:
+        a.start()
+        if _hangul_left(a):
+            fails.append("home: %r" % _hangul_left(a))
+        _open_workshop(a, start=False)
+        if _hangul_left(a):
+            fails.append("workshop: %r" % _hangul_left(a))
+        _open_project(a, "P1")
+        if _hangul_left(a):
+            fails.append("project: %r" % _hangul_left(a))
+        a.page.click("#sol")
+        a.page.click("#pj-usesol")
+        a.page.wait_for_selector(".modal .pj-pass")
+        if _hangul_left(a):
+            fails.append("pass dialog: %r" % _hangul_left(a))
+        _pj_next(a)
+        a.page.wait_for_selector(".screen.project[data-state=ready] .pj-tool")
+        if _hangul_left(a):
+            fails.append("tool step: %r" % _hangul_left(a))
+        a.shot("workshop-en-tool.png")
+        for st in en["steps"][1:]:
+            _pj_submit(a, st["solution"])
+            if _hangul_left(a):
+                fails.append("dialog: %r" % _hangul_left(a))
+            _pj_next(a)
+        a.page.wait_for_selector(".screen.play")
+        a.wait_py()
+        _pl_wait(a, 1)
+        if en["play"]["prompt"] not in a.page.inner_text(".screen.play"):
+            fails.append("english play prompt")
+        _pl_answer(a, "rock")
+        if "rock" not in _pl_log(a) or _hangul_left(a):
+            fails.append("play: %r %r" % (_pl_log(a), _hangul_left(a)))
+        _gd_check_layout(a, "play-en", fails)
+        assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_workshop_dev():
+    """개발자 모드: 학습 기록이 없어도 공방 카드·프로젝트 5개 모두 열림. 진행은 개발자 칸에만, 학습 기록 칸은 그대로. 끄면 다시 잠김."""
+    fails = []
+    with App("iPhone 17") as a:
+        a.start()
+        if not a.page.query_selector(".workshop-card.locked"):
+            fails.append("fresh save: card not locked")
+        _to_settings_dev(a)
+        a.page.click("#dev")
+        a.page.wait_for_selector(".modal [data-i='1']")
+        a.page.click(".modal [data-i='1']")
+        a.page.wait_for_selector('#dev[aria-checked="true"]')
+        _home(a)
+        _open_workshop(a, start=False)
+        if a.page.query_selector(".ws-item.locked"):
+            fails.append("dev: locked items %r" % a.js("() => [...document.querySelectorAll('.ws-item.locked')].map(b => b.dataset.id)"))
+        _open_project(a, "P5")
+        a.page.click("#sol")
+        a.page.click("#pj-usesol")
+        a.page.wait_for_selector(".modal .pj-pass")
+        _pj_next(a)
+        dev = json.loads(_ls(a, DEV_SAVE_KEY) or "{}")
+        main = json.loads(_ls(a, SAVE_KEY) or "{}")
+        if ((dev.get("projects") or {}).get("open", {}).get("P5") or {}).get("step") != 1:
+            fails.append("dev save projects %r" % dev.get("projects"))
+        if (main.get("projects") or {}).get("open", {}).get("P5"):
+            fails.append("learning save touched %r" % main.get("projects"))
+        a.page.click("#pj-back")
+        a.page.wait_for_selector(".screen.workshop")
+        _home(a)
+        _to_settings_dev(a)
+        a.page.click("#dev")
+        a.page.wait_for_selector('#dev[aria-checked="false"]')
+        _home(a)
+        if not a.page.query_selector(".workshop-card.locked"):
+            fails.append("dev off: card not locked again")
+        assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_workshop_play_edges():
+    """주고받기: 빈 답은 빈 글자로, 600자 답은 500자로. 숫자가 아닌 답의 ValueError → 「숫자로 입력해야 해요」 + 오류 카드 +
+    「다시 하기」(새 판). 실행 중에는 입력칸·보내기가 잠김."""
+    fails = []
+    code = "a = input()\nprint(len(a))\nn = int(input())\nprint(n * 2)\n"
+    with App("iPhone 17", save=_ws_seed(5, projects=_done_projects(P2=code))) as a:
+        _open_workshop(a)
+        _open_play(a, "P2")
+        _pl_answer(a, "")
+        if "0" not in _pl_log(a).split("\n"):
+            fails.append("empty answer: %r" % _pl_log(a))
+        a.page.fill("#pl-input", "abc")
+        a.page.press("#pl-input", "Enter")
+        locked = a.js("() => { const i = document.querySelector('#pl-input'), b = document.querySelector('#pl-send'); return [i.readOnly, b.disabled, document.querySelector('.screen.play').dataset.state]; }")
+        if locked[2] == "running" and not (locked[0] and locked[1]):
+            fails.append("input not locked while running %r" % locked)
+        _pl_wait(a, 3)
+        if _pl_state(a) != "error":
+            fails.append("state after ValueError %r" % _pl_state(a))
+        if "숫자로 입력해야 해요" not in a.page.inner_text(".screen.play"):
+            fails.append("no friendly number message")
+        if not a.page.query_selector(".screen.play .err-panel") or not a.page.is_visible("#pl-again"):
+            fails.append("no error card / play-again")
+        _gd_check_layout(a, "play-error", fails)
+        a.shot("workshop-play-error.png")
+        a.page.click("#pl-again")
+        _pl_wait(a, 4)
+        if "abc" in _pl_log(a) or _pl_state(a) != "need":
+            fails.append("new round not clean: %r" % _pl_log(a))
+        _pl_answer(a, "x" * 600)
+        if "500" not in _pl_log(a).split("\n"):
+            fails.append("long answer: %r" % _pl_log(a)[-40:])
+        _pl_answer(a, "21")
+        if "42" not in _pl_log(a).split("\n") or _pl_state(a) != "done":
+            fails.append("finish: %r %r" % (_pl_log(a)[-20:], _pl_state(a)))
+        assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_workshop_play_limits():
+    """끝나지 않는 프로그램: 입력만 계속 받으면 50번 뒤 「한 판이 너무 길어요」, 입력 없이 도는 반복은 시간 제한 안내.
+    출력 앞부분이 달라지면(무작위 씨앗을 스스로 바꿈) 처음부터 다시 그리고 안내 한 줄."""
+    fails = []
+    with App("iPhone 17", save=_ws_seed(3, projects=_done_projects(P1="while True:\n    input()\n"))) as a:
+        _open_workshop(a)
+        _open_play(a, "P1")
+        for i in range(51):
+            _pl_answer(a, str(i))
+            if _pl_state(a) != "need":
+                break
+        if _pl_state(a) != "limit" or "한 판이 너무 길어요" not in a.page.inner_text(".screen.play"):
+            fails.append("no input cap message: state %r after %d" % (_pl_state(a), i + 1))
+        if i + 1 != 51:
+            fails.append("cap after %d answers (want 51st)" % (i + 1))
+        if not a.page.is_visible("#pl-again"):
+            fails.append("no play-again at limit")
+        a.shot("workshop-play-limit.png")
+        assert not _app_errors(a), a.errors
+    with App("iPhone 17", save=_ws_seed(3, projects=_done_projects(P1="while True:\n    pass\n"))) as a:
+        _open_workshop(a)
+        a.page.click('.ws-play[data-id="P1"]')
+        a.wait_py()
+        _pl_wait(a, 1)
+        if _pl_state(a) != "error" or "끝나지 않" not in a.page.inner_text(".screen.play"):
+            fails.append("timeout: state %r %r" % (_pl_state(a), a.page.inner_text(".screen.play")[-200:]))
+        if not a.page.is_visible("#pl-again"):
+            fails.append("no play-again after timeout")
+    code = "import random\nrandom.seed()\nprint(random.randint(1, 10 ** 9))\ninput()\nprint(\"끝\")\n"
+    with App("iPhone 17", save=_ws_seed(3, projects=_done_projects(P1=code))) as a:
+        _open_workshop(a)
+        _open_play(a, "P1")
+        first = _pl_log(a).strip()
+        _pl_answer(a, "a")
+        log = _pl_log(a)
+        if not a.page.query_selector(".pl-note") or log.count("끝") != 1 or first in log.split("\n"):
+            fails.append("prefix mismatch: %r note=%r" % (log, bool(a.page.query_selector(".pl-note"))))
+        assert not _app_errors(a), a.errors
+    assert not fails, fails
+
+
+def test_workshop_narrow():
+    """375px(iPhone SE 3세대)·밝게/어둡게·한국어/영어: 공방 목록·프로젝트 단계(새 도구 카드)·단계 창·주고받기·오류 카드에 넘침 없음, 터치 44px."""
+    fails = []
+    proj = _done_projects(P1=_pj_body("P1")["steps"][-1]["solution"], P2="n = int(input())\nprint(n)\n")
+    for theme, en in (("light", False), ("dark", True)):
+        init = "try{localStorage.setItem('ria-python.theme', %s)}catch(e){}" % json.dumps(theme)
+        with App("iPhone SE (3rd gen)", save=_ws_seed(5, projects=proj, en=en), locale="en-US" if en else None, init_js=init) as a:
+            tag = "%s-%s" % (theme, "en" if en else "ko")
+            a.start()
+            _gd_check_layout(a, "home-" + tag, fails)
+            _open_workshop(a, start=False)
+            _gd_check_layout(a, "workshop-" + tag, fails)
+            a.shot("workshop-narrow-%s.png" % tag)
+            a.page.click('.ws-item[data-id="P2"]')   # 완성한 작품: 한 판 하기 / 다시 만들기 창
+            a.page.wait_for_selector(".modal [data-i='1']")
+            _gd_check_layout(a, "remake-" + tag, fails)
+            a.page.click(".modal [data-i='1']")
+            a.page.wait_for_selector(".screen.project[data-state=ready] .cm-content", timeout=30_000)
+            _gd_check_layout(a, "project-" + tag, fails)
+            a.page.click("#sol")
+            a.page.click("#pj-usesol")
+            a.page.wait_for_selector(".modal .pj-pass")
+            a.page.wait_for_timeout(GUARD_WAIT)
+            _gd_check_layout(a, "pass-" + tag, fails)
+            _pj_next(a)
+            a.page.click("#pj-back")
+            a.page.wait_for_selector(".screen.workshop .ws-list")
+            _open_play(a, "P2")
+            _gd_check_layout(a, "play-" + tag, fails)
+            _pl_answer(a, "abc")
+            _gd_check_layout(a, "play-error-" + tag, fails)
+            a.shot("workshop-narrow-play-%s.png" % tag)
+            assert not _app_errors(a), a.errors
+    assert not fails, fails
 
 
 if __name__ == "__main__":

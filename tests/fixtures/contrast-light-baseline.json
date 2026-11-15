@@ -234,6 +234,55 @@
    "minRatio": 4.71,
    "theme_applied": "light",
    "fails": 0
+  },
+  {
+   "screen": "workshop",
+   "checked": 22,
+   "minRatio": 5.32,
+   "theme_applied": "light",
+   "fails": 0
+  },
+  {
+   "screen": "project-step",
+   "checked": 23,
+   "minRatio": 4.63,
+   "theme_applied": "light",
+   "fails": 0
+  },
+  {
+   "screen": "project-solution",
+   "checked": 27,
+   "minRatio": 4.63,
+   "theme_applied": "light",
+   "fails": 0
+  },
+  {
+   "screen": "project-pass",
+   "checked": 11,
+   "minRatio": 4.71,
+   "theme_applied": "light",
+   "fails": 0
+  },
+  {
+   "screen": "play-need",
+   "checked": 5,
+   "minRatio": 4.61,
+   "theme_applied": "light",
+   "fails": 0
+  },
+  {
+   "screen": "play-done",
+   "checked": 7,
+   "minRatio": 5.14,
+   "theme_applied": "light",
+   "fails": 0
+  },
+  {
+   "screen": "play-error",
+   "checked": 9,
+   "minRatio": 4.97,
+   "theme_applied": "light",
+   "fails": 0
   }
  ],
  "checked": 1166,
@@ -485,8 +534,10 @@
    ".tab > span|#555f72|#fffdf8",
    ".tab > span|#555f72|#fffdf8",
    ".tab > span|#636b7a|#fffdf8",
+   ".wsc-text > p|#555f72|#f2e9d5",
    "h2#d-title|#22304a|#f2e9d5",
    "h2#q-title|#22304a|#fffdf8",
+   "h2#wsc-title|#22304a|#f2e9d5",
    "main > p.path-end|#555f72|#fbf6ea"
   ],
   "lesson-card": [
@@ -821,9 +872,11 @@
    ".tab > span|#555f72|#fffdf8",
    ".tab > span|#555f72|#fffdf8",
    ".tab > span|#555f72|#fffdf8",
+   ".wsc-text > p|#555f72|#f2e9d5",
    "button#daily|#22304a|#ffd43b",
    "h2#d-title|#22304a|#ddf1ec",
    "h2#q-title|#22304a|#fffdf8",
+   "h2#wsc-title|#22304a|#f2e9d5",
    "main > p.path-end|#555f72|#fbf6ea"
   ],
   "badges": [
@@ -1509,6 +1562,124 @@
    "p#gd-rank|#12756d|#fbf6ea",
    "p#gd-why|#22304a|#fffdf8",
    "span > b|#22304a|#fff3c4"
+  ],
+  "workshop": [
+   "#ws-list-t > span|#22304a|#fffdf8",
+   "#ws-shelf-t > span|#22304a|#fffdf8",
+   ".btn > span|#22304a|#ffd43b",
+   ".g-top > h1|#22304a|#fbf6ea",
+   ".ria-row > p.bubble|#22304a|#fffdf8",
+   ".ws-state > span|#12756d|#fffdf8",
+   ".ws-state > span|#555f72|#f2e9d5",
+   ".ws-state > span|#555f72|#f2e9d5",
+   ".ws-state > span|#555f72|#f2e9d5",
+   ".ws-state > span|#6b4f00|#fffdf8",
+   ".ws-text > b.ws-name|#22304a|#f2e9d5",
+   ".ws-text > b.ws-name|#22304a|#f2e9d5",
+   ".ws-text > b.ws-name|#22304a|#f2e9d5",
+   ".ws-text > b.ws-name|#22304a|#fffdf8",
+   ".ws-text > b.ws-name|#22304a|#fffdf8",
+   ".ws-text > b.ws-name|#22304a|#fffdf8",
+   ".ws-text > small.ws-blurb|#555f72|#f2e9d5",
+   ".ws-text > small.ws-blurb|#555f72|#f2e9d5",
+   ".ws-text > small.ws-blurb|#555f72|#f2e9d5",
+   ".ws-text > small.ws-blurb|#555f72|#fffdf8",
+   ".ws-text > small.ws-blurb|#555f72|#fffdf8",
+   ".ws-text > small.ws-blurb|#555f72|#fffdf8"
+  ],
+  "project-step": [
+   "#hint > span|#22304a|#fffdf8",
+   "#pj-head > h1.pj-title|#22304a|#fbf6ea",
+   "#pj-tool-t > span|#22304a|#fff3c4",
+   "#run > span|#22304a|#fffdf8",
+   "#sol > span|#22304a|#fffdf8",
+   "#submit > span|#ffffff|#12756d",
+   "#taskblock > h1.q|#22304a|#fbf6ea",
+   "#taskblock > span.tag.code-tag|#ffffff|#1f2b3d",
+   ".cm-content > div.cm-line.cm-activeLine|#22304a|#eff6f1",
+   ".cm-gutter > div.cm-gutterElement.cm-activeLineGutter|#555f72|#d3decb",
+   ".cm-gutter > div.cm-gutterElement|#555f72|#f2e9d5",
+   ".cm-gutter > div.cm-gutterElement|#555f72|#f2e9d5",
+   ".cm-line > span.ͼb|#770088|#eff6f1",
+   ".code > code|#f4eedd|#1f2b3d",
+   ".expect > p.ex-label|#555f72|#fbf6ea",
+   ".expect > pre.out|#22304a|#fffdf8",
+   ".goal-line > span|#12756d|#ddf1ec",
+   ".panel > p|#22304a|#fff3c4",
+   ".ria-row > p.bubble|#22304a|#fffdf8",
+   ".symbols > button.sym.word|#22304a|#fffdf8",
+   "p#pychip|#6b4f00|#fff3c4",
+   "span#hn|#22304a|#fffdf8",
+   "span#pj-step|#555f72|#fbf6ea"
+  ],
+  "project-solution": [
+   "#hint > span|#22304a|#fffdf8",
+   "#pj-head > h1.pj-title|#22304a|#fbf6ea",
+   "#pj-tool-t > span|#22304a|#fff3c4",
+   "#run > span|#22304a|#fffdf8",
+   "#sol > span|#5c574c|#e9e2d2",
+   "#solution > h2|#0b5953|#fffdf8",
+   "#solution > p|#22304a|#fffdf8",
+   "#submit > span|#ffffff|#12756d",
+   "#taskblock > h1.q|#22304a|#fbf6ea",
+   "#taskblock > span.tag.code-tag|#ffffff|#1f2b3d",
+   ".cm-content > div.cm-line.cm-activeLine|#22304a|#eff6f1",
+   ".cm-gutter > div.cm-gutterElement.cm-activeLineGutter|#555f72|#d3decb",
+   ".cm-gutter > div.cm-gutterElement|#555f72|#f2e9d5",
+   ".cm-gutter > div.cm-gutterElement|#555f72|#f2e9d5",
+   ".cm-line > span.ͼb|#770088|#eff6f1",
+   ".code > code|#f4eedd|#1f2b3d",
+   ".code > code|#f4eedd|#1f2b3d",
+   ".expect > p.ex-label|#555f72|#fbf6ea",
+   ".expect > pre.out|#22304a|#fffdf8",
+   ".goal-line > span|#12756d|#ddf1ec",
+   ".panel > p|#22304a|#fff3c4",
+   ".ria-row > p.bubble|#22304a|#fffdf8",
+   ".symbols > button.sym.word|#22304a|#fffdf8",
+   "button#pj-usesol|#22304a|#fffdf8",
+   "p#pychip|#6b4f00|#fff3c4",
+   "span#hn|#22304a|#fffdf8",
+   "span#pj-step|#555f72|#fbf6ea"
+  ],
+  "project-pass": [
+   "#pj-head > h1.pj-title|#22304a|#fbf6ea",
+   "#pj-tool-t > span|#22304a|#fff3c4",
+   ".code > code|#f4eedd|#1f2b3d",
+   ".g-done-xp > span|#12756d|#fffdf8",
+   ".goal-line > span|#12756d|#ddf1ec",
+   ".modal-actions > button.btn.primary|#ffffff|#12756d",
+   ".panel > p|#22304a|#fff3c4",
+   ".ria-row > p.bubble|#22304a|#fffdf8",
+   ".ria-row > p.bubble|#22304a|#fffdf8",
+   "h2#dlg-title|#22304a|#fffdf8",
+   "span#pj-step|#555f72|#fbf6ea"
+  ],
+  "play-need": [
+   "#pl-prompt > span|#555f72|#fbf6ea",
+   "#pl-send > span|#ffffff|#12756d",
+   ".g-top > h1|#22304a|#fbf6ea",
+   ".toast > span|#ffffff|#22304a",
+   "input#pl-input|#757575|#ffffff"
+  ],
+  "play-done": [
+   "#pl-again > span|#22304a|#ffd43b",
+   "#pl-log > span.pl-in|#ffe27a|#1f2b3d",
+   "#pl-log > span.pl-out|#e8eef6|#1f2b3d",
+   "#pl-prompt > span|#555f72|#fbf6ea",
+   ".g-top > h1|#22304a|#fbf6ea",
+   ".pl-line > span|#12756d|#fbf6ea",
+   ".toast > span|#ffffff|#22304a"
+  ],
+  "play-error": [
+   "#pl-again > span|#22304a|#ffd43b",
+   "#pl-log > span.pl-in|#ffe27a|#1f2b3d",
+   "#pl-prompt > span|#555f72|#fbf6ea",
+   ".err-orig > span|#ffd8cc|#1f2b3d",
+   ".err-panel > h3|#b03a25|#fce4dc",
+   ".err-panel > p.err-orig.mono|#ffd8cc|#1f2b3d",
+   ".err-panel > p|#22304a|#fce4dc",
+   ".g-top > h1|#22304a|#fbf6ea",
+   ".pl-line > span|#22304a|#fbf6ea"
   ]
  }
 }

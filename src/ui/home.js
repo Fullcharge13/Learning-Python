@@ -7,6 +7,7 @@ import { tabBar, bindTabs, gardenTabOf, statusBar } from "./nav.js";
 import { pathEndText } from "../curriculum.js";
 import { hasNewContent } from "../newcontent.js";
 import { t, tx, lang, tp } from "../i18n.js";
+import { workshopCard, bindWorkshopCard } from "./workshop.js";
 
 // 「새 내용」 점(v0.7.1): 노드 옆 작은 꼬리표. 누르기는 노드가 받는다(pointer-events: none, 노드 크기 그대로)
 const newLabel = () => t`새 내용 있음`;
@@ -205,12 +206,14 @@ export function render(root, ctx) {
       ${dst && dst.state === "locked" ? dailyCard(dst) : ""}
       ${reviewCard(save)}
       ${questCard(save)}
+      ${workshopCard(ctx)}
       ${sections || `<p class="panel">${t`레슨을 불러오지 못했어요. 새로고침해 주세요.`}</p>`}
       <p class="path-end">${esc(pathEndText({ chapters: ctx.chapters, completed: save.completed_lessons }))}</p>
     </main>
     ${tabBar("home", gardenTabOf(ctx))}
   </div>`;
   bindTabs(root, ctx);
+  bindWorkshopCard(root, ctx);
   const bx = root.querySelector("#broken-export");
   if (bx) bx.addEventListener("click", () => {
     toast(ctx.exportBroken(broken.key) ? t`옛 저장을 파일로 내보냈어요. 고친 뒤 설정 → 저장 가져오기로 되살릴 수 있어요.` : t`옛 저장을 찾지 못했어요.`, "");

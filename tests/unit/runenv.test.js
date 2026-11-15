@@ -41,3 +41,12 @@ test("카드 예제: 보통 카드는 실행 결과와 그래프, show_only 카�
   assert.doesNotMatch(only, /실행 결과|class="out"/);
   assert.equal(cardExample({ say: "s" }), "");
 });
+
+// v0.21.0 프로젝트 공방(이월 8): 시험의 rand는 손대지 않고 그대로 실행기로([v, a, b] 정확한 부름 칸 포함). 없으면 열쇠도 없음
+test("runEnv passes a test's rand through unchanged (project steps)", () => {
+  const rand = [[2, 1, 3], "바위"];
+  const env = runEnv({}, { stdin: "가위", rand });
+  assert.deepEqual(env, { files: null, server: null, rand: [[2, 1, 3], "바위"] });
+  assert.equal(env.rand, rand);
+  assert.equal("rand" in runEnv({}, { stdin: "" }), false);
+});

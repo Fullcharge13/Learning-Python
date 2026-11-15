@@ -2,6 +2,13 @@
 import { BADGES } from "../data/badges.js";
 import { isAdvancedId } from "./advanced.js";
 import { basicIndex, fieldIndex } from "./guard/state.js";
+import { projectIndex } from "./projects/state.js";
+
+/** 프로젝트 색인의 id들. 색인을 아직 안 넣었으면(단위 시험·색인 전 흐름) 빈 목록 → 「공방 장인」은 받지 않음 */
+function projectIds() {
+  try { return projectIndex().map((e) => e.id); } catch { return []; }
+}
+const projectsDone = (s) => (s.projects && s.projects.done && typeof s.projects.done === "object" ? s.projects.done : {});
 
 const done = (s, id) => (s.completed_lessons || []).includes(id);
 const stat = (s, k) => (s.stats && s.stats[k]) || 0;
@@ -29,6 +36,9 @@ export const RULES = {
   // 「완벽한 문지기」: 색인의 모든 사건을 첫 실행에 해결(v0.16.0: 본문 대신 색인)
   guard_perfect: (s) => basicIndex().every((i) => s.guard?.solved?.[i.id]?.firstTry === true),
   guard_files: (s) => fieldIndex().length > 0 && fieldIndex().every((i) => !!s.guard?.solved?.[i.id]),   // v0.20.0 응용 모두 해결
+  // v0.21.0 프로젝트 공방: 작품 하나 완성 / 색인의 작품 모두 완성(src/projects/state.js passStep이 완성 때 이 검사를 부름)
+  project_first: (s) => Object.keys(projectsDone(s)).length >= 1,
+  project_all: (s) => { const ids = projectIds(); const d = projectsDone(s); return ids.length > 0 && ids.every((id) => Object.hasOwn(d, id)); },
 };
 
 export function checkBadges(save, ctx = {}) {

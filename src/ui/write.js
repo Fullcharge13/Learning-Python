@@ -11,9 +11,12 @@ const SYSTEM_ERRORS = new Set(["LoadError", "WorkerError", "NotReady"]);
 
 function stdinOf(t) { return t && t.stdin != null ? String(t.stdin) : ""; }
 // 가상 파일·연습 서버(v0.4 E1·E2): 시험의 files가 문제의 files보다 앞선다. server는 문제에만.
+// v0.21.0 프로젝트 공방: 시험의 rand(정해 둔 무작위, [v, a, b] 정확한 부름 칸 포함)는 손대지 않고 그대로 넘긴다
 export function runEnv(item, t) {
   const files = t && t.files ? t.files : item.files;
-  return { files: files || null, server: item.server || null };
+  const env = { files: files || null, server: item.server || null };
+  if (t && Array.isArray(t.rand)) env.rand = t.rand;
+  return env;
 }
 
 export const DRAFT_DEBOUNCE_MS = 500;
@@ -45,7 +48,13 @@ export function errorPanel(err, outfit, over = null, opts = {}) {
 // initial(이어 하기, v0.6.2 다): { code, hintsShown, solutionSeen, submits, hadError } — 초안·힌트·정답 보기·제출 수를 되살림.
 // onState(state): 같은 모양으로 지금 상태를 알림. 초안은 DRAFT_DEBOUNCE_MS 뒤에, 힌트·정답·틀린 제출은 바로.
 // (통과한 제출은 알리지 않음 — 그 뒤 상태는 레슨 쪽이 다음 문제로 넘기며 저장)
-export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log, showCards, initial = null, onState = null }) {
+// v0.21.0 프로젝트 공방(src/ui/project.js)이 더 넘기는 것:
+//   useSolution: { label, onUse(code) } — 정답 칸의 「정답을 입력창에 넣기」 대신 이 단추(「모범 코드에서 이어 하기」)
+//   runFiles: 「실행」(채점 전 자유 실행)에서 공개 시험에 files가 없을 때 쓸 가상 파일(프로젝트 play.files). 채점은 시험마다 제 files
+//   flushOnDestroy: 떠날 때 남은 초안을 onState로 바로 알림(레슨은 끄고 둠 — 그만두기가 이어 하기 기록을 지운 뒤라)
+//   onPass에는 통과한 코드 code도 같이 넘긴다
+export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log, showCards, initial = null, onState = null,
+  useSolution = null, runFiles = null, flushOnDestroy = false }) {
   const tests = Array.isArray(item.tests) ? item.tests : [];
   const pub = tests.find((t) => t.public) || tests[0] || { stdin: "", expect: "" };
   const hints = Array.isArray(item.hints) ? item.hints : [];
@@ -261,7 +270,9 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     ed.markLine(null);
     showRunning();
     try {
-      const r = await ctx.py.run(ed.getCode(), stdinOf(pub), item.require || [], runEnv(item, pub));
+      const env = runEnv(item, pub);
+      if (!env.files && runFiles) env.files = runFiles;
+      const r = await ctx.py.run(ed.getCode(), stdinOf(pub), item.require || [], env);
       if (st.destroyed) return; // 화면을 떠난 뒤 도착한 결과는 버림
       if (r.error && SYSTEM_ERRORS.has(r.error.type)) { systemError(r); return; }
       const out = normalize(r.stdout);
@@ -298,7 +309,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
       log({ pass: v.pass });
       if (v.pass) {
         consoleEl.innerHTML = `<p class="pass-line">${icon("check")}${t`시험 ${tests.length}개 모두 통과`}</p>`;
-        onPass({ solutionSeen: st.solutionSeen, hintUsed: st.hintsShown > 0, hadError: st.hadError, firstSubmit: st.submits === 1 });
+        onPass({ solutionSeen: st.solutionSeen, hintUsed: st.hintsShown > 0, hadError: st.hadError, firstSubmit: st.submits === 1, code });
         return;
       }
       onWrong();
@@ -393,8 +404,13 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
     solEl.innerHTML = `<h2>${auto ? t`세 번 제출했으니 정답을 같이 볼까요?` : t`정답과 해설`}</h2>
       ${codeBlock(item.solution || "")}
       ${item.explain ? `<p>${esc(item.explain)}</p>` : ""}
-      <button class="btn ghost small" id="usesol">${t`정답을 입력창에 넣기`}</button>`;
-    solEl.querySelector("#usesol").addEventListener("click", () => { if (ed) { ed.setCode(item.solution || ""); ed.focus(); } });
+      ${useSolution ? `<button class="btn ghost small" id="pj-usesol">${esc(useSolution.label)}</button>`
+        : `<button class="btn ghost small" id="usesol">${t`정답을 입력창에 넣기`}</button>`}`;
+    if (useSolution) {
+      solEl.querySelector("#pj-usesol").addEventListener("click", () => { if (!st.busy && !st.destroyed) useSolution.onUse(item.solution || ""); });
+    } else {
+      solEl.querySelector("#usesol").addEventListener("click", () => { if (ed) { ed.setCode(item.solution || ""); ed.focus(); } });
+    }
     body.querySelector("#sol").disabled = true;
   }
   body.querySelector("#sol").addEventListener("click", () => revealSolution(false));
@@ -430,6 +446,7 @@ export function mountWrite({ ctx, item, body, foot, onPass, onWrong, onHint, log
   });
 
   return () => {
+    if (flushOnDestroy && draftTimer) notify();
     st.destroyed = true;
     if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
     window.removeEventListener("pagehide", flushDraft);

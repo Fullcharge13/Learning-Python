@@ -249,12 +249,13 @@ def _guard_result(gs):
     failed = gs['error'] is True
     solved = not failed and n > 0 and (_g_len(events) == n) and ([e['i'] for e in events] == _g_list(range(n))) and _g_all((e['ok'] for e in events))
     return {'events': events, 'stats': stats, 'solved': solved, 'stopped': 'error' if failed else None}
-'학습자 코드를 실행하고 결과를 dict로 돌려준다.\n\nCPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다.\n스레드·시그널·네트워크를 쓰지 않는다. 시간 제한은 바깥(작업자 종료)에서 건다.\n\n격리(검토 C18 I2): 실행마다 builtins 전체·재귀 한도·sys.modules 목록을 저장해 두었다가 되돌린다.\n알려진 한계:\n- 이미 import되어 있던 표준 모듈을 학습자가 고치는 것(예: math.pi = 3)은 되돌리지 않는다.\n  이런 변경은 같은 작업자의 다음 실행에 남는다.\n- 실행 중 새로 import된 모듈은 sys.modules에서 지워 다음 실행에서 새로 불러오게 한다.\n  C 확장처럼 다시 import할 수 없거나 두 번째 import에서 상태가 어긋나는 모듈은\n  이 방식으로 깨끗이 되돌릴 수 없다(그럴 때는 작업자를 새로 띄우는 수밖에 없다).\n\n학습자가 builtins를 지우거나 바꿔도(예: del builtins.str) runner가 결과를 돌려주도록,\n학습자 코드가 도는 동안 불리는 runner 코드는 아래 _len·_str 같은 모듈 변수만 쓰고,\n결과(dict) 만들기는 finally에서 builtins를 되돌린 뒤에 한다.\n\n가상 파일·연습 서버(v0.4 E1·E2):\n- 실행마다 새 임시 폴더를 만들어 작업 위치(cwd)로 삼고, files(이름 → 글자)를 UTF-8로 써 둔다.\n  끝나면 원래 위치로 돌아가고 폴더를 통째로 지운다(학습자가 만든 파일도). 실행 사이에 흔적이 없다.\n  files가 없어도 빈 폴더에서 돈다. 절대 경로로 다른 곳에 쓰는 것까지 막지는 않는다.\n- server(주소 → {"status": int, "body": str, "type"?: str})가 있으면 실행 동안\n  urllib.request.urlopen이 이 표에서 답한다(소켓을 열지 않음). 표에 없는 주소는 URLError,\n  status 400 이상은 HTTPError. 끝나면 진짜 urlopen으로 되돌린다. server가 None이면 손대지 않는다.\n\n차트(v0.5 E3): 실행마다 새 `chart` 모듈을 sys.modules에 넣는다(끝나면 지워져 실행 사이에 상태가 없다).\n  matplotlib.pyplot과 거의 같은 이름(line만 pyplot에서는 plot): bar(이름들, 값들), line(이름들, 값들), title(글), xlabel(글), ylabel(글), legend(선 이름들), show().\n  show()가 그림 하나를 결과의 charts에 넣고 그림을 비운다. show() 없이 끝나면 그리지 않는다. 한 실행에 CHART_MAX개까지.\n  인자는 차례로만 받는다(color= 같은 이름 붙은 인자는 한국어 TypeError). 이름은 글자로 바꿔 담고, 값은 JSON에 넣을 수 있는 수(int·float, bool·nan·inf 아님).\n  그림 하나에 막대는 하나만. 꺾은선은 같은 이름들(가로축)로 CHART_LINES_MAX개까지 겹칠 수 있다(v0.9, 17장 심화).\n  막대와 꺾은선은 섞지 않는다. legend(이름들)는 선 이름표 — 부르는 차례는 line 앞뒤 상관없고, show() 때 개수가 선 수와 같아야 한다.\n  그림 모양: 꺾은선 하나이고 legend가 없으면 예전 그대로 {kind, labels, values, …}.\n             꺾은선이 둘 이상이거나 legend가 있으면 values 대신 series: [{"name"?: 글, "values": [수]}, …].\n\n텃밭(v0.10, 설계서 2026-11-05 §2): farm(dict)이 있으면 실행마다 새 `farm` 모듈을 sys.modules에 넣고(끝나면 지움)\n  명령 move(방향)·plant(작물)·harvest()·can_harvest()·what_here()·store()·where()·seeds()를 실행 전역에도 미리 넣는다(import 없이 씀,\n  `from farm import *`·`import farm`도 됨). print는 그대로 출력하면서 say 사건도 남긴다(표준 출력에 쓸 때만).\n  받은 상태는 고치지 않고 다듬은 사본(_farm_state) 위에서 돈다. 시간 1짜리 행동(move·plant·harvest, 실패한\n  심기·빈 칸 수확 포함)은 지금 clock에 일어나고 clock += 1. 다 자람: clock − planted_at ≥ 자라는 시간(당근 8,\n  감자 12, upgrades에 "비료"면 6·9). 감자는 upgrades에 "감자 씨앗"이 있어야 심어짐.\n  한 실행에 행동 FARM_ACTIONS_MAX(500)번까지 — 501번째에 FarmTired(BaseException)로 멈추고, 학습자가 except로\n  삼켜도 추적 함수가 학습자 코드 다음 줄에서 다시 던진다. 결과는 오류가 아니라 stopped "tired".\n  확인(can_harvest·what_here·store·where, 시간 0)은 한 실행에 FARM_CHECKS_MAX(2000)번까지 — 2001번째에 같은 방식으로 멈추고\n  stopped "waited"(`while not can_harvest(): pass`처럼 시간이 흐르지 않는 기다리기, 판정 C60). 확인은 사건을 남기지 않는다.\n  v0.11(설계서 2026-11-05 6~9장 §1): store()는 창고 사본 {"당근": n, "감자": n}(새 dict — 바꿔도 진짜 창고·결과는\n  그대로, 없는 작물 이름은 KeyError), where()는 파이의 자리 튜플 (x, y). 둘 다 확인 하나로 세고 사건은 없다(사건 모양 그대로).\n  둘 중 먼저 걸린 이유가 stopped에 남고, 멈춘 뒤로는 행동·확인 모두 다시 던진다.\n  v0.12(설계서 2026-11-05 10~17장 §1·§2·§4):\n  - 토마토: 자라는 시간 10(비료 7), 업그레이드 없이 심어짐(장마다 여는 것은 앱이 함). 토마토 씨앗 봉투 state["seeds"]\n    (없으면 5, 0..20으로 다듬음): 토마토 심기 성공 −1, 다 자란 토마토 거두기 +2(최대 20). 봉투가 비었을 때 plant("토마토")는\n    시간 1을 쓰고 plant_fail(reason "no_tomato_seed")을 남긴 뒤 ValueError("토마토 씨앗이 떨어졌어요")를 던진다\n    (학습자가 try/except ValueError로 잡을 수 있음). 봉투 검사가 먼저이고(빈 봉투면 칸이 차 있어도 이 오류), 씨앗이\n    있는데 칸이 차 있으면 예전처럼 plant_fail "occupied"(씨앗은 그대로). store()는 세 작물 모두, what_here()는 "토마토"도.\n  - seeds(): 남은 토마토 씨앗 수. 시간 0, 확인 하나로 셈(C60), 사건 없음.\n  - 쪽지함: farm과 files를 함께 주면 files 가운데 "농장일지.txt"가 아닌 것은 받는 쪽지(읽기 전용) — 실행 동안\n    builtins.open·io.open을 감싸 그 파일을 쓰기("w"·"a"·"x"·"+")로 열면 PermissionError("받은 쪽지는 읽기만 해요").\n    경로는 realpath로 비교(절대 경로·링크도 막힘). os.open·_io.open 직접 쓰기는 막지 않는다(받는 쪽지는 실행마다\n    새로 놓이므로 남지 않음). 실행이 끝나면(오류·멈춤·SyntaxError 때도) 실행 폴더의 농장일지.txt를 읽어\n    result["farm"]["files"] = {"농장일지.txt": 끝 2000자}로 돌려준다. 지웠거나 없으면 "", 깨진 바이트는 U+FFFD.\n    다른 새 파일은 폴더와 함께 사라진다. files를 안 주면 open은 그대로이고 결과에 files가 없다.\n    텃밭 없이 files만 주면 예전 그대로(모든 파일 쓰기 가능).\n  v0.12 검토(판정 C71):\n  - 농장일지.txt를 쓰기·덧붙이기로 열 때마다(builtins.open·io.open 길) 행동 상한에 하나씩 든다: 시간 1짜리 행동과\n    일지 쓰기 열기를 합쳐 FARM_ACTIONS_MAX(500)번까지, 넘으면 stopped "tired". 시계는 흐르지 않고 사건도 없으며\n    결과의 actions는 시간 1짜리 행동만 센다(앱의 결과 대조 C62가 그대로 맞게). 끝없는 일지 쓰기 반복이 시간 제한\n    대신 「지침」으로 끝난다. 읽기로 여는 것은 세지 않는다.\n  - farm["tomato_ok"]가 False면(앱: 10장 전) plant("토마토")는 시간 1을 쓰고 plant_fail(reason "tomato_locked")을\n    남긴 뒤 ValueError("토마토는 10장을 끝내면 심을 수 있어요")(봉투 검사보다 먼저). seeds()는 그대로 됨.\n    없거나 다른 값이면 열림. 끝 상태(state)에는 넣지 않는다.\n  - 일지를 돌려줄 때 바로가기(symlink)는 따라가지 않는다(일지 없음 "").\n  result["farm"] = {\n      "events": [ {"t": "move", "line", "dir", "x", "y"}            # x, y = 움직인 뒤 자리\n                | {"t": "plant", "line", "crop", "x", "y"}\n                | {"t": "plant_fail", "line", "reason": "occupied" | "no_seed" | "no_tomato_seed" | "tomato_locked", "crop", "x", "y"}\n                | {"t": "harvest", "line", "crop", "x", "y"}          # 다 자람 → store[crop] += 1\n                | {"t": "harvest_young", "line", "crop", "x", "y"}    # 덜 자람 → 작물만 사라짐\n                | {"t": "harvest_empty", "line", "x", "y"}            # 빈 칸(시간은 1 듦)\n                | {"t": "say", "line", "text"} ],                     # print 한 번(끝 줄바꿈 뺌, 40자까지)\n                # line: 그 명령을 부른 학습자 코드 줄(가장 안쪽). say는 FARM_SAYS_MAX(100)개까지만 남긴다(넘는 print는\n                # 출력만). 시간 1짜리 사건은 행동 상한(500) 안이라 하나도 버리지 않는다 → 사건만으로 끝 상태를 다시 만들 수 있다.\n      "state": {"size", "cells": [None | {"crop", "planted_at"}] (y*size+x), "pie": {"x", "y"},\n                "clock", "store": {"당근", "감자", "토마토"}, "upgrades": [str], "seeds": int},   # 끝 상태(오류가 나도 그 직전까지)\n      "stopped": None | "tired" | "waited", "actions": int,   # actions: 이번 실행의 시간 1짜리 행동 수\n      "files"?: {"농장일지.txt": str} }   # files를 함께 준 텃밭 실행에만(v0.12, 2000자까지)\n  결과 farm은 학습자 코드가 닫힘으로 상태·사건을 건드렸어도 다시 다듬은 사본이다(JSON 모양, nan 없음).\n  규칙 표는 실행마다 바꿀 수 없는 원본에서 새로 만들고, 이 모듈의 전역 이름은 실행이 끝나면 되돌린다(검토 C62 I1).\n  farm=None이면 result에 "farm"이 없다(예전 그대로).\n\n경비실(v0.15, 설계서 2026-11-12 경비실 §2): guard={"mode": "script"|"loop"|"func", "tries": [{"value": str|int,\n  "expect": "block"|"allow"}, …], "password"?: str}가 있으면 guard.py 규칙으로 실행한다(farm과 함께 오면 guard만 씀).\n  명령 block()·allow()·has_try()·next_try()(+ password)를 실행 전역에 넣는다. 판정 규칙은 guard.py 설명 글.\n  학습자가 삼킨 사용 오류(GuardUsageError)도 결과 오류로 알린다. check를 부르는 자리에서 난 오류(인자 수·bool 아님)는\n  def check 줄(판정 G-C1).\n  result["guard"] = {"events": [{"i", "verdict": "block"|"allow"|"none", "ok": bool, "twice"?: True}],\n                     "stats": {"attacks_blocked", "attacks_total", "guests_allowed", "guests_total"},\n                     "solved": bool, "stopped": None | "error"}   # events는 오류 전까지만, guard=None이면 열쇠 없음\n\nrun(code, stdin, require, files=None, server=None, farm=None, lang=None, guard=None) -> {\n    "stdout": str, "stderr": str,\n    "error": None | {"type": str, "line": int | None, "msg": str},\n    "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:/Def:/SQL:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr, NamedGroup·Reraise)\n    "charts": [{"kind": "bar" | "line", "labels": [str], "values": [int | float],\n                "title"?: str, "xlabel"?: str, "ylabel"?: str}\n               | {"kind": "line", "labels": [str], "series": [{"name"?: str, "values": [...]}, ...], ...}, ...],\n}\nstdin은 "12\n30" 같은 문자열(레슨 데이터 형식) 또는 문자열 목록.\n\n'
+'학습자 코드를 실행하고 결과를 dict로 돌려준다.\n\nCPython 3.13(시험)과 Pyodide(Python 3.14, Web Worker 안)에서 같이 돈다.\n스레드·시그널·네트워크를 쓰지 않는다. 시간 제한은 바깥(작업자 종료)에서 건다.\n\n격리(검토 C18 I2): 실행마다 builtins 전체·재귀 한도·sys.modules 목록을 저장해 두었다가 되돌린다.\n알려진 한계:\n- 이미 import되어 있던 표준 모듈을 학습자가 고치는 것(예: math.pi = 3)은 되돌리지 않는다.\n  이런 변경은 같은 작업자의 다음 실행에 남는다.\n- 실행 중 새로 import된 모듈은 sys.modules에서 지워 다음 실행에서 새로 불러오게 한다.\n  C 확장처럼 다시 import할 수 없거나 두 번째 import에서 상태가 어긋나는 모듈은\n  이 방식으로 깨끗이 되돌릴 수 없다(그럴 때는 작업자를 새로 띄우는 수밖에 없다).\n\n학습자가 builtins를 지우거나 바꿔도(예: del builtins.str) runner가 결과를 돌려주도록,\n학습자 코드가 도는 동안 불리는 runner 코드는 아래 _len·_str 같은 모듈 변수만 쓰고,\n결과(dict) 만들기는 finally에서 builtins를 되돌린 뒤에 한다.\n\n가상 파일·연습 서버(v0.4 E1·E2):\n- 실행마다 새 임시 폴더를 만들어 작업 위치(cwd)로 삼고, files(이름 → 글자)를 UTF-8로 써 둔다.\n  끝나면 원래 위치로 돌아가고 폴더를 통째로 지운다(학습자가 만든 파일도). 실행 사이에 흔적이 없다.\n  files가 없어도 빈 폴더에서 돈다. 절대 경로로 다른 곳에 쓰는 것까지 막지는 않는다.\n- server(주소 → {"status": int, "body": str, "type"?: str})가 있으면 실행 동안\n  urllib.request.urlopen이 이 표에서 답한다(소켓을 열지 않음). 표에 없는 주소는 URLError,\n  status 400 이상은 HTTPError. 끝나면 진짜 urlopen으로 되돌린다. server가 None이면 손대지 않는다.\n\n차트(v0.5 E3): 실행마다 새 `chart` 모듈을 sys.modules에 넣는다(끝나면 지워져 실행 사이에 상태가 없다).\n  matplotlib.pyplot과 거의 같은 이름(line만 pyplot에서는 plot): bar(이름들, 값들), line(이름들, 값들), title(글), xlabel(글), ylabel(글), legend(선 이름들), show().\n  show()가 그림 하나를 결과의 charts에 넣고 그림을 비운다. show() 없이 끝나면 그리지 않는다. 한 실행에 CHART_MAX개까지.\n  인자는 차례로만 받는다(color= 같은 이름 붙은 인자는 한국어 TypeError). 이름은 글자로 바꿔 담고, 값은 JSON에 넣을 수 있는 수(int·float, bool·nan·inf 아님).\n  그림 하나에 막대는 하나만. 꺾은선은 같은 이름들(가로축)로 CHART_LINES_MAX개까지 겹칠 수 있다(v0.9, 17장 심화).\n  막대와 꺾은선은 섞지 않는다. legend(이름들)는 선 이름표 — 부르는 차례는 line 앞뒤 상관없고, show() 때 개수가 선 수와 같아야 한다.\n  그림 모양: 꺾은선 하나이고 legend가 없으면 예전 그대로 {kind, labels, values, …}.\n             꺾은선이 둘 이상이거나 legend가 있으면 values 대신 series: [{"name"?: 글, "values": [수]}, …].\n\n텃밭(v0.10, 설계서 2026-11-05 §2): farm(dict)이 있으면 실행마다 새 `farm` 모듈을 sys.modules에 넣고(끝나면 지움)\n  명령 move(방향)·plant(작물)·harvest()·can_harvest()·what_here()·store()·where()·seeds()를 실행 전역에도 미리 넣는다(import 없이 씀,\n  `from farm import *`·`import farm`도 됨). print는 그대로 출력하면서 say 사건도 남긴다(표준 출력에 쓸 때만).\n  받은 상태는 고치지 않고 다듬은 사본(_farm_state) 위에서 돈다. 시간 1짜리 행동(move·plant·harvest, 실패한\n  심기·빈 칸 수확 포함)은 지금 clock에 일어나고 clock += 1. 다 자람: clock − planted_at ≥ 자라는 시간(당근 8,\n  감자 12, upgrades에 "비료"면 6·9). 감자는 upgrades에 "감자 씨앗"이 있어야 심어짐.\n  한 실행에 행동 FARM_ACTIONS_MAX(500)번까지 — 501번째에 FarmTired(BaseException)로 멈추고, 학습자가 except로\n  삼켜도 추적 함수가 학습자 코드 다음 줄에서 다시 던진다. 결과는 오류가 아니라 stopped "tired".\n  확인(can_harvest·what_here·store·where, 시간 0)은 한 실행에 FARM_CHECKS_MAX(2000)번까지 — 2001번째에 같은 방식으로 멈추고\n  stopped "waited"(`while not can_harvest(): pass`처럼 시간이 흐르지 않는 기다리기, 판정 C60). 확인은 사건을 남기지 않는다.\n  v0.11(설계서 2026-11-05 6~9장 §1): store()는 창고 사본 {"당근": n, "감자": n}(새 dict — 바꿔도 진짜 창고·결과는\n  그대로, 없는 작물 이름은 KeyError), where()는 파이의 자리 튜플 (x, y). 둘 다 확인 하나로 세고 사건은 없다(사건 모양 그대로).\n  둘 중 먼저 걸린 이유가 stopped에 남고, 멈춘 뒤로는 행동·확인 모두 다시 던진다.\n  v0.12(설계서 2026-11-05 10~17장 §1·§2·§4):\n  - 토마토: 자라는 시간 10(비료 7), 업그레이드 없이 심어짐(장마다 여는 것은 앱이 함). 토마토 씨앗 봉투 state["seeds"]\n    (없으면 5, 0..20으로 다듬음): 토마토 심기 성공 −1, 다 자란 토마토 거두기 +2(최대 20). 봉투가 비었을 때 plant("토마토")는\n    시간 1을 쓰고 plant_fail(reason "no_tomato_seed")을 남긴 뒤 ValueError("토마토 씨앗이 떨어졌어요")를 던진다\n    (학습자가 try/except ValueError로 잡을 수 있음). 봉투 검사가 먼저이고(빈 봉투면 칸이 차 있어도 이 오류), 씨앗이\n    있는데 칸이 차 있으면 예전처럼 plant_fail "occupied"(씨앗은 그대로). store()는 세 작물 모두, what_here()는 "토마토"도.\n  - seeds(): 남은 토마토 씨앗 수. 시간 0, 확인 하나로 셈(C60), 사건 없음.\n  - 쪽지함: farm과 files를 함께 주면 files 가운데 "농장일지.txt"가 아닌 것은 받는 쪽지(읽기 전용) — 실행 동안\n    builtins.open·io.open을 감싸 그 파일을 쓰기("w"·"a"·"x"·"+")로 열면 PermissionError("받은 쪽지는 읽기만 해요").\n    경로는 realpath로 비교(절대 경로·링크도 막힘). os.open·_io.open 직접 쓰기는 막지 않는다(받는 쪽지는 실행마다\n    새로 놓이므로 남지 않음). 실행이 끝나면(오류·멈춤·SyntaxError 때도) 실행 폴더의 농장일지.txt를 읽어\n    result["farm"]["files"] = {"농장일지.txt": 끝 2000자}로 돌려준다. 지웠거나 없으면 "", 깨진 바이트는 U+FFFD.\n    다른 새 파일은 폴더와 함께 사라진다. files를 안 주면 open은 그대로이고 결과에 files가 없다.\n    텃밭 없이 files만 주면 예전 그대로(모든 파일 쓰기 가능).\n  v0.12 검토(판정 C71):\n  - 농장일지.txt를 쓰기·덧붙이기로 열 때마다(builtins.open·io.open 길) 행동 상한에 하나씩 든다: 시간 1짜리 행동과\n    일지 쓰기 열기를 합쳐 FARM_ACTIONS_MAX(500)번까지, 넘으면 stopped "tired". 시계는 흐르지 않고 사건도 없으며\n    결과의 actions는 시간 1짜리 행동만 센다(앱의 결과 대조 C62가 그대로 맞게). 끝없는 일지 쓰기 반복이 시간 제한\n    대신 「지침」으로 끝난다. 읽기로 여는 것은 세지 않는다.\n  - farm["tomato_ok"]가 False면(앱: 10장 전) plant("토마토")는 시간 1을 쓰고 plant_fail(reason "tomato_locked")을\n    남긴 뒤 ValueError("토마토는 10장을 끝내면 심을 수 있어요")(봉투 검사보다 먼저). seeds()는 그대로 됨.\n    없거나 다른 값이면 열림. 끝 상태(state)에는 넣지 않는다.\n  - 일지를 돌려줄 때 바로가기(symlink)는 따라가지 않는다(일지 없음 "").\n  result["farm"] = {\n      "events": [ {"t": "move", "line", "dir", "x", "y"}            # x, y = 움직인 뒤 자리\n                | {"t": "plant", "line", "crop", "x", "y"}\n                | {"t": "plant_fail", "line", "reason": "occupied" | "no_seed" | "no_tomato_seed" | "tomato_locked", "crop", "x", "y"}\n                | {"t": "harvest", "line", "crop", "x", "y"}          # 다 자람 → store[crop] += 1\n                | {"t": "harvest_young", "line", "crop", "x", "y"}    # 덜 자람 → 작물만 사라짐\n                | {"t": "harvest_empty", "line", "x", "y"}            # 빈 칸(시간은 1 듦)\n                | {"t": "say", "line", "text"} ],                     # print 한 번(끝 줄바꿈 뺌, 40자까지)\n                # line: 그 명령을 부른 학습자 코드 줄(가장 안쪽). say는 FARM_SAYS_MAX(100)개까지만 남긴다(넘는 print는\n                # 출력만). 시간 1짜리 사건은 행동 상한(500) 안이라 하나도 버리지 않는다 → 사건만으로 끝 상태를 다시 만들 수 있다.\n      "state": {"size", "cells": [None | {"crop", "planted_at"}] (y*size+x), "pie": {"x", "y"},\n                "clock", "store": {"당근", "감자", "토마토"}, "upgrades": [str], "seeds": int},   # 끝 상태(오류가 나도 그 직전까지)\n      "stopped": None | "tired" | "waited", "actions": int,   # actions: 이번 실행의 시간 1짜리 행동 수\n      "files"?: {"농장일지.txt": str} }   # files를 함께 준 텃밭 실행에만(v0.12, 2000자까지)\n  결과 farm은 학습자 코드가 닫힘으로 상태·사건을 건드렸어도 다시 다듬은 사본이다(JSON 모양, nan 없음).\n  규칙 표는 실행마다 바꿀 수 없는 원본에서 새로 만들고, 이 모듈의 전역 이름은 실행이 끝나면 되돌린다(검토 C62 I1).\n  farm=None이면 result에 "farm"이 없다(예전 그대로).\n\n경비실(v0.15, 설계서 2026-11-12 경비실 §2): guard={"mode": "script"|"loop"|"func", "tries": [{"value": str|int,\n  "expect": "block"|"allow"}, …], "password"?: str}가 있으면 guard.py 규칙으로 실행한다(farm과 함께 오면 guard만 씀).\n  명령 block()·allow()·has_try()·next_try()(+ password)를 실행 전역에 넣는다. 판정 규칙은 guard.py 설명 글.\n  학습자가 삼킨 사용 오류(GuardUsageError)도 결과 오류로 알린다. check를 부르는 자리에서 난 오류(인자 수·bool 아님)는\n  def check 줄(판정 G-C1).\n  result["guard"] = {"events": [{"i", "verdict": "block"|"allow"|"none", "ok": bool, "twice"?: True}],\n                     "stats": {"attacks_blocked", "attacks_total", "guests_allowed", "guests_total"},\n                     "solved": bool, "stopped": None | "error"}   # events는 오류 전까지만, guard=None이면 열쇠 없음\n\n주고받기·정해 둔 무작위(v0.21.0, 설계서 2026-11-15 프로젝트 공방 §4-3·§7):\n  interactive=True면 input() 값이 모자랄 때 InputMissing 오류 대신 result["need_input"] = {"prompt": 그 input()의 안내 글}과\n  error None을 돌려준다(그 전까지의 출력은 stdout에, 안내 글은 stdout에 넣지 않음 → 다음 실행 출력의 앞부분과 같다).\n  값이 충분하면 need_input 열쇠가 없다. interactive가 아니면 예전 그대로(InputMissing 오류).\n  rand=[int|str|[int, a, b], …]면 실행 동안 random.randint(a, b)·random.choice(seq)가 이 값을 차례로 돌려준다(randint는 정수이고 a 이상 b 이하,\n  choice는 값이 seq 안에 있어야 하고 아니면 RandMismatch). 값이 떨어지면 RandMissing. RandMissing·RandMismatch는 BaseException이고 처음 실패를 state에 적어 두어,\n  학습자가 except로 삼켜도 결과 error로 알린다(InputMissing과 같은 방식). 끝나면(오류 때도, rand 실행이 아니어도)\n  불러올 때 잡아 둔 진짜 randint·choice로 되돌린다(학습자가 바꿔도 다음 실행에 안 샘).\n  need_input으로 바뀌는 실행은 stderr를 비운다.\n  rand=None이면 진짜 random. seed=정수면 실행 전에 random.seed(seed), 끝나면 그 전 전역 random 상태로 되돌린다.\n\nrun(code, stdin, require, files=None, server=None, farm=None, lang=None, guard=None, interactive=False, rand=None, seed=None) -> {\n    "stdout": str, "stderr": str,\n    "error": None | {"type": str, "line": int | None, "msg": str},\n    "missing": [str, ...],   # require 중 코드에 없는 것(ast 마디 이름, Call:/Name:/Method:/Def:/SQL:, Comment·Elif·Else, SelfCall·FormatSpec·TripleStr, NamedGroup·Reraise)\n    "need_input"?: {"prompt": str},   # interactive이고 입력이 모자랄 때만(그때 error는 None)\n    "charts": [{"kind": "bar" | "line", "labels": [str], "values": [int | float],\n                "title"?: str, "xlabel"?: str, "ylabel"?: str}\n               | {"kind": "line", "labels": [str], "series": [{"name"?: str, "values": [...]}, ...], ...}, ...],\n}\nstdin은 "12\n30" 같은 문자열(레슨 데이터 형식) 또는 문자열 목록.\n\n'
 import ast
 import builtins
 import io
 import linecache
 import os
+import random
 import shutil
 import sys
 import tempfile
@@ -294,6 +295,12 @@ def _tr_for(lang):
     return lambda s: en.get(s, s)
 
 class InputMissing(BaseException):
+    pass
+
+class RandMissing(BaseException):
+    pass
+
+class RandMismatch(BaseException):
     pass
 
 class OutputLimit(BaseException):
@@ -346,14 +353,54 @@ def _make_input(values, out, state):
     queue = list(values)
 
     def fake_input(prompt=''):
-        if prompt:
+        pending = not queue and state.get('interactive')
+        if prompt and (not pending):
             out.write(_str(prompt))
         if not queue:
             if state['input_missing'] is None:
                 state['input_missing'] = _caller_user_line()
+                state['need_prompt'] = _str(prompt) if prompt else ''
             raise InputMissing('input() needed more values than were given')
         return _str(queue.pop(0))
     return fake_input
+_REAL_RANDINT = random.randint
+_REAL_CHOICE = random.choice
+_REAL_GETSTATE = random.getstate
+_REAL_SETSTATE = random.setstate
+
+def _make_rand(values, state):
+    queue = list(values)
+
+    def _fail(exc):
+        if state['rand_fail'] is None:
+            state['rand_fail'] = (type(exc).__name__, _caller_user_line(), _str(exc.args[0]))
+        return exc
+
+    def _next():
+        if not queue:
+            raise _fail(RandMissing('random was called more times than the given values'))
+        return queue.pop(0)
+
+    def randint(a, b):
+        v = _next()
+        if _type(v) is list:
+            if not (_len(v) == 3 and all((_type(x) is int for x in v)) and ((a, b) == (v[1], v[2]))):
+                raise _fail(RandMismatch('randint was called with a different range than expected'))
+            v = v[0]
+        if _type(v) is not int or not a <= v <= b:
+            raise _fail(RandMismatch("the given random value is not in randint's range"))
+        return v
+
+    def choice(seq):
+        n = _len(seq)
+        if not n:
+            raise IndexError('Cannot choose from an empty sequence')
+        seq[0]
+        v = _next()
+        if v not in _list(seq):
+            raise _fail(RandMismatch('the given random value is not in the sequence'))
+        return v
+    return (randint, choice)
 
 def _user_line(tb):
     line = None
@@ -1040,7 +1087,7 @@ def _restore_farm_tables():
     global FARM_CROPS, FARM_GROW, FARM_GROW_FERTILIZED, FARM_DIRS
     FARM_CROPS, FARM_GROW, FARM_GROW_FERTILIZED, FARM_DIRS = _farm_tables()
 
-def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang=None, guard=None):
+def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang=None, guard=None, interactive=False, rand=None, seed=None):
     if guard is not None:
         farm = None
     if lang is None and _type(farm) is _dict:
@@ -1051,7 +1098,7 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
     code = '' if code is None else str(code)
     stdin = _split_stdin(stdin)
     require = list(require or [])
-    state = {'used': 0, 'input_missing': None, 'output_limit': None}
+    state = {'used': 0, 'input_missing': None, 'output_limit': None, 'interactive': interactive is True, 'need_prompt': '', 'rand_fail': None}
     out = _CappedIO(state)
     err = _CappedIO(state)
     charts = []
@@ -1133,7 +1180,13 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
     sys.stdout, sys.stderr = (out, err)
     builtins.input = _make_input(stdin, out, state)
     caught = None
+    rand_state = None
     try:
+        if rand is not None:
+            random.randint, random.choice = _make_rand(rand, state)
+        if seed is not None:
+            rand_state = _REAL_GETSTATE()
+            random.seed(seed)
         _chdir(run_dir)
         if urlreq is not None:
             urlreq.urlopen = fake_urlopen
@@ -1149,6 +1202,9 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
         mod_globals.clear()
         mod_globals.update(saved_globals)
         _restore_farm_tables()
+        random.randint, random.choice = (_REAL_RANDINT, _REAL_CHOICE)
+        if rand_state is not None:
+            _REAL_SETSTATE(rand_state)
         if fs is not None and fs['trace_on']:
             _settrace(old_trace)
         sys.stdout, sys.stderr = (old_out, old_err)
@@ -1186,10 +1242,22 @@ def run(code, stdin=None, require=None, files=None, server=None, farm=None, lang
     linecache.cache.pop(USER_FILE, None)
     if tired:
         pass
+    elif state['rand_fail'] is not None:
+        kind, line, msg = state['rand_fail']
+        swallowed = (result['error'] or {}).get('type') != kind
+        result['error'] = {'type': kind, 'line': line, 'msg': msg}
+        if swallowed:
+            err.raw_write('%s (line %s): %s\n' % (kind, line, msg))
     elif state['input_missing'] is not None or (result['error'] or {}).get('type') == 'InputMissing':
         line = state['input_missing'] or result['error']['line']
-        result['error'] = {'type': 'InputMissing', 'line': line, 'msg': 'input() needed more values than were given'}
-        err.raw_write('InputMissing (line %s): input() needed more values than were given\n' % line)
+        if state['interactive']:
+            result['error'] = None
+            result['need_input'] = {'prompt': state['need_prompt']}
+            err.seek(0)
+            err.truncate(0)
+        else:
+            result['error'] = {'type': 'InputMissing', 'line': line, 'msg': 'input() needed more values than were given'}
+            err.raw_write('InputMissing (line %s): input() needed more values than were given\n' % line)
     elif state['output_limit'] is not None or (result['error'] or {}).get('type') == 'OutputLimit':
         line = state['output_limit'] or result['error']['line']
         result['error'] = {'type': 'OutputLimit', 'line': line, 'msg': 'output is longer than %d characters' % OUTPUT_LIMIT}

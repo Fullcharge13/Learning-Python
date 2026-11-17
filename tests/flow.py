@@ -7206,7 +7206,9 @@ def test_shop_tabs():
         # 검토 M4: 탭 줄 화살표·Home·End(초점도 그 탭으로)
         sel = lambda: a.js("() => [document.querySelector('.shop-tabs [aria-selected=true]').dataset.tab, document.activeElement.dataset.tab]")
         for key, want in (("Home", "outfit"), ("ArrowLeft", "color"), ("ArrowLeft", "deco"), ("ArrowRight", "color"), ("ArrowRight", "outfit"), ("End", "color")):
-            a.page.keyboard.press(key) if a.js("() => !!document.activeElement.closest('.shop-tabs')") else (a.page.focus('.shop-tabs [aria-selected=true]'), a.page.keyboard.press(key))
+            if not a.js("() => !!document.activeElement.closest('.shop-tabs')"):
+                a.page.focus(".shop-tabs [aria-selected=true]")
+            a.page.keyboard.press(key)
             assert sel() == [want, want], (key, sel())
         # 검토 M4: 꾸미기 탭에서 보호권을 사도 꾸미기 탭 그대로
         _shop_tab(a, "deco")
@@ -7631,6 +7633,19 @@ def test_deco_persist():
         a.page.click("#g-guard")
         a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
         assert attr() == "gu_control", "re-enter"
+        # 검토 M6: 개발자 칸은 저장이 따로 — 켜면 그 칸의 꾸미기(없음), 끄면 원래 칸의 것으로
+        ed = lambda: a.js("() => document.documentElement.dataset.edtheme || null")
+        assert ed() == "ed_sea", ed()
+        a.js("() => window.__ria.ctx.setDev(true)")
+        a.page.wait_for_function("() => !document.documentElement.hasAttribute('data-edtheme')")
+        a.js("() => window.__ria.ctx.show('guard')")
+        a.page.wait_for_selector(".screen.guard")
+        assert attr() is None, "dev slot has no guard theme"
+        a.js("() => window.__ria.ctx.setDev(false)")
+        a.page.wait_for_function("() => document.documentElement.dataset.edtheme === 'ed_sea'")
+        a.js("() => window.__ria.ctx.show('guard')")
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+        assert attr() == "gu_control", "back to the normal slot"
         a.page.reload()
         a.page.wait_for_selector(".screen.splash #go")
         assert a.js("() => document.documentElement.dataset.edtheme") == "ed_sea", "edtheme on <html> at start"
@@ -7663,6 +7678,77 @@ def test_deco_persist():
         dflt = a.js(_ED_LOOK)
         assert dflt["bg"] != nd["bg"] and dflt["kw"] == "rgb(217, 165, 255)", dflt   # 어둡게 기본 keyword #D9A5FF
         assert not _app_errors(a), a.errors
+
+
+_ED_BAD = 'def f():\n    s = "hi"  # memo\n    return s\nprint(f(), True, None'
+_MARKS_JS = """() => { const cs = (e) => e ? getComputedStyle(e) : null;
+  const toks = [...document.querySelectorAll('.cm-content .cm-line span')].filter(e => /\\w/.test(e.textContent)).map(e => cs(e).color);
+  const sel = cs(document.querySelector('.cm-selectionBackground'));
+  const br = document.querySelector('.cm-matchingBracket');
+  return { ed: cs(document.querySelector('.cm-editor')).backgroundColor, plain: cs(document.querySelector('.cm-content')).color, toks,
+           act: cs(document.querySelector('.cm-activeLine:not(.cm-errline)')) ? cs(document.querySelector('.cm-activeLine:not(.cm-errline)')).backgroundColor : null,
+           sel: sel ? sel.backgroundColor : null, br: br ? [cs(br).color, cs(br).backgroundColor] : null }; }"""
+
+
+def _rgba(s):
+    v = [float(x) for x in re.findall(r"[\d.]+", s)]
+    return v[:3] + [v[3] if len(v) > 3 else 1.0]
+
+
+def _over(top, base):
+    t = _rgba(top) if isinstance(top, str) else top
+    b = _rgba(base)[:3] if isinstance(base, str) else base[:3]
+    return "rgb(%d, %d, %d)" % tuple(round(t[i] * t[3] + b[i] * (1 - t[3])) for i in range(3))
+
+
+def test_deco_editor_marks():
+    """작업 6 검토 I1·M1: 편집기 색을 켜도 ① 커서가 있는 오류 줄의 바탕은 오류 색(--coral-soft) 그대로(현재 줄 색에 지지 않음),
+    ② 고른 글자(전체 고르기) 바탕 위·짝 괄호 바탕 위 글자가 4.5:1 이상. 밝게·어둡게 4가지 색 모두"""
+    fails = []
+    coral = {"light": "rgb(252, 228, 220)", "dark": "rgb(61, 35, 40)"}
+    for theme in ("light", "dark"):
+        init = "localStorage.setItem(%s, %s);" % (json.dumps(THEME_KEY), json.dumps(theme))
+        for iid in ((None,) if theme == "light" else ()) + ("ed_paper", "ed_forest", "ed_sea", "ed_night"):
+            s = _shop_seed(xp=LV13_XP, levels=_lv(13), deco=_deco(editor=iid), completed_lessons=[], current_lesson="1-1")
+            with App("iPhone 17", save=s, init_js=init) as a:
+                a.start()
+                a.page.click("#continue")
+                _to_write(a)
+                a.wait_py()
+                a.set_code(_ED_BAD)
+                a.page.click("#run")
+                a.page.wait_for_selector(".cm-errline", timeout=30_000)
+                a.page.click(".cm-errline")
+                a.page.wait_for_selector(".cm-errline.cm-activeLine")
+                a.page.wait_for_timeout(100)
+                bg = a.js("() => getComputedStyle(document.querySelector('.cm-errline')).backgroundColor")
+                if bg != coral[theme]:
+                    fails.append("%s %s: error line under the cursor %s (want %s)" % (theme, iid, bg, coral[theme]))
+                if iid is None:
+                    continue
+                # 짝 괄호: 1줄 「def f():」의 ) 앞
+                a.page.keyboard.press("Control+Home")
+                a.page.keyboard.press("End")
+                a.page.keyboard.press("ArrowLeft")
+                a.page.wait_for_selector(".cm-matchingBracket")
+                m = a.js(_MARKS_JS)
+                fg, bb = m["br"]
+                r = _ratio(fg, _over(bb, m["ed"]))
+                if r < 4.5:
+                    fails.append("%s %s: bracket %s on %s = %.2f" % (theme, iid, fg, bb, r))
+                # 전체 고르기: 고른 바탕(편집기 바탕 위), 그 위 현재 줄 색까지
+                a.page.keyboard.press("Control+a")
+                a.page.wait_for_selector(".cm-selectionBackground")
+                m = a.js(_MARKS_JS)
+                sel = _over(m["sel"], m["ed"])
+                backs = [sel] + ([_over(m["act"], sel)] if m["act"] else [])
+                for c in set(m["toks"] + [m["plain"]]):
+                    for b in backs:
+                        if _ratio(c, b) < 4.5:
+                            fails.append("%s %s: selected text %s on %s = %.2f" % (theme, iid, c, b, _ratio(c, b)))
+                if a.errors:
+                    fails.append("%s %s: %s" % (theme, iid, a.errors))
+    assert not fails, fails
 
 if __name__ == "__main__":
     sys.exit(main())

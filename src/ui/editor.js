@@ -94,21 +94,21 @@ const isDark = () => typeof document !== "undefined" && document.documentElement
 
 // v0.22.0 편집기 색(상점, 설계 2026-11-17 §5-4): <html data-edtheme="ed_…">. 없거나 모르는 값이면 위의 지금 색 그대로.
 // 색마다 밝게·어둡게 한 벌: [바탕, 줄번호 바탕, 줄번호 글자, 보통 글자, 현재 줄 색(rgb), 낱말(keyword), 수·참거짓, 글자열,
-//   이스케이프, 정의 이름, 지역 이름, 형·클래스, 주석, 잘못]. 글자 색은 바탕·현재 줄·오류 줄(--coral-soft)·실행 줄(--sun-soft)
-//   위에서 모두 4.5:1 이상(최저 4.88, tests/contrast.py edcolor-* 화면과 flow test_deco_editor로 확인)
+//   이스케이프, 정의 이름, 지역 이름, 형·클래스, 주석, 잘못]. 글자 색은 바탕·현재 줄·오류 줄(--coral-soft)·실행 줄(--sun-soft)·
+//   고른 글자(현재 줄 색 16%)·짝 괄호(20%) 위에서 모두 4.5:1 이상(tests/contrast.py edcolor-*, flow test_deco_editor·_marks)
 const ED = {
   ed_paper: [
-    ["#FFFBF0", "#F3EAD6", "#6B5B3E", "#2E2A24", "200,164,74", "#8A2C55", "#245A8A", "#8A4310", "#9A3B00", "#1D5A8A", "#5A3A8A", "#3F6A1E", "#75613F", "#B00020"],
-    ["#241F18", "#2D271E", "#CDBD9C", "#F2E8D5", "232,199,122", "#F2A7C3", "#9FC8F0", "#F0C27A", "#FFB070", "#A9D3F5", "#D5BFFF", "#B5DDA0", "#CBB68E", "#FF8A80"]],
+    ["#FFFBF0", "#F3EAD6", "#6B5B3E", "#2E2A24", "200,164,74", "#8A2C55", "#245A8A", "#8A4310", "#9A3B00", "#1D5A8A", "#5A3A8A", "#3F6A1E", "#715E3D", "#B00020"],
+    ["#241F18", "#2D271E", "#CDBD9C", "#F2E8D5", "232,199,122", "#F2A7C3", "#9FC8F0", "#F0C27A", "#FFB070", "#A9D3F5", "#D5BFFF", "#B5DDA0", "#CDB891", "#FFA39B"]],
   ed_forest: [
-    ["#F3F9F1", "#E1EEDD", "#3D5C43", "#1C3022", "78,154,90", "#1B6638", "#2F5896", "#8A4519", "#9A3A00", "#0E5B67", "#5B3F8A", "#6A5410", "#58694B", "#B00020"],
-    ["#14231A", "#1A2D21", "#A9C7AF", "#E4F1E2", "143,224,166", "#8FE0A6", "#A9C4FF", "#F0B98A", "#FFB070", "#7FD6DE", "#C9B8FF", "#E2D27A", "#B5C49F", "#FF8A80"]],
+    ["#F3F9F1", "#E1EEDD", "#3D5C43", "#1C3022", "78,154,90", "#1B6638", "#2F5896", "#8A4519", "#9A3A00", "#0E5B67", "#5B3F8A", "#6A5410", "#536347", "#B00020"],
+    ["#14231A", "#1A2D21", "#A9C7AF", "#E4F1E2", "143,224,166", "#8FE0A6", "#A9C4FF", "#F0B98A", "#FFB070", "#7FD6DE", "#C9B8FF", "#E2D27A", "#B5C49F", "#FFA39B"]],
   ed_sea: [
-    ["#F1F7FC", "#DEEBF5", "#3A586F", "#122E47", "60,143,208", "#0A578A", "#0C6767", "#983A58", "#9A3A00", "#3446A8", "#5E3E99", "#5A4A0E", "#4C6779", "#B00020"],
-    ["#0E2132", "#132B3F", "#A8C4D9", "#E2F0FA", "124,200,245", "#7CC8F5", "#7FE0D0", "#FFB1A6", "#FFC07A", "#AAB9FF", "#D1BEFF", "#F0D58A", "#A3BACA", "#FF8A80"]],
+    ["#F1F7FC", "#DEEBF5", "#3A586F", "#122E47", "60,143,208", "#0A578A", "#0C6767", "#983A58", "#9A3A00", "#3446A8", "#5E3E99", "#5A4A0E", "#455E6E", "#B00020"],
+    ["#0E2132", "#132B3F", "#A8C4D9", "#E2F0FA", "124,200,245", "#7CC8F5", "#7FE0D0", "#FFB1A6", "#FFC07A", "#AAB9FF", "#D1BEFF", "#F0D58A", "#A3BACA", "#FF9B92"]],
   ed_night: [
-    ["#F4F2FC", "#E5E1F5", "#4C4670", "#211C42", "122,100,208", "#5527A0", "#244FA0", "#9C2F72", "#9A3A00", "#1B5A88", "#6A2E9A", "#714310", "#5E587C", "#B00020"],
-    ["#11142E", "#181C3C", "#B8BADF", "#ECEBFF", "201,184,255", "#C9B8FF", "#9FD0FF", "#FFD48A", "#FFB878", "#A7E3FF", "#F2C2FF", "#F5B8E8", "#ABAACE", "#FF8A80"]],
+    ["#F4F2FC", "#E5E1F5", "#4C4670", "#211C42", "122,100,208", "#5527A0", "#244FA0", "#972E6F", "#9A3A00", "#1B5A88", "#6A2E9A", "#714310", "#585375", "#B00020"],
+    ["#11142E", "#181C3C", "#B8BADF", "#ECEBFF", "201,184,255", "#C9B8FF", "#9FD0FF", "#FFD48A", "#FFB878", "#A7E3FF", "#F2C2FF", "#F5B8E8", "#AEADCF", "#FF9188"]],
 };
 const looks = new Map();
 function edLook(id, dark) {
@@ -123,8 +123,12 @@ function edLook(id, dark) {
       ".cm-gutters": { backgroundColor: gut, color: gink },
       ".cm-activeLine": { backgroundColor: `rgba(${act},${dark ? 0.1 : 0.12})` },
       ".cm-activeLineGutter": { backgroundColor: `rgba(${act},${dark ? 0.16 : 0.2})` },
-      ".cm-matchingBracket, &.cm-focused .cm-matchingBracket": { backgroundColor: `rgba(${act},0.3)`, outline: "none" },
-      "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": { backgroundColor: `rgba(${act},${dark ? 0.32 : 0.28})` },
+      // 오류 줄·실행 줄은 현재 줄보다 이긴다(커서가 그 줄에 있어도 배움 신호가 남게, 작업 6 검토 I1). 같은 묶음 안 뒤쪽 규칙이 이김
+      ".cm-errline": { backgroundColor: "var(--coral-soft)" },
+      ".cm-nowline": { backgroundColor: "var(--sun-soft)" },
+      // 고른 글자·짝 괄호 바탕: 글자 색이 이 위에서도 4.5:1(작업 6 검토 M1, flow test_deco_editor_marks)
+      ".cm-matchingBracket, &.cm-focused .cm-matchingBracket": { backgroundColor: `rgba(${act},0.2)`, outline: "none" },
+      "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": { backgroundColor: `rgba(${act},0.16)` },
     }, { dark }),
     syntaxHighlighting(HighlightStyle.define([
       { tag: t.keyword, color: kw },

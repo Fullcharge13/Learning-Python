@@ -64,7 +64,7 @@ const ED_SW = {
   ed_paper: [["#FFFBF0", "#8A2C55", "#8A4310", "#1D5A8A"], ["#241F18", "#F2A7C3", "#F0C27A", "#A9D3F5"]],
   ed_forest: [["#F3F9F1", "#1B6638", "#8A4519", "#0E5B67"], ["#14231A", "#8FE0A6", "#F0B98A", "#7FD6DE"]],
   ed_sea: [["#F1F7FC", "#0A578A", "#983A58", "#3446A8"], ["#0E2132", "#7CC8F5", "#FFB1A6", "#AAB9FF"]],
-  ed_night: [["#F4F2FC", "#5527A0", "#9C2F72", "#1B5A88"], ["#11142E", "#C9B8FF", "#FFD48A", "#A7E3FF"]],
+  ed_night: [["#F4F2FC", "#5527A0", "#972E6F", "#1B5A88"], ["#11142E", "#C9B8FF", "#FFD48A", "#A7E3FF"]],
 };
 // 경비실 견본: [바탕, 칸, 글자, 점] 밝게·어둡게(style.css [data-deco-guard]와 같은 값)
 const GU_SW = {
@@ -72,17 +72,19 @@ const GU_SW = {
   gu_control: [["#E6F2EE", "#F8FCFA", "#15332E", "#12756D"], ["#0B1A19", "#152B2A", "#E4F6F0", "#5FE0C8"]],
 };
 const tile = (bg) => `<rect x="1" y="1" width="22" height="22" rx="6" fill="${bg}" stroke="currentColor" stroke-opacity=".3"/>`;
+// 공간 견본 바탕: 밝게·어둡게 두 벌(어둡게에서 밝은 칸이 눈부시지 않게, 작업 6 검토 M4)
+const tile2 = (l, d) => `<g class="sw-l">${tile(l)}</g><g class="sw-d">${tile(d)}</g>`;
 const edSw = ([bg, a, b, c], cls) => `<g class="${cls}">${tile(bg)}<rect x="4.5" y="6" width="7" height="2.6" rx="1.3" fill="${a}"/><rect x="13" y="6" width="6" height="2.6" rx="1.3" fill="${c}"/>`
   + `<rect x="7.5" y="10.7" width="11" height="2.6" rx="1.3" fill="${b}"/><rect x="7.5" y="15.4" width="5" height="2.6" rx="1.3" fill="${a}"/><rect x="14" y="15.4" width="4.5" height="2.6" rx="1.3" fill="${c}"/></g>`;
 const guSw = ([bg, card, ink, dot], cls) => `<g class="${cls}">${tile(bg)}<rect x="4" y="5" width="16" height="7" rx="2" fill="${card}"/><rect x="6" y="7.5" width="8" height="2" rx="1" fill="${ink}"/>`
   + `<circle cx="17" cy="8.5" r="1.5" fill="${dot}"/><rect x="4" y="14" width="16" height="5" rx="2" fill="${card}"/><rect x="6" y="15.5" width="11" height="2" rx="1" fill="${ink}"/></g>`;
 const SPACE_SW = {
-  gd_fence: `${tile("#EAF5E4")}<g fill="#C68D55" stroke="#7A4E25" stroke-width=".7"><rect x="3" y="11" width="18" height="2"/><rect x="3" y="15.5" width="18" height="2"/>`
+  gd_fence: `${tile2("#EAF5E4", "#22332A")}<g fill="#C68D55" stroke="#7A4E25" stroke-width=".7"><rect x="3" y="11" width="18" height="2"/><rect x="3" y="15.5" width="18" height="2"/>`
     + `<path d="M5 20V9l2-2.5L9 9v11zM11 20V9l2-2.5L15 9v11zM17 20V9l2-2.5L21 9v11z"/></g>`,
-  gd_flowers: `${tile("#EAF5E4")}<rect x="3" y="17" width="18" height="4" rx="2" fill="#E2C996"/>${flower(7.5, 10, "#E86A92", 1.9)}${flower(16.5, 8.5, "#F2C23A", 1.9)}`,
-  gd_greenhouse: `${tile("#EAF5E4")}<path d="M4 20V12Q12 2 20 12V20z" fill="#CDEFF2" stroke="#3F8A74" stroke-width="1.2"/><path d="M12 5.5V20M4 14h16" stroke="#3F8A74" stroke-width=".9"/>`,
-  ws_wood: `${tile("#F6EEDC")}<rect x="8" y="7" width="8" height="8" rx="1.5" fill="#F2C23A" stroke="#8A6A10" stroke-width=".8"/>${svgInner("ws_wood")}`,
-  ws_metal: `${tile("#EDF0F4")}<rect x="8" y="7" width="8" height="8" rx="1.5" fill="#7FC8C0" stroke="#2F6F68" stroke-width=".8"/>${svgInner("ws_metal")}`,
+  gd_flowers: `${tile2("#EAF5E4", "#22332A")}<rect x="3" y="17" width="18" height="4" rx="2" fill="#E2C996"/>${flower(7.5, 10, "#E86A92", 1.9)}${flower(16.5, 8.5, "#F2C23A", 1.9)}`,
+  gd_greenhouse: `${tile2("#EAF5E4", "#22332A")}<path d="M4 20V12Q12 2 20 12V20z" fill="#CDEFF2" stroke="#3F8A74" stroke-width="1.2"/><path d="M12 5.5V20M4 14h16" stroke="#3F8A74" stroke-width=".9"/>`,
+  ws_wood: `${tile2("#F6EEDC", "#3A3024")}<rect x="8" y="7" width="8" height="8" rx="1.5" fill="#F2C23A" stroke="#8A6A10" stroke-width=".8"/>${svgInner("ws_wood")}`,
+  ws_metal: `${tile2("#EDF0F4", "#2C3340")}<rect x="8" y="7" width="8" height="8" rx="1.5" fill="#7FC8C0" stroke="#2F6F68" stroke-width=".8"/>${svgInner("ws_metal")}`,
 };
 // 견본 속 받침: 진열장 받침 그림을 견본 칸 크기로
 function svgInner(id) {

@@ -1310,7 +1310,7 @@ body.kbd-compact .pj-head { display: none; }
 .ws-stand svg { display: block; width: 100%; height: 100%; }
 .ws-empty + .ws-stand { margin-top: 2px; }
 /* 경비실 테마: 화면의 종이·칸·잉크 색 묶음. 강조 색(청록·해·산호)은 그대로. 글자 4.5:1(밝게·어둡게, tests/contrast.py guard-gu_*) */
-.screen.guard[data-deco-guard] { background: var(--paper); min-height: 100dvh; }
+.screen.guard[data-deco-guard] { background: var(--paper); color: var(--ink); min-height: 100dvh; }
 .screen.guard[data-deco-guard] .g-top, .screen.guard[data-deco-guard] .g-foot { background: var(--paper); }
 .screen.guard[data-deco-guard="gu_night"] {
   --paper: #E9EDF7; --paper-2: #DCE2F0; --card: #F9FAFE; --line: #C3CBDE; --ink: #1B2440; --ink-2: #47506B;

@@ -537,6 +537,8 @@ def sc_deco(r):
             a.page.click("#run")
             a.page.wait_for_selector(".err-panel", timeout=30_000)
             a.page.wait_for_selector(".cm-errline")
+            a.page.click(".cm-errline")   # 커서를 오류 줄에: 오류 바탕(--coral-soft) 위 글자를 잰다(작업 6 검토 I1)
+            a.page.wait_for_selector(".cm-errline.cm-activeLine")
             a.page.eval_on_selector(".cm-editor", "e => e.scrollIntoView({block: 'center'})")
             r.cap(a, "edcolor-" + ed)
     for gu in ("gu_night", "gu_control"):

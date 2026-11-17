@@ -30,6 +30,8 @@ import { levelLineHTML } from "./levelline.js";
 import { mountEditor } from "./editorslot.js";
 import { errorPanel, waitForClues } from "./write.js";
 import { SYMBOL_ORDER } from "../kbd.js";
+import { cleanDeco } from "../deco.js";
+import { gardenDeco } from "./decoart.js";
 import { t, tp, tx, lang } from "../i18n.js";
 import { cropName, dirName, fileName, pyName } from "../garden/lang.js";
 import { guardOpen, guardNews } from "../guard/state.js";
@@ -268,7 +270,10 @@ export function render(root, ctx, params = {}) {
     textEdited: new Set(), // v0.12.1 이번에 학습자가 직접 쓴 앞·뒤 글자("노드id:pre") — 값을 바꿔도 비우지 않음
   };
 
-  root.innerHTML = `<div class="screen garden" data-state="idle">
+  // v0.22.0 텃밭 장식(상점 꾸미기): 판 위·아래 띠 그림. 장식이라 글자와 겹치지 않음
+  const decoId = cleanDeco(ctx.save.deco).on.garden;
+  const deco = gardenDeco(decoId);
+  root.innerHTML = `<div class="screen garden" data-state="idle"${decoId ? ` data-deco-garden="${decoId}"` : ""}>
     <header class="g-top">
       <button class="icon-btn" id="g-back" aria-label="${t`돌아가기`}">${icon("back")}</button>
       <h1>${t`파이의 텃밭`}</h1>
@@ -276,7 +281,7 @@ export function render(root, ctx, params = {}) {
     </header>
     <main class="g-main">
       <section class="g-board" aria-label="${t`텃밭`}">
-        <div id="board" class="g-board-svg"></div>
+        ${deco.top}<div id="board" class="g-board-svg"></div>${deco.bottom}
         <p class="g-now mono" id="g-now" hidden></p>
         <div class="g-tools" id="g-tools">
           ${tomatoOpen ? `<p class="g-seeds" id="g-seeds"></p>` : ""}

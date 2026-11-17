@@ -3,7 +3,7 @@ import { test, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
-import { THEME_KEY, THEME_COLOR, getTheme, setTheme, resolvedTheme, applyTheme, watchSystem } from "../../src/theme.js";
+import { THEME_KEY, THEME_COLOR, getTheme, setTheme, resolvedTheme, applyTheme, watchSystem, applyDecoAttrs } from "../../src/theme.js";
 
 function fakeEnv({ stored, systemDark = false, throwing = false } = {}) {
   const m = new Map(stored === undefined ? [] : [[THEME_KEY, stored]]);
@@ -91,4 +91,28 @@ test("index.html 머리 스크립트와 resolvedTheme은 모든 경우에 같은
     assert.equal(env.root.style.colorScheme, want, tag);
     assert.equal(env.meta.content, THEME_COLOR[want], tag);
   }
+});
+
+test("applyDecoAttrs: 저장의 편집기 색을 <html data-edtheme>에, 끄거나 망가지면 속성을 뗌, 같은 값이면 다시 쓰지 않음", () => {
+  const attrs = new Map();
+  let writes = 0;
+  const root = { getAttribute: (k) => (attrs.has(k) ? attrs.get(k) : null), hasAttribute: (k) => attrs.has(k),
+    setAttribute: (k, v) => { writes++; attrs.set(k, String(v)); }, removeAttribute: (k) => { writes++; attrs.delete(k); } };
+  Object.defineProperty(globalThis, "document", { value: { documentElement: root }, configurable: true, writable: true });
+  const on = (editor, owned = ["ed_sea", "ed_night"]) => ({ deco: { owned, on: { garden: null, guard: null, workshop: null, editor } } });
+  assert.equal(applyDecoAttrs(on("ed_sea")), "ed_sea");
+  assert.equal(attrs.get("data-edtheme"), "ed_sea");
+  applyDecoAttrs(on("ed_sea"));
+  assert.equal(writes, 1, "같은 값이면 쓰지 않음(편집기 감시가 헛돌지 않게)");
+  applyDecoAttrs(on("ed_night"));
+  assert.equal(attrs.get("data-edtheme"), "ed_night");
+  assert.equal(applyDecoAttrs(on(null)), null);
+  assert.ok(!attrs.has("data-edtheme"));
+  applyDecoAttrs(on("ed_paper", ["ed_sea"]));
+  assert.ok(!attrs.has("data-edtheme"), "가지지 않은 색은 켜지지 않음(cleanDeco)");
+  applyDecoAttrs(on("gd_fence", ["gd_fence"]));
+  assert.ok(!attrs.has("data-edtheme"), "다른 공간 id");
+  applyDecoAttrs(null);
+  applyDecoAttrs({ deco: "x" });
+  assert.ok(!attrs.has("data-edtheme"));
 });

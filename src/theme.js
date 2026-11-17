@@ -1,5 +1,7 @@
 // 화면 설정(v0.19.0 「밤의 연구 노트」): 시스템 따라가기 · 밝게 · 어둡게.
 // 기기 단위 설정이라 학습 기록(save)과 따로 localStorage 한 칸에 둔다. src/index.html 머리 스크립트와 규칙이 같다(같은 시험으로 확인).
+import { cleanDeco } from "./deco.js";
+
 export const THEME_KEY = "ria-python.theme";
 export const THEME_COLOR = { light: "#FBF6EA", dark: "#141C2B" };   // 어둡게는 --paper와 같은 값
 const VALUES = ["system", "light", "dark"];
@@ -48,4 +50,16 @@ export function watchSystem() {
   const on = () => { if (getTheme() === "system") applyTheme(); };
   mq.addEventListener("change", on);
   return () => mq.removeEventListener("change", on);
+}
+
+/** v0.22.0 편집기 색(설계 2026-11-17 §5-4): 저장의 deco.on.editor를 <html data-edtheme>에(없으면 속성을 뗌).
+ *  편집기 묶음(src/ui/editor.js)이 이 속성을 읽고 지켜본다. 값이 같으면 건드리지 않는다(감시가 헛돌지 않게).
+ *  공간 꾸미기(텃밭·경비실·공방)는 각 화면이 그릴 때 저장에서 읽는다. 돌려줌: 단 값(없으면 null) */
+export function applyDecoAttrs(save) {
+  const id = cleanDeco(save && save.deco).on.editor;
+  const el = typeof document !== "undefined" ? document.documentElement : null;
+  if (!el) return id;
+  if (id) { if (el.getAttribute("data-edtheme") !== id) el.setAttribute("data-edtheme", id); }
+  else if (el.hasAttribute("data-edtheme")) el.removeAttribute("data-edtheme");
+  return id;
 }

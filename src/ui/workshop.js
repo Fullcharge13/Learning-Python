@@ -5,6 +5,8 @@ import { isDev } from "../devgate.js";
 import { passedChapters } from "../garden/state.js";
 import { cleanProjects, projectOpen } from "../projects/state.js";
 import { esc, icon, dialog, riaSays, toast } from "./dom.js";
+import { cleanDeco } from "../deco.js";
+import { standHTML } from "./decoart.js";
 import { t, lang, tp } from "../i18n.js";
 
 let workshopGen = 0;
@@ -64,7 +66,10 @@ export function render(root, ctx) {
   const alive = () => !S.destroyed && gen === workshopGen;
   const rows = workshopRows(ctx);
   const shelf = rows.filter((r) => r.done);
-  root.innerHTML = `<div class="screen workshop">
+  // v0.22.0 진열장 받침(상점 꾸미기): 칸마다 아래에 받침 그림. 비어 있어도 하나(장식, 글자와 겹치지 않음)
+  const decoId = cleanDeco(ctx.save.deco).on.workshop;
+  const stand = standHTML(decoId);
+  root.innerHTML = `<div class="screen workshop"${decoId ? ` data-deco-workshop="${decoId}"` : ""}>
     <header class="g-top ws-top">
       <button class="icon-btn" id="ws-back" aria-label="${t`돌아가기`}">${icon("back")}</button>
       <h1>${t`프로젝트 공방`}</h1><span></span>
@@ -84,8 +89,8 @@ export function render(root, ctx) {
             <span class="ws-ic" aria-hidden="true">${icon(r.entry.icon)}</span>
             <span class="ws-text"><b class="ws-name">${esc(nameOf(r.entry))}</b><small class="ws-blurb">${esc(blurbOf(r.entry))}</small></span>
             <button class="btn sun small ws-play" data-id="${esc(r.entry.id)}" aria-label="${esc(t`${nameOf(r.entry)} 실행`)}">${icon("play")}<span>${t`실행`}</span></button>
-          </li>`).join("")}</ul>`
-          : `<p class="muted ws-empty">${t`아직 완성한 작품이 없어요. 첫 작품을 만들면 여기에 놓여요.`}</p>`}
+            ${stand}</li>`).join("")}</ul>`
+          : `<p class="muted ws-empty">${t`아직 완성한 작품이 없어요. 첫 작품을 만들면 여기에 놓여요.`}</p>${stand}`}
       </section>
     </main>
   </div>`;

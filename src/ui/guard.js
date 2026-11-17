@@ -19,6 +19,7 @@ import { SYMBOL_ORDER } from "../kbd.js";
 import { t, tx } from "../i18n.js";
 import { definedNames } from "../grade.js";
 import { fileCardHTML } from "./guardfile.js";
+import { cleanDeco } from "../deco.js";
 
 const SYSTEM_ERRORS = new Set(["LoadError", "WorkerError", "NotReady"]);
 const STEP_MS = 450;     // 재생 1배: 시도 한 칸(2배는 반)
@@ -74,7 +75,9 @@ export function render(root, ctx, params = {}) {
   // entry: 지금 사건의 색인 칸, inc: 받은 본문(받기 전·실패면 null)
   const S = { entry: first, inc: null, picks: [], mode: "blank", state: "idle", speed: 1, skip: false, wake: null, token: 0, ed: null, edWait: null, codeTimer: null, last: null, destroyed: false };
 
-  root.innerHTML = `<div class="screen guard" data-state="idle"><header class="g-top gd-head"><button class="icon-btn" id="gd-back" aria-label="${t`돌아가기`}">${icon("back")}</button>
+  // v0.22.0 경비실 테마(상점 꾸미기): 화면의 색 묶음(style.css [data-deco-guard]). 밝게·어둡게 모두 글자 4.5:1
+  const decoId = cleanDeco(ctx.save.deco).on.guard;
+  root.innerHTML = `<div class="screen guard" data-state="idle"${decoId ? ` data-deco-guard="${decoId}"` : ""}><header class="g-top gd-head"><button class="icon-btn" id="gd-back" aria-label="${t`돌아가기`}">${icon("back")}</button>
       <div class="gd-title"><h1>${t`경비실`}</h1><p class="gd-rank" id="gd-rank"></p></div>
       <button class="btn ghost small" id="gd-list" aria-haspopup="dialog">${icon("book")}<span>${t`사건 목록`}</span></button>
     </header>

@@ -7153,6 +7153,7 @@ def test_level_dark():
 
 # ---------------------------------------------------------------- v0.22.0 상점 (작업 5)
 LV13_XP = 1020   # 30×12 + 5×12×11
+LV20_XP = 2280   # 30×19 + 5×19×18
 
 
 def _shop_seed(xp=0, levels=None, bytes_=1000, **kw):
@@ -7202,6 +7203,18 @@ def test_shop_tabs():
             a.shot("shop-tab-%s.png" % tab, full=True)
         assert a.page.query_selector('.shop-item[data-id="ed_paper"]'), "editor colour list"
         assert not a.page.query_selector('.shop-item[data-id="gd_fence"]'), "deco not in colour tab"
+        # 검토 M4: 탭 줄 화살표·Home·End(초점도 그 탭으로)
+        sel = lambda: a.js("() => [document.querySelector('.shop-tabs [aria-selected=true]').dataset.tab, document.activeElement.dataset.tab]")
+        for key, want in (("Home", "outfit"), ("ArrowLeft", "color"), ("ArrowLeft", "deco"), ("ArrowRight", "color"), ("ArrowRight", "outfit"), ("End", "color")):
+            a.page.keyboard.press(key) if a.js("() => !!document.activeElement.closest('.shop-tabs')") else (a.page.focus('.shop-tabs [aria-selected=true]'), a.page.keyboard.press(key))
+            assert sel() == [want, want], (key, sel())
+        # 검토 M4: 꾸미기 탭에서 보호권을 사도 꾸미기 탭 그대로
+        _shop_tab(a, "deco")
+        a.page.click("#freeze")
+        a.page.wait_for_timeout(200)
+        assert a.save()["freezes"] == 1, a.save().get("freezes")
+        assert a.js("() => document.querySelector('.shop-tabs [aria-selected=true]').dataset.tab") == "deco"
+        assert a.page.query_selector('.shop-item[data-id="gd_fence"]'), "deco list still shown"
         assert not a.errors, a.errors
 
 
@@ -7244,6 +7257,16 @@ def test_shop_legacy():
         assert "Lv 18에 열려요" in info and "예전부터" not in info, info
         assert not a.page.query_selector("#buy")
         assert not a.errors, a.errors
+    # 검토 M4: legacy가 아닌 Lv20 저장은 마법사 망토를 레벨로 산다 — 「예전부터」 표시 없음
+    with App("iPhone 17", save=_shop_seed(xp=LV20_XP, levels=_lv(20))) as a:
+        _open_shop(a)
+        _pick_outfit(a, "wizard")
+        info = " ".join(a.page.inner_text(".stage-info").split())
+        assert "예전부터" not in info and a.page.query_selector("#buy:not([disabled])"), info
+        a.page.click("#buy")
+        a.page.wait_for_selector("#worn")
+        assert a.save()["bytes"] == 700 and "wizard" in a.save()["outfits"]
+        assert not a.errors, a.errors
 
 
 def test_shop_buy_deco_toggle():
@@ -7256,6 +7279,10 @@ def test_shop_buy_deco_toggle():
             a.page.wait_for_selector('.shop-item[data-id="%s"] [role=switch]' % iid)
             assert a.save()["bytes"] == b0 - price, a.save()["bytes"]
             assert "가지고 있음" in _item_text(a, iid), _item_text(a, iid)
+            # 검토 M4: 산 바로 뒤 초점은 그 스위치. M3: 스위치 설명은 공간 제목(텃밭)
+            assert a.js("() => document.activeElement && document.activeElement.dataset.on") == iid
+            desc = a.page.get_attribute('.shop-item[data-id="%s"] [role=switch]' % iid, "aria-describedby")
+            assert desc and a.page.inner_text("#" + desc).strip() == "텃밭", desc
         assert a.save()["deco"]["on"]["garden"] is None, "buying does not switch on"
         sw = lambda iid: '.shop-item[data-id="%s"] [role=switch]' % iid
         a.page.click(sw("gd_fence"))
@@ -7397,6 +7424,245 @@ def test_shop_375():
         assert not bad, bad
         assert not a.errors, a.errors
 
+
+
+# ---------------------------------------------------------------- v0.22.0 꾸미기와 편집기 색 (작업 6)
+_NO_DECO = {"garden": None, "guard": None, "workshop": None, "editor": None}
+_ALL_DECO = ["ed_paper", "ed_forest", "ed_sea", "ed_night", "gd_fence", "gd_flowers", "gd_greenhouse",
+             "gu_night", "gu_control", "ws_wood", "ws_metal"]
+
+
+def _deco(**on):
+    return {"owned": list(_ALL_DECO), "on": {**_NO_DECO, **on}}
+
+
+def _deco_toggle(a, iid, want):
+    """상점 꾸미기·색 탭에서 iid 스위치를 want(True/False)로. 지금 화면은 떠난다"""
+    tab = "color" if iid.startswith("ed_") else "deco"
+    a.js("(t) => window.__ria.ctx.show('closet', { tab: t })", tab)
+    sw = '.shop-item[data-id="%s"] [role=switch]' % iid
+    a.page.wait_for_selector(sw)
+    if (a.page.get_attribute(sw, "aria-checked") == "true") != want:
+        a.page.click(sw)
+    a.page.wait_for_selector(sw + '[aria-checked="%s"]' % ("true" if want else "false"))
+
+
+def _deco_set(a, space, iid):
+    """저장의 꾸미기 켬 칸을 바로 바꿈(ctx.commit — 화면은 그대로 둔 채)"""
+    a.js("([sp, id]) => { const c = window.__ria.ctx; const d = c.save.deco;"
+         " c.commit({ ...c.save, deco: { owned: d.owned, on: { ...d.on, [sp]: id } } }); }", [space, iid])
+
+
+_ED_LOOK = """() => { const q = (t) => [...document.querySelectorAll('.cm-content .cm-line span')].find(e => e.textContent.trim() === t);
+    const c = (e) => e ? getComputedStyle(e).color : null; const ed = document.querySelector('.cm-editor');
+    return { kw: c(q('def')), str: c(q('"hi"')), cm: c(q('# memo')), plain: getComputedStyle(document.querySelector('.cm-content')).color,
+             bg: getComputedStyle(ed).backgroundColor, ed: document.documentElement.dataset.edtheme || null,
+             code: document.querySelector('.cm-content').innerText }; }"""
+_ED_CODE = 'def f():\n    s = "hi"  # memo\n    return s'
+
+
+def _ed_ok(look, tag):
+    """편집기 글자(문법 색 셋 + 보통 글자)가 편집기 바탕에서 4.5:1 이상"""
+    bad = [(k, look[k], look["bg"], round(_ratio(look[k], look["bg"]), 2)) for k in ("kw", "str", "cm", "plain")
+           if not look[k] or _ratio(look[k], look["bg"]) < 4.5]
+    assert not bad, (tag, bad)
+
+
+def test_deco_garden():
+    """텃밭 장식: 켜면 텃밭 화면에 그 그림(data-deco-garden + .g-deco), 끄면 사라짐. 그림은 장식(aria-hidden), 글자 대비 그대로"""
+    fails = []
+    for iid in ("gd_fence", "gd_flowers", "gd_greenhouse"):
+        s = _garden_seed(1, xp=40)
+        s["deco"] = _deco(garden=iid)
+        with App("iPhone 17", save=s) as a:
+            _open_garden(a)
+            got = a.js("() => { const s = document.querySelector('.screen.garden'); const d = s.querySelectorAll('.g-deco');"
+                       " return { attr: s.dataset.decoGarden || null, n: d.length, hidden: [...d].every(e => e.getAttribute('aria-hidden') === 'true'),"
+                       " svg: [...d].every(e => e.querySelector('svg')), vis: [...d].some(e => e.getBoundingClientRect().height > 4) }; }")
+            if got != {"attr": iid, "n": got["n"], "hidden": True, "svg": True, "vis": True} or got["n"] < 1:
+                fails.append("%s on: %r" % (iid, got))
+            a.shot("deco-%s.png" % iid)
+            _deco_toggle(a, iid, False)
+            a.js("() => window.__ria.ctx.show('garden')")
+            a.page.wait_for_selector(".screen.garden")
+            off = a.js("() => ({ attr: document.querySelector('.screen.garden').dataset.decoGarden || null, n: document.querySelectorAll('.g-deco').length })")
+            if off != {"attr": None, "n": 0}:
+                fails.append("%s off: %r" % (iid, off))
+            if a.errors:
+                fails.append("%s: %s" % (iid, a.errors))
+    assert not fails, fails
+
+
+def test_deco_guard():
+    """경비실 테마: 켜면 화면에 data-deco-guard와 다른 바탕색, 끄면 원래 색. 글자 4.5:1(밝게·어둡게)"""
+    sys.path.insert(0, os.path.join(ROOT, "tests"))
+    import contrast
+    BG = "() => ({ attr: document.querySelector('.screen.guard').dataset.decoGuard || null, bg: getComputedStyle(document.querySelector('.screen.guard')).backgroundColor, card: getComputedStyle(document.querySelector('#gd-card')).backgroundColor })"
+    fails = []
+    base = {}
+    for theme in ("light", "dark"):
+        init = "localStorage.setItem(%s, %s);" % (json.dumps(THEME_KEY), json.dumps(theme))
+        with App("iPhone 17", save=_guard_seed(3), init_js=init) as a:
+            _open_guard(a)
+            base[theme] = a.js(BG)
+        for iid in ("gu_night", "gu_control"):
+            s = _guard_seed(3)
+            s["deco"] = _deco(guard=iid)
+            with App("iPhone 17", save=s, init_js=init) as a:
+                _open_guard(a)
+                on = a.js(BG)
+                if on["attr"] != iid or on["card"] == base[theme]["card"] or on["bg"] in ("rgba(0, 0, 0, 0)", base[theme]["bg"]):
+                    fails.append("%s %s on: %r vs base %r" % (theme, iid, on, base[theme]))
+                _settle_animations(a)
+                res = contrast.run_check(a.page, skip_art=True)
+                fails += [(theme, iid, f["selector"], f["ratio"], f["text"]) for f in res["fails"]]
+                a.shot("deco-%s-%s.png" % (iid, theme), full=True)
+                _deco_toggle(a, iid, False)
+                a.js("() => window.__ria.ctx.show('guard')")
+                a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+                off = a.js(BG)
+                if off["attr"] is not None or off["card"] != base[theme]["card"]:
+                    fails.append("%s %s off: %r" % (theme, iid, off))
+                if a.errors:
+                    fails.append("%s %s: %s" % (theme, iid, a.errors))
+    assert not fails, fails
+
+
+def test_deco_workshop():
+    """공방 진열장 받침: 켜면 진열장 칸마다 받침 그림(.ws-stand), 비어 있어도 하나. 끄면 사라짐"""
+    fails = []
+    for iid in ("ws_wood", "ws_metal"):
+        for proj, want in ((_done_projects(P1="print(1)\n"), 1), (None, 1)):
+            s = _ws_seed(5, projects=proj)
+            s["deco"] = _deco(workshop=iid)
+            with App("iPhone 17", save=s) as a:
+                _open_workshop(a)
+                got = a.js("() => ({ attr: document.querySelector('.screen.workshop').dataset.decoWorkshop || null,"
+                           " n: document.querySelectorAll('.ws-shelf .ws-stand').length,"
+                           " hidden: [...document.querySelectorAll('.ws-stand')].every(e => e.getAttribute('aria-hidden') === 'true' && e.querySelector('svg')),"
+                           " h: Math.min(...[...document.querySelectorAll('.ws-stand')].map(e => e.getBoundingClientRect().height)) })")
+                if got["attr"] != iid or got["n"] < want or not got["hidden"] or got["h"] < 4:
+                    fails.append("%s %s on: %r" % (iid, "shelf" if proj else "empty", got))
+                a.shot("deco-%s-%s.png" % (iid, "shelf" if proj else "empty"), full=True)
+                _deco_toggle(a, iid, False)
+                a.js("() => window.__ria.ctx.show('workshop')")
+                a.page.wait_for_selector(".screen.workshop .ws-list")
+                off = a.js("() => ({ attr: document.querySelector('.screen.workshop').dataset.decoWorkshop || null, n: document.querySelectorAll('.ws-stand').length })")
+                if off != {"attr": None, "n": 0}:
+                    fails.append("%s off: %r" % (iid, off))
+                if a.errors:
+                    fails.append("%s: %s" % (iid, a.errors))
+    assert not fails, fails
+
+
+_MO_COUNT = """(function(){ const M = window.MutationObserver; window.__mo = 0;
+  window.MutationObserver = class extends M { observe(t, o) { if (t === document.documentElement && o && o.attributeFilter
+    && o.attributeFilter.includes('data-edtheme') && !this.__on) { this.__on = true; window.__mo++; } return super.observe(t, o); }
+    disconnect() { if (this.__on) { this.__on = false; window.__mo--; } return super.disconnect(); } }; })();"""
+
+
+def test_deco_editor():
+    """편집기 색: 켜면 <html data-edtheme>와 편집기 바탕·문법 색이 바뀌고(4.5:1, 밝게·어둡게), 끄면 지금 색 그대로.
+    편집기를 닫으면 data-edtheme 감시도 끊긴다(v0.20.1)"""
+    fails = []
+    seen = {}
+    for theme in ("light", "dark"):
+        init = "localStorage.setItem(%s, %s);" % (json.dumps(THEME_KEY), json.dumps(theme)) + _MO_COUNT
+        for iid in (None, "ed_paper", "ed_forest", "ed_sea", "ed_night"):
+            s = _shop_seed(xp=LV13_XP, levels=_lv(13), deco=_deco(editor=iid), completed_lessons=[], current_lesson="1-1")
+            with App("iPhone 17", save=s, init_js=init) as a:
+                a.start()
+                a.page.click("#continue")
+                _to_write(a)
+                a.set_code(_ED_CODE)
+                look = a.js(_ED_LOOK)
+                seen[(theme, iid)] = look
+                if look["ed"] != iid:
+                    fails.append("%s %s: data-edtheme %r" % (theme, iid, look["ed"]))
+                try:
+                    _ed_ok(look, (theme, iid))
+                except AssertionError as e:
+                    fails.append(str(e))
+                if a.js("() => window.__mo") != 1:
+                    fails.append("%s %s: live edtheme observers %r (want 1 while open)" % (theme, iid, a.js("() => window.__mo")))
+                a.shot("deco-editor-%s-%s.png" % (iid or "none", theme))
+                a.page.click("#quit")
+                a.page.wait_for_selector(".modal [data-i='1']")
+                a.page.click(".modal [data-i='1']")   # 그만두기
+                a.page.wait_for_selector(".screen.home")
+                if a.js("() => window.__mo") != 0:
+                    fails.append("%s %s: edtheme observer left after leaving the lesson: %r" % (theme, iid, a.js("() => window.__mo")))
+                if a.errors:
+                    fails.append("%s %s: %s" % (theme, iid, a.errors))
+    for theme in ("light", "dark"):
+        none = seen[(theme, None)]
+        for iid in ("ed_paper", "ed_forest", "ed_sea", "ed_night"):
+            l = seen[(theme, iid)]
+            if l["bg"] == none["bg"] or l["kw"] == none["kw"]:
+                fails.append("%s %s looks like the default: %r vs %r" % (theme, iid, l, none))
+    if seen[("light", None)]["kw"] != "rgb(119, 0, 136)":
+        fails.append("default light keyword changed: %r" % seen[("light", None)])
+    assert not fails, fails
+
+
+def test_deco_persist():
+    """경비실 테마를 켠 채 어둡게로 바꾸고, 언어를 바꾸고, 나갔다 다시 들어오고, 새로 고쳐도 그대로.
+    편집기 색은 열린 편집기에 바로 들어가고(내용 그대로), 어둡게로 바꾸면 그 색의 어두운 쪽으로"""
+    s = _guard_seed(3)
+    s["deco"] = _deco(guard="gu_control", editor="ed_sea")
+    with App("iPhone 17", save=s) as a:
+        a.page.emulate_media(color_scheme="light")
+        _open_guard(a)
+        attr = lambda: a.js("() => (document.querySelector('.screen.guard') || {dataset: {}}).dataset.decoGuard || null")
+        card = lambda: a.js("() => getComputedStyle(document.querySelector('#gd-card')).backgroundColor")
+        assert attr() == "gu_control", attr()
+        light_card = card()
+        a.page.emulate_media(color_scheme="dark")
+        a.page.wait_for_function("() => document.documentElement.dataset.theme === 'dark'")
+        a.page.wait_for_timeout(150)
+        assert attr() == "gu_control", "dark switch"
+        assert card() != light_card, "dark variant of the theme"
+        a.js("() => window.__ria.ctx.setLanguage('en')")
+        a.page.wait_for_function("() => document.documentElement.lang === 'en'")
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+        assert attr() == "gu_control", "language switch"
+        a.page.click("#gd-back")
+        a.page.wait_for_selector(".screen.garden")
+        a.page.click("#g-guard")
+        a.page.wait_for_selector(".screen.guard[data-state=idle] #gd-card svg[role=img]", timeout=15_000)
+        assert attr() == "gu_control", "re-enter"
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go")
+        assert a.js("() => document.documentElement.dataset.edtheme") == "ed_sea", "edtheme on <html> at start"
+        _open_guard(a)
+        assert attr() == "gu_control", "reload"
+        assert not _app_errors(a), a.errors
+    # 편집기 색: 열린 편집기에 바로
+    with App("iPhone 17", save=_shop_seed(xp=LV13_XP, levels=_lv(13), deco=_deco(editor="ed_sea"), completed_lessons=[], current_lesson="1-1")) as a:
+        a.page.emulate_media(color_scheme="light")
+        a.start()
+        a.page.click("#continue")
+        _to_write(a)
+        a.set_code(_ED_CODE)
+        sea = a.js(_ED_LOOK)
+        _deco_set(a, "editor", "ed_night")
+        a.page.wait_for_function("() => document.documentElement.dataset.edtheme === 'ed_night'")
+        a.page.wait_for_timeout(150)
+        night = a.js(_ED_LOOK)
+        assert night["code"] == sea["code"] and night["bg"] != sea["bg"] and night["kw"] != sea["kw"], (sea, night)
+        _ed_ok(night, "night light")
+        a.page.emulate_media(color_scheme="dark")
+        a.page.wait_for_function("() => document.documentElement.dataset.theme === 'dark'")
+        a.page.wait_for_timeout(150)
+        nd = a.js(_ED_LOOK)
+        assert nd["bg"] != night["bg"], (night, nd)
+        _ed_ok(nd, "night dark")
+        _deco_set(a, "editor", None)
+        a.page.wait_for_function("() => !document.documentElement.hasAttribute('data-edtheme')")
+        a.page.wait_for_timeout(150)
+        dflt = a.js(_ED_LOOK)
+        assert dflt["bg"] != nd["bg"] and dflt["kw"] == "rgb(217, 165, 255)", dflt   # 어둡게 기본 keyword #D9A5FF
+        assert not _app_errors(a), a.errors
 
 if __name__ == "__main__":
     sys.exit(main())

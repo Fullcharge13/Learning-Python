@@ -123,12 +123,12 @@ test("shop: id는 겹치지 않고, 의상 행은 OUTFITS에 있고 값이 같�
 });
 
 test("shop: 레벨이 모자라면 reason level과 needLevel", () => {
-  assert.deepEqual(canBuy(atLv(1, { bytes: 9999 }), "hoodie"), { ok: false, reason: "level", needLevel: 3 });
-  assert.deepEqual(canBuy(atLv(9, { bytes: 9999 }), "gd_flowers"), { ok: false, reason: "level", needLevel: 13 });
+  assert.deepEqual(canBuy(atLv(1, { bytes: 9999 }), "hoodie"), { ok: false, reason: "level", needLevel: 3, legacy: false });
+  assert.deepEqual(canBuy(atLv(9, { bytes: 9999 }), "gd_flowers"), { ok: false, reason: "level", needLevel: 13, legacy: false });
   const r = buyItem(atLv(1, { bytes: 9999 }), "hoodie");
   assert.ok(r instanceof Error);
   assert.equal(r.reason, "level");
-  assert.deepEqual(canBuy(atLv(3, { bytes: 180 }), "hoodie"), { ok: true, reason: null, needLevel: 3 });
+  assert.deepEqual(canBuy(atLv(3, { bytes: 180 }), "hoodie"), { ok: true, reason: null, needLevel: 3, legacy: false });
 });
 
 test("shop: legacy 저장은 마법사 망토(Lv20)를 Lv1에서 바이트만으로 산다. new1은 레벨 제한", () => {
@@ -138,13 +138,13 @@ test("shop: legacy 저장은 마법사 망토(Lv20)를 Lv1에서 바이트만으
   assert.ok(!(r instanceof Error), String(r));
   assert.equal(r.bytes, 0);
   assert.ok(r.outfits.includes("wizard"));
-  assert.deepEqual(canBuy(legacyAt(1, { bytes: 9999 }), "new1"), { ok: false, reason: "level", needLevel: 18 });
+  assert.deepEqual(canBuy(legacyAt(1, { bytes: 9999 }), "new1"), { ok: false, reason: "level", needLevel: 18, legacy: false });
   assert.equal(canBuy(legacyAt(1, { bytes: 9999 }), "ed_forest").reason, "level", "꾸미기도 legacy 예외 없음");
   for (const id of ORIGINAL_8) assert.equal(canBuy(legacyAt(1, { bytes: 9999 }), id).ok, true, id);
 });
 
 test("shop: 새 저장은 원래 8벌에도 레벨 제한", () => {
-  assert.deepEqual(canBuy(atLv(1, { bytes: 9999 }), "wizard"), { ok: false, reason: "level", needLevel: 20 });
+  assert.deepEqual(canBuy(atLv(1, { bytes: 9999 }), "wizard"), { ok: false, reason: "level", needLevel: 20, legacy: false });
   assert.equal(canBuy(atLv(19, { bytes: 9999 }), "wizard").reason, "level");
   assert.equal(canBuy(atLv(20, { bytes: 9999 }), "wizard").ok, true);
   assert.equal(canBuy(atLv(1, { bytes: 9999 }), "casual").ok, true, "Lv1 상품은 바로");
@@ -153,7 +153,7 @@ test("shop: 새 저장은 원래 8벌에도 레벨 제한", () => {
 });
 
 test("shop: bytes·owned·notsold 이유", () => {
-  assert.deepEqual(canBuy(atLv(20, { bytes: 299 }), "wizard"), { ok: false, reason: "bytes", needLevel: 20 });
+  assert.deepEqual(canBuy(atLv(20, { bytes: 299 }), "wizard"), { ok: false, reason: "bytes", needLevel: 20, legacy: false });
   assert.equal(canBuy(atLv(20, { bytes: 9999, outfits: ["basic", "wizard"] }), "wizard").reason, "owned");
   assert.equal(canBuy(atLv(1, { bytes: 9999, outfits: ["basic"] }), "basic").reason, "notsold");
   assert.equal(canBuy(atLv(30, { bytes: 9999 }), "graduate").reason, "notsold");
@@ -213,4 +213,15 @@ test("shop: setDeco는 가지지 않은 것, 다른 공간의 id, 모르는 공�
   assert.ok(setDeco(s, "__proto__", null) instanceof Error);
   assert.equal(setDeco(s, "editor", "ed_sea").deco.on.editor, "ed_sea");
   assert.equal(setDeco(mkSave(), "guard", null).deco.on.guard, null, "deco 없는 저장도 끌 수 있음");
+});
+
+test("shop: canBuy.legacy — 기존 학습자 예외가 걸린 상품만 true(상점 표시가 이것만 봄, 작업 5 검토 M1)", () => {
+  assert.equal(canBuy(legacyAt(1, { bytes: 9999 }), "wizard").legacy, true);
+  assert.equal(canBuy(legacyAt(1, { bytes: 0 }), "wizard").reason, "bytes", "예외라도 바이트는 필요");
+  assert.equal(canBuy(legacyAt(1, { bytes: 0 }), "wizard").legacy, true);
+  assert.equal(canBuy(legacyAt(25, { bytes: 9999 }), "wizard").legacy, true, "레벨이 넉넉해도 legacy 저장의 원래 8벌");
+  assert.equal(canBuy(atLv(20, { bytes: 9999 }), "wizard").legacy, false, "legacy가 아닌 저장");
+  assert.equal(canBuy(legacyAt(30, { bytes: 9999 }), "new1").legacy, false, "새 의상");
+  assert.equal(canBuy(legacyAt(30, { bytes: 9999 }), "ed_night").legacy, false, "편집기 색");
+  assert.equal(canBuy(legacyAt(30, { bytes: 9999 }), "graduate").legacy, false, "팔지 않음");
 });

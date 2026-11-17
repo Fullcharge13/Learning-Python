@@ -12,7 +12,7 @@
 - `build.py --dev-pyodide`로 만든 앱(tests/flow.py의 빌드·서버·Chromium 하나를 같이 씀)을 `localStorage["ria-python.theme"]`를
   주어 연다. 설계서 §4 화면 목록(인사, 튜토리얼 4장+실행 결과, 홈, 레슨 카드·고르기·빈칸·순서·코드 쓰기·오류 카드·맞음/틀림 설명·완료,
   배지, 의상실, 설정+확인 창, 텃밭(1장 통과 저장)+말풍선·노드 고르기 창·주문 완료 창, 경비실 빈칸·고르기 창·판정 칸·직접 쓰기,
-  v0.20.0 응용 꼬리표가 있는 사건 목록·응용 사건 처음 해결 창(사건 파일 카드), v0.22.0 상점 세 탭)을 연다.
+  v0.20.0 응용 꼬리표가 있는 사건 목록·응용 사건 처음 해결 창(사건 파일 카드), v0.22.0 상점 세 탭, 꾸미기·편집기 색을 켠 화면)을 연다.
 - 화면마다 「보이는 글자가 있는 요소」의 글자색과 실제 바탕색의 대비를 재어, 기준 미달을 목록으로 낸다.
   기준: 글자 4.5:1, 큰 글씨(24px 이상, 또는 굵기 700 이상이고 19px 이상) 3:1.
 - 같은 화면 목록의 스크린숏을 tests/out/contrast/<theme>/<화면>.png 로 저장한다(밝게 회귀 비교의 기준 사진).
@@ -508,6 +508,60 @@ def sc_shop(r):
             r.cap(a, "shop-" + tab)
 
 
+
+# 꾸미기·편집기 색(v0.22.0 작업 6): 산 꾸미기를 켠 저장
+_DECO_ALL = ["ed_paper", "ed_forest", "ed_sea", "ed_night", "gd_fence", "gd_flowers", "gd_greenhouse",
+             "gu_night", "gu_control", "ws_wood", "ws_metal"]
+# 문법 색이 고루 나오는 코드. 마지막 줄은 괄호를 닫지 않아 실행하면 오류 줄(.cm-errline) 위 글자도 잰다
+DECO_CODE = 'def f(n):\n    s = "hi"  # memo\n    return n + 1.5\nprint(f(2), True, None'
+
+
+def _deco_on(save, **on):
+    save = dict(save)
+    save["deco"] = {"owned": list(_DECO_ALL), "on": {"garden": None, "guard": None, "workshop": None, "editor": None, **on}}
+    return save
+
+
+def sc_deco(r):
+    """v0.22.0 작업 6: 편집기 색 4가지(문법 색·오류 줄), 경비실 테마 2가지(빈칸·판정), 텃밭 장식 3가지, 공방 받침 2가지"""
+    import flow
+    for ed in ("ed_paper", "ed_forest", "ed_sea", "ed_night"):
+        save = _deco_on({"saveVer": 2, "xp": 0, "bytes": 0, "levels": {"granted": 1, "pending_welcome": 0, "legacy": False},
+                         "settings": {"sound": False, "dailyGoal": 10, "name": ""}}, editor=ed)
+        with _app(r.theme, save=save) as a:
+            a.start()
+            a.page.click("#continue")
+            flow._to_write(a)
+            a.wait_py()
+            a.set_code(DECO_CODE)
+            a.page.click("#run")
+            a.page.wait_for_selector(".err-panel", timeout=30_000)
+            a.page.wait_for_selector(".cm-errline")
+            a.page.eval_on_selector(".cm-editor", "e => e.scrollIntoView({block: 'center'})")
+            r.cap(a, "edcolor-" + ed)
+    for gu in ("gu_night", "gu_control"):
+        with _app(r.theme, save=_deco_on(flow._guard_seed(3), guard=gu)) as a:
+            flow._open_guard(a)
+            r.cap(a, "guard-" + gu)
+            for n, v in ((0, 1), (1, 0), (2, 0)):   # sc_guard와 같은 고르기 → 같은 판정 칸
+                flow._gd_pick(a, n, v)
+            flow._gd_run(a, skip=True)
+            a.page.wait_for_timeout(300)
+            r.cap(a, "guard-%s-result" % gu)
+    for gd in ("gd_fence", "gd_flowers", "gd_greenhouse"):
+        with _app(r.theme, save=_deco_on(flow._garden_seed(1, xp=40), garden=gd)) as a:
+            a.start()
+            a.page.click('.tabbar [data-go="garden"]')
+            a.page.wait_for_selector(".screen.garden .g-deco")
+            a.page.wait_for_timeout(300)
+            r.cap(a, "garden-" + gd)
+    for ws in ("ws_wood", "ws_metal"):
+        with _app(r.theme, save=_deco_on(flow._ws_seed(5, projects=flow._done_projects(P1="print(1)\n")), workshop=ws)) as a:
+            flow._open_workshop(a)
+            a.page.wait_for_selector(".ws-shelf .ws-stand")
+            r.cap(a, "workshop-" + ws)
+
+
 def run_app(theme, skip_tokens, skip_art=False):
     import flow
     flow.env()
@@ -519,6 +573,7 @@ def run_app(theme, skip_tokens, skip_art=False):
     r.scenario("5장 통과·P1 완성 저장: 프로젝트 공방", lambda: sc_workshop(r))
     r.scenario("레벨: 환영 알림·레벨 줄(v0.22.0)", lambda: sc_levels(r))
     r.scenario("상점: 의상·꾸미기·편집기 색 탭(v0.22.0)", lambda: sc_shop(r))
+    r.scenario("꾸미기·편집기 색 켬(v0.22.0)", lambda: sc_deco(r))
     return r
 
 

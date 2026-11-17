@@ -10,8 +10,6 @@ import { t } from "./i18n.js";
 const ITEMS = new Map(SHOP_ITEMS.map((i) => [i.id, i]));
 const itemOf = (id) => (typeof id === "string" && ITEMS.has(id) ? ITEMS.get(id) : null);
 const decoOf = (save) => cleanDeco(save && save.deco);
-/** 상품 표의 한 줄(없으면 null). 상점 화면이 legacyFree를 볼 때 */
-export const shopItem = itemOf;
 const isLegacy = (save) => !!(save && save.levels && save.levels.legacy === true);
 
 /** 가지고 있나: 의상은 save.outfits, 꾸미기는 save.deco.owned */
@@ -24,17 +22,20 @@ export function owns(save, id) {
 /**
  * 살 수 있나. 순서: notsold(표에 없음: 기본복장·졸업 가운·모르는 id) → owned → level → bytes.
  * needLevel: 이 저장에 필요한 레벨(legacy 예외면 1). 팔지 않으면 null.
- * @returns {{ ok: boolean, reason: "owned"|"level"|"bytes"|"notsold"|null, needLevel: number|null }}
+ * legacy: 기존 학습자 예외(원래 8벌을 레벨 없이)가 이 상품에 걸렸나. 상점의 「예전부터 함께한 학습자」 표시가 이것만 본다(작업 5 검토 M1)
+ * @returns {{ ok: boolean, reason: "owned"|"level"|"bytes"|"notsold"|null, needLevel: number|null, legacy: boolean }}
  */
 export function canBuy(save, id) {
   const item = itemOf(id);
-  if (!item) return { ok: false, reason: "notsold", needLevel: null };
-  const needLevel = item.legacyFree && isLegacy(save) ? 1 : item.level;
-  if (owns(save, id)) return { ok: false, reason: "owned", needLevel };
-  if (levelOf(save && save.xp) < needLevel) return { ok: false, reason: "level", needLevel };
+  if (!item) return { ok: false, reason: "notsold", needLevel: null, legacy: false };
+  const legacy = !!item.legacyFree && isLegacy(save);
+  const needLevel = legacy ? 1 : item.level;
+  const r = (ok, reason) => ({ ok, reason, needLevel, legacy });
+  if (owns(save, id)) return r(false, "owned");
+  if (levelOf(save && save.xp) < needLevel) return r(false, "level");
   const bytes = (save && save.bytes) || 0;
-  if (bytes < item.price) return { ok: false, reason: "bytes", needLevel };
-  return { ok: true, reason: null, needLevel };
+  if (bytes < item.price) return r(false, "bytes");
+  return r(true, null);
 }
 
 function fail(reason, msg) {

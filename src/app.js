@@ -26,7 +26,7 @@ import { setGuardIndex } from "./guard/state.js";
 import { createProjectData, projectWarmList } from "./projects/catalog.js";
 import { loadDevProjects } from "./projects/projectdev.js";
 import { setProjectIndex } from "./projects/state.js";
-import { watchSystem } from "./theme.js";
+import { watchSystem, applyDecoAttrs } from "./theme.js";
 import { createSound } from "./sound.js";
 import { toast } from "./ui/dom.js";
 import { statusBar } from "./ui/nav.js";
@@ -181,6 +181,7 @@ function dayStart() {
 function commit(next) {
   next = markDev(next, app.dev);   // 지금 칸에 맞는 개발자 표시(가져오기 등으로 빠지거나 섞여 들어와도)
   app.save = next;
+  applyDecoAttrs(next);   // v0.22.0 편집기 색: 상점에서 켜고 끄면 열린 편집기도 바로
   const ok = storeSlot(storage, next, app.dev);
   if (!ok && !app.storeFailedShown) {
     app.storeFailedShown = true;
@@ -390,6 +391,7 @@ function setDev(on) {
   const { save, readFailed, brokenKey } = setDevMode(storage, on);
   app.dev = on;
   app.save = save;
+  applyDecoAttrs(save);   // 칸마다 편집기 색이 다를 수 있음
   followPhoneLang();
   if (brokenKey) commit({ ...app.save, broken_notice: brokenKey });   // 깨진 저장 안내(홈에서 한 번)
   app.storeFailedShown = false;
@@ -481,6 +483,7 @@ async function boot() {
   watchSystem();   // v0.19.0: 「시스템 따라가기」일 때 휴대폰 어두운 모드 전환을 바로 따라감
   const { save, readFailed, brokenKey } = loadSlot(storage, app.dev);
   app.save = save;
+  applyDecoAttrs(save);   // v0.22.0: 시작할 때 편집기 색(<html data-edtheme>)
   followPhoneLang();
   // 깨진 저장(v0.12.1, QA 5): 새 저장에 남긴 칸 이름을 적어 바로 저장 → 홈에서 한 번 안내(새로고침해도 다시 .broken으로 남기지 않음)
   if (brokenKey) commit({ ...app.save, broken_notice: brokenKey });

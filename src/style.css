@@ -1294,3 +1294,36 @@ body.kbd-compact .pj-head { display: none; }
 [data-theme="dark"] .pl-input[readonly] { border-color: var(--line); }
 .sol-note { display: flex; gap: 6px; align-items: center; margin: 0 0 8px; font-size: .88rem; font-weight: 700; color: var(--coral-ink); }
 .sol-note .ic { width: 18px; height: 18px; flex: none; }
+
+/* ---- v0.22.0 꾸미기(상점, 설계 2026-11-17 §5-4). 그림은 src/ui/decoart.js ---- */
+/* 견본: 편집기 색·경비실 테마는 밝게·어둡게 두 벌 중 지금 것만 */
+.si-svg .sw-d, [data-theme="dark"] .si-svg .sw-l { display: none; }
+[data-theme="dark"] .si-svg .sw-d { display: inline; }
+/* 텃밭 장식 띠: 판과 같은 폭, 판에 붙여 놓음. 글자와 겹치지 않는 장식 */
+.g-deco { width: 100%; max-width: min(100%, 400px, max(240px, 44dvh)); line-height: 0; pointer-events: none; }
+.g-deco svg { display: block; width: 100%; height: auto; }
+.g-deco-top { margin-bottom: -7px; }
+.g-deco-bottom { margin-top: -7px; }
+/* 공방 진열장 받침: 칸 아래 한 줄 */
+.screen.workshop[data-deco-workshop] .ws-shelf-item { flex-wrap: wrap; row-gap: 4px; border-bottom: 0; }
+.ws-stand { display: block; flex: 0 0 100%; height: 15px; line-height: 0; }
+.ws-stand svg { display: block; width: 100%; height: 100%; }
+.ws-empty + .ws-stand { margin-top: 2px; }
+/* 경비실 테마: 화면의 종이·칸·잉크 색 묶음. 강조 색(청록·해·산호)은 그대로. 글자 4.5:1(밝게·어둡게, tests/contrast.py guard-gu_*) */
+.screen.guard[data-deco-guard] { background: var(--paper); min-height: 100dvh; }
+.screen.guard[data-deco-guard] .g-top, .screen.guard[data-deco-guard] .g-foot { background: var(--paper); }
+.screen.guard[data-deco-guard="gu_night"] {
+  --paper: #E9EDF7; --paper-2: #DCE2F0; --card: #F9FAFE; --line: #C3CBDE; --ink: #1B2440; --ink-2: #47506B;
+}
+.screen.guard[data-deco-guard="gu_control"] {
+  --paper: #E6F2EE; --paper-2: #D6E9E3; --card: #F8FCFA; --line: #B9D6CC; --ink: #15332E; --ink-2: #3F5A54;
+}
+[data-theme="dark"] .screen.guard[data-deco-guard="gu_night"] {
+  --paper: #0E1324; --paper-2: #151C33; --card: #1A2241; --line: #2E3A60; --ink: #EEF0FA; --ink-2: #B7BED6;
+}
+[data-theme="dark"] .screen.guard[data-deco-guard="gu_control"] {
+  --paper: #0B1A19; --paper-2: #112523; --card: #152B2A; --line: #24453F; --ink: #E4F6F0; --ink-2: #A9CBC2; --teal-ink: #6FE3CF;
+}
+/* 관제실: 칸 왼쪽에 청록 띠, 야간 근무: 남색 띠(장식 테두리) */
+.screen.guard[data-deco-guard="gu_control"] .panel { box-shadow: inset 4px 0 0 var(--teal); }
+.screen.guard[data-deco-guard="gu_night"] .panel { box-shadow: inset 4px 0 0 #6F86D6; }

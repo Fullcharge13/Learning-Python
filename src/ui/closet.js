@@ -2,7 +2,7 @@
 // 의상 탭은 무대 미리보기·사기·입기. 잠긴 상품은 처음부터 「Lv N에 열려요」, 사기 단추 없음. 꾸미기·색 탭은 ./shopdeco.js
 // 탭 상태는 params.tab("outfit"|"deco"|"color"). #app 묶음 없음 — 단추마다 묶고 다시 그리면 함께 사라짐(v0.20.1)
 import { OUTFITS } from "../../data/outfits.js";
-import { buy, canBuy, shopItem } from "../shop.js";
+import { buyItem, canBuy } from "../shop.js";
 import { decoPanelHTML, bindDeco } from "./shopdeco.js";
 import { buyFreeze, FREEZE_PRICE, FREEZE_MAX } from "../rules.js";
 import { checkBadges } from "../badges.js";
@@ -42,7 +42,6 @@ function focusAction(root) {
 
 const TABS = ["outfit", "deco", "color"];
 const tabLabel = (k) => (k === "outfit" ? t`의상` : k === "deco" ? t`꾸미기` : t`편집기 색`);
-const isLegacyFree = (s, id) => !!(s.levels && s.levels.legacy === true && shopItem(id) && shopItem(id).legacyFree);
 
 export function render(root, ctx, params = {}) {
   let sel = params.sel || ctx.save.outfit;
@@ -60,7 +59,7 @@ export function render(root, ctx, params = {}) {
     else if (own) action = `<button class="btn primary wide" id="wear">${t`입기`}</button>`;
     else if (o.price == null) action = `<p class="lock-note">${icon("lock")}${t`30일 연속 기록 보상`}</p>`;
     else if (c.reason === "level") action = `<p class="lock-note">${icon("lock")}${esc(t`Lv ${c.needLevel}에 열려요`)}</p>`;
-    else action = `${isLegacyFree(s, o.id) ? `<p class="legacy-mark">${icon("star")}${t`예전부터 함께한 학습자`}</p>` : ""}<button class="btn sun wide" id="buy"${s.bytes < o.price ? " disabled" : ""}>${icon("byte")}<span>${t`${o.price}바이트로 사기`}</span></button>
+    else action = `${c.legacy ? `<p class="legacy-mark">${icon("star")}${t`예전부터 함께한 학습자`}</p>` : ""}<button class="btn sun wide" id="buy"${s.bytes < o.price ? " disabled" : ""}>${icon("byte")}<span>${t`${o.price}바이트로 사기`}</span></button>
       ${s.bytes < o.price ? `<p class="muted center">${t`${o.price - Math.max(0, s.bytes)}바이트 더 모으면 살 수 있어요`}</p>` : ""}`;
     return `<section class="stage" aria-labelledby="stage-name">
           <div class="ria-wrap big">${riaSVG({ outfit: o.id, face: wearing ? "smile" : "sparkle", size: 170 })}</div>
@@ -129,7 +128,7 @@ export function render(root, ctx, params = {}) {
     });
     const buyBtn = root.querySelector("#buy");
     if (buyBtn) buyBtn.addEventListener("click", () => {
-      const r = buy(ctx.save, o.id);
+      const r = buyItem(ctx.save, o.id);
       if (r instanceof Error) { toast(r.message); return; }
       let next = { ...r, outfit: o.id };
       const got = checkBadges(next, { hour: new Date().getHours(), lessonDone: false });

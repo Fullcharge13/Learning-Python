@@ -11,6 +11,7 @@
 - data/projects.js       프로젝트 공방(v0.21) 프로젝트 표, src/projects/state.js 보상 XP
 - data/badges.js         배지
 - data/outfits.js        의상(가격·얻는 법)
+- data/shop.js, src/levels.js  상점 상품 표, 레벨 곡선·선물(v0.22)
 - src/ria.js             의상·표정 한국어 이름(그림 시트 설명)
 - src/app.js             게임 안 버전 표시(VERSION)
 - build.py               Pyodide 판 번호, 크기 상한
@@ -55,11 +56,23 @@ const WORKSHOP = { stepXp: wkr.PROJECT_STEP_XP, doneXp: wkr.PROJECT_DONE_XP,
 const GARDEN = { orders: garden.ORDERS.map((o) => ({ id: o.id, need: o.need, title: o.title, xp: o.xp })),
   upgrades: garden.UPGRADES.map((u) => ({ id: u.id, label: u.label || u.id, cost: u.cost })),
   nodes: Object.entries(gnodes.NODES).map(([k, v]) => ({ kind: k, chapter: v.chapter, label: v.label })) };
-console.log(JSON.stringify({ chapters, CONCEPTS, QUESTS, BADGES, OUTFITS, GARDEN, GUARD, WORKSHOP,
+const shop = await imp("data/shop.js");
+const lv = await imp("src/levels.js");
+const LEVELS = { max: lv.LEVEL_MAX, base: lv.LEVEL_BASE, step: lv.LEVEL_STEP, giftBase: lv.GIFT_BASE, giftStep: lv.GIFT_STEP,
+  welcomeStep: lv.WELCOME_STEP, welcomeCap: lv.WELCOME_CAP, xpMax: lv.xpForLevel(lv.LEVEL_MAX),
+  titles: [1, 6, 11, 16, 21, 26].map((L) => lv.levelTitle(L)), items: shop.SHOP_ITEMS };
+console.log(JSON.stringify({ chapters, CONCEPTS, QUESTS, BADGES, OUTFITS, GARDEN, GUARD, WORKSHOP, LEVELS,
   outfitKo: ria.OUTFIT_KO, faceKo: ria.FACE_KO, faces: ria.FACE_IDS }));
 """
 
 TYPE_KO = {"choice": "객관식", "blank": "빈칸", "order": "순서", "write": "직접 작성", "check": "이해도 확인"}
+
+DECO_KO = {  # 화면 이름(src/ui/shopdeco.js). 종류별 탭 이름
+    "ed_paper": "종이", "ed_forest": "숲", "ed_sea": "바다", "ed_night": "밤하늘",
+    "gd_fence": "울타리", "gd_flowers": "꽃길", "gd_greenhouse": "온실",
+    "gu_night": "야간 근무", "gu_control": "관제실", "ws_wood": "나무 받침", "ws_metal": "금속 받침",
+}
+KIND_KO = {"outfit": "의상", "garden": "꾸미기: 텃밭", "guard": "꾸미기: 경비실", "workshop": "꾸미기: 공방", "editor": "편집기 색"}
 
 UNLOCK_KO = {"start": "처음부터 입고 있음", "streak30": "30일 연속 기록 보상 (판매 안 함)"}
 
@@ -331,6 +344,34 @@ def build(d):
             w(f"| {l['id']} | {title} | {cell(l['goal'])} | {task} | {cell(', '.join(concepts))} | {kinds} |")
         w("")
 
+    # ---- 레벨과 상점
+    lv = d.get("LEVELS")
+    if lv:
+        n_it = len(lv["items"])
+        names = {o["id"]: o["name"] for o in d["OUTFITS"]}
+        w("## 레벨과 상점 (v0.22)")
+        w("")
+        w(f"XP가 쌓이면 레벨이 올라요(1~{lv['max']}). 레벨 n에서 n+1로 가려면 XP {lv['base']} + {lv['step']} × (n − 1)이 필요하고, "
+          f"레벨 {lv['max']}은 누적 XP {lv['xpMax']:,}이에요(그 위로는 오르지 않아요). 이름표는 5레벨마다 바뀌어요: "
+          + " · ".join(t["ko"] for t in lv["titles"]) + ". "
+          "홈의 하루 목표 줄(XP 아래)에 레벨이 보이고, 레슨 결과·통과 화면에 레벨업 한 줄만 나와요(새 창으로 공부를 끊지 않아요).")
+        w("")
+        w(f"레벨업 선물은 레벨 L에 오를 때 {lv['giftBase']} + {lv['giftStep']} × L 바이트예요. 여러 레벨이 한 번에 오르면 합해서 한 번에 줘요. "
+          "업데이트 전부터 쓰던 학습자는 지나간 선물 대신 환영 선물 "
+          f"min({lv['welcomeStep']} × (레벨 − 1), {lv['welcomeCap']}) 바이트를 한 번 받고, 원래 의상 8벌(캐주얼룩부터 판타지 마법사까지)은 레벨과 상관없이 살 수 있어요. "
+          "졸업 가운(30일 연속)과 기본복장은 팔지 않고, 기록 보호권(200바이트, 최대 2개)은 레벨 제한이 없어요. "
+          "배움(힌트·레슨·심화)은 바이트로 팔지 않아요.")
+        w("")
+        w(f"상점에는 탭 3개(의상 · 꾸미기 · 편집기 색)에 상품 {n_it}개가 있어요. 꾸미기는 공간(텃밭·경비실·공방)마다 하나씩, 편집기 색은 하나를 켜요. 산 것은 레벨과 상관없이 계속 가져요.")
+        w("")
+        w("| 레벨 | 상품 | 종류 | 가격(바이트) |")
+        w("|---|---|---|---|")
+        for it in sorted(lv["items"], key=lambda x: (x["level"], x["id"])):
+            nm = names.get(it["id"]) or DECO_KO.get(it["id"], it["id"])
+            leg = " (기존 학습자는 레벨 무관)" if it.get("legacyFree") else ""
+            w(f"| {it['level']} | {cell(nm)}{leg} | {KIND_KO.get(it['kind'], it['kind'])} | {it['price']} |")
+        w("")
+
     # ---- 게임 장치 요약
     w("## 게임 장치")
     w("")
@@ -338,7 +379,7 @@ def build(d):
       "다시 하기는 10 (장 평가 15), 복습 한 판 10.")
     w("- **하루 목표와 연속 기록**: 하루 목표 10·20·30 XP(기본 20)를 채운 날마다 +1. "
       "기록 보호권(200바이트, 최대 2개)이 빠진 날을 메워 줘요. 7·30·100일에 축하와 보상.")
-    w("- **바이트**: 게임 속 돈. 레슨 첫 완료 10 (심화 15) + 실수 없음 5, 퀘스트, 보물상자 10, 연속 7일 50. 의상과 보호권을 사요.")
+    w("- **바이트**: 게임 속 돈. 레슨 첫 완료 10 (심화 15) + 실수 없음 5, 퀘스트, 보물상자 10, 연속 7일 50. 의상·꾸미기·편집기 색과 보호권을 사요(레벨 올리면 선물도).")
     w("")
     w(f"### 일일 퀘스트 ({n_quests}종 중 매일 3개)")
     w("")

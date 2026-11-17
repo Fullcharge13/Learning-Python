@@ -184,10 +184,7 @@ test("shop: 꾸미기를 사면 deco.owned에 들어가고 켜지지는 않는�
   assert.ok(!owns(s, "nope"));
 });
 
-test("shop: buy는 buyItem을 그대로 부른다(의상실용)", () => {
-  const a = buyItem(legacyAt(1, { bytes: 300 }), "wizard");
-  const b = buyItem(legacyAt(1, { bytes: 300 }), "wizard");
-  assert.deepEqual(a, b);
+test("buyItem: legacy 아닌 Lv1 저장은 바이트가 많아도 마법사 망토를 못 산다(level)", () => {
   assert.equal(buyItem(atLv(1, { bytes: 9999 }), "wizard").reason, "level");
 });
 

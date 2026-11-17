@@ -7459,7 +7459,7 @@ def test_shop_new_outfits():
                 a.page.wait_for_selector("#worn")
             s = a.save()
             assert s["outfit"] == oid and oid in s["outfits"], (oid, s["outfit"], s["outfits"])
-            assert b0 - s["bytes"] in (300, 360, 400), (oid, b0, s["bytes"])
+            assert b0 - s["bytes"] == {"new1": 300, "new2": 360, "new3": 400}[oid], (oid, b0, s["bytes"])
             # 입고 나면 미리보기는 미소 — 목록 칸(미소)과 같은 그림
             assert a.js(_RIA_BODY, ".closet .stage") == tile, oid + ": 입은 미리보기 그림"
         assert len(set(tiles.values())) == 3, "세 벌은 서로 다른 그림"

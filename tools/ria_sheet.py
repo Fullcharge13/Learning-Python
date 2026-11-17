@@ -2,7 +2,7 @@
 
     python3 tools/ria_sheet.py
 
-- docs/img/ria-sheet.png   : 의상 10(줄) x 표정 8(칸) = 80칸, 이름표 포함
+- docs/img/ria-sheet.png   : 의상 13(줄) x 표정 8(칸) = 104칸, 이름표 포함
 - docs/img/ria-hero.png    : 기본 의상·미소, 크게
 - tests/out/ria-compare.png : 참고 그림(dev/ref/ria-outfits-2026-10-31.png, 저장소에 올리지 않음)과 코드 그림 10벌을 나란히. 참고 그림에 파이썬 로고가 있어 결과도 저장소 밖에 둔다(판정 C43)
 

@@ -448,7 +448,7 @@ export function render(root, ctx, params = {}) {
     await dialog({
       title: t`사건 해결!`,
       body: `<div class="gd-done g-done-body"><div class="gd-crow-row"><div class="gd-crow">${crowSVG({ pose: inc.crow.lose, size: 64 })}</div><p class="bubble gd-say">${esc(txt(inc, "crowLose"))}</p></div>${riaSays({ outfit: ctx.save.outfit, face: "joy", text: t`「${txt(inc, "title")}」 사건을 해결했어요. 문을 잘 지켰어요!`, size: 64 })}
-        <p class="g-done-xp">${icon("xp")}<span>XP +${out.xp}</span></p>${levelLineHTML(out.levelUp)}${fileCardHTML(inc)}</div>`,
+        <p class="g-done-xp">${icon("xp")}<span>XP +${out.xp}</span></p>${levelLineHTML(out.levelUp, ctx.save)}${fileCardHTML(inc)}</div>`,
       buttons: [{ label: t`좋아요`, value: true, kind: "primary" }],
     });
     if (S.destroyed) return;

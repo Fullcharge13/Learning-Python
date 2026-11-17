@@ -6,7 +6,7 @@ import { newDaily, cleanDaily } from "./daily.js";
 import { newGarden, cleanGarden } from "./garden/state.js";
 import { newGuard, cleanGuard } from "./guard/state.js";
 import { newProjects, cleanProjects } from "./projects/state.js";
-import { newLevels, cleanLevels, welcomeLevels, levelOf } from "./levels.js";
+import { newLevels, cleanLevels, welcomeLevels, levelOf, WELCOME_STEP, WELCOME_CAP } from "./levels.js";
 import { newDeco, cleanDeco } from "./deco.js";
 import { isDate, DAILY_GOALS } from "./rules.js";
 import { t, normLang } from "./i18n.js";
@@ -212,7 +212,8 @@ export function takeRefundNotice(save) {
 export function takeWelcome(save) {
   const lv = save && save.levels;
   const bytes = lv && Number.isInteger(lv.pending_welcome) && lv.pending_welcome > 0 ? lv.pending_welcome : 0;
-  const level = levelOf(save && save.xp);
+  // 알릴 레벨은 옮길 때 레벨: 선물에서 되짚는다(환불 알림을 먼저 보는 사이 레벨이 올라도, 검토 M1). 상한이면 되짚을 수 없어 지금 레벨
+  const level = bytes && bytes < WELCOME_CAP && bytes % WELCOME_STEP === 0 ? bytes / WELCOME_STEP + 1 : levelOf(save && save.xp);
   return bytes ? { save: { ...save, levels: { ...lv, pending_welcome: 0 } }, bytes, level } : { save, bytes: 0, level };
 }
 // 깨진 저장 안내(v0.12.1, QA): 남긴 칸 이름과 깃발을 내린(null) 새 저장. 없으면 같은 저장

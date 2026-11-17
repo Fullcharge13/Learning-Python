@@ -19,6 +19,7 @@ test("levels: xpForLevel 닻 값", () => {
   assert.equal(xpForLevel(2), 30);
   assert.equal(xpForLevel(3), 70);
   assert.equal(xpForLevel(10), 630);
+  // tests/flow.py _level_of가 이 곡선(LEVEL_BASE 30, LEVEL_STEP 10)을 그대로 베낀다 — 곡선을 바꾸면 그쪽도(작업 4 검토 M5)
   assert.equal(xpForLevel(13), 1020);
   assert.equal(xpForLevel(30), 4930);
 });

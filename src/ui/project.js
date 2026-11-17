@@ -176,7 +176,7 @@ export function render(root, ctx, params = {}) {
       v = await dialog({
         title: t`완성!`,
         body: `<div class="pj-done">${say(S.body.finale, "joy")}
-          <p class="g-done-xp">${icon("xp")}<span>${esc(r.xp ? `XP +${r.xp}` : t`이미 완성한 작품이라 XP는 없어요`)}</span></p>${levelLineHTML(r.levelUp)}
+          <p class="g-done-xp">${icon("xp")}<span>${esc(r.xp ? `XP +${r.xp}` : t`이미 완성한 작품이라 XP는 없어요`)}</span></p>${levelLineHTML(r.levelUp, ctx.save)}
           <p class="pj-shelf-note">${icon("star")}<span>${t`진열장에 놓았어요. 언제든 다시 실행할 수 있어요.`}</span></p></div>`,
         buttons: [{ label: t`한 판 해 보기`, value: "play", kind: "primary" }, { label: t`공방으로`, value: "list" }],
       });
@@ -185,7 +185,7 @@ export function render(root, ctx, params = {}) {
       v = await dialog({
         title: viaButton ? t`모범 코드로 넘어가요` : t`${n + 1}단계 통과!`,
         body: `<div class="pj-pass">${say(S.body.steps[n].explain || ctx.say("correct").text, viaButton ? "smile" : "joy")}
-          <p class="g-done-xp">${icon("xp")}<span>${esc(xpLine)}</span></p>${levelLineHTML(r.levelUp)}</div>`,
+          <p class="g-done-xp">${icon("xp")}<span>${esc(xpLine)}</span></p>${levelLineHTML(r.levelUp, ctx.save)}</div>`,
         buttons: [{ label: t`다음 단계`, value: "next", kind: "primary" }],
       });
     }

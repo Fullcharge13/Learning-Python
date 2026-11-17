@@ -21,12 +21,19 @@ test("levelLineHTML: null이면 빈 글", () => {
 test("levelLineHTML: 레벨·이름·선물·새 상품 수(from < level <= to)", () => {
   const h = levelLineHTML({ from: 2, to: 3, bytes: levelGift(3) });
   assert.match(h, /class="level-line"/);
-  assert.equal(plain(h), "레벨 3! 새싹이 됐어요 · +16바이트 · 새 상품 2개");
+  // 같은 이름 단계 안(검토 I1): 새 이름을 얻었다고 말하지 않는다
+  assert.equal(plain(h), "레벨 3으로 올랐어요! · +16바이트 · 새 상품 2개");
   // 새 상품이 없으면 그 부분은 뺀다
-  assert.equal(plain(levelLineHTML({ from: 1, to: 2, bytes: levelGift(2) })), "레벨 2! 새싹이 됐어요 · +14바이트");
-  // 조사: 정원사가, 떡잎이
+  assert.equal(plain(levelLineHTML({ from: 1, to: 2, bytes: levelGift(2) })), "레벨 2로 올랐어요! · +14바이트");
+  assert.equal(levelLineText({ from: 6, to: 7, bytes: levelGift(7) }), "레벨 7로 올랐어요! · +24바이트");
+  // 이름 단계가 바뀔 때만 「…이 됐어요」. 조사: 떡잎이, 정원사가
+  assert.equal(levelLineText({ from: 5, to: 6, bytes: levelGift(6) }), "레벨 6! 떡잎이 됐어요 · +22바이트");
   assert.equal(levelLineText({ from: 10, to: 11, bytes: levelGift(11) }), "레벨 11! 정원사가 됐어요 · +32바이트");
-  assert.equal(levelLineText({ from: 6, to: 7, bytes: levelGift(7) }), "레벨 7! 떡잎이 됐어요 · +24바이트");
+  // 여러 레벨이 한 번에 단계를 넘으면 바뀐 것으로 친다(4→7: 새싹 → 떡잎)
+  assert.equal(levelLineText({ from: 4, to: 7, bytes: 1 }), "레벨 7! 떡잎이 됐어요 · +1바이트 · 새 상품 2개");
+  // 조사 「으로/로」: 받침 있는 숫자 3·6·10, 없는 2·4·5
+  assert.ok(levelLineText({ from: 9, to: 10, bytes: 1 }).startsWith("레벨 10으로 올랐어요!"));
+  assert.ok(levelLineText({ from: 3, to: 4, bytes: 1 }).startsWith("레벨 4로 올랐어요!"));
   // 여러 레벨이 한 번에: 사이 상품을 모두 센다
   assert.equal(levelLineText({ from: 1, to: 5, bytes: 1 }).endsWith("새 상품 4개"), true);
 });
@@ -68,9 +75,10 @@ test("영어: 레벨 줄·이름·환영 알림에 한글 없음", () => {
   usePack("en", { ui, data });
   assert.ok(setLang("en"));
   try {
-    assert.equal(levelLineText({ from: 2, to: 3, bytes: 16 }), "Level 3! Rank: Sprout · +16 Bytes · 2 new items in the shop");
+    assert.equal(levelLineText({ from: 2, to: 3, bytes: 16 }), "You reached Level 3! · +16 Bytes · 2 new items in the shop");
     assert.equal(levelLineText({ from: 7, to: 8, bytes: 26 }).endsWith("· 2 new items in the shop"), true);
-    assert.equal(levelLineText({ from: 25, to: 26, bytes: 62 }), "Level 26! Rank: Python Master · +62 Bytes · 1 new item in the shop");
+    assert.equal(levelLineText({ from: 5, to: 6, bytes: 22 }), "Level 6! New rank: Seedling · +22 Bytes");
+    assert.equal(levelLineText({ from: 25, to: 26, bytes: 62 }), "Level 26! New rank: Python Master · +62 Bytes · 1 new item in the shop");
     assert.ok(welcomeNoticeText(13, 120).includes("Lv 13 · +120 Bytes"));
     const h = statusBar({ ...newSave(), xp: 1100 });
     assert.doesNotMatch(h, /[가-힣]/);
@@ -83,4 +91,23 @@ test("영어: 레벨 줄·이름·환영 알림에 한글 없음", () => {
 test("levelLineHTML: 글자는 escape", () => {
   // 숫자가 아닌 값은 받지 않으므로 공격 글자가 들어갈 자리가 없다 — 모양이 틀리면 빈 글
   assert.equal(levelLineHTML({ from: 1, to: '<img src=x onerror="x">', bytes: 1 }), "");
+  // 이름(영어 표에서 옴)에 HTML 글자가 있어도 글자 그대로(검토 M6)
+  usePack("en", { ui: { "레벨 {}! {}{} 됐어요": "Level {0}! New rank: {1}" }, data: { "level.title.2": '<img src=x onerror="x">' } });
+  assert.ok(setLang("en"));
+  try {
+    const h = levelLineHTML({ from: 5, to: 6, bytes: 0 });
+    assert.doesNotMatch(h, /<img/);
+    assert.match(h, /&lt;img src=x onerror=&quot;x&quot;&gt;/);
+  } finally {
+    setLang("ko");
+  }
+});
+
+// 검토 M2: 기존 학습자(legacy)는 원래 8벌을 레벨과 상관없이 살 수 있으므로 「새 상품」에서 뺀다
+test("새 상품 수: legacy 저장은 legacyFree 의상을 세지 않음", () => {
+  assert.equal(newItemsCount(2, 3, true), 1);   // 후드티 빼고 울타리만
+  assert.equal(newItemsCount(2, 3, false), 2);
+  assert.equal(levelLineText({ from: 2, to: 3, bytes: 16 }, { levels: { legacy: true } }), "레벨 3으로 올랐어요! · +16바이트 · 새 상품 1개");
+  assert.equal(levelLineText({ from: 17, to: 18, bytes: 1 }, { levels: { legacy: true } }).endsWith("새 상품 2개"), true);   // new1·관제실은 누구나 새것
+  assert.equal(plain(levelLineHTML({ from: 2, to: 3, bytes: 16 }, { levels: { legacy: false } })).endsWith("새 상품 2개"), true);
 });

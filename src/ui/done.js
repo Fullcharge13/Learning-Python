@@ -36,7 +36,7 @@ export function render(root, ctx, params = {}) {
       ${daily && r.xp ? `<p class="daily-done">${icon("flame")}<span>${esc(t`도전 ${r.dailyStreak}일째`)}</span>${r.bonusBytes
         ? `<b class="sun-text">${esc(t`7일 보너스 +${r.bonusBytes}바이트`)}</b>` : ""}</p>` : ""}
       ${daily && !r.xp ? `<p class="muted center">${t`오늘의 도전 보상은 이미 받았어요. 내일 새 문제가 와요.`}</p>` : ""}
-      ${levelLineHTML(r.levelUp)}
+      ${levelLineHTML(r.levelUp, ctx.save)}
       ${r.milestone ? `<p class="milestone">${icon("flame")}<span>${esc(`${t`연속 ${r.milestone}일!`} ${MILESTONE_REWARD[r.milestone] || ""}`)}</span></p>` : ""}
       <ul class="tiles" aria-label="${t`받은 보상`}">
         <li class="tile xp">${icon("xp")}<b>+${r.xp}</b><span>XP</span></li>

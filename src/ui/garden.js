@@ -1278,7 +1278,7 @@ export function render(root, ctx, params = {}) {
     await dialog({
       title: t`주문 완료!`,
       body: `<div class="g-done-body">${riaSays({ outfit: ctx.save.outfit, face: "joy", text, size: 84, sfx: t`딩동!` })}
-        <p class="g-done-xp">${icon("xp")}<span>XP +${res ? res.xp : order.xp}</span></p>${levelLineHTML(res && res.levelUp)}</div>`,
+        <p class="g-done-xp">${icon("xp")}<span>XP +${res ? res.xp : order.xp}</span></p>${levelLineHTML(res && res.levelUp, ctx.save)}</div>`,
       buttons: [{ label: t`좋아요`, value: true, kind: "primary" }],
     });
     if (S.destroyed) return;

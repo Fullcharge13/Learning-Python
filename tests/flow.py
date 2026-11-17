@@ -1300,7 +1300,9 @@ def _chapters_done(n):
 
 
 def _level_of(xp):
-    """src/levels.js levelOf와 같은 곡선(30 + 10(n−1))"""
+    """src/levels.js levelOf와 같은 곡선(30 + 10(n−1)). LEVEL_BASE(30)·LEVEL_STEP(10)을 베꼈다 — 작업 3 같은 판정으로
+    곡선을 바꾸면 여기도 고친다(안 고치면 텃밭·경비실·공방 저장이 환영 선물을 받아 바이트 시험이 엉뚱하게 깨짐).
+    tests/unit/levels.test.js의 xpForLevel(13) == 1020이 짝(검토 M5)."""
     L = 1
     while L < 30 and xp >= 30 * L + 5 * L * (L - 1):
         L += 1
@@ -6861,10 +6863,10 @@ def test_workshop_randint_card():
 
 # ---------------------------------------------------------------- v0.22.0 레벨 표시·축하 줄·환영 알림 (작업 4)
 # 곡선 30 + 10(n−1): 레벨 2 = 30 XP, 레벨 3 = 70 XP, 레벨 13 = 1,020 XP. 선물 10 + 2L: Lv2 14, Lv3 16. 환영 min(10(L−1), 200)
-LV2_XP, LV3_XP = 30, 70
+LV2_XP, LV3_XP, LV6_XP = 30, 70, 250
 
 
-def _lv(granted=1, legacy=True):
+def _lv(granted=1, legacy=False):
     return {"granted": granted, "pending_welcome": 0, "legacy": legacy}
 
 
@@ -6906,6 +6908,23 @@ def test_level_status():
         w = a.js("() => { const b = document.querySelector('.status .lv-bar'); return [b.querySelector('span').getBoundingClientRect().width, b.getBoundingClientRect().width]; }")
         assert 0.3 < w[0] / w[1] < 0.7, w
         assert not a.errors, a.errors
+    # 검토 M6: 375px·영어·어둡게, 큰 값(365일·9999바이트·4930 XP)에서도 위 줄 세 칸이 한 줄, Lv는 XP 바로 아래(목표 줄 끝)
+    big = {"saveVer": 2, "xp": 4930, "bytes": 9999, "levels": _lv(30),
+           "streak": {"days": 365, "best": 365, "lastGoalDate": today(1), "todayDate": today(), "todayXp": 0},
+           "settings": {"sound": False, "dailyGoal": 20, "name": "", "lang": "en", "langChosen": True}}
+    with App("iPhone SE (3rd gen)", save=big, locale="en-US", init_js="localStorage.setItem(%s, 'dark');" % json.dumps(THEME_KEY)) as a:
+        a.start()
+        g = a.js("""() => { const r = (s) => document.querySelector(s).getBoundingClientRect();
+            const tops = [...document.querySelectorAll('.stats-row > .stat')].map(e => Math.round(e.getBoundingClientRect().top));
+            return { vw: innerWidth, sw: document.documentElement.scrollWidth, tops, xp: [r('.stat.xp').left, r('.stat.xp').right],
+                     lv: [r('.stat.lv').left, r('.stat.lv').right, r('.stat.lv').top], goalBottom: r('.stats-row').bottom, bar: r('.goal-bar').width }; }""")
+        assert g["vw"] == 375 and g["sw"] == 375, g
+        assert len(set(g["tops"])) == 1, g
+        assert g["lv"][1] <= g["xp"][1] + 1 and g["lv"][0] >= g["xp"][0] - 1 and g["lv"][2] >= g["goalBottom"], g   # XP 칸 아래
+        assert g["bar"] >= 100, g
+        assert a.page.inner_text(".status .stat.lv b") == "Lv 30"
+        a.shot("level-status-se-en-dark.png")
+        assert not a.errors, a.errors
 
 
 def test_levelup_lesson():
@@ -6919,7 +6938,7 @@ def test_levelup_lesson():
         a.page.click("#continue")
         a.play("1-1")
         line = _level_line(a, ".screen.done")
-        assert "레벨 2!" in line and "새싹이 됐어요" in line and "+14바이트" in line, line
+        assert line == "레벨 2로 올랐어요! · +14바이트", line   # 같은 이름 단계(새싹) 안: 「…이 됐어요」 없음(검토 I1)
         assert "새 상품" not in line, line   # 레벨 2에 열리는 상품 없음
         parts = a.page.inner_text(".screen.done p.muted.center")
         assert "레벨 14" in parts, parts
@@ -6949,7 +6968,7 @@ def test_levelup_lesson():
         a.play("1-1")
         a.page.wait_for_selector(".celebrate", timeout=3000)
         line = _level_line(a, ".screen.done")
-        assert "레벨 2!" in line, line
+        assert line.startswith("레벨 2로 올랐어요!"), line
         parts = a.page.inner_text(".screen.done p.muted.center")
         assert "연속 기록 50" in parts and "레벨 14" in parts, parts
         assert _plays(a, "levelup") == 1, a.js("() => window.__plays")
@@ -6972,7 +6991,7 @@ def test_levelup_guard():
         _gd_run(a)
         a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
         line = _level_line(a, ".modal .gd-done")
-        assert line == "레벨 3! 새싹이 됐어요 · +16바이트 · 새 상품 2개", line
+        assert line == "레벨 3으로 올랐어요! · +16바이트 · 새 상품 2개", line
         a.page.wait_for_timeout(GUARD_WAIT)
         a.shot("level-guard.png")
         m = measure(a, "level-guard")
@@ -6986,18 +7005,18 @@ def test_levelup_guard():
 
 
 def test_levelup_garden():
-    """텃밭 주문 완료 창에 레벨 줄(주문 1, XP +5로 Lv 2)"""
-    s = _garden_seed(1, xp=LV2_XP - 1)
-    s["levels"] = _lv(1)
+    """텃밭 주문 완료 창에 레벨 줄(주문 1, XP +5로 Lv 5 → 6: 이름 단계가 새싹 → 떡잎으로 바뀜)"""
+    s = _garden_seed(1, xp=LV6_XP - 1)
+    s["levels"] = _lv(5)
     with App("iPhone 17", save=s) as a:
         _open_garden(a)
         _garden_run(a, skip=True)
         line = _level_line(a, ".modal .g-done-body")
-        assert line == "레벨 2! 새싹이 됐어요 · +14바이트", line
+        assert line == "레벨 6! 떡잎이 됐어요 · +22바이트", line
         a.page.wait_for_timeout(GUARD_WAIT)
         a.shot("level-garden.png")
         _close_done(a)
-        assert a.save()["levels"]["granted"] == 2
+        assert a.save()["levels"]["granted"] == 6
         assert not _app_errors(a), a.errors
 
 
@@ -7011,7 +7030,7 @@ def test_levelup_project():
         _open_project(a, "P1")
         _pj_submit(a, body["steps"][0]["solution"])
         line = _level_line(a, ".modal .pj-pass")
-        assert line == "레벨 2! 새싹이 됐어요 · +14바이트", line
+        assert line == "레벨 2로 올랐어요! · +14바이트", line
         a.page.wait_for_timeout(GUARD_WAIT)
         a.shot("level-project.png")
         _pj_next(a)
@@ -7077,7 +7096,7 @@ def test_level_english():
         _gd_run(a)
         a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
         line = _level_line(a, ".modal .gd-done")
-        assert line == "Level 3! Rank: Sprout · +16 Bytes · 2 new items in the shop", line
+        assert line == "You reached Level 3! · +16 Bytes · 2 new items in the shop", line
         a.shot("level-guard-en.png")
         a.page.wait_for_timeout(GUARD_WAIT)
         a.page.click(".modal .btn.primary")

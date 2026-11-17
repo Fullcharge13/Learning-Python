@@ -602,6 +602,17 @@ test("save: takeWelcome은 한 번만 bytes>0", () => {
   assert.equal(takeWelcome({}).bytes, 0);
 });
 
+// 검토 M1: 환불 알림을 먼저 보는 사이 레벨이 올라도 환영 알림의 레벨은 옮길 때 레벨(선물에서 되짚음)
+test("save: takeWelcome 레벨은 옮길 때 레벨", () => {
+  const s = migrate(oldSave({ xp: 1100 }));   // Lv 13, 선물 120
+  const later = { ...s, xp: xpForLevel(14) + 5 };
+  assert.equal(takeWelcome(later).level, 13);
+  // 상한(200)에 닿은 선물은 레벨을 되짚을 수 없어 지금 레벨
+  const big = migrate(oldSave({ xp: xpForLevel(25) }));
+  assert.equal(big.levels.pending_welcome, WELCOME_CAP);
+  assert.equal(takeWelcome(big).level, 25);
+});
+
 test("save: 옛 저장 가져오기", () => {
   const raw = JSON.parse(JSON.stringify(oldSave({ xp: 1100, bytes: 33, completed_lessons: ["1-1"] })));
   assert.equal(checkImport(raw).ok, true);

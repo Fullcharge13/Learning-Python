@@ -130,7 +130,6 @@
  "앱을 시작하지 못했어요. 새로고침해 주세요.": "The app couldn't start. Please refresh the page.",
  "언어": "Language",
  "얻었어요": "Earned",
- "없는 의상이에요: {}": "No such outfit: {}",
  "없어진 옷 값 {}바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!": "Some outfits were retired, so I refunded you {} Bytes. Come check out the new ones!",
  "연속 {}일!": "{}-day streak!",
  "연속 기록 {}일": "{0}-day streak",
@@ -248,5 +247,10 @@
  "replay::보기": "View",
  "파이썬 격리: 켜짐": "Python sandbox: on",
  "파이썬 격리: 일부": "Python sandbox: partial",
- "파이썬 격리: 확인 전": "Python sandbox: not checked yet"
+ "파이썬 격리: 확인 전": "Python sandbox: not checked yet",
+ "없는 상품이에요: {}": "No such item: {}",
+ "Lv {}에 열려요": "Unlocks at Lv {}",
+ "모르는 꾸미기 자리예요: {}": "Unknown decoration spot: {}",
+ "이 자리에 쓰는 꾸미기가 아니에요": "This decoration doesn't go here",
+ "아직 가지고 있지 않아요": "You don't own this yet"
 }

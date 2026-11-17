@@ -7,6 +7,7 @@ import { newGarden, cleanGarden } from "./garden/state.js";
 import { newGuard, cleanGuard } from "./guard/state.js";
 import { newProjects, cleanProjects } from "./projects/state.js";
 import { newLevels, cleanLevels, welcomeLevels, levelOf } from "./levels.js";
+import { newDeco, cleanDeco } from "./deco.js";
 import { isDate, DAILY_GOALS } from "./rules.js";
 import { t, normLang } from "./i18n.js";
 
@@ -40,6 +41,7 @@ export function newSave() {
     guard: newGuard(),   // v0.15 경비실(src/guard/state.js). saveVer 그대로, 없거나 망가지면 기본값
     projects: newProjects(), // v0.21.0 프로젝트 공방(src/projects/state.js). saveVer 그대로, 없거나 망가지면 기본값
     levels: newLevels(),     // v0.22.0 레벨 { granted, pending_welcome, legacy }(src/levels.js). saveVer 그대로, 없으면 옮기기(migrate), 망가지면 granted=levelOf(xp)
+    deco: newDeco(),         // v0.22.0 꾸미기 { owned, on: { garden, guard, workshop, editor } }(src/deco.js). saveVer 그대로, 없거나 망가지면 기본값
     goal_pending: null,  // v0.12.1 하루 목표 예약 { value: 10|20|30, from: "YYYY-MM-DD" } — 바꾼 목표는 다음 날부터(rules.js)
     broken_notice: null, // v0.12.1 깨진 저장을 남긴 칸 이름. 홈에서 한 번 알리고 null로
     tutorial: null,      // v0.18.0 첫 사용 튜토리얼 null(아직)|"done"|"skipped". saveVer 그대로, 없거나 이상하면 기록 규칙(migrate)
@@ -114,6 +116,7 @@ function clampRanges(s) {
   s.garden = cleanGarden(s.garden);
   s.guard = cleanGuard(s.guard);
   s.projects = cleanProjects(s.projects);
+  s.deco = cleanDeco(s.deco);
   return s;
 }
 

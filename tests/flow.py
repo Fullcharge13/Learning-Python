@@ -627,7 +627,7 @@ def test_v06_outfit_migration_and_closet():
         a.page.click('[data-go="closet"]')
         a.page.wait_for_selector(".screen.closet")
         tiles = a.page.query_selector_all(".outfit-grid [data-o]")
-        assert len(tiles) == 10, len(tiles)
+        assert len(tiles) == 13, len(tiles)  # v0.22.0: 10벌 + 새 의상 3벌 자리(작업 7까지 기본복장 그림)
         ids = [x.get_attribute("data-o") for x in tiles]
         a.shot("v06-closet-grid.png", full=True)
         descs = {}
@@ -2954,7 +2954,9 @@ def _in_view(a, sel):
 def test_qa0121_closet_preview_in_view():
     """의상실(QA 1·3): 아래쪽 카드(마법사 망토)를 누르면 미리보기·「300바이트로 사기」가 화면 안, 초점은 사기 단추 →
     사면 초점은 「입고 있어요」. 맨 끝 카드(졸업 가운)도 미리보기가 화면 안. 캡처: qa0121-closet-*.png (iPhone 17)"""
-    seed = {"saveVer": 2, "xp": 500, "bytes": 1000, "completed_lessons": ["1-1"]}
+    # v0.22.0: levels를 적어 둔다 — 없으면 옮기기가 환영 선물(+50)을 더한다. legacy라 Lv6에서도 마법사 망토(Lv20)를 산다
+    seed = {"saveVer": 2, "xp": 500, "bytes": 1000, "completed_lessons": ["1-1"],
+            "levels": {"granted": 6, "pending_welcome": 0, "legacy": True}}
     with App("iPhone 17", save=seed) as a:
         a.start()
         a.page.click('[data-go="closet"]')

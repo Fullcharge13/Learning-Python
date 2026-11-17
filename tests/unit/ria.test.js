@@ -4,11 +4,13 @@ import assert from "node:assert/strict";
 import { riaSVG, OUTFIT_IDS, FACE_IDS, RIA_COLORS, RIA_SET, RIA_VIEWBOX } from "../../src/ria.js";
 import { OUTFITS as OUTFIT_TABLE } from "../../data/outfits.js";
 
+// 그림이 있는 10벌(세트2). v0.22.0 새 의상 3벌(new1~3)은 작업 7까지 그림이 없어 기본복장 그림으로 대신 그린다
 const OUTFITS = ["basic", "casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate"];
+const NEW_OUTFITS = ["new1", "new2", "new3"];
 const FACES = ["smile", "joy", "sparkle", "think", "surprise", "worry", "cheer", "wink"];
 
 test("ids: 공통 이름(ledger)과 같다", () => {
-  assert.deepEqual([...OUTFIT_IDS], OUTFITS);
+  assert.deepEqual([...OUTFIT_IDS], [...OUTFITS, ...NEW_OUTFITS]);
   assert.deepEqual([...FACE_IDS], FACES);
 });
 
@@ -61,7 +63,7 @@ test("set2: 지금 쓰는 그림은 #리아_이미지_세트2, 칸 배경 네모
 import { OUTFIT_KO, FACE_KO } from "../../src/ria.js";
 
 test("a11y: 한국어 이름표·role·title", () => {
-  assert.deepEqual(Object.keys(OUTFIT_KO), OUTFITS);
+  assert.deepEqual(Object.keys(OUTFIT_KO), [...OUTFITS, ...NEW_OUTFITS]);
   assert.deepEqual(Object.keys(FACE_KO), FACES);
   for (const o of OUTFIT_TABLE) assert.equal(OUTFIT_KO[o.id], o.short, o.id + ": 의상 표 short와 같음");
   assert.equal(FACE_KO.smile, "미소");
@@ -139,4 +141,16 @@ test("set2 companions: 기본·마법사 그림에만 뱀 친구(초록)가 있�
 test("v0.6 size budget: 한 장이 너무 크지 않다", () => {
   for (const outfit of OUTFITS) for (const face of FACES)
     assert.ok(riaSVG({ outfit, face }).length < 26000, `${outfit}/${face}: ${riaSVG({ outfit, face }).length}`);
+});
+
+// v0.22.0 작업 2: 새 의상 3벌은 그림이 생길 때(작업 7)까지 기본복장 그림, 이름표는 새 의상 이름
+test("new outfits: new1~3은 기본복장 그림으로 대신 그리고, 이름표는 자기 이름", () => {
+  const body = (svg) => svg.slice(svg.indexOf('<g class="ria-body">'));
+  for (const outfit of NEW_OUTFITS) for (const face of FACES) {
+    const s = riaSVG({ outfit, face });
+    assert.ok(s.startsWith("<svg") && s.trimEnd().endsWith("</svg>"), `${outfit}/${face}`);
+    assert.equal(body(s), body(riaSVG({ outfit: "basic", face })), `${outfit}/${face}: 기본복장 그림`);
+    assert.match(s, new RegExp(`aria-label="[^"]*${OUTFIT_KO[outfit]}"`), `${outfit}: 이름표`);
+    assert.notEqual(s, riaSVG({ outfit: "basic", face }), `${outfit}: 이름표가 기본복장과 다름`);
+  }
 });

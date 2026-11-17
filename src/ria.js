@@ -7,7 +7,8 @@ import { RIA_SET2 } from "../data/ria_set2.js";
 import { t, tp, tx } from "./i18n.js";
 
 export const RIA_SET = "set2";
-export const OUTFIT_IDS = Object.freeze(["basic", "casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate"]);
+// v0.22.0: new1~3은 작업 7까지 그림(세트2 칸)이 없어 기본복장 그림으로 대신 그린다(artOf)
+export const OUTFIT_IDS = Object.freeze(["basic", "casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate", "new1", "new2", "new3"]);
 export const FACE_IDS = Object.freeze(["smile", "joy", "sparkle", "think", "surprise", "worry", "cheer", "wink"]);
 // 80칸 전체를 감싸는 틀(원본 좌표). 세트1과 같은 가로세로 비율(200:260)이라 화면 배치가 그대로다.
 export const RIA_VIEWBOX = "166 -6 354 460";
@@ -16,6 +17,7 @@ const RATIO = 260 / 200;
 export const OUTFIT_KO = Object.freeze({ // I18N_SKIP: 한국어 기준 표(영어는 tx outfit.*.short)
   basic: "기본복장", casual: "캐주얼룩", whitecoat: "화이트 코트", hoodie: "후드티", gym: "체육복",
   chef: "요리사 옷", explorer: "탐험가 옷", uniform: "교복", wizard: "마법사 망토", graduate: "졸업 가운", // I18N_SKIP: 한국어 기준 표
+  new1: "새 의상 1", new2: "새 의상 2", new3: "새 의상 3", // I18N_SKIP: 한국어 기준 표(자리 이름, 작업 7에서 바꿈)
 });
 export const FACE_KO = Object.freeze({ // I18N_SKIP: 한국어 기준 표(영어는 faceName)
   smile: "미소", joy: "기쁨", sparkle: "반짝", think: "생각", surprise: "놀람", worry: "걱정", cheer: "응원", wink: "장난",
@@ -29,6 +31,9 @@ const faceName = (f) => ({
   smile: tp("face", "미소"), joy: tp("face", "기쁨"), sparkle: tp("face", "반짝"), think: tp("face", "생각"),
   surprise: tp("face", "놀람"), worry: tp("face", "걱정"), cheer: tp("face", "응원"), wink: tp("face", "장난"),
 })[f];
+
+// 그림 칸이 있는 의상만 자기 그림, 없으면 기본복장 그림(새 의상 자리)
+const artOf = (oid) => (Object.hasOwn(RIA_SET2.cells, oid + "_smile") ? oid : "basic");
 
 const cache = new Map();
 function cell(oid, fid) {
@@ -54,5 +59,5 @@ export function riaSVG(opts) {
   const fid = typeof face === "string" && FACE_IDS.includes(face) ? face : "smile";
   const sz = clampSize(size);
   const label = t`리아 교수, ${faceName(fid)}, ${tx(`outfit.${oid}.short`, OUTFIT_KO[oid])}`; // v0.13.0 영어판
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="ria" viewBox="${RIA_VIEWBOX}" width="${n(sz)}" height="${n(sz * RATIO)}" role="img" aria-label="${label}"><title>${label}</title><g class="ria-body">${cell(oid, fid)}</g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="ria" viewBox="${RIA_VIEWBOX}" width="${n(sz)}" height="${n(sz * RATIO)}" role="img" aria-label="${label}"><title>${label}</title><g class="ria-body">${cell(artOf(oid), fid)}</g></svg>`;
 }

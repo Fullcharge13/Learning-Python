@@ -40,6 +40,7 @@ const LEDGER_SHAPE = {
   guard: newGuard(),   // v0.15 경비실(saveVer 그대로, 없으면 기본값)
   projects: newProjects(), // v0.21.0 프로젝트 공방(saveVer 그대로, 없으면 기본값)
   levels: { granted: 1, pending_welcome: 0, legacy: false }, // v0.22.0 레벨(saveVer 그대로, 없으면 옮기기)
+  deco: { owned: [], on: { garden: null, guard: null, workshop: null, editor: null } }, // v0.22.0 꾸미기(saveVer 그대로, 없거나 망가지면 기본값)
   goal_pending: null,  // v0.12.1 하루 목표 예약(내일부터)
   broken_notice: null, // v0.12.1 깨진 저장 안내(한 번)
   tutorial: null,      // v0.18.0 첫 사용 튜토리얼(null|"done"|"skipped")
@@ -611,4 +612,33 @@ test("save: 옛 저장 가져오기", () => {
   assert.deepEqual(viaLoad.levels, viaImport.levels);
   assert.equal(viaLoad.bytes, viaImport.bytes);
   assert.equal(xpForLevel(13) <= 1400, true);
+});
+
+// ---- v0.22.0 꾸미기 deco (설계 §5-4, §5-5): clean-or-default ----
+const DECO_DEFAULT = { owned: [], on: { garden: null, guard: null, workshop: null, editor: null } };
+
+test("save: newSave().deco 기본값, deco 없는 저장도 기본값", () => {
+  assert.deepEqual(newSave().deco, DECO_DEFAULT);
+  const old = { ...newSave() }; delete old.deco;
+  assert.deepEqual(migrate(old).deco, DECO_DEFAULT);
+});
+
+test("save: deco 정리 — 망가진 값, 모르는 id, 가지지 않은 켬 상태", () => {
+  for (const bad of [null, 3, "x", [], { owned: "gd_fence" }, { on: 5 }]) {
+    assert.deepEqual(migrate({ ...newSave(), deco: bad }).deco, DECO_DEFAULT, JSON.stringify(bad));
+  }
+  const s = migrate({ ...newSave(), deco: {
+    owned: ["gd_fence", "nope", 7, "gd_fence", "casual", "ed_sea", "__proto__", "gu_night"],
+    on: { garden: "gd_fence", guard: "gu_control", workshop: 3, editor: "gd_fence", kitchen: "ed_sea" },
+  } });
+  assert.deepEqual(s.deco.owned, ["gd_fence", "gu_night", "ed_sea"], "상품 표 순서, 중복 없음");
+  assert.deepEqual(s.deco.on, { garden: "gd_fence", guard: null, workshop: null, editor: null });
+  const good = { owned: ["ws_metal", "ed_night"], on: { garden: null, guard: null, workshop: "ws_metal", editor: "ed_night" } };
+  assert.deepEqual(migrate({ ...newSave(), deco: good }).deco, good, "바른 값은 그대로");
+});
+
+test("save: 새 의상 id(new1~3)는 가진 의상으로 남는다", () => {
+  const s = migrate({ ...newSave(), outfits: ["basic", "new2", "new1"], outfit: "new2" });
+  assert.deepEqual(s.outfits, ["basic", "new1", "new2"]);
+  assert.equal(s.outfit, "new2");
 });

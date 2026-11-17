@@ -1,4 +1,4 @@
-// 의상 10벌 (설계 2026-10-31 「리아 의상 교체」 §1). short: 대사 {outfit}에 넣는 짧은 이름(C16, 조사 없이).
+// 의상 10벌 (설계 2026-10-31 「리아 의상 교체」 §1) + v0.22.0 새 의상 3벌. short: 대사 {outfit}에 넣는 짧은 이름(C16, 조사 없이).
 // price: null = 판매 안 함. unlock = 판매 외 얻는 방법. desc = 의상실 설명(참고 그림의 문구를 그림 대신 여기에 씀)
 // voice: 입으면 바뀌는 오류 설명 말투(data/errors.js의 같은 이름 칸). 탐정 말투는 탐험가(판정 C42)
 export const OUTFITS = [
@@ -12,6 +12,11 @@ export const OUTFITS = [
   { id: "uniform", short: "교복", name: "교복", price: 240, desc: "열심히 공부하는 리아!" },
   { id: "wizard", short: "마법사 망토", name: "판타지 마법사", price: 300, desc: "마법처럼 지식을 발견해요!" },
   { id: "graduate", short: "졸업 가운", name: "졸업 가운·학사모", price: null, unlock: "streak30", desc: "꾸준함이 졸업장을 만들어요!" },
+  // v0.22.0 새 의상 3벌(설계 2026-11-17 §5-4). 이름·설명·그림은 작업 7에서 정한다(지금은 자리 이름, 그림은 기본복장). id는 바꾸지 않는다.
+  // price는 data/shop.js 표와 같아야 한다(시험이 확인). 레벨 제한은 data/shop.js에.
+  { id: "new1", short: "새 의상 1", name: "새 의상 1", price: 300, desc: "곧 모습이 정해질 첫 번째 새 의상!" },
+  { id: "new2", short: "새 의상 2", name: "새 의상 2", price: 360, desc: "곧 모습이 정해질 두 번째 새 의상!" },
+  { id: "new3", short: "새 의상 3", name: "새 의상 3", price: 400, desc: "곧 모습이 정해질 세 번째 새 의상!" },
 ];
 
 // saveVer 1 → 2 옮기기 표 (설계 §2). 새 짝이 있는 옛 의상은 이름만 바꾸고, 없어진 의상은 산 값만큼 바이트로 돌려준다.

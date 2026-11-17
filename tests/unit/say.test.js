@@ -113,7 +113,7 @@ test("placeholders: {streak}·{xp} 채움", () => {
 });
 
 test("outfit_short: 모든 의상에 short 이름이 있음 (C16)", () => {
-  assert.equal(OUTFITS.length, 10);
+  assert.equal(OUTFITS.length, 13); // v0.6 10벌 + v0.22.0 새 의상 3벌
   for (const o of OUTFITS) {
     assert.equal(typeof o.short, "string", o.id);
     assert.ok(o.short.length > 0 && o.short.length <= 8, `${o.id}: ${o.short}`);

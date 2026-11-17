@@ -7,6 +7,7 @@ import { badgeArt } from "./badges.js";
 import { courseJustFinished } from "../curriculum.js";
 import { isAdvancedLesson } from "../advanced.js";
 import { t, tx } from "../i18n.js";
+import { levelLineHTML } from "./levelline.js";
 
 export function render(root, ctx, params = {}) {
   const r = params.result;
@@ -18,9 +19,9 @@ export function render(root, ctx, params = {}) {
   const finished = !review && !daily && courseJustFinished({ chapters: ctx.chapters, completed: ctx.save.completed_lessons, firstTime: r.firstTime, lessonId: r.lessonId });
   const line = ctx.say(finished ? "course_done" : "lesson_done", { xp: r.xp });
   const streakLine = r.streakUp || r.milestone ? ctx.say("streak_up", { streak: r.streak }) : null;
-  const bytes = r.totalBytes ?? (r.lessonBytes + r.questBytes + (r.milestoneBytes || 0));
+  const bytes = r.totalBytes ?? (r.lessonBytes + r.questBytes + (r.milestoneBytes || 0) + (r.levelBytes || 0));
   const parts = [[daily ? t`도전` : t`레슨`, r.lessonBytes], ...(daily ? [[t`도전 7일 보너스`, r.bonusBytes || 0]] : []),
-    [t`퀘스트`, r.questBytes], [t`연속 기록`, r.milestoneBytes || 0]].filter(([, v]) => v > 0);
+    [t`퀘스트`, r.questBytes], [t`연속 기록`, r.milestoneBytes || 0], [t`레벨`, r.levelBytes || 0]].filter(([, v]) => v > 0); // v0.22.0 「레벨」 출처
   const acc = Math.round((r.accuracy ?? 1) * 100);
   const quests = r.finished.map((id) => QUESTS.find((q) => q.id === id)).filter(Boolean);
   const badges = r.newBadges.map((id) => BADGES.find((b) => b.id === id)).filter(Boolean);
@@ -35,6 +36,7 @@ export function render(root, ctx, params = {}) {
       ${daily && r.xp ? `<p class="daily-done">${icon("flame")}<span>${esc(t`도전 ${r.dailyStreak}일째`)}</span>${r.bonusBytes
         ? `<b class="sun-text">${esc(t`7일 보너스 +${r.bonusBytes}바이트`)}</b>` : ""}</p>` : ""}
       ${daily && !r.xp ? `<p class="muted center">${t`오늘의 도전 보상은 이미 받았어요. 내일 새 문제가 와요.`}</p>` : ""}
+      ${levelLineHTML(r.levelUp)}
       ${r.milestone ? `<p class="milestone">${icon("flame")}<span>${esc(`${t`연속 ${r.milestone}일!`} ${MILESTONE_REWARD[r.milestone] || ""}`)}</span></p>` : ""}
       <ul class="tiles" aria-label="${t`받은 보상`}">
         <li class="tile xp">${icon("xp")}<b>+${r.xp}</b><span>XP</span></li>
@@ -56,10 +58,8 @@ export function render(root, ctx, params = {}) {
   </div>`;
   root.querySelector("#home").addEventListener("click", () => ctx.show("home"));
   (async () => {
-    if (r.milestone) {
-      ctx.sound.play("levelup");
-      await celebrate({ outfit: ctx.save.outfit, milestone: r.milestone });
-    }
+    if (r.milestone || r.levelUp) ctx.sound.play("levelup"); // 이정표와 레벨업이 겹쳐도 한 번(v0.22.0)
+    if (r.milestone) await celebrate({ outfit: ctx.save.outfit, milestone: r.milestone });
     await ctx.afterDone(); // 첫 레슨이면 「홈 화면에 추가」 안내(아이폰 사파리만)
     root.querySelector("#home")?.focus({ preventScroll: true });
   })();

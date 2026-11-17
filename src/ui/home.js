@@ -182,7 +182,7 @@ export function render(root, ctx) {
   const currentId = ctx.currentLessonId();
   const cur = currentId ? ctx.lessonById(currentId) : null;
   const broken = ctx.takeBrokenNotice ? ctx.takeBrokenNotice() : null; // 깨진 저장 안내(v0.12.1): 한 번만
-  const notice = ctx.takeNotice ? ctx.takeNotice() : null; // 환불 안내가 있으면 그날 인사보다 먼저(판정 C42)
+  const notice = ctx.takeNotice ? ctx.takeNotice() : null; // 환불·레벨 환영 안내가 있으면 그날 인사보다 먼저(판정 C42, v0.22.0)
   const special = notice ? null : ctx.takeGreeting();
   const line = notice || ctx.say(special || "greet");
   const dst = ctx.daily ? ctx.daily() : null;   // 오늘 문제 고정(저장) + 카드 상태
@@ -199,7 +199,7 @@ export function render(root, ctx) {
       </section>` : ""}
       ${dst && dst.state !== "locked" ? dailyCard(dst) : ""}
       <section class="hello">
-        ${riaSays({ outfit: save.outfit, face: line.face, text: line.text, size: 92, cls: notice ? "refund-notice" : "" })}
+        ${riaSays({ outfit: save.outfit, face: line.face, text: line.text, size: 92, cls: notice ? (notice.situation === "welcome" ? "refund-notice welcome-notice" : "refund-notice") : "" })}
         ${cur && !allDone ? `<button class="btn primary wide" id="continue">${icon("play")}<span>${save.completed_lessons.length ? t`이어서 하기` : t`첫 레슨 시작`} · ${esc(cur.id)} ${esc(cur.title)}</span></button>` : ""}
         ${allDone ? `<p class="all-done">${t`준비된 레슨을 모두 끝냈어요. 다시 풀거나 복습하며 XP를 모아 봐요.`}</p>` : ""}
       </section>

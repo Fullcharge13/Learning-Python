@@ -470,6 +470,30 @@ def sc_workshop(r):
         r.cap(a, "play-error")
 
 
+def sc_levels(r):
+    """v0.22.0 작업 4: 홈 환영 알림(levels 없는 옛 저장), 레슨 결과 레벨 줄, 텃밭 주문 완료 창 레벨 줄"""
+    import flow
+    with _app(r.theme, save={"saveVer": 2, "xp": 1100, "bytes": 0, "completed_lessons": ["1-1"], "current_lesson": "1-2"}) as a:
+        a.start()
+        a.page.wait_for_selector(".hello .welcome-notice")
+        r.cap(a, "home-welcome")
+    lv1 = {"granted": 1, "pending_welcome": 0, "legacy": True}
+    with _app(r.theme, save={"saveVer": 2, "xp": 20, "bytes": 0, "levels": lv1}) as a:
+        a.start()
+        a.page.click("#continue")
+        a.play("1-1")
+        a.page.wait_for_selector(".screen.done .level-line")
+        r.cap(a, "done-levelup")
+    seed = flow._garden_seed(1, xp=29)
+    seed["levels"] = lv1
+    with _app(r.theme, save=seed) as a:
+        flow._open_garden(a)
+        flow._garden_run(a, skip=True)
+        a.page.wait_for_selector(".modal .g-done-body .level-line", timeout=15_000)
+        a.page.wait_for_timeout(flow.GUARD_WAIT)
+        r.cap(a, "garden-done-levelup")
+
+
 def run_app(theme, skip_tokens, skip_art=False):
     import flow
     flow.env()
@@ -479,6 +503,7 @@ def run_app(theme, skip_tokens, skip_art=False):
     r.scenario("3장 통과 저장: 경비실", lambda: sc_guard(r))
     r.scenario("4장 통과·3장 기본 해결 저장: 경비실 응용 사건", lambda: sc_guard_field(r))
     r.scenario("5장 통과·P1 완성 저장: 프로젝트 공방", lambda: sc_workshop(r))
+    r.scenario("레벨: 환영 알림·레벨 줄(v0.22.0)", lambda: sc_levels(r))
     return r
 
 

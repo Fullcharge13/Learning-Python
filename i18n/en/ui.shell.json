@@ -252,5 +252,12 @@
  "Lv {}에 열려요": "Unlocks at Lv {}",
  "모르는 꾸미기 자리예요: {}": "Unknown decoration spot: {}",
  "이 자리에 쓰는 꾸미기가 아니에요": "This decoration doesn't go here",
- "아직 가지고 있지 않아요": "You don't own this yet"
+ "아직 가지고 있지 않아요": "You don't own this yet",
+ "레벨 {}! {}{} 됐어요": "Level {0}! Rank: {1}",
+ "+{}바이트": "+{0} {0|Byte|Bytes}",
+ "새 상품 {}개": "{0} new {0|item|items} in the shop",
+ "레벨": "Level",
+ "레벨 {} {}, 가장 높은 레벨": "Level {0} {1}, the top level",
+ "레벨 {} {}, 다음 레벨까지 {} XP": "Level {0} {1}, {2} XP to the next level",
+ "레벨이 새로 생겼어요! 그동안 모은 XP로 Lv {} · +{}바이트 환영 선물을 받았어요.": "Levels are here! For the XP you've already earned: Lv {0} · +{1} Bytes as a welcome gift."
 }

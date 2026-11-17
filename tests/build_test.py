@@ -49,7 +49,7 @@ DEV_OUT = os.path.join(OUT, "dist-dev")
 CDN_HOST = "cdn.jsdelivr.net"   # v0.19.2(H-C1): 배포판 어디에도 나오면 안 됨
 PY_CORE_FILES = ("pyodide.mjs", "pyodide.asm.mjs", "pyodide.asm.wasm", "python_stdlib.zip", "pyodide-lock.json")
 REL_OUT = os.path.join(OUT, "dist-rel")
-MAX_RAW = 614_400  # 판정 C28 → … → G-C6(850KB) → v0.17.0 첫 화면 가볍게: 600KB(목표 520KB)
+MAX_RAW = 614_400  # 판정 C28 → … → G-C6(850KB) → v0.17.0 첫 화면 가볍게: 600KB(목표 520KB → v0.22.0 550KB)
 V02_RAW = 667397  # v0.2 dist/index.html (651.8 KB). v0.3~v0.9는 이보다 작아야 했음
 FIRST_FILE_MAX = 614_400  # 판정 C61 → … → v0.17.0: 첫 파일 상한을 build.py와 같게
 CHAPTER_FILE = re.compile(r"^ch(\d+)-([0-9a-f]{8})\.json$")
@@ -1599,7 +1599,7 @@ def test_third_party_notices():
     html = _read(os.path.join(DIST, "index.html"))
     assert "licenses.txt" in html, "settings must link to licenses.txt"
 
-FIRST_FILE_GOAL = 532_480        # 520KB 목표
+FIRST_FILE_GOAL = 563_200        # 550KB 목표 (v0.22.0 판정: 520KB → 550KB, 상한 600KB 그대로)
 EDITOR_CHUNK_MAX = 430_080       # 420KB
 ERRORS_CHUNK_MAX = 40_960        # 40KB
 CHUNK_NAME = re.compile(r"^js/(editor|errors)-([0-9a-f]{8})\.js$")
@@ -1612,7 +1612,7 @@ def _ria_chunks(html):
 
 
 def test_chunks_split():
-    """v0.17.0 작업 4: 첫 파일은 600KB 아래(목표 520KB), 편집기·오류 안내는 따로 나간 지문 이름 파일. 첫 파일에 편집기(CodeMirror)·
+    """v0.17.0 작업 4: 첫 파일은 600KB 아래(목표 520KB, v0.22.0부터 550KB), 편집기·오류 안내는 따로 나간 지문 이름 파일. 첫 파일에 편집기(CodeMirror)·
     오류 안내 글이 없고, 편집기 묶음에 앱의 i18n.js(언어 상태)가 없다. 서비스 작업자가 설치 때 미리 받고 저장본 먼저."""
     _build()
     raw = open(os.path.join(DIST, "index.html"), "rb").read()

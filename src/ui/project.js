@@ -9,6 +9,7 @@ import { BADGES } from "../../data/badges.js";
 import { passedChapters } from "../garden/state.js";
 import { stepState, saveDraft, passStep, restartInLang, projectOpen } from "../projects/state.js";
 import { esc, icon, bar, dialog, riaSays, toast, codeBlock, celebrate } from "./dom.js";
+import { levelLineHTML } from "./levelline.js";
 import { mountWrite } from "./write.js";
 import { t, tx, lang, tp } from "../i18n.js";
 
@@ -168,14 +169,14 @@ export function render(root, ctx, params = {}) {
     if (r.save === ctx.save) { S.busy = false; showStep(); return; }   // 지금 단계가 아님(다른 곳에서 바뀜): 다시 맞춤
     ctx.commit(r.save);
     dropItem();
-    ctx.sound.play(r.completed ? "done" : "correct");
+    ctx.sound.play(r.levelUp ? "levelup" : r.completed ? "done" : "correct");   // v0.22.0: 레벨업이면 레벨업 소리 한 번
     const say = (text, face) => riaSays({ outfit: ctx.save.outfit, face, text, size: 64 });
     let v;
     if (r.completed) {
       v = await dialog({
         title: t`완성!`,
         body: `<div class="pj-done">${say(S.body.finale, "joy")}
-          <p class="g-done-xp">${icon("xp")}<span>${esc(r.xp ? `XP +${r.xp}` : t`이미 완성한 작품이라 XP는 없어요`)}</span></p>
+          <p class="g-done-xp">${icon("xp")}<span>${esc(r.xp ? `XP +${r.xp}` : t`이미 완성한 작품이라 XP는 없어요`)}</span></p>${levelLineHTML(r.levelUp)}
           <p class="pj-shelf-note">${icon("star")}<span>${t`진열장에 놓았어요. 언제든 다시 실행할 수 있어요.`}</span></p></div>`,
         buttons: [{ label: t`한 판 해 보기`, value: "play", kind: "primary" }, { label: t`공방으로`, value: "list" }],
       });
@@ -184,7 +185,7 @@ export function render(root, ctx, params = {}) {
       v = await dialog({
         title: viaButton ? t`모범 코드로 넘어가요` : t`${n + 1}단계 통과!`,
         body: `<div class="pj-pass">${say(S.body.steps[n].explain || ctx.say("correct").text, viaButton ? "smile" : "joy")}
-          <p class="g-done-xp">${icon("xp")}<span>${esc(xpLine)}</span></p></div>`,
+          <p class="g-done-xp">${icon("xp")}<span>${esc(xpLine)}</span></p>${levelLineHTML(r.levelUp)}</div>`,
         buttons: [{ label: t`다음 단계`, value: "next", kind: "primary" }],
       });
     }

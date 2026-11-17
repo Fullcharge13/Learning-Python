@@ -12,6 +12,7 @@ import { cleanGuard, markSeen, guardInput, guardConsistent, rankOf, applyGuardRu
 import { passedChapters } from "../garden/state.js";
 import { sheet } from "./garden.js";
 import { esc, icon, dialog, toast, riaSays, celebrate } from "./dom.js";
+import { levelLineHTML } from "./levelline.js";
 import { mountEditor } from "./editorslot.js";
 import { errorPanel, waitForClues } from "./write.js";
 import { SYMBOL_ORDER } from "../kbd.js";
@@ -443,11 +444,11 @@ export function render(root, ctx, params = {}) {
 
   /** 처음 해결: 텃밭 주문 완료와 같은 모양(창 → 이정표 축하 → 새 배지 알림) */
   async function solvedDialog(inc, out) {
-    ctx.sound.play("done");
+    ctx.sound.play(out.levelUp ? "levelup" : "done");   // v0.22.0: 레벨업이면 레벨업 소리 한 번
     await dialog({
       title: t`사건 해결!`,
       body: `<div class="gd-done g-done-body"><div class="gd-crow-row"><div class="gd-crow">${crowSVG({ pose: inc.crow.lose, size: 64 })}</div><p class="bubble gd-say">${esc(txt(inc, "crowLose"))}</p></div>${riaSays({ outfit: ctx.save.outfit, face: "joy", text: t`「${txt(inc, "title")}」 사건을 해결했어요. 문을 잘 지켰어요!`, size: 64 })}
-        <p class="g-done-xp">${icon("xp")}<span>XP +${out.xp}</span></p>${fileCardHTML(inc)}</div>`,
+        <p class="g-done-xp">${icon("xp")}<span>XP +${out.xp}</span></p>${levelLineHTML(out.levelUp)}${fileCardHTML(inc)}</div>`,
       buttons: [{ label: t`좋아요`, value: true, kind: "primary" }],
     });
     if (S.destroyed) return;

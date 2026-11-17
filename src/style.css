@@ -195,6 +195,13 @@ button { cursor: pointer; }
 .stat.flame.lit .ic { color: #E8742E; fill: #FFB347; }
 .stat.byte .ic { color: var(--teal-ink); }
 .stat.xp .ic { color: var(--sun-deep); fill: var(--sun); }
+/* v0.22.0 레벨(설계 §5-3): XP 바로 아래(목표 줄 오른쪽 끝) 「Lv 7」 + 다음 레벨까지 작은 막대(글자 아래).
+   네 칸을 위 줄에 다 넣으면 영어·큰 숫자에서 375px를 넘어 줄이 깨졌다 */
+.goal.with-lv { grid-template-columns: auto 1fr auto; }
+.stat.lv { min-height: 0; font-size: .95rem; }
+.stat.lv .stat-in { flex-direction: column; align-items: stretch; gap: 2px; }
+.stat.lv b { line-height: 1.1; white-space: nowrap; color: var(--ink); }
+.lv-bar { height: 6px; min-width: 40px; border-width: 1px; }
 .goal { margin-top: 6px; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; font-size: .85rem; color: var(--ink-2); }
 .goal b { color: var(--ink); }
 .goal.met .goal-label { color: var(--teal-ink); font-weight: 700; }
@@ -278,6 +285,9 @@ main { padding: 16px calc(16px + var(--sar)) 0 calc(16px + var(--sal)); }
 .daily-ic { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; color: var(--ink-2); background: var(--card); flex: none; }
 .daily-done { display: flex; gap: 8px; align-items: center; background: var(--teal-soft); border: 2px solid var(--teal); border-radius: 16px; padding: 12px 14px; font-weight: 800; color: var(--teal-deep); }
 .daily-done .ic { color: var(--coral-ink); }
+/* v0.22.0 레벨 축하 한 줄: 결과 화면·통과 창. 새 창 없이 */
+.level-line { display: flex; gap: 8px; align-items: center; background: var(--sun-soft); border: 2px solid var(--sun); border-radius: 16px; padding: 10px 14px; margin: 10px 0; font-weight: 800; color: var(--ink); text-align: left; }
+.level-line .ic { flex: none; color: var(--sun-deep); fill: var(--sun); }
 .tag.daily { background: var(--teal-soft); color: var(--teal-deep); }
 .lesson-tag.daily { font-family: var(--sans); color: var(--teal-ink); }
 .quest-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }

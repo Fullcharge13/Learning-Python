@@ -5,6 +5,8 @@ import { localDate } from "../today.js";
 import { gardenTab, passedChapters } from "../garden/state.js";
 import { guardNews } from "../guard/state.js";
 import { t, tp } from "../i18n.js";
+import { levelProgress } from "../levels.js";
+import { levelName } from "./levelline.js";
 
 // v0.12.5: 「텃밭」 칸(학습과 배지 사이). 텃밭 화면 안에서는 탭 줄을 그리지 않는다(레슨처럼 몰입 화면)
 // 이름은 그릴 때마다 지금 언어로
@@ -55,11 +57,21 @@ export function statusBar(save) {
       <span class="stat byte"><span aria-hidden="true" class="stat-in">${icon("byte")}<b>${Math.max(0, save.bytes)}</b><small>${t`바이트`}</small></span><span class="sr">${t`바이트 ${Math.max(0, save.bytes)}`}</span></span>
       <span class="stat xp"><span aria-hidden="true" class="stat-in">${icon("xp")}<b>${Math.max(0, save.xp)}</b><small>XP</small></span><span class="sr">XP ${Math.max(0, save.xp)}</span></span>
     </div>
-    <div class="goal${met ? " met" : ""}">
+    <div class="goal with-lv${met ? " met" : ""}">
       <span class="goal-label">${met ? t`오늘 목표 달성` : t`오늘 목표`} <b>${Math.min(todayXp, 999)}/${goal} XP</b></span>
       ${bar(todayXp, goal, "goal-bar", t`오늘 목표 XP`)}
+      ${levelStat(save)}
     </div>
   </header>`;
+}
+
+// v0.22.0(설계 §5-3): XP 바로 아래(목표 줄 끝)에 「Lv 7」과 다음 레벨까지의 막대. 최고 레벨이면 막대가 다 참
+function levelStat(save) {
+  const p = levelProgress(save.xp);
+  const name = levelName(p.level);
+  const top = p.need === 0;
+  const sr = top ? t`레벨 ${p.level} ${name}, 가장 높은 레벨` : t`레벨 ${p.level} ${name}, 다음 레벨까지 ${p.need - p.into} XP`;
+  return `<span class="stat lv"><span aria-hidden="true" class="stat-in"><b>Lv ${p.level}</b>${bar(top ? 1 : p.into, top ? 1 : p.need, "lv-bar")}</span><span class="sr">${esc(sr)}</span></span>`;
 }
 
 function localToday() { return localDate(); }

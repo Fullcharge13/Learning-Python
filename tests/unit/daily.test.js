@@ -270,3 +270,17 @@ test("finish: 레벨 선물은 milestoneBytes에 안 섞임 (매일 도전)", ()
   assert.equal(again.levelUp, null);
   assert.equal(again.levelBytes, 0);
 });
+
+// v0.22.0 작업 4 carry-over M1: 한 번의 보상에서 연속 기록 이정표와 레벨업이 함께 (매일 도전)
+test("finish: 이정표(7일)와 레벨업이 같은 보상에서 (매일 도전)", () => {
+  let s = ensureDaily(save({ completed_lessons: ids(1), xp: xpForLevel(2) - 1,
+    streak: { days: 6, best: 6, lastGoalDate: "2026-11-04", todayDate: "2026-11-05", todayXp: 10 } }), "2026-11-05", INDEX);
+  s = recordDaily(s, "2026-11-05", [0, 1, 2], []);
+  const { save: out, result } = finishDaily(s, { itemsSolved: 3, logs: [] }, NOW("2026-11-05"));
+  assert.equal(result.milestone, 7);
+  assert.equal(result.milestoneBytes, 50);
+  assert.deepEqual(result.levelUp, { from: 1, to: 2, bytes: levelGift(2) });
+  assert.equal(result.levelBytes, levelGift(2));
+  assert.equal(result.totalBytes, result.lessonBytes + result.bonusBytes + result.questBytes + result.milestoneBytes + result.levelBytes);
+  assert.equal(out.bytes - s.bytes, result.totalBytes);
+});

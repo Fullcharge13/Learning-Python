@@ -149,3 +149,16 @@ test("finish: 레벨이 안 오르면 levelUp null, levelBytes 0", () => {
   assert.equal(result.levelUp, null);
   assert.equal(result.levelBytes, 0);
 });
+
+// v0.22.0 작업 4 carry-over M1: 한 번의 보상에서 연속 기록 이정표와 레벨업이 함께 — 두 출처가 따로, 둘 다 맞게
+test("finish: 이정표(7일)와 레벨업이 같은 보상에서 (레슨)", () => {
+  const s0 = { ...newSave(), xp: xpForLevel(2) - 1 };
+  s0.streak = { days: 6, best: 6, lastGoalDate: "2026-10-28", todayDate: "2026-10-28", todayXp: 20 };
+  const { save, result } = finishLesson(s0, base(), at());
+  assert.equal(result.milestone, 7);
+  assert.equal(result.milestoneBytes, 50);
+  assert.deepEqual(result.levelUp, { from: 1, to: 2, bytes: levelGift(2) });
+  assert.equal(result.levelBytes, levelGift(2));
+  assert.equal(result.totalBytes, result.lessonBytes + result.questBytes + result.milestoneBytes + result.levelBytes);
+  assert.equal(save.bytes - s0.bytes, result.totalBytes);
+});

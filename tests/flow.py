@@ -77,6 +77,9 @@
                  영어로 열면 고르기 창(이 언어로·한국어로 바꾸기) / 들락날락해도 한 번만 / 영어 화면에 한글 없음 / 개발자 칸은 따로 /
                  주고받기: 빈 답·긴 답(500자), 숫자 아닌 답 「숫자로 입력해야 해요」+「다시 하기」, 입력 50번 상한, 끝나지 않는 반복(시간 제한),
                  출력 앞부분이 달라짐(처음부터 다시 보여 줌). 넘침·터치 44px. 캡처: workshop-*.png (iPhone 17)
+- test_level_* / test_levelup_* / test_welcome_once: v0.22.0 작업 4. 상태 줄 「Lv n」+막대(목표 줄 끝, XP 바로 아래) /
+                 레슨·경비실·텃밭·공방 레벨업 한 줄(새 창 없음, 소리 한 번, 바이트 출처 「레벨」, 새 상품 수) / 옛 저장·가져오기 환영 알림
+                 한 번 / 영어·어둡게. 캡처: level-*.png (iPhone 17)
 """
 
 import atexit
@@ -609,7 +612,9 @@ def test_old_save():
         s = a.save()
         a.shot("old-save-home.png")
         assert xp == "30", xp
-        assert s["saveVer"] == 2 and s["xp"] == 30 and s["bytes"] == 0, s
+        # v0.22.0: levels 없는 옛 저장 → 레벨 2, 환영 선물 10바이트(홈 알림으로 한 번)
+        assert s["saveVer"] == 2 and s["xp"] == 30 and s["bytes"] == 10, s
+        assert s["levels"] == {"granted": 2, "pending_welcome": 0, "legacy": True}, s["levels"]
         assert a.page.is_visible("#continue")
         assert not a.errors, a.errors
 
@@ -622,7 +627,7 @@ def test_v06_outfit_migration_and_closet():
         s = a.save()
         assert s["saveVer"] == 2, s
         assert s["outfits"] == ["basic", "whitecoat", "explorer"], s["outfits"]
-        assert s["outfit"] == "whitecoat" and s["bytes"] == 5 + 180, s
+        assert s["outfit"] == "whitecoat" and s["bytes"] == 5 + 180 + 10, s   # v0.22.0: + 환영 선물(레벨 2)
         a.dismiss()
         a.page.click('[data-go="closet"]')
         a.page.wait_for_selector(".screen.closet")
@@ -1294,9 +1299,19 @@ def _chapters_done(n):
     return ["%d-%d" % (c, k) for c in range(1, n + 1) for k in range(1, 6)]
 
 
+def _level_of(xp):
+    """src/levels.js levelOf와 같은 곡선(30 + 10(n−1))"""
+    L = 1
+    while L < 30 and xp >= 30 * L + 5 * L * (L - 1):
+        L += 1
+    return L
+
+
 def _garden_seed(chapters, garden=None, xp=0):
+    # v0.22.0: levels를 적어 둔다 — 없으면 옮기기가 환영 선물(바이트)과 홈 환영 알림을 더해 바이트·인사 시험이 흔들린다
     s = {"saveVer": 2, "xp": xp, "bytes": 0, "completed_lessons": _chapters_done(chapters),
          "current_chapter": chapters + 1, "current_lesson": "%d-1" % (chapters + 1),
+         "levels": {"granted": _level_of(xp), "pending_welcome": 0, "legacy": xp > 0},
          "settings": {"sound": False, "dailyGoal": 10, "name": ""}}
     if garden is not None:
         s["garden"] = garden
@@ -6841,6 +6856,273 @@ def test_workshop_randint_card():
             assert "randint(a, b)" in txt and "목록" not in txt and "choice" not in txt, (btn, txt)
             a.page.wait_for_function("() => !document.querySelector('#submit').disabled && !document.querySelector('#run').disabled")
         assert not _app_errors(a), a.errors
+
+
+
+# ---------------------------------------------------------------- v0.22.0 레벨 표시·축하 줄·환영 알림 (작업 4)
+# 곡선 30 + 10(n−1): 레벨 2 = 30 XP, 레벨 3 = 70 XP, 레벨 13 = 1,020 XP. 선물 10 + 2L: Lv2 14, Lv3 16. 환영 min(10(L−1), 200)
+LV2_XP, LV3_XP = 30, 70
+
+
+def _lv(granted=1, legacy=True):
+    return {"granted": granted, "pending_welcome": 0, "legacy": legacy}
+
+
+def _count_sounds(a):
+    """ctx.sound.play를 감싸 낸 소리 이름을 window.__plays에 모은다"""
+    a.js("() => { window.__plays = []; const s = window.__ria.ctx.sound; const p = s.play.bind(s);"
+         " s.play = (n) => { window.__plays.push(n); return p(n); }; }")
+
+
+def _plays(a, name):
+    return a.js("(n) => (window.__plays || []).filter((x) => x === n).length", name)
+
+
+def _level_line(a, scope):
+    sel = scope + " .level-line"
+    a.page.wait_for_selector(sel, timeout=15_000)
+    return " ".join(a.page.inner_text(sel).split())
+
+
+def test_level_status():
+    """상태 줄: XP 옆에 「Lv 1」과 다음 레벨까지의 막대. 읽기 프로그램용 글에 레벨 이름·남은 XP"""
+    with App("iPhone 17") as a:
+        a.start()
+        lv = a.page.inner_text(".status .stat.lv b")
+        assert lv == "Lv 1", lv
+        assert a.page.query_selector(".status .stat.lv .lv-bar"), "no level bar"
+        sr = a.page.inner_text(".status .stat.lv .sr")
+        assert "레벨 1" in sr and "새싹" in sr and "30 XP" in sr, sr
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings .status .stat.lv")
+        m = measure(a, "level-status")
+        assert not m["problems"], m["problems"]
+        a.shot("level-status.png")
+        assert not a.errors, a.errors
+    # 반쯤 찬 막대(레벨 2, 30 XP 중 20)
+    with App("iPhone 17", save={"saveVer": 2, "xp": LV2_XP + 20, "levels": _lv(2)}) as a:
+        a.start()
+        assert a.page.inner_text(".status .stat.lv b") == "Lv 2"
+        w = a.js("() => { const b = document.querySelector('.status .lv-bar'); return [b.querySelector('span').getBoundingClientRect().width, b.getBoundingClientRect().width]; }")
+        assert 0.3 < w[0] / w[1] < 0.7, w
+        assert not a.errors, a.errors
+
+
+def test_levelup_lesson():
+    """XP 20(Lv 1) 저장에서 레슨 하나 → 결과 화면 레벨 줄, 바이트 출처 「레벨」, 상태 줄 Lv 2. 레벨업 소리 한 번"""
+    seed = {"saveVer": 2, "xp": LV2_XP - 10, "bytes": 0, "levels": _lv(1),
+            "settings": {"sound": True, "dailyGoal": 20, "name": ""}}
+    with App("iPhone 17", save=seed) as a:
+        a.start()
+        assert a.page.inner_text(".status .stat.lv b") == "Lv 1"
+        _count_sounds(a)
+        a.page.click("#continue")
+        a.play("1-1")
+        line = _level_line(a, ".screen.done")
+        assert "레벨 2!" in line and "새싹이 됐어요" in line and "+14바이트" in line, line
+        assert "새 상품" not in line, line   # 레벨 2에 열리는 상품 없음
+        parts = a.page.inner_text(".screen.done p.muted.center")
+        assert "레벨 14" in parts, parts
+        tile = int(a.page.inner_text(".tile.byte b").lstrip("+"))
+        nums = [int(x) for x in re.findall(r"(\d+)", parts.split(":", 1)[-1])]
+        assert sum(nums) == tile, (parts, tile)
+        r = a.result()
+        assert r["levelUp"] == {"from": 1, "to": 2, "bytes": 14}, r["levelUp"]
+        assert a.save()["bytes"] == tile, (a.save()["bytes"], tile)
+        a.page.wait_for_timeout(300)
+        assert _plays(a, "levelup") == 1, a.js("() => window.__plays")
+        assert not a.page.query_selector(".celebrate"), "level-up must not open a window"
+        a.shot("level-done.png", full=True)
+        m = measure(a, "level-done")
+        assert not m["problems"], m["problems"]
+        a.dismiss()
+        a.page.click("#home")
+        a.page.wait_for_selector(".screen.home")
+        assert a.page.inner_text(".status .stat.lv b") == "Lv 2"
+        assert not a.errors, a.errors
+    # 연속 기록 이정표(7일)와 레벨업이 같은 레슨에서 → 소리는 한 번, 축하 창은 이정표만, 바이트 출처 둘 다
+    seed2 = dict(seed, streak={"days": 6, "best": 6, "lastGoalDate": today(1), "todayDate": today(), "todayXp": 0})
+    with App("iPhone 17", save=seed2) as a:
+        a.start()
+        _count_sounds(a)
+        a.page.click("#continue")
+        a.play("1-1")
+        a.page.wait_for_selector(".celebrate", timeout=3000)
+        line = _level_line(a, ".screen.done")
+        assert "레벨 2!" in line, line
+        parts = a.page.inner_text(".screen.done p.muted.center")
+        assert "연속 기록 50" in parts and "레벨 14" in parts, parts
+        assert _plays(a, "levelup") == 1, a.js("() => window.__plays")
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click("#cel-ok")
+        a.page.wait_for_selector(".celebrate", state="detached")
+        assert _plays(a, "levelup") == 1, a.js("() => window.__plays")
+        assert not a.errors, a.errors
+
+
+def test_levelup_guard():
+    """경비실 처음 해결 창에 레벨 줄: Lv 2 → 3, +16바이트, 새 상품 2개(후드티·울타리)"""
+    s = _guard_seed(3)
+    s.update(xp=LV3_XP - 1, levels=_lv(2), settings={"sound": True, "dailyGoal": 10, "name": ""})
+    with App("iPhone 17", save=s) as a:
+        _open_guard(a)
+        _count_sounds(a)
+        for n in range(3):
+            _gd_pick(a, n, 0)
+        _gd_run(a)
+        a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
+        line = _level_line(a, ".modal .gd-done")
+        assert line == "레벨 3! 새싹이 됐어요 · +16바이트 · 새 상품 2개", line
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.shot("level-guard.png")
+        m = measure(a, "level-guard")
+        assert not m["problems"], m["problems"]
+        assert _plays(a, "levelup") == 1 and _plays(a, "done") == 0, a.js("() => window.__plays")
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".modal .gd-done", state="detached")
+        sv = a.save()
+        assert sv["bytes"] == 17 + 16 and sv["levels"]["granted"] == 3, (sv["bytes"], sv["levels"])
+        assert not _app_errors(a), a.errors
+
+
+def test_levelup_garden():
+    """텃밭 주문 완료 창에 레벨 줄(주문 1, XP +5로 Lv 2)"""
+    s = _garden_seed(1, xp=LV2_XP - 1)
+    s["levels"] = _lv(1)
+    with App("iPhone 17", save=s) as a:
+        _open_garden(a)
+        _garden_run(a, skip=True)
+        line = _level_line(a, ".modal .g-done-body")
+        assert line == "레벨 2! 새싹이 됐어요 · +14바이트", line
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.shot("level-garden.png")
+        _close_done(a)
+        assert a.save()["levels"]["granted"] == 2
+        assert not _app_errors(a), a.errors
+
+
+def test_levelup_project():
+    """공방 단계 통과 창에 레벨 줄(P1 1단계, XP +5로 Lv 2)"""
+    body = _pj_body("P1")
+    s = _ws_seed(3, xp=LV2_XP - 1)
+    s["levels"] = _lv(1)
+    with App("iPhone 17", save=s) as a:
+        _open_workshop(a)
+        _open_project(a, "P1")
+        _pj_submit(a, body["steps"][0]["solution"])
+        line = _level_line(a, ".modal .pj-pass")
+        assert line == "레벨 2! 새싹이 됐어요 · +14바이트", line
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.shot("level-project.png")
+        _pj_next(a)
+        assert a.save()["levels"]["granted"] == 2
+        assert not _app_errors(a), a.errors
+
+
+def test_welcome_once():
+    """levels 없는 xp 1,100 저장 → 홈 알림 「Lv 13 · +120바이트」 → 다시 들어오면 없음.
+    carry-over M4: 설정 → 저장 가져오기로 옛 저장을 넣어도 알림은 딱 한 번."""
+    with App("iPhone 17", save={"saveVer": 2, "xp": 1100, "bytes": 5, "completed_lessons": ["1-1"], "current_lesson": "1-2"}) as a:
+        a.start()
+        a.page.wait_for_selector(".hello .welcome-notice .bubble")
+        msg = a.page.inner_text(".hello .welcome-notice .bubble")
+        assert "Lv 13 · +120바이트" in msg, msg
+        a.shot("level-welcome.png")
+        sv = a.save()
+        assert sv["bytes"] == 125 and sv["levels"]["pending_welcome"] == 0 and sv["levels"]["granted"] == 13, sv["levels"]
+        assert a.page.inner_text(".status .stat.lv b") == "Lv 13"
+        a.page.click('[data-go="badges"]')
+        a.page.wait_for_selector(".screen.badges")
+        a.page.click('[data-go="home"]')
+        a.page.wait_for_selector(".screen.home")
+        assert not a.page.query_selector(".welcome-notice"), "다시 들어오면 없어야 함"
+        a.page.reload()
+        a.page.wait_for_selector(".screen.splash #go", timeout=20_000)
+        a.start()
+        assert not a.page.query_selector(".welcome-notice"), "새로 고침 뒤에도 없어야 함"
+        assert a.save()["bytes"] == 125
+        assert not a.errors, a.errors
+    # 가져오기: 새 저장 → 설정 → levels 없는 옛 저장 → 바꾸기 → 홈에 알림 한 번 → 다시 홈이면 없음
+    with App("iPhone 17") as a:
+        a.start()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        _import_file(a, "level-import.json", {"saveVer": 2, "xp": 1100, "bytes": 5, "completed_lessons": ["1-1"]})
+        a.page.wait_for_selector(".modal")
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal button:has-text('바꾸기')")
+        a.page.wait_for_selector("#app[data-screen=home] .screen.home")
+        a.page.wait_for_timeout(300)
+        n = a.js("() => document.querySelectorAll('.welcome-notice').length")
+        assert n == 1, n
+        assert "Lv 13 · +120바이트" in a.page.inner_text(".hello .welcome-notice .bubble")
+        assert a.save()["levels"]["pending_welcome"] == 0 and a.save()["bytes"] == 125
+        a.dismiss()
+        a.page.click('[data-go="settings"]')
+        a.page.wait_for_selector(".screen.settings")
+        a.page.click('[data-go="home"]')
+        a.page.wait_for_selector(".screen.home")
+        assert not a.page.query_selector(".welcome-notice")
+        assert not a.errors, a.errors
+
+
+def test_level_english():
+    """영어: 상태 줄 Lv·막대, 레벨 줄(Level 3, 새 상품 2개), 환영 알림 — 한글 없음"""
+    s = _guard_seed(3, en=True)
+    s.update(xp=LV3_XP - 1, levels=_lv(2))
+    with App("iPhone 17", save=s, locale="en-US") as a:
+        _open_guard(a)
+        for n in range(3):
+            _gd_pick(a, n, 0)
+        _gd_run(a)
+        a.page.wait_for_selector(".modal .gd-done", timeout=15_000)
+        line = _level_line(a, ".modal .gd-done")
+        assert line == "Level 3! Rank: Sprout · +16 Bytes · 2 new items in the shop", line
+        a.shot("level-guard-en.png")
+        a.page.wait_for_timeout(GUARD_WAIT)
+        a.page.click(".modal .btn.primary")
+        a.page.wait_for_selector(".modal .gd-done", state="detached")
+        assert not _app_errors(a), a.errors
+    en = {"sound": False, "dailyGoal": 10, "name": "", "lang": "en", "langChosen": True}
+    with App("iPhone 17", save={"saveVer": 2, "xp": 1100, "bytes": 0, "completed_lessons": ["1-1"], "settings": en}, locale="en-US") as a:
+        a.start()
+        a.page.wait_for_selector(".hello .welcome-notice .bubble")
+        msg = a.page.inner_text(".hello .welcome-notice .bubble")
+        assert "Lv 13 · +120 Bytes" in msg, msg
+        sr = a.page.inner_text(".status .stat.lv .sr")
+        assert "Level 13" in sr and "Gardener" in sr, sr
+        assert not _hangul_left(a), _hangul_left(a)
+        a.shot("level-welcome-en.png")
+        assert not a.errors, a.errors
+
+
+def test_level_dark():
+    """어둡게: 상태 줄 Lv·막대, 환영 알림, 레벨 줄(텃밭 주문 완료 창) 글자 대비 기준 통과"""
+    sys.path.insert(0, os.path.join(ROOT, "tests"))
+    import contrast
+    init = "localStorage.setItem(%s, 'dark');" % json.dumps(THEME_KEY)
+    fails = []
+    with App("iPhone 17", save={"saveVer": 2, "xp": 1100, "bytes": 0, "completed_lessons": _chapters_done(1),
+                                "current_lesson": "2-1", "garden": _garden(), "settings": {"sound": False, "dailyGoal": 10, "name": ""}},
+             init_js=init) as a:
+        a.start()
+        a.page.wait_for_selector(".hello .welcome-notice")
+        _settle_animations(a)
+        res = contrast.run_check(a.page, skip_art=True)
+        fails += res["fails"]
+        a.shot("level-home-dark.png")
+    s = _garden_seed(1, xp=LV2_XP - 1)
+    s["levels"] = _lv(1)
+    with App("iPhone 17", save=s, init_js=init) as a:
+        _open_garden(a)
+        _garden_run(a, skip=True)
+        _level_line(a, ".modal .g-done-body")
+        a.page.wait_for_timeout(GUARD_WAIT)
+        _settle_animations(a)
+        res = contrast.run_check(a.page, skip_art=True)
+        fails += res["fails"]
+        a.shot("level-garden-dark.png")
+    assert not fails, fails
 
 
 if __name__ == "__main__":

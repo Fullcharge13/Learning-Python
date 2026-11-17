@@ -26,6 +26,7 @@ import { BADGES } from "../../data/badges.js";
 import { render as farmSVG, replayFrames, thinFrames } from "../garden/view.js";
 import { riaSVG } from "../ria.js";
 import { esc, icon, el, dialog, toast, bar, riaSays, celebrate } from "./dom.js";
+import { levelLineHTML } from "./levelline.js";
 import { mountEditor } from "./editorslot.js";
 import { errorPanel, waitForClues } from "./write.js";
 import { SYMBOL_ORDER } from "../kbd.js";
@@ -1268,7 +1269,7 @@ export function render(root, ctx, params = {}) {
   // ---- 주문 완료 ----
   /** 주문 완료 창 하나. after: 이 주문 다음에 걸리는 { order, waiting } (이어서 끝난 주문이 있으면 그것) */
   async function orderDone(order, res, after = currentOrder(S.garden, passed)) {
-    ctx.sound.play("done");
+    ctx.sound.play(res && res.levelUp ? "levelup" : "done");   // v0.22.0: 레벨업이면 레벨업 소리 한 번
     const { order: next, waiting } = after;
     const nextLine = !next ? t`주문을 모두 해냈어요! 텃밭은 계속 가꿀 수 있어요.`
       : waiting ? t`다음 주문은 ${next.need}장을 끝내면 이어져요.`
@@ -1277,7 +1278,7 @@ export function render(root, ctx, params = {}) {
     await dialog({
       title: t`주문 완료!`,
       body: `<div class="g-done-body">${riaSays({ outfit: ctx.save.outfit, face: "joy", text, size: 84, sfx: t`딩동!` })}
-        <p class="g-done-xp">${icon("xp")}<span>XP +${res ? res.xp : order.xp}</span></p></div>`,
+        <p class="g-done-xp">${icon("xp")}<span>XP +${res ? res.xp : order.xp}</span></p>${levelLineHTML(res && res.levelUp)}</div>`,
       buttons: [{ label: t`좋아요`, value: true, kind: "primary" }],
     });
     if (S.destroyed) return;

@@ -55,6 +55,9 @@ for (const g of GD.INCIDENTS) {
     g.file.search.forEach((s, i) => { out[`guard.${g.id}.file.search.${i}`] = s; });
   }
 }
+// v0.22.0 레벨 이름: 열쇠는 단계 번호 level.title.1~6(src/levels.js levelTitle)
+const LV = await imp("src/levels.js");
+for (let L = 1; L <= LV.LEVEL_MAX; L += 5) { const x = LV.levelTitle(L); out[x.key] = x.ko; }
 console.log(JSON.stringify(out));
 """
 

@@ -1,5 +1,5 @@
 // 리아와 파이썬! — 앱 입구. 상태는 app = { save, screen, modal } 하나, 화면 전환은 show() 하나.
-import { migrate, takeRefundNotice, refundNoticeText, takeBrokenNotice, brokenNoticeText } from "./save.js";
+import { migrate, takeRefundNotice, refundNoticeText, takeWelcome, welcomeNoticeText, takeBrokenNotice, brokenNoticeText } from "./save.js";
 import { t, tx, setLang, lang, EN_PUBLIC, deviceLang, packOf } from "./i18n.js";
 import { loadLangPack } from "./langload.js";
 import { warmLangFiles } from "./langwarm.js";
@@ -437,11 +437,17 @@ const ctx = {
   dayStart,
   takeGreeting() { const g = app.greetOverride; app.greetOverride = null; return g; },
   // 의상 교체로 돌려준 바이트 안내(판정 C42): 처음 한 번만. 깃발을 내린 저장을 바로 남긴다
+  // v0.22.0: 레벨 환영 선물 안내도 같은 자리·방식(설계 §5-5). 둘 다 있으면 환불 먼저, 환영은 다음에 홈을 그릴 때
   takeNotice() {
     const r = takeRefundNotice(app.save);
-    if (!r.bytes) return null;
-    commit(r.save);
-    return { text: refundNoticeText(r.bytes), face: "wink", situation: "refund" };
+    if (r.bytes) {
+      commit(r.save);
+      return { text: refundNoticeText(r.bytes), face: "wink", situation: "refund" };
+    }
+    const w = takeWelcome(app.save);
+    if (!w.bytes) return null;
+    commit(w.save);
+    return { text: welcomeNoticeText(w.level, w.bytes), face: "joy", situation: "welcome" };
   },
   // 깨진 저장 안내(v0.12.1): 처음 한 번만. 깃발을 내린 저장을 바로 남기고 { text, key }
   takeBrokenNotice() {

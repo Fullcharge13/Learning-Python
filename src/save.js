@@ -225,6 +225,8 @@ export const BROKEN_NOTICE_TEXT = "저장을 읽지 못해 새로 시작했어�
 export const brokenNoticeText = () => t`저장을 읽지 못해 새로 시작했어요. 설정 → 저장 가져오기로 옛 기록을 되살릴 수 있어요`;
 
 export const refundNoticeText = (n) => t`없어진 옷 값 ${n}바이트를 돌려 드렸어요. 새 옷도 구경해 보세요!`;
+// v0.22.0 기존 학습자 환영 알림(설계 §5-5): 홈에서 한 번
+export const welcomeNoticeText = (level, n) => t`레벨이 새로 생겼어요! 그동안 모은 XP로 Lv ${level} · +${n}바이트 환영 선물을 받았어요.`;
 
 // 깨진 원본을 남긴다. 이미 남긴 것은 덮지 않고 .broken.1 ~ .broken.5 중 빈 칸에 쓴다(모두 차면 .broken.5를 덮음).
 // key: 저장 칸(기본 학습 기록. 개발자 모드 저장은 src/devmode.js가 자기 키를 넘김)

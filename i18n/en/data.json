@@ -1391,5 +1391,11 @@
  "quest.q_lessons2.name": "Finish 2 lessons",
  "quest.q_perfect.name": "Finish a lesson with no mistakes",
  "quest.q_review3.name": "Review 3 missed questions",
- "quest.q_xp20.name": "Earn 20 XP"
+ "quest.q_xp20.name": "Earn 20 XP",
+ "level.title.1": "Sprout",
+ "level.title.2": "Seedling",
+ "level.title.3": "Gardener",
+ "level.title.4": "Explorer",
+ "level.title.5": "Researcher",
+ "level.title.6": "Python Master"
 }

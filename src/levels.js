@@ -1,11 +1,11 @@
 // v0.22.0 레벨(설계 §5-1, §5-2, §5-5). 순수 함수만.
 // 레벨은 늘 save.xp에서 계산한다(따로 저장하지 않음). save.levels에는 받은 최고 레벨(granted)만 적는다.
-// 60·10(곡선)과 20·2(선물)는 작업 3 시뮬레이션 판정에서만 바꾼다 — 바꾸면 설계서 §5와 LOG도 함께 고친다.
+// 곡선(LEVEL_BASE·LEVEL_STEP)과 선물(GIFT_BASE·GIFT_STEP)은 작업 3 시뮬레이션 판정에서 30·10, 10·2로 정했다 — 다시 바꾸면 설계서 §5와 LOG도 함께 고친다.
 
 export const LEVEL_MAX = 30;
-export const LEVEL_BASE = 60;   // 1→2에 필요한 XP
+export const LEVEL_BASE = 30;   // 1→2에 필요한 XP (작업 3 판정: 60 → 30)
 export const LEVEL_STEP = 10;   // 레벨마다 더 필요한 XP
-export const GIFT_BASE = 20;    // 레벨업 선물 = GIFT_BASE + GIFT_STEP × L 바이트
+export const GIFT_BASE = 10;    // (작업 3 판정: 20 → 10) 레벨업 선물 = GIFT_BASE + GIFT_STEP × L 바이트
 export const GIFT_STEP = 2;
 export const WELCOME_STEP = 10; // 기존 학습자 환영 선물 = min(WELCOME_STEP × (레벨 − 1), WELCOME_CAP)
 export const WELCOME_CAP = 200;

@@ -12,8 +12,14 @@
 // - 실제 레슨 표(data/lessons/ch*.js)를 차례로(--lessons N 이면 앞의 N개; 15면 v0.1 재현). 다 끝낸 뒤 한 판은 복습 목록이 있으면 복습(5문제, 5 XP),
 //   없으면 처음 레슨부터 다시 하기(XP 절반, 바이트 0).
 // - 레슨마다 id, isExam, 쓰기 문제의 개념만 읽어 쓴다(터치 문제도 그 개념으로 표시).
-// - 쇼핑은 학습한 날 끝에: 보호권이 0개이고 200바이트 이상이면 보호권 1개를 먼저, 그다음 살 수 있는 가장 싼 의상.
-//   (「strict」 방식: 보호권이 0개면 의상을 사지 않고 보호권 값을 먼저 모음 — 비교용으로만 계산)
+// - 쇼핑(v0.22.0 설계 §5-6)은 학습한 날 끝에: 보호권이 0개이고 200바이트 이상이면 보호권 1개를 먼저, 그다음
+//   src/shop.js canBuy가 ok인 상품(data/shop.js SHOP_ITEMS, 의상·꾸미기·편집기 색 종류 상관없이) 중 가장 싼 것을 하나씩 산다.
+//   값이 같으면 표 순서. 「첫 의상」은 의상(kind "outfit")을 처음 산 날로 따로 잰다. 시뮬레이션 학습자는 새 학습자(legacy 아님).
+//   (「strict」 방식: 보호권이 0개면 상품을 사지 않고 보호권 값을 먼저 모음 — 비교용으로만 계산)
+// - 레벨(v0.22.0): earnXp가 주는 레벨업 선물(levelUp.bytes)은 바이트 출처 「레벨」로 따로 센다(이정표·도전·텃밭에 섞지 않음).
+// - 날 수(v0.22.0, { days }): 기본 30. 빠지는 날은 30일 묶음마다 같은 규칙(3번, 그중 1번은 이틀)으로 뽑는다 — 30일 판은 예전과 같은 난수 흐름.
+// - 판정(기본 실행, --lessons 없이): 기준 판 B/active day 40~50, 첫 의상 3~4일째, 30일 레벨 10~14,
+//   90일 판(심화 + 매일 도전 + 텃밭)의 남은 상품 1개 이상. 하나라도 밖이면 종료 코드 1.
 // - 심화(v0.7, --advanced / { advanced: true }): 장 평가를 끝내면 다음 차례에 그 장 심화 3개를 먼저 한다(새 본 과정 레슨보다 앞).
 //   장 파일의 ADVANCED를 쓰고, v0.7 계획의 1~6장 중 아직 ADVANCED가 없는 장은 자리 표시 3개(N-A1..3, 개념은 그 장 평가의 것)로 채운다.
 //   보상은 rules.js lessonReward({ isAdvanced: true }) 그대로. 배지 「깊이 파는 사람」은 이 심화 목록 전부가 기준.
@@ -29,8 +35,9 @@ import { newSave } from "../../src/save.js";
 import { lessonReward, reviewReward, earnXp, rollDay, buyFreeze, markConcept, FREEZE_PRICE } from "../../src/rules.js";
 import { ensureQuests, tick } from "../../src/quests.js";
 import { checkBadges } from "../../src/badges.js";
-import { buy } from "../../src/shop.js";
-import { OUTFITS } from "../../data/outfits.js";
+import { canBuy, buyItem, owns } from "../../src/shop.js";
+import { SHOP_ITEMS } from "../../data/shop.js";
+import { levelOf } from "../../src/levels.js";
 import { finishDaily, newDaily } from "../../src/daily.js";
 import { gardenOrderOpen } from "../../src/quests.js";
 import { grantOrderXP } from "../../src/garden/state.js";
@@ -96,14 +103,14 @@ function addDays(d, n) {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-// 빠지는 날(0부터 센 날 번호) 4개: 1일짜리 2번 + 2일짜리 1번, 겹치거나 붙지 않게
-function pickSkips(rng) {
+// 빠지는 날(0부터 센 날 번호) 4개: 1일짜리 2번 + 2일짜리 1번, 겹치거나 붙지 않게(span일 묶음 하나 안에서)
+function pickSkips(rng, span = DAYS) {
   for (;;) {
     const lens = [2, 1, 1];
     const skip = new Set();
     let ok = true;
     for (const len of lens) {
-      const start = 1 + Math.floor(rng() * (DAYS - len)); // 1..DAYS-len
+      const start = 1 + Math.floor(rng() * (span - len)); // 1..span-len
       for (let i = -1; i <= len; i++) if (skip.has(start + i)) ok = false; // 앞뒤 하루 띄움
       if (!ok) break;
       for (let i = 0; i < len; i++) skip.add(start + i);
@@ -112,20 +119,29 @@ function pickSkips(rng) {
   }
 }
 
-function cheapestOutfit(save) {
-  const forSale = OUTFITS.filter((o) => o.price != null && !save.outfits.includes(o.id));
-  forSale.sort((a, b) => a.price - b.price);
-  return forSale[0] || null;
+// 30일 묶음마다 빠지는 날을 뽑는다. 30일 판은 pickSkips 한 번(예전과 같은 난수 흐름)
+function pickAllSkips(rng, days) {
+  const all = new Set();
+  for (let b = 0; b < days; b += DAYS) {
+    const span = Math.min(DAYS, days - b);
+    if (span < 10) break;   // 너무 짧은 끝 묶음은 빠지는 날 없이(3번을 띄워 넣을 자리가 없음)
+    for (const x of pickSkips(rng, span)) all.add(b + x);
+  }
+  return all;
 }
 
-export function runSim(seed, { policy = "plan", lessons = null, advanced = false, daily: withDaily = false, garden: withGarden = false } = {}) {
+// 지금 살 수 있는(canBuy ok) 가장 싼 상품. 값이 같으면 표 순서(sort는 안정 정렬)
+const BY_PRICE = [...SHOP_ITEMS].sort((a, b) => a.price - b.price);
+const cheapestBuyable = (save) => BY_PRICE.find((i) => canBuy(save, i.id).ok) || null;
+
+export function runSim(seed, { policy = "plan", lessons = null, advanced = false, daily: withDaily = false, garden: withGarden = false, days = DAYS } = {}) {
   const COURSE = lessons ? FULL_COURSE.slice(0, lessons) : FULL_COURSE;
   const inCourse = new Set(COURSE.map((l) => l.id));
   const ADV = advanced ? ADVANCED_LIST.filter((l) => inCourse.has(`${l.chapter}-5`)) : [];
   const advIds = ADV.map((l) => l.id);
   const lessonDay = {}, advancedDay = {};
   const rng = mulberry32(seed);
-  const skips = pickSkips(rng);
+  const skips = pickAllSkips(rng, days);
   let s = newSave();
   let earned = 0;
   let activeDays = 0;
@@ -134,7 +150,9 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
   let streakBroken = 0;
   let freezesBought = 0;
   const milestones = [];
-  const src = { lesson: 0, quest: 0, milestone: 0, daily: 0, garden: 0 };
+  const src = { lesson: 0, quest: 0, milestone: 0, daily: 0, garden: 0, level: 0 };
+  let levelAt30 = null;
+  let firstItemDay = null;
   let dailyDone = 0;
   let gardenOrders = 0;
   let gardenQuestDays = 0, gardenQuestDone = 0;
@@ -143,9 +161,10 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
   const daily = [];
 
   // 바이트 변화를 따로 셈(쓰기 전)
-  const gain = (before, after, kind) => {
+  // levelBytes: 그 안에 든 레벨업 선물 — 「레벨」 출처로 떼어 센다
+  const gain = (before, after, kind, levelBytes = 0) => {
     const d = after.bytes - before.bytes;
-    if (d > 0) { earned += d; src[kind] += d; }
+    if (d > 0) { earned += d; src.level += levelBytes; src[kind] += d - levelBytes; }
   };
   const doTick = (event, today, amount = 1) => {
     const prev = s;
@@ -157,7 +176,7 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
     const r = earnXp(s, xp, today);
     s = r.save;
     if (r.milestone) milestones.push(r.milestone);
-    gain(prev, s, "milestone");
+    gain(prev, s, "milestone", r.levelUp ? r.levelUp.bytes : 0);
     doTick("xp", today, xp);
   };
   const badges = () => {
@@ -226,17 +245,19 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
     }
     if (policy === "strict" && s.freezes < 1) return;
     for (;;) {
-      const o = cheapestOutfit(s);
-      if (!o || s.bytes < o.price) break;
-      const r = buy(s, o.id);
+      const item = cheapestBuyable(s);
+      if (!item) break;
+      const r = buyItem(s, item.id);
       if (r instanceof Error) break;
       s = r;
-      if (firstOutfitDay === null) firstOutfitDay = dayNo;
+      if (firstItemDay === null) firstItemDay = dayNo;
+      if (item.kind === "outfit" && firstOutfitDay === null) firstOutfitDay = dayNo;
     }
     badges();
   }
 
-  for (let d = 0; d < DAYS; d++) {
+  for (let d = 0; d < days; d++) {
+    if (d === DAYS) levelAt30 = levelOf(s.xp);   // 30일째가 끝난 뒤(빠진 날이어도)
     if (skips.has(d)) continue;
     const today = addDays(START, d);
     activeDays++;
@@ -263,7 +284,7 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
       const r = finishDaily(s, { itemsSolved: 3 }, new Date(today + "T20:00:00"));
       s = r.save;
       if (r.result.milestone) milestones.push(r.result.milestone);
-      gain(prev, s, "daily");
+      gain(prev, s, "daily", r.result.levelBytes || 0);
       dailyDone++;
     }
     // 텃밭 학습자는 1장 평가 뒤 텃밭을 연다(실행 1번 — q_garden 조건 garden.runs > 0, 판정 C65)
@@ -276,7 +297,7 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
       s = r.save;
       s = { ...s, garden: { ...s.garden, order: { ...s.garden.order, idx: idx + 1, done: [...s.garden.order.done, order.id] } } };
       if (r.result.milestone) milestones.push(r.result.milestone);
-      gain(prev, s, "garden");
+      gain(prev, s, "garden", r.result.levelBytes || 0);
       gardenOrders++;
     }
     if (s.quests.ids.includes("q_garden")) {
@@ -289,8 +310,16 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
     if (newToday) { newPhaseEarned += de; newPhaseDays++; }
   }
 
+  if (levelAt30 === null) levelAt30 = levelOf(s.xp);
   return {
     seed,
+    days,
+    levelAt30,
+    level: levelOf(s.xp),
+    levelBytes: src.level,
+    itemsLeft: SHOP_ITEMS.filter((i) => !owns(s, i.id)).length,
+    itemsOwned: SHOP_ITEMS.filter((i) => owns(s, i.id)).length,
+    firstItemDay,
     courseLength: COURSE.length,
     activeDays,
     bytesPerActiveDay: Math.round((earned / activeDays) * 10) / 10,
@@ -304,7 +333,7 @@ export function runSim(seed, { policy = "plan", lessons = null, advanced = false
     finalStreak: s.streak.days,
     outfitsOwned: s.outfits.filter((o) => o !== "basic").length,
     milestones,
-    sources: { lesson: src.lesson, quest: src.quest, milestone: src.milestone, daily: src.daily, garden: src.garden },
+    sources: { lesson: src.lesson, quest: src.quest, milestone: src.milestone, daily: src.daily, garden: src.garden, level: src.level },
     dailyDone,
     gardenOrders,
     gardenQuestDays,
@@ -328,6 +357,10 @@ function median(xs) {
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
 }
 
+// 판정 목표(설계 §5-6)
+const TARGET = { bpd: [40, 50], firstOutfit: [3, 4], levelAt30: [10, 14], itemsLeft90: 1 };
+const inRange = (x, [lo, hi]) => x !== null && x >= lo && x <= hi;
+
 function main() {
   const li = process.argv.indexOf("--lessons");
   const lessons = li > 0 ? parseInt(process.argv[li + 1]) : null;
@@ -338,30 +371,66 @@ function main() {
   const runs = seeds.map((sd) => runSim(sd, { lessons }));
   const strict = seeds.map((sd) => runSim(sd, { policy: "strict", lessons }));
   const med = (f, rs = runs) => { const m = median(rs.map(f)); return m === null ? "-" : Math.round(m * 10) / 10; };
-  const head = ["seed", "B/active day", "B/day (new lessons)", "course done day", "1st outfit day", "1st outfit (strict)",
-    "freezes bought/used", "goal-miss days", "streak broken", "final streak", "outfits", "milestones", "skip days", "bytes lesson/quest/milestone"];
+  const srcs = (r) => `${r.sources.lesson}/${r.sources.quest}/${r.sources.milestone}/${r.sources.level}`;
+  const head = ["seed", "B/active day", "B/day (new lessons)", "course done day", "1st outfit day", "1st outfit (strict)", "1st item day", "Lv@30",
+    "freezes bought/used", "goal-miss days", "streak broken", "final streak", "outfits", "shop items", "milestones", "skip days", "bytes lesson/quest/streak/level"];
   const rows = runs.map((r, i) => [
-    r.seed, r.bytesPerActiveDay, r.bytesPerNewLessonDay, r.courseDoneDay, r.firstOutfitDay ?? "-", strict[i].firstOutfitDay ?? "-",
-    `${r.freezesBought}/${r.freezesUsed}`, r.goalMissDays, r.streakBroken, r.finalStreak, r.outfitsOwned,
-    r.milestones.join(",") || "-", r.skipDays.join(","), `${r.sources.lesson}/${r.sources.quest}/${r.sources.milestone}`,
+    r.seed, r.bytesPerActiveDay, r.bytesPerNewLessonDay, r.courseDoneDay, r.firstOutfitDay ?? "-", strict[i].firstOutfitDay ?? "-", r.firstItemDay ?? "-", r.levelAt30,
+    `${r.freezesBought}/${r.freezesUsed}`, r.goalMissDays, r.streakBroken, r.finalStreak, r.outfitsOwned, r.itemsOwned,
+    r.milestones.join(",") || "-", r.skipDays.join(","), srcs(r),
   ]);
   rows.push([
     "**median**", med((r) => r.bytesPerActiveDay), med((r) => r.bytesPerNewLessonDay), med((r) => r.courseDoneDay),
-    med((r) => r.firstOutfitDay), med((r) => r.firstOutfitDay, strict),
+    med((r) => r.firstOutfitDay), med((r) => r.firstOutfitDay, strict), med((r) => r.firstItemDay), med((r) => r.levelAt30),
     `${med((r) => r.freezesBought)}/${med((r) => r.freezesUsed)}`, med((r) => r.goalMissDays), med((r) => r.streakBroken),
-    med((r) => r.finalStreak), med((r) => r.outfitsOwned), `7일: ${runs.filter((r) => r.milestones.includes(7)).length}/12판`, "", "",
+    med((r) => r.finalStreak), med((r) => r.outfitsOwned), med((r) => r.itemsOwned), `7일: ${runs.filter((r) => r.milestones.includes(7)).length}/12판`, "",
+    `${med((r) => r.sources.lesson)}/${med((r) => r.sources.quest)}/${med((r) => r.sources.milestone)}/${med((r) => r.sources.level)}`,
   ]);
   console.log("| " + head.join(" | ") + " |");
   console.log("|" + head.map(() => "---").join("|") + "|");
   for (const row of rows) console.log("| " + row.join(" | ") + " |");
 
+  // 「매일 도전 + 텃밭」 30일 판: 함께 적되 판정은 기준 판으로(설계 §5-6)
+  const gdn = seeds.map((sd) => runSim(sd, { lessons, daily: true, garden: true }));
+  console.log(`\n매일 도전 + 텃밭 30일(참고): B/active day ${med((r) => r.bytesPerActiveDay, gdn)}, 첫 의상 ${med((r) => r.firstOutfitDay, gdn)}일째, `
+    + `30일 레벨 ${med((r) => r.levelAt30, gdn)}, 상품 ${med((r) => r.itemsOwned, gdn)}개`);
+
+  // 90일 판: 본 과정 + 심화 + 매일 도전 + 텃밭
+  const long = seeds.map((sd) => runSim(sd, { lessons, advanced: true, daily: true, garden: true, days: 90 }));
+  const allSrc = (r) => `${r.sources.lesson}/${r.sources.quest}/${r.sources.milestone}/${r.sources.daily}/${r.sources.garden}/${r.sources.level}`;
+  console.log(`\n90일 판(본 과정 + 심화 + 매일 도전 + 텃밭), 상품 ${SHOP_ITEMS.length}개\n`);
+  console.log("| seed | B/active day | Lv@30 | Lv@90 | shop items | items left | freezes bought | end bytes | bytes lesson/quest/streak/daily/garden/level |");
+  console.log("|---|---|---|---|---|---|---|---|---|");
+  for (const r of long) {
+    console.log(`| ${r.seed} | ${r.bytesPerActiveDay} | ${r.levelAt30} | ${r.level} | ${r.itemsOwned} | ${r.itemsLeft} | ${r.freezesBought} | ${r.endBytes} | ${allSrc(r)} |`);
+  }
+  const lm = (f) => med(f, long);
+  console.log(`| **median** | ${lm((r) => r.bytesPerActiveDay)} | ${lm((r) => r.levelAt30)} | ${lm((r) => r.level)} | ${lm((r) => r.itemsOwned)} | `
+    + `${lm((r) => r.itemsLeft)} | ${lm((r) => r.freezesBought)} | ${lm((r) => r.endBytes)} | `
+    + `${lm((r) => r.sources.lesson)}/${lm((r) => r.sources.quest)}/${lm((r) => r.sources.milestone)}/${lm((r) => r.sources.daily)}/${lm((r) => r.sources.garden)}/${lm((r) => r.sources.level)} |`);
+
   const bpd = med((r) => r.bytesPerActiveDay);
   const bnew = med((r) => r.bytesPerNewLessonDay);
   const fod = med((r) => r.firstOutfitDay);
-  const inB = (x) => x >= 40 && x <= 50 ? "OK" : "밖";
-  console.log(`\n판정: 하루 바이트 중앙값 전체 ${bpd} (${inB(bpd)}), 새 레슨이 있는 날 ${bnew} (${inB(bnew)}) — 목표 40~50`);
-  console.log(`      첫 의상 중앙값 ${fod}일째 (목표 3~4) ${fod >= 3 && fod <= 4 ? "OK" : "밖"}`);
+  const lv30 = med((r) => r.levelAt30);
+  const left = lm((r) => r.itemsLeft);
+  const verdicts = [
+    [`하루 바이트 중앙값 ${bpd} (목표 ${TARGET.bpd.join("~")})`, inRange(bpd, TARGET.bpd)],
+    [`첫 의상 중앙값 ${fod}일째 (목표 ${TARGET.firstOutfit.join("~")})`, inRange(fod, TARGET.firstOutfit)],
+    [`30일 레벨 중앙값 ${lv30} (목표 ${TARGET.levelAt30.join("~")})`, inRange(lv30, TARGET.levelAt30)],
+    [`90일 남은 상품 중앙값 ${left} (목표 ${TARGET.itemsLeft90} 이상)`, left !== "-" && left >= TARGET.itemsLeft90],
+  ];
+  console.log(`\n판정 (기준 판, 새 레슨이 있는 날 ${bnew}):`);
+  for (const [txt, ok] of verdicts) console.log(`  ${ok ? "OK" : "밖"}  ${txt}`);
   console.log("12판뿐이라 중앙값은 판마다 흔들릴 수 있음(빠지는 날 위치·정확도 무작위).");
+  const allOk = verdicts.every(([, ok]) => ok);
+  // 종료 코드는 기준 판(--lessons 없이 전체 과정)에만 건다. --lessons N은 옛 판 재현용이라 목표가 다르다.
+  if (lessons === null) {
+    console.log(allOk ? "판정 OK" : "판정 밖 — 종료 코드 1");
+    if (!allOk) process.exitCode = 1;
+  } else {
+    console.log("(--lessons로 줄인 과정은 참고용 — 종료 코드를 걸지 않음)");
+  }
 }
 
 // 심화 없이 / 심화까지 하는 학습자 비교(v0.7 작업 1): node tests/sim/economy.js --advanced
@@ -391,12 +460,12 @@ function compareDaily(lessons) {
   const r1 = (x) => (x === null ? "-" : Math.round(x * 10) / 10);
   const med = (rs, f) => r1(median(rs.map(f)));
   console.log(`매일 도전: 1장 뒤 학습한 날의 ${DAILY_P * 100}%에 도전 3문제 · 텃밭: 해낼 주문이 있는 날의 ${GARDEN_P * 100}%에 주문 1개, 30일 × 12판\n`);
-  console.log("| 학습자 | B/active day | 1st outfit day | outfits | 도전한 날 | 도전 최고 연속 | 바이트 도전/레슨/퀘스트/연속 | 하루 목표 미달 | 텃밭 주문 | q_garden 뽑힌 날/끝낸 날 |");
+  console.log("| 학습자 | B/active day | 1st outfit day | outfits | 도전한 날 | 도전 최고 연속 | 바이트 도전/레슨/퀘스트/연속/레벨 | 하루 목표 미달 | 텃밭 주문 | q_garden 뽑힌 날/끝낸 날 |");
   console.log("|---|---|---|---|---|---|---|---|---|---|");
   for (const [name, rs] of [["도전 없음(기준)", base], ["매일 도전", dly], ["매일 도전 + 텃밭", gdn]]) {
     console.log(`| ${name} | ${med(rs, (r) => r.bytesPerActiveDay)} | ${med(rs, (r) => r.firstOutfitDay)} | ${med(rs, (r) => r.outfitsOwned)} | `
       + `${med(rs, (r) => r.dailyDone)} | ${med(rs, (r) => r.dailyBest)} | ${med(rs, (r) => r.sources.daily)}/${med(rs, (r) => r.sources.lesson)}/`
-      + `${med(rs, (r) => r.sources.quest)}/${med(rs, (r) => r.sources.milestone)} | ${med(rs, (r) => r.goalMissDays)} | `
+      + `${med(rs, (r) => r.sources.quest)}/${med(rs, (r) => r.sources.milestone)}/${med(rs, (r) => r.sources.level)} | ${med(rs, (r) => r.goalMissDays)} | `
       + `${med(rs, (r) => r.gardenOrders)} | ${med(rs, (r) => r.gardenQuestDays)}/${med(rs, (r) => r.gardenQuestDone)} |`);
   }
   for (const [name, rs] of [["매일 도전", dly], ["매일 도전 + 텃밭", gdn]]) {

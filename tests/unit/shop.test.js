@@ -83,8 +83,8 @@ import { xpForLevel } from "../../src/levels.js";
 const ORIGINAL_8 = ["casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard"];
 // 설계서 §5-4 표 그대로: [id, kind, level, price]
 const TABLE_5_4 = [
-  ["casual", "outfit", 1, 100], ["ed_paper", "editor", 1, 60],
-  ["hoodie", "outfit", 3, 180], ["gd_fence", "garden", 3, 80],
+  ["casual", "outfit", 1, 100], ["ed_paper", "editor", 1, 100],
+  ["hoodie", "outfit", 3, 180], ["gd_fence", "garden", 3, 100],
   ["gym", "outfit", 5, 180], ["ed_forest", "editor", 5, 100],
   ["chef", "outfit", 8, 180], ["gu_night", "guard", 8, 120],
   ["whitecoat", "outfit", 10, 180], ["ws_wood", "workshop", 10, 120],
@@ -169,14 +169,14 @@ test("shop: bytes·owned·notsold 이유", () => {
 });
 
 test("shop: 꾸미기를 사면 deco.owned에 들어가고 켜지지는 않는다, 원본 불변", () => {
-  const s = atLv(3, { bytes: 100 });
+  const s = atLv(3, { bytes: 120 });
   const r = buyItem(s, "gd_fence");
   assert.ok(!(r instanceof Error), String(r));
   assert.equal(r.bytes, 20);
   assert.deepEqual(r.deco.owned, ["gd_fence"]);
   assert.equal(r.deco.on.garden, null);
   assert.deepEqual(r.outfits, ["basic"]);
-  assert.equal(s.bytes, 100);
+  assert.equal(s.bytes, 120);
   assert.equal(s.deco, undefined);
   assert.ok(owns(r, "gd_fence"));
   assert.ok(!owns(s, "gd_fence"));

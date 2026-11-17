@@ -252,7 +252,7 @@ test("M7: 6 → 7일 달성하면 +50바이트, 한 번만", () => {
   assert.equal(r.save.bytes, 53);
   const r2 = earnXp(r.save, 20, "2026-10-29");
   assert.equal(r2.milestone, null);
-  assert.equal(r2.save.bytes, 53);
+  assert.equal(r2.save.bytes, 53 + (r2.levelUp ? r2.levelUp.bytes : 0)); // v0.22.0: 레벨업 선물(XP 40 = Lv 2)은 이정표와 따로
 });
 
 test("M7_again: 끊긴 뒤 다시 7일 (best ≥ 7) → 보상 없음", () => {

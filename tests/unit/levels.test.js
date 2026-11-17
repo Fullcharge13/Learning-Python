@@ -16,11 +16,11 @@ test("levels: 상수", () => {
 
 test("levels: xpForLevel 닻 값", () => {
   assert.equal(xpForLevel(1), 0);
-  assert.equal(xpForLevel(2), 60);
-  assert.equal(xpForLevel(3), 130);
-  assert.equal(xpForLevel(10), 900);
-  assert.equal(xpForLevel(13), 1380);
-  assert.equal(xpForLevel(30), 5800);
+  assert.equal(xpForLevel(2), 30);
+  assert.equal(xpForLevel(3), 70);
+  assert.equal(xpForLevel(10), 630);
+  assert.equal(xpForLevel(13), 1020);
+  assert.equal(xpForLevel(30), 4930);
 });
 
 test("levels: n→n+1 필요 XP = BASE + STEP × (n − 1)", () => {
@@ -30,17 +30,17 @@ test("levels: n→n+1 필요 XP = BASE + STEP × (n − 1)", () => {
 });
 
 test("levels: levelOf 경계", () => {
-  assert.equal(levelOf(59), 1);
-  assert.equal(levelOf(60), 2);
-  assert.equal(levelOf(129), 2);
-  assert.equal(levelOf(130), 3);
-  assert.equal(levelOf(5799), 29);
-  assert.equal(levelOf(5800), 30);
+  assert.equal(levelOf(29), 1);
+  assert.equal(levelOf(30), 2);
+  assert.equal(levelOf(69), 2);
+  assert.equal(levelOf(70), 3);
+  assert.equal(levelOf(4929), 29);
+  assert.equal(levelOf(4930), 30);
   assert.equal(levelOf(99999), 30);
   assert.equal(levelOf(-5), 1);
   assert.equal(levelOf(NaN), 1);
   assert.equal(levelOf(undefined), 1);
-  assert.equal(levelOf("60"), 1);
+  assert.equal(levelOf("30"), 1);
   for (let L = 1; L <= LEVEL_MAX; L++) {
     assert.equal(levelOf(xpForLevel(L)), L);
     if (L > 1) assert.equal(levelOf(xpForLevel(L) - 1), L - 1);
@@ -56,8 +56,8 @@ test("levels: levelProgress", () => {
 });
 
 test("levels: levelGift = GIFT_BASE + GIFT_STEP × L", () => {
-  assert.equal(levelGift(2), 24);
-  assert.equal(levelGift(30), 80);
+  assert.equal(levelGift(2), 14);
+  assert.equal(levelGift(30), 70);
   for (let L = 2; L <= LEVEL_MAX; L++) assert.equal(levelGift(L), GIFT_BASE + GIFT_STEP * L);
 });
 
@@ -82,9 +82,9 @@ test("levels: 한 레벨 오름 → 선물 바이트를 더함", () => {
 });
 
 test("levels: 두 레벨을 한 번에", () => {
-  const r = applyLevels(withXp(50, 1), withXp(140, 1));
-  assert.deepEqual(r.levelUp, { from: 1, to: 3, bytes: 24 + 26 });
-  assert.equal(r.save.bytes, 50);
+  const r = applyLevels(withXp(20, 1), withXp(80, 1));
+  assert.deepEqual(r.levelUp, { from: 1, to: 3, bytes: 14 + 16 });
+  assert.equal(r.save.bytes, 30);
   assert.equal(r.save.levels.granted, 3);
 });
 

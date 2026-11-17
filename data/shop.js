@@ -7,8 +7,8 @@ const o = (id, level, price, legacyFree) => (legacyFree ? { id, kind: "outfit", 
 const d = (id, kind, level, price) => ({ id, kind, level, price });
 
 export const SHOP_ITEMS = Object.freeze([
-  o("casual", 1, 100, true), d("ed_paper", "editor", 1, 60),
-  o("hoodie", 3, 180, true), d("gd_fence", "garden", 3, 80),
+  o("casual", 1, 100, true), d("ed_paper", "editor", 1, 100),
+  o("hoodie", 3, 180, true), d("gd_fence", "garden", 3, 100),
   o("gym", 5, 180, true), d("ed_forest", "editor", 5, 100),
   o("chef", 8, 180, true), d("gu_night", "guard", 8, 120),
   o("whitecoat", 10, 180, true), d("ws_wood", "workshop", 10, 120),

@@ -2,9 +2,9 @@
 
     python3 tools/ria_set2_import.py
 
-- 시트: 의상 10줄 × 표정 8칸 = 80칸. 칸마다 <g transform="translate(..) scale(0.5) translate(-150 -30)"> 안에
+- 시트: 의상 13줄 × 표정 8칸 = 104칸(v0.22.0 작업 7: 새 의상 new1~3 세 줄을 더함). 칸마다 <g transform="translate(..) scale(0.5) translate(-150 -30)"> 안에
   칸 배경 네모(<rect>) 하나 + 그림 묶음(<g stroke=..>) 하나가 들어 있다. 배경 네모는 버린다.
-- 80칸은 몸·얼굴·소품 조각을 서로 나눠 쓴다. 겹치는 조각을 한 번만 담고(pieces) 칸마다 조각 순서(cells)를 적는다.
+- 104칸은 몸·얼굴·소품 조각을 서로 나눠 쓴다. 겹치는 조각을 한 번만 담고(pieces) 칸마다 조각 순서(cells)를 적는다.
 - 데이터로 다시 조립한 칸이 원본 칸과 글자 하나까지 같아야 한다(tests/py/test_ria_set2.py).
 """
 import json
@@ -17,7 +17,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 SHEET = os.path.join(ROOT, "art", "ria_set2_sheet.svg")
 DATA = os.path.join(ROOT, "data", "ria_set2.js")
 NS = "http://www.w3.org/2000/svg"
-OUTFITS = ["basic", "casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate"]
+OUTFITS = ["basic", "casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate", "new1", "new2", "new3"]
 FACES = ["smile", "joy", "sparkle", "think", "surprise", "worry", "cheer", "wink"]
 HEAD = "// 자동 생성: tools/ria_set2_import.py — 손으로 고치지 말 것. #리아_이미지_세트2 (원본 art/ria_set2_sheet.svg)\n"
 PREFIX = "export const RIA_SET2 = "
@@ -34,7 +34,7 @@ def cells_from_sheet(path=SHEET):
     ET.register_namespace("", NS)
     root = ET.parse(path).getroot()
     groups = [k for k in root if k.tag == "{%s}g" % NS and (k.get("transform") or "").startswith("translate(")]
-    assert len(groups) == 80, len(groups)
+    assert len(groups) == len(OUTFITS) * len(FACES), len(groups)
     out = {}
     for i, g in enumerate(groups):
         kids = list(g)

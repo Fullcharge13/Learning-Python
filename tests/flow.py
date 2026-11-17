@@ -636,7 +636,7 @@ def test_v06_outfit_migration_and_closet():
         a.page.click('[data-go="closet"]')
         a.page.wait_for_selector(".screen.closet")
         tiles = a.page.query_selector_all(".outfit-grid [data-o]")
-        assert len(tiles) == 13, len(tiles)  # v0.22.0: 10벌 + 새 의상 3벌 자리(작업 7까지 기본복장 그림)
+        assert len(tiles) == 13, len(tiles)  # v0.22.0: 10벌 + 새 의상 3벌
         ids = [x.get_attribute("data-o") for x in tiles]
         a.shot("v06-closet-grid.png", full=True)
         descs = {}
@@ -7428,6 +7428,50 @@ def test_shop_375():
 
 
 
+LV28_XP = 4320   # 30×27 + 5×27×26
+_NEW_OUTFITS = {"new1": ("학회 발표자", "발표자 정장"), "new2": ("천문학자", "천문학자 옷"), "new3": ("우주 연구원", "우주복")}
+_RIA_BODY = "(sel) => { const g = document.querySelector(sel + ' svg.ria .ria-body'); return g ? g.innerHTML : null; }"
+
+
+def test_shop_new_outfits():
+    """작업 7: Lv28 저장은 새 의상 3벌(new1~3)을 미리 보고 사서 입는다. 목록 칸·미리보기·홈 그림은 자기 그림(기본복장 그림 아님)"""
+    with App("iPhone 17", save=_shop_seed(xp=LV28_XP, levels=_lv(28), bytes_=2000)) as a:
+        _open_shop(a)
+        basic_tile = a.js(_RIA_BODY, '[data-o="basic"]')
+        assert basic_tile, "basic tile art"
+        tiles = {}
+        for oid, (name, short) in _NEW_OUTFITS.items():
+            tile = a.js(_RIA_BODY, '[data-o="%s"]' % oid)
+            assert tile and tile != basic_tile, oid + ": 목록 칸이 기본복장 그림"
+            tiles[oid] = tile
+            _pick_outfit(a, oid)
+            assert a.page.inner_text("#stage-name").strip() == name, a.page.inner_text("#stage-name")
+            label = a.page.get_attribute(".closet .stage svg.ria", "aria-label")
+            assert short in label, label
+            preview = a.js(_RIA_BODY, ".closet .stage")
+            assert preview and preview != basic_tile, oid + ": 미리보기가 기본복장 그림"
+            a.shot("shop-%s-preview.png" % oid)
+            b0 = a.save()["bytes"]
+            a.page.click("#buy")
+            a.page.wait_for_selector("#wear, #worn")
+            if a.page.query_selector("#wear"):
+                a.page.click("#wear")
+                a.page.wait_for_selector("#worn")
+            s = a.save()
+            assert s["outfit"] == oid and oid in s["outfits"], (oid, s["outfit"], s["outfits"])
+            assert b0 - s["bytes"] in (300, 360, 400), (oid, b0, s["bytes"])
+            # 입고 나면 미리보기는 미소 — 목록 칸(미소)과 같은 그림
+            assert a.js(_RIA_BODY, ".closet .stage") == tile, oid + ": 입은 미리보기 그림"
+        assert len(set(tiles.values())) == 3, "세 벌은 서로 다른 그림"
+        assert a.save()["bytes"] == 2000 - 300 - 360 - 400
+        a.page.click('.tabbar [data-go="home"]')
+        a.page.wait_for_selector(".screen.home svg.ria")
+        label = a.page.get_attribute(".screen.home svg.ria", "aria-label")
+        assert "우주복" in label, label
+        a.shot("home-new3.png")
+        assert not a.errors, a.errors
+
+
 # ---------------------------------------------------------------- v0.22.0 꾸미기와 편집기 색 (작업 6)
 _NO_DECO = {"garden": None, "guard": None, "workshop": None, "editor": None}
 _ALL_DECO = ["ed_paper", "ed_forest", "ed_sea", "ed_night", "gd_fence", "gd_flowers", "gd_greenhouse",
@@ -7680,7 +7724,10 @@ def test_deco_persist():
         assert not _app_errors(a), a.errors
 
 
-_ED_BAD = 'def f():\n    s = "hi"  # memo\n    return s\nprint(f(), True, None'
+# 작업 6 재검토 M(작업 7에서 닫음): 토큰 종류를 늘리고(이스케이프·클래스 이름·숫자), 오류 줄 뒤에 한 줄을 더 둔다 —
+# 전체 고르기 뒤 커서 머리가 오류가 아닌 마지막 줄에 있어야 「고른 바탕 + 현재 줄」이 실제로 재진다
+_ED_BAD = ('def f(n):\n    s = "hi\\tthere"  # memo\n    return s, n, int(n), 3\nclass Box:\n    pass\n'
+           'print(f(1), True, None, missing)\nx = 1')
 _MARKS_JS = """() => { const cs = (e) => e ? getComputedStyle(e) : null;
   const toks = [...document.querySelectorAll('.cm-content .cm-line span')].filter(e => /\\w/.test(e.textContent)).map(e => cs(e).color);
   const sel = cs(document.querySelector('.cm-selectionBackground'));
@@ -7733,7 +7780,10 @@ def test_deco_editor_marks():
                 a.page.wait_for_selector(".cm-matchingBracket")
                 m = a.js(_MARKS_JS)
                 fg, bb = m["br"]
-                r = _ratio(fg, _over(bb, m["ed"]))
+                # 짝 괄호는 현재 줄(1줄) 위에 있다: 편집기 바탕 → 현재 줄 → 짝 괄호 바탕 순으로 겹친다
+                if not m["act"]:
+                    fails.append("%s %s: bracket line is not the current line" % (theme, iid))
+                r = _ratio(fg, _over(bb, _over(m["act"], m["ed"]) if m["act"] else m["ed"]))
                 if r < 4.5:
                     fails.append("%s %s: bracket %s on %s = %.2f" % (theme, iid, fg, bb, r))
                 # 전체 고르기: 고른 바탕(편집기 바탕 위), 그 위 현재 줄 색까지
@@ -7741,7 +7791,13 @@ def test_deco_editor_marks():
                 a.page.wait_for_selector(".cm-selectionBackground")
                 m = a.js(_MARKS_JS)
                 sel = _over(m["sel"], m["ed"])
+                if not m["act"]:
+                    fails.append("%s %s: no current line under the selection (head on the error line?)" % (theme, iid))
                 backs = [sel] + ([_over(m["act"], sel)] if m["act"] else [])
+                # 키워드·정의·문자열·이스케이프·주석·숫자(True)·클래스 이름 = 7색. 파이썬 문법은 이 코드에서 local·invalid 표시를 내지 않는다
+                kinds = len(set(m["toks"]))
+                if kinds < 7:
+                    fails.append("%s %s: only %d token colours measured" % (theme, iid, kinds))
                 for c in set(m["toks"] + [m["plain"]]):
                     for b in backs:
                         if _ratio(c, b) < 4.5:

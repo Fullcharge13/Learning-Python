@@ -4,17 +4,18 @@ import assert from "node:assert/strict";
 import { riaSVG, OUTFIT_IDS, FACE_IDS, RIA_COLORS, RIA_SET, RIA_VIEWBOX } from "../../src/ria.js";
 import { OUTFITS as OUTFIT_TABLE } from "../../data/outfits.js";
 
-// 그림이 있는 10벌(세트2). v0.22.0 새 의상 3벌(new1~3)은 작업 7까지 그림이 없어 기본복장 그림으로 대신 그린다
-const OUTFITS = ["basic", "casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate"];
+// 원래 10벌(세트2) + v0.22.0 작업 7 새 의상 3벌(new1~3). 13벌 모두 자기 그림이 있다
+const ORIGINAL = ["basic", "casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate"];
 const NEW_OUTFITS = ["new1", "new2", "new3"];
+const OUTFITS = [...ORIGINAL, ...NEW_OUTFITS];
 const FACES = ["smile", "joy", "sparkle", "think", "surprise", "worry", "cheer", "wink"];
 
 test("ids: 공통 이름(ledger)과 같다", () => {
-  assert.deepEqual([...OUTFIT_IDS], [...OUTFITS, ...NEW_OUTFITS]);
+  assert.deepEqual([...OUTFIT_IDS], OUTFITS);
   assert.deepEqual([...FACE_IDS], FACES);
 });
 
-test("all_combos: 80개 조합 모두 <svg로 시작하고 같은 조합은 같은 결과", () => {
+test("all_combos: 104개 조합 모두 <svg로 시작하고 같은 조합은 같은 결과", () => {
   let n = 0;
   for (const outfit of OUTFITS) {
     for (const face of FACES) {
@@ -25,13 +26,13 @@ test("all_combos: 80개 조합 모두 <svg로 시작하고 같은 조합은 같�
       n++;
     }
   }
-  assert.equal(n, 80);
+  assert.equal(n, 104);
 });
 
 test("all_combos: 의상과 표정이 실제로 그림을 바꾼다", () => {
   const outs = new Set(OUTFITS.map((outfit) => riaSVG({ outfit })));
   const faces = new Set(FACES.map((face) => riaSVG({ face })));
-  assert.equal(outs.size, 10);
+  assert.equal(outs.size, 13);
   assert.equal(faces.size, 8);
 });
 
@@ -63,7 +64,7 @@ test("set2: 지금 쓰는 그림은 #리아_이미지_세트2, 칸 배경 네모
 import { OUTFIT_KO, FACE_KO } from "../../src/ria.js";
 
 test("a11y: 한국어 이름표·role·title", () => {
-  assert.deepEqual(Object.keys(OUTFIT_KO), [...OUTFITS, ...NEW_OUTFITS]);
+  assert.deepEqual(Object.keys(OUTFIT_KO), OUTFITS);
   assert.deepEqual(Object.keys(FACE_KO), FACES);
   for (const o of OUTFIT_TABLE) assert.equal(OUTFIT_KO[o.id], o.short, o.id + ": 의상 표 short와 같음");
   assert.equal(FACE_KO.smile, "미소");
@@ -143,14 +144,33 @@ test("v0.6 size budget: 한 장이 너무 크지 않다", () => {
     assert.ok(riaSVG({ outfit, face }).length < 26000, `${outfit}/${face}: ${riaSVG({ outfit, face }).length}`);
 });
 
-// v0.22.0 작업 2: 새 의상 3벌은 그림이 생길 때(작업 7)까지 기본복장 그림, 이름표는 새 의상 이름
-test("new outfits: new1~3은 기본복장 그림으로 대신 그리고, 이름표는 자기 이름", () => {
-  const body = (svg) => svg.slice(svg.indexOf('<g class="ria-body">'));
+// v0.22.0 작업 7: 새 의상 3벌(new1~3) × 표정 8개는 자기 그림. 기본복장과 다르고, 원래 10벌이 쓰던 색만 쓴다
+const body = (svg) => svg.slice(svg.indexOf('<g class="ria-body">'));
+const colorsOf = (svg) => (svg.match(/#[0-9A-Fa-f]{3,8}\b/g) || []).map((c) => c.toUpperCase());
+
+test("new outfits: new1~3 × 표정 8개가 그려지고, 기본복장 그림과 다르다", () => {
   for (const outfit of NEW_OUTFITS) for (const face of FACES) {
     const s = riaSVG({ outfit, face });
     assert.ok(s.startsWith("<svg") && s.trimEnd().endsWith("</svg>"), `${outfit}/${face}`);
-    assert.equal(body(s), body(riaSVG({ outfit: "basic", face })), `${outfit}/${face}: 기본복장 그림`);
+    assert.notEqual(body(s), body(riaSVG({ outfit: "basic", face })), `${outfit}/${face}: 기본복장 그림이 아님`);
     assert.match(s, new RegExp(`aria-label="[^"]*${OUTFIT_KO[outfit]}"`), `${outfit}: 이름표`);
-    assert.notEqual(s, riaSVG({ outfit: "basic", face }), `${outfit}: 이름표가 기본복장과 다름`);
   }
+  // 세 벌은 서로 다르고, 표정마다 다른 그림
+  for (const face of FACES) assert.equal(new Set(NEW_OUTFITS.map((outfit) => body(riaSVG({ outfit, face })))).size, 3, face);
+  for (const outfit of NEW_OUTFITS) assert.equal(new Set(FACES.map((face) => body(riaSVG({ outfit, face })))).size, 8, outfit);
+});
+
+test("new outfits: 원래 10벌이 쓰던 색(팔레트) 안에서만 그린다", () => {
+  const original = new Set(ORIGINAL.flatMap((outfit) => FACES.flatMap((face) => colorsOf(riaSVG({ outfit, face })))));
+  for (const outfit of NEW_OUTFITS) for (const face of FACES) {
+    const s = riaSVG({ outfit, face });
+    for (const c of colorsOf(s)) assert.ok(original.has(c), `${outfit}/${face}: 새 색 ${c}`);
+    for (const m of s.matchAll(/(?:fill|stroke)="([^"]+)"/g)) assert.ok(m[1] === "none" || original.has(m[1].toUpperCase()), `${outfit}/${face}: ${m[1]}`);
+  }
+});
+
+test("new outfits: 얼굴(눈·입·볼)은 기본복장과 같은 조각을 나눠 쓴다", () => {
+  const face0 = (svg) => svg.match(/<ellipse cx="340" cy="215" rx="90" ry="80"[^>]*>.*?<ellipse cx="403" cy="264"[^>]*>/s)[0];
+  for (const outfit of NEW_OUTFITS) for (const face of FACES)
+    assert.equal(face0(riaSVG({ outfit, face })), face0(riaSVG({ outfit: "basic", face })), `${outfit}/${face}`);
 });

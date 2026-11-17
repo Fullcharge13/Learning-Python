@@ -61,9 +61,6 @@ export function buyItem(save, id) {
   return { ...paid, deco: cleanDeco({ ...deco, owned: [...deco.owned, id] }) };
 }
 
-/** 예전 이름(의상실 src/ui/closet.js가 씀). buyItem 그대로 */
-export const buy = (save, id) => buyItem(save, id);
-
 /** 공간의 꾸미기를 켠다(id) 또는 끈다(null). 가진 것, 그 공간의 것만. 레벨과 상관없음. Error.reason: "space"|"notowned" */
 export function setDeco(save, space, id) {
   if (!DECO_SPACES.includes(space)) return fail("space", t`모르는 꾸미기 자리예요: ${space}`);

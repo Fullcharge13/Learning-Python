@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buy } from "../../src/shop.js";
 import { OUTFITS } from "../../data/outfits.js";
 
 function mkSave(over = {}) {
@@ -20,9 +19,8 @@ function mkSave(over = {}) {
   };
 }
 
-// v0.22.0: 새 의상 3벌(new1~3) 자리. 이름·그림은 작업 7에서 정한다(id는 그대로)
+// v0.22.0: 새 의상 3벌(new1~3). 이름·그림은 작업 7에서 정했다(id는 그대로)
 const NEW_IDS = ["basic", "casual", "whitecoat", "hoodie", "gym", "chef", "explorer", "uniform", "wizard", "graduate", "new1", "new2", "new3"];
-const PLACEHOLDER = new Set(["new1", "new2", "new3"]);
 
 test("OUTFITS table: v0.6 10벌 + v0.22.0 새 의상 3벌, 설계서 가격·얻는 법", () => {
   const price = Object.fromEntries(OUTFITS.map((o) => [o.id, o.price]));
@@ -33,8 +31,10 @@ test("OUTFITS table: v0.6 10벌 + v0.22.0 새 의상 3벌, 설계서 가격·얻
   assert.equal(OUTFITS.find((o) => o.id === "graduate").unlock, "streak30");
   for (const o of OUTFITS) {
     assert.match(o.name, /[가-힣]/, o.id);
-    // 자리 이름(「새 의상 1」)만 숫자를 허용 — 작업 7에서 진짜 이름으로 바꾸면 이 예외를 지운다
-    assert.match(o.short, PLACEHOLDER.has(o.id) ? /^[가-힣 ·0-9]+$/ : /^[가-힣 ·]+$/, o.id + " short: 조사 없이 대사에 들어가는 짧은 이름");
+    assert.match(o.short, /^[가-힣 ·]+$/, o.id + " short: 조사 없이 대사에 들어가는 짧은 이름");
+    // 작업 7: 자리 이름·설명(「새 의상 1」, 「곧 모습이 정해질」)이 남지 않는다. 「새 의상 {outfit}!」 대사가 「새 의상 새 의상 1!」이 되지 않게
+    assert.ok(!/새 의상|곧 모습/.test(o.name + o.short + o.desc), o.id + ": 자리 이름이 남음");
+    assert.ok(!("voice" in o) || o.id === "explorer", o.id + ": 새 의상은 말투를 바꾸지 않는다");
     assert.ok(typeof o.desc === "string" && /[가-힣]/.test(o.desc) && o.desc.length <= 30, o.id + " desc");
     assert.ok(!/python/i.test(o.name + o.short + o.desc), o.id + ": 상표 이름 안 씀");
   }
@@ -44,29 +44,29 @@ test("OUTFITS table: v0.6 10벌 + v0.22.0 새 의상 3벌, 설계서 가격·얻
 
 test("buy: 100 bytes buys casual -> 0 bytes, owned; again -> error; graduate -> error", () => {
   const s0 = mkSave({ bytes: 100 });
-  const s1 = buy(s0, "casual");
+  const s1 = buyItem(s0, "casual");
   assert.ok(!(s1 instanceof Error));
   assert.equal(s1.bytes, 0);
   assert.ok(s1.outfits.includes("casual"));
   assert.equal(s0.bytes, 100);
   assert.deepEqual(s0.outfits, ["basic"]);
-  const again = buy({ ...s1, bytes: 500 }, "casual");
+  const again = buyItem({ ...s1, bytes: 500 }, "casual");
   assert.ok(again instanceof Error);
-  const grad = buy(mkSave({ bytes: 9999 }), "graduate");
+  const grad = buyItem(mkSave({ bytes: 9999 }), "graduate");
   assert.ok(grad instanceof Error);
 });
 
 test("buy errors: insufficient bytes, unknown/old id, basic not for sale", () => {
-  assert.ok(buy(mkSave({ bytes: 179 }), "chef") instanceof Error);
-  assert.ok(buy(mkSave({ bytes: 99 }), "casual") instanceof Error);
-  assert.ok(buy(mkSave({ bytes: 299 }), "wizard") instanceof Error);
-  assert.ok(buy(mkSave({ bytes: 9999 }), "pirate") instanceof Error);
-  assert.ok(buy(mkSave({ bytes: 9999 }), "lab") instanceof Error);
-  assert.ok(buy(mkSave({ bytes: 9999 }), "basic") instanceof Error);
+  assert.ok(buyItem(mkSave({ bytes: 179 }), "chef") instanceof Error);
+  assert.ok(buyItem(mkSave({ bytes: 99 }), "casual") instanceof Error);
+  assert.ok(buyItem(mkSave({ bytes: 299 }), "wizard") instanceof Error);
+  assert.ok(buyItem(mkSave({ bytes: 9999 }), "pirate") instanceof Error);
+  assert.ok(buyItem(mkSave({ bytes: 9999 }), "lab") instanceof Error);
+  assert.ok(buyItem(mkSave({ bytes: 9999 }), "basic") instanceof Error);
 });
 
 test("buy does not change the worn outfit", () => {
-  const s = buy(mkSave({ bytes: 300, levels: { granted: 1, pending_welcome: 0, legacy: true } }), "wizard"); // v0.22.0: Lv20 상품이라 legacy 저장으로
+  const s = buyItem(mkSave({ bytes: 300, levels: { granted: 1, pending_welcome: 0, legacy: true } }), "wizard"); // v0.22.0: Lv20 상품이라 legacy 저장으로
   assert.equal(s.outfit, "basic");
   assert.equal(s.bytes, 0);
 });
@@ -185,10 +185,10 @@ test("shop: 꾸미기를 사면 deco.owned에 들어가고 켜지지는 않는�
 });
 
 test("shop: buy는 buyItem을 그대로 부른다(의상실용)", () => {
-  const a = buy(legacyAt(1, { bytes: 300 }), "wizard");
+  const a = buyItem(legacyAt(1, { bytes: 300 }), "wizard");
   const b = buyItem(legacyAt(1, { bytes: 300 }), "wizard");
   assert.deepEqual(a, b);
-  assert.equal(buy(atLv(1, { bytes: 9999 }), "wizard").reason, "level");
+  assert.equal(buyItem(atLv(1, { bytes: 9999 }), "wizard").reason, "level");
 });
 
 test("shop: 가진 상품은 레벨과 상관없음 — 가진 꾸미기는 Lv1에서도 setDeco로 켠다", () => {
@@ -224,4 +224,15 @@ test("shop: canBuy.legacy — 기존 학습자 예외가 걸린 상품만 true(�
   assert.equal(canBuy(legacyAt(30, { bytes: 9999 }), "new1").legacy, false, "새 의상");
   assert.equal(canBuy(legacyAt(30, { bytes: 9999 }), "ed_night").legacy, false, "편집기 색");
   assert.equal(canBuy(legacyAt(30, { bytes: 9999 }), "graduate").legacy, false, "팔지 않음");
+});
+
+// 작업 7: 새 의상 3벌의 영어 이름·설명도 자리 문구(「New outfit」, 「coming soon」)가 아니다
+test("new outfits: 영어 이름·짧은 이름·설명이 있고 자리 문구가 아니다", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const en = JSON.parse(await readFile(new URL("../../i18n/en/data.json", import.meta.url), "utf8"));
+  for (const id of ["new1", "new2", "new3"]) for (const k of ["name", "short", "desc"]) {
+    const v = en[`outfit.${id}.${k}`];
+    assert.ok(typeof v === "string" && v.trim() && !/[가-힣]/.test(v), `${id}.${k}: ${v}`);
+    assert.doesNotMatch(v, /new outfit|coming soon/i, `${id}.${k}: ${v}`);
+  }
 });

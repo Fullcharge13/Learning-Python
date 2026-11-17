@@ -7,6 +7,7 @@ import {
   DAILY_XP, DAILY_BYTES, DAILY_BONUS_BYTES, newDaily,
 } from "../../src/daily.js";
 import { newSave } from "../../src/save.js";
+import { xpForLevel, levelGift } from "../../src/levels.js";
 import { TEMPLATE_SEEDS } from "../../src/template.js";
 
 const ch = (n, concepts, tplN = 4) => ({
@@ -252,4 +253,20 @@ test("cleanDaily: 깨진 값은 기본값으로(저장 옮기기)", () => {
   const good = { date: "2026-11-05", picks: [{ kind: "tpl", id: "1-T1", chapter: 1, seed: 5 }, { kind: "tpl", id: "1-T2", chapter: 1, seed: 0 },
     { kind: "write", lesson: "1-3", chapter: 1 }], done: [1], streak: 3, best: 9, last_done_date: "2026-11-04" };
   assert.deepEqual(cleanDaily(good), good);
+});
+
+// v0.22.0(설계 §5-2): 레벨 선물은 바이트 출처 「레벨」로 따로 센다
+test("finish: 레벨 선물은 milestoneBytes에 안 섞임 (매일 도전)", () => {
+  let s = ensureDaily(save({ completed_lessons: ids(1), xp: xpForLevel(2) - 1 }), "2026-11-05", INDEX);
+  s = recordDaily(s, "2026-11-05", [0, 1, 2], []);
+  const { save: out, result } = finishDaily(s, { itemsSolved: 3, logs: [] }, NOW("2026-11-05"));
+  assert.deepEqual(result.levelUp, { from: 1, to: 2, bytes: levelGift(2) });
+  assert.equal(result.levelBytes, levelGift(2));
+  assert.equal(result.milestoneBytes, 0);
+  assert.equal(result.totalBytes, result.lessonBytes + result.bonusBytes + result.questBytes + result.levelBytes);
+  assert.equal(out.bytes - s.bytes, result.totalBytes);
+  // 보상 없는 두 번째: levelUp null, levelBytes 0
+  const again = finishDaily(out, {}, NOW("2026-11-05")).result;
+  assert.equal(again.levelUp, null);
+  assert.equal(again.levelBytes, 0);
 });

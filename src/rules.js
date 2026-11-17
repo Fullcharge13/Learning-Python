@@ -2,6 +2,7 @@
 // 모든 함수는 받은 저장을 고치지 않고, 변화가 없어도 언제나 새 객체를 돌려준다.
 import { ADV_XP, ADV_BYTES } from "./advanced.js";
 import { t } from "./i18n.js";
+import { applyLevels } from "./levels.js";
 
 export const FREEZE_PRICE = 200;
 export const FREEZE_MAX = 2;
@@ -150,10 +151,12 @@ export function applyMilestones(prevSave, nextSave) {
   return { save: out, milestone };
 }
 
-// 앱이 쓰는 XP 적립 입구: 하루 XP·연속 기록 + 이정표 보상
+// 앱이 쓰는 XP 적립 입구: 하루 XP·연속 기록 + 이정표 보상 + 레벨업 선물(v0.22.0, 바이트는 이미 save.bytes에 들어 있음)
 export function earnXp(save, xp, today) {
   const next = addDailyXp(save, xp, today);
-  return applyMilestones(save, next);
+  const m = applyMilestones(save, next);
+  const lv = applyLevels(save, m.save);
+  return { save: lv.save, milestone: m.milestone, levelUp: lv.levelUp };
 }
 
 // ---- 보호권 구매 ----

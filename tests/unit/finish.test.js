@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { newSave } from "../../src/save.js";
 import { finishLesson } from "../../src/finish.js";
 import { lessonReward, reviewReward } from "../../src/rules.js";
+import { xpForLevel, levelGift } from "../../src/levels.js";
 
 const L11 = { id: "1-1", chapter: 1 };
 const at = (h = 10) => new Date(2026, 9, 29, h, 0);
@@ -129,4 +130,22 @@ test("goal_change_raise: 목표를 올리면 아무 일 없음", () => {
   assert.equal(r.save.streak.days, 2);
   assert.equal(r.streakUp, false);
   assert.equal(r.milestone, null);
+});
+
+// v0.22.0(설계 §5-2): 레벨 선물은 바이트 출처 「레벨」로 따로 센다
+test("finish: 레벨 선물은 milestoneBytes에 안 섞임 (레슨)", () => {
+  const s0 = { ...newSave(), xp: xpForLevel(2) - 1 };
+  const { save, result } = finishLesson(s0, base(), at());
+  assert.deepEqual(result.levelUp, { from: 1, to: 2, bytes: levelGift(2) });
+  assert.equal(result.levelBytes, levelGift(2));
+  assert.equal(result.milestoneBytes, 0);
+  assert.equal(result.totalBytes, result.lessonBytes + result.questBytes + result.levelBytes);
+  assert.equal(save.bytes, result.totalBytes);
+  assert.equal(save.levels.granted, 2);
+});
+
+test("finish: 레벨이 안 오르면 levelUp null, levelBytes 0", () => {
+  const { result } = finishLesson(newSave(), base(), at());
+  assert.equal(result.levelUp, null);
+  assert.equal(result.levelBytes, 0);
 });

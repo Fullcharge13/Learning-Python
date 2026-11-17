@@ -41,7 +41,9 @@ export function finishLesson(save, info, now = new Date()) {
   const bytesBeforeXp = num(s.bytes);
   const earned = earnXp(s, reward.xp, today);
   s = earned.save;
-  const milestoneBytes = num(s.bytes) - bytesBeforeXp;
+  // v0.22.0: 레벨 선물은 「레벨」 출처로 따로 센다(연속 기록 바이트에 섞지 않음)
+  const levelBytes = earned.levelUp ? earned.levelUp.bytes : 0;
+  const milestoneBytes = num(s.bytes) - bytesBeforeXp - levelBytes;
   const streakUp = s.streak.lastGoalDate === today && goalBefore !== today;
   s.bytes = num(s.bytes) + reward.bytes;
 
@@ -100,7 +102,7 @@ export function finishLesson(save, info, now = new Date()) {
   return {
     save: s,
     result: {
-      mode: info.mode, lessonId: lesson.id, xp: reward.xp, lessonBytes: reward.bytes, questBytes, milestoneBytes,
+      mode: info.mode, lessonId: lesson.id, xp: reward.xp, lessonBytes: reward.bytes, questBytes, milestoneBytes, levelBytes, levelUp: earned.levelUp,
       totalBytes: num(s.bytes) - num(save.bytes),
       finished, chest, newBadges, milestone: earned.milestone, streakUp, streak: s.streak.days,
       firstTime, perfect, hintFreeWrite, accuracy: info.accuracy,

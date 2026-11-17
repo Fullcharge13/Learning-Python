@@ -138,11 +138,11 @@ export function saveDraft(save, id, lang, step, code) {
  *     마지막 단계면 완성: done[id] = { at, code, lang }, open에서 뺌, 처음 완성이면 + PROJECT_DONE_XP(usedSolution이어도).
  *     이미 완성한 프로젝트를 다시 만들면 XP 없이 진열장 코드만 새것으로.
  * @param now Date(지금 시각) 또는 "YYYY-MM-DD"
- * @returns { save, xp, completed, streakUp, milestone, finished, chest, newBadges }
+ * @returns { save, xp, completed, streakUp, milestone, levelUp, levelBytes, finished, chest, newBadges }
  */
 export function passStep(save, id, lang, step, code, { usedSolution = false } = {}, now = new Date()) {
   const entry = projectIndex().find((e) => e.id === id);
-  const none = { save, xp: 0, completed: false, streakUp: false, milestone: null, finished: [], chest: false, newBadges: [] };
+  const none = { save, xp: 0, completed: false, streakUp: false, milestone: null, levelUp: null, levelBytes: 0, finished: [], chest: false, newBadges: [] };
   if (!entry || !okLang(lang) || typeof code !== "string") return none;
   const p0 = cleanProjects(save?.projects);
   const cur = p0.open[id] || { lang, step: 0, code: "", best: 0 };
@@ -166,13 +166,15 @@ export function passStep(save, id, lang, step, code, { usedSolution = false } = 
     p.open[id] = { ...cur, step: step + 1, code: codeOf(code), best };
   }
   let s = withProjects(structuredClone(save), p);
-  const out = { xp, completed: last, streakUp: false, milestone: null, finished: [], chest: false, newBadges: [] };
+  const out = { xp, completed: last, streakUp: false, milestone: null, levelUp: null, levelBytes: 0, finished: [], chest: false, newBadges: [] };
   if (xp > 0) {
     const goalBefore = s.streak?.lastGoalDate;
     const earned = earnXp(s, xp, date);
     s = earned.save;
     out.streakUp = s.streak.lastGoalDate === date && goalBefore !== date;
     out.milestone = earned.milestone;
+    out.levelUp = earned.levelUp; // v0.22.0 레벨업 선물(바이트는 이미 저장에 들어 있음)
+    out.levelBytes = earned.levelUp ? earned.levelUp.bytes : 0;
     s = ensureQuests(s, date);
     const q = tick(s, "xp", date, xp);
     s = q.save;

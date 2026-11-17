@@ -176,7 +176,7 @@ export function rankOf(guard) {
  * 실행 결과를 저장에 반영. 결과 대조(guardConsistent)가 틀리면 저장 그대로·solved:false.
  * incident: 장 파일에서 받은 사건 본문(시도 목록으로 결과를 대조). id가 색인에 없으면 저장 그대로.
  * 첫 해결이면 XP(GUARD_XP): grantOrderXP와 같은 길(earnXp → 퀘스트 "xp"만 tick → 배지). 바이트는 직접 주지 않는다.
- * @returns { save, outcome: { solved, firstSolve, firstTry, xp, streakUp, streak, milestone, finished, chest, newBadges } }
+ * @returns { save, outcome: { solved, firstSolve, firstTry, xp, streakUp, streak, milestone, levelUp, levelBytes, finished, chest, newBadges } }
  */
 export function applyGuardRun(save, incident, result, how, now = new Date()) {
   if (!isObj(incident) || !Array.isArray(incident.tries)) {
@@ -187,7 +187,7 @@ export function applyGuardRun(save, incident, result, how, now = new Date()) {
   const inc = typeof id === "string" ? BY_ID[id] : undefined;
   const g0 = cleanGuard(save?.guard);
   const none = { solved: false, firstSolve: false, firstTry: false, xp: 0, streakUp: false,
-    streak: save?.streak?.days ?? 0, milestone: null, finished: [], chest: false, newBadges: [] };
+    streak: save?.streak?.days ?? 0, milestone: null, levelUp: null, levelBytes: 0, finished: [], chest: false, newBadges: [] };
   if (!inc || !guardConsistent(guardInput(incident), result)) return { save, outcome: none };
 
   const solved = result.solved === true;
@@ -221,6 +221,7 @@ export function applyGuardRun(save, incident, result, how, now = new Date()) {
   return {
     save: s,
     outcome: { solved: true, firstSolve: true, firstTry, xp: GUARD_XP, streakUp, streak: s.streak.days,
-      milestone: earned.milestone, finished: q.finished, chest: q.chest, newBadges: s.badges.filter((b) => !had.has(b)) },
+      milestone: earned.milestone, levelUp: earned.levelUp, levelBytes: earned.levelUp ? earned.levelUp.bytes : 0,
+      finished: q.finished, chest: q.chest, newBadges: s.badges.filter((b) => !had.has(b)) },
   };
 }

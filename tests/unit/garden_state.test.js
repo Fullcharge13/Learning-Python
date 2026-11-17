@@ -9,6 +9,7 @@ import {
 import { CROPS, UPGRADES, ORDERS, DAILY_NOTES, farmSetup } from "../../data/garden.js";
 import { NODES, unlockedKinds, validate, defaultProgram, newNode, kindsUsed, codegen, COND_LOCKS } from "../../src/garden/nodes.js";
 import { newSave, migrate } from "../../src/save.js";
+import { xpForLevel, levelGift } from "../../src/levels.js";
 
 const ALL = new Set([1, 2, 3, 4, 5]);
 const upTo = (n) => new Set(Array.from({ length: n }, (_, i) => i + 1));
@@ -982,4 +983,17 @@ test("C71 C2 막힌 손글씨 주문: 씨앗 0·밭에 토마토 없음 → 씨�
   const out = applyRun(b.garden, r, { program: o.solution, mode: "nodes", passed });
   assert.notEqual(out.rejected, true);
   assert.equal(out.orderDone?.id, "o_hand");
+});
+
+// v0.22.0(설계 §5-2): 레벨 선물은 바이트 출처 「레벨」로 따로 센다
+test("finish: 레벨 선물은 milestoneBytes에 안 섞임 (텃밭 주문)", () => {
+  const s = { ...newSave(), xp: xpForLevel(2) - 1 };
+  const a = grantOrderXP(s, ORDERS[0], NOW("2026-11-05"));
+  assert.deepEqual(a.result.levelUp, { from: 1, to: 2, bytes: levelGift(2) });
+  assert.equal(a.result.levelBytes, levelGift(2));
+  assert.equal(a.result.milestoneBytes, 0);
+  assert.equal(a.save.bytes - s.bytes, a.result.questBytes + a.result.milestoneBytes + a.result.levelBytes);
+  const b = grantOrderXP(a.save, ORDERS[0], NOW("2026-11-05")); // 같은 주문: 보상 없음
+  assert.equal(b.result.levelUp, null);
+  assert.equal(b.result.levelBytes, 0);
 });

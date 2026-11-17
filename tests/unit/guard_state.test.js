@@ -10,6 +10,7 @@ import { buildGuardIndex } from "../../src/guard/catalog.js";
 import { GUARD_INDEX } from "./_guard_index.js";
 import { newSave } from "../../src/save.js";
 import { localDate } from "../../src/today.js";
+import { xpForLevel, levelGift } from "../../src/levels.js";
 
 const G = (id) => INCIDENTS.find((i) => i.id === id);
 // 판정 G2-C3: 앱처럼 저장을 읽기 전에 색인을 넣는다
@@ -380,4 +381,17 @@ test("setGuardIndex: 이상한 tier는 거부", () => {
   try {
     assert.throws(() => setGuardIndex([{ ...mkE("X", 3), tier: "adv" }]), /setGuardIndex/);
   } finally { setGuardIndex(GUARD_INDEX); }
+});
+
+// v0.22.0(설계 §5-2): 결과에 levelUp·levelBytes
+test("applyGuardRun: 레벨이 오르면 outcome에 levelUp·levelBytes", () => {
+  const inp = guardInput(G("G1"), "ko");
+  const save = { ...quietSave(), xp: xpForLevel(2) - 1 };
+  const { save: s, outcome } = applyGuardRun(save, G("G1"), perfectResult(inp), "blank", NOW);
+  assert.deepEqual(outcome.levelUp, { from: 1, to: 2, bytes: levelGift(2) });
+  assert.equal(outcome.levelBytes, levelGift(2));
+  assert.equal(s.bytes, save.bytes + levelGift(2));
+  const again = applyGuardRun(s, G("G1"), perfectResult(inp), "blank", NOW).outcome;
+  assert.equal(again.levelUp, null);
+  assert.equal(again.levelBytes, 0);
 });

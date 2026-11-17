@@ -637,13 +637,14 @@ export function buy(garden, id, passed) {
  * 주문 XP(5): 레슨·매일 도전과 같은 길(earnXp → 하루 목표·연속 기록·이정표, XP 퀘스트, 배지). 바이트는 주지 않음.
  * 하루 퀘스트 사건 "garden_order"(q_garden)도 1 센다(v0.11).
  * 같은 주문 id에는 한 번만(garden.order.paid). 데이터에 없는 주문이면 아무 일 없음.
- * @returns { save, result: { xp, streakUp, streak, milestone, milestoneBytes, questBytes, finished, chest, newBadges } }
+ * @returns { save, result: { xp, streakUp, streak, milestone, milestoneBytes, levelUp, levelBytes, questBytes, finished, chest, newBadges } }
+ * levelUp·levelBytes(v0.22.0): 레벨업 선물. milestoneBytes에는 섞지 않는다.
  */
 export function grantOrderXP(save, order, now = new Date()) {
   let s = fillGarden(save);
   const known = order && ORDERS.find((o) => o.id === order.id);
   const empty = { xp: 0, streakUp: false, streak: s.streak?.days ?? 0, milestone: null, milestoneBytes: 0,
-    questBytes: 0, finished: [], chest: false, newBadges: [] };
+    levelUp: null, levelBytes: 0, questBytes: 0, finished: [], chest: false, newBadges: [] };
   if (!known || s.garden.order.paid.includes(known.id)) return { save: s, result: empty };
 
   const xp = known.xp ?? ORDER_XP;
@@ -655,7 +656,8 @@ export function grantOrderXP(save, order, now = new Date()) {
   const bytesBefore = nonNeg(s.bytes);
   const earned = earnXp(s, xp, today);
   s = earned.save;
-  const milestoneBytes = nonNeg(s.bytes) - bytesBefore;
+  const levelBytes = earned.levelUp ? earned.levelUp.bytes : 0; // v0.22.0: 「레벨」 출처로 따로
+  const milestoneBytes = nonNeg(s.bytes) - bytesBefore - levelBytes;
   const streakUp = s.streak.lastGoalDate === today && goalBefore !== today;
 
   s = ensureQuests(s, today);
@@ -672,7 +674,7 @@ export function grantOrderXP(save, order, now = new Date()) {
   const had = new Set(save.badges || []);
   return {
     save: s,
-    result: { xp, streakUp, streak: s.streak.days, milestone: earned.milestone, milestoneBytes, questBytes,
+    result: { xp, streakUp, streak: s.streak.days, milestone: earned.milestone, milestoneBytes, levelUp: earned.levelUp, levelBytes, questBytes,
       finished: [...q.finished, ...qg.finished], chest: q.chest || qg.chest, newBadges: s.badges.filter((b) => !had.has(b)) },
   };
 }

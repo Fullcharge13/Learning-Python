@@ -1,7 +1,8 @@
 // 작업 2: 보상·보호권 구매·취약 개념 규칙 시험
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { lessonReward, reviewReward, buyFreeze, markConcept } from "../../src/rules.js";
+import { lessonReward, reviewReward, buyFreeze, markConcept, earnXp } from "../../src/rules.js";
+import { xpForLevel, levelGift } from "../../src/levels.js";
 
 // 공통 Save 모양(ledger C3) — src/save.js를 import하지 않고 직접 만든다
 function fixture(over = {}) {
@@ -114,4 +115,22 @@ test("R8 new_object: 실패하지 않는 경로는 언제나 새 객체", () => 
   assert.notEqual(s1, s0);
   assert.notEqual(s1.review_queue, s0.review_queue);
   assert.notEqual(s1.weak_concepts, s0.weak_concepts);
+});
+
+// v0.22.0 레벨업 선물(설계 §5-2): earnXp가 레벨이 오를 때 바이트를 더하고 levelUp을 돌려준다
+test("earnXp: 레벨이 오르면 선물 바이트와 levelUp", () => {
+  const s0 = fixture({ xp: xpForLevel(2) - 5, bytes: 7, levels: { granted: 1, pending_welcome: 0, legacy: false } });
+  const r = earnXp(s0, 10, "2026-10-29");
+  assert.deepEqual(r.levelUp, { from: 1, to: 2, bytes: levelGift(2) });
+  assert.equal(r.save.bytes, 7 + levelGift(2));
+  assert.equal(r.save.levels.granted, 2);
+  assert.equal(r.milestone, null);
+  assert.equal(s0.bytes, 7); // 원본은 그대로
+});
+
+test("earnXp: 레벨이 안 오르면 levelUp null, 바이트 그대로", () => {
+  const s0 = fixture({ xp: 0, bytes: 7, levels: { granted: 1, pending_welcome: 0, legacy: false } });
+  const r = earnXp(s0, 10, "2026-10-29");
+  assert.equal(r.levelUp, null);
+  assert.equal(r.save.bytes, 7);
 });

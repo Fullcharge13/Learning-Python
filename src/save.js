@@ -6,6 +6,7 @@ import { newDaily, cleanDaily } from "./daily.js";
 import { newGarden, cleanGarden } from "./garden/state.js";
 import { newGuard, cleanGuard } from "./guard/state.js";
 import { newProjects, cleanProjects } from "./projects/state.js";
+import { newLevels, cleanLevels, welcomeLevels, levelOf } from "./levels.js";
 import { isDate, DAILY_GOALS } from "./rules.js";
 import { t, normLang } from "./i18n.js";
 
@@ -38,6 +39,7 @@ export function newSave() {
     garden: newGarden(), // v0.10 파이의 텃밭(src/garden/state.js). saveVer 그대로, 없거나 망가지면 기본값
     guard: newGuard(),   // v0.15 경비실(src/guard/state.js). saveVer 그대로, 없거나 망가지면 기본값
     projects: newProjects(), // v0.21.0 프로젝트 공방(src/projects/state.js). saveVer 그대로, 없거나 망가지면 기본값
+    levels: newLevels(),     // v0.22.0 레벨 { granted, pending_welcome, legacy }(src/levels.js). saveVer 그대로, 없으면 옮기기(migrate), 망가지면 granted=levelOf(xp)
     goal_pending: null,  // v0.12.1 하루 목표 예약 { value: 10|20|30, from: "YYYY-MM-DD" } — 바꾼 목표는 다음 날부터(rules.js)
     broken_notice: null, // v0.12.1 깨진 저장을 남긴 칸 이름. 홈에서 한 번 알리고 null로
     tutorial: null,      // v0.18.0 첫 사용 튜토리얼 null(아직)|"done"|"skipped". saveVer 그대로, 없거나 이상하면 기록 규칙(migrate)
@@ -185,6 +187,14 @@ export function migrate(raw) {
     s.tutorial = s.completed_lessons.length > 0 || s.xp > 0 ? "done" : null;
   }
   migrateOutfits(s, ver < 2);
+  // v0.22.0(설계 §5-5): levels 칸이 없으면 업데이트 뒤 처음 연 것 — 지금 레벨까지 받은 것으로 치고 환영 선물을 한 번.
+  // 칸이 있으면(망가졌어도) 정리만 한다. 선물 없음.
+  if (Object.hasOwn(raw, "levels")) s.levels = cleanLevels(raw.levels, s.xp);
+  else {
+    const w = welcomeLevels(s.xp);
+    s.levels = w.levels;
+    s.bytes += w.bytes;
+  }
   s.saveVer = ver > SAVE_VER ? ver : SAVE_VER;
   return s;
 }
@@ -193,6 +203,14 @@ export function migrate(raw) {
 export function takeRefundNotice(save) {
   const bytes = save && Number.isInteger(save.pending_refund) && save.pending_refund > 0 ? save.pending_refund : 0;
   return bytes ? { save: { ...save, pending_refund: 0 }, bytes } : { save, bytes: 0 };
+}
+// 레벨 환영 선물 안내(v0.22.0, pending_refund와 같은 방식): 알릴 금액·지금 레벨과 깃발을 내린(0) 새 저장.
+// 알릴 것이 없으면 같은 저장을 그대로 돌려준다(bytes 0). 바이트는 migrate에서 이미 더했다.
+export function takeWelcome(save) {
+  const lv = save && save.levels;
+  const bytes = lv && Number.isInteger(lv.pending_welcome) && lv.pending_welcome > 0 ? lv.pending_welcome : 0;
+  const level = levelOf(save && save.xp);
+  return bytes ? { save: { ...save, levels: { ...lv, pending_welcome: 0 } }, bytes, level } : { save, bytes: 0, level };
 }
 // 깨진 저장 안내(v0.12.1, QA): 남긴 칸 이름과 깃발을 내린(null) 새 저장. 없으면 같은 저장
 export function takeBrokenNotice(save) {

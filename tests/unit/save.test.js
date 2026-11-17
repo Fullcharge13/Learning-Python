@@ -1,7 +1,9 @@
 import "./_guard_index.js";   // 판정 G2-C3: 저장을 읽기 전에 경비실 색인
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SAVE_KEY, SAVE_VER, newSave, migrate, load, loadEx, store, takeRefundNotice, refundNoticeText } from "../../src/save.js";
+import { SAVE_KEY, SAVE_VER, newSave, migrate, load, loadEx, store, takeRefundNotice, refundNoticeText, takeWelcome } from "../../src/save.js";
+import { checkImport } from "../../src/importsave.js";
+import { levelOf, xpForLevel, welcomeGift, WELCOME_CAP } from "../../src/levels.js";
 import { newGarden } from "../../src/garden/state.js";
 import { newGuard } from "../../src/guard/state.js";
 import { newProjects } from "../../src/projects/state.js";
@@ -37,6 +39,7 @@ const LEDGER_SHAPE = {
   garden: newGarden(), // v0.10 파이의 텃밭(saveVer 그대로, 없으면 기본값)
   guard: newGuard(),   // v0.15 경비실(saveVer 그대로, 없으면 기본값)
   projects: newProjects(), // v0.21.0 프로젝트 공방(saveVer 그대로, 없으면 기본값)
+  levels: { granted: 1, pending_welcome: 0, legacy: false }, // v0.22.0 레벨(saveVer 그대로, 없으면 옮기기)
   goal_pending: null,  // v0.12.1 하루 목표 예약(내일부터)
   broken_notice: null, // v0.12.1 깨진 저장 안내(한 번)
   tutorial: null,      // v0.18.0 첫 사용 튜토리얼(null|"done"|"skipped")
@@ -529,4 +532,81 @@ test("tutorial: 저장된 null이어도 기록이 있으면 done, 없으면 null
   assert.equal(migrate({ ...newSave(), tutorial: null, xp: 5 }).tutorial, "done");
   assert.equal(migrate({ ...newSave(), tutorial: null, completed_lessons: ["1-1"] }).tutorial, "done");
   assert.equal(migrate({ ...newSave(), tutorial: null }).tutorial, null);
+});
+
+// ---- v0.22.0 레벨 옮기기 (설계 §5-5) ----
+// 업데이트 전 저장: levels 칸이 없다
+const oldSave = (over = {}) => { const s = { ...newSave(), ...over }; delete s.levels; return s; };
+
+test("save: newSave().levels", () => {
+  assert.deepEqual(newSave().levels, { granted: 1, pending_welcome: 0, legacy: false });
+});
+
+test("save: levels 없는 xp 1,400 저장 → granted 13, 환영 선물 120, legacy", () => {
+  const s = migrate(oldSave({ xp: 1400, bytes: 33 }));
+  assert.equal(levelOf(1400), 13);
+  assert.equal(welcomeGift(13), 120);
+  assert.deepEqual(s.levels, { granted: 13, pending_welcome: 120, legacy: true });
+  assert.equal(s.bytes, 33 + 120);
+});
+
+test("save: levels 없는 xp 0 저장 → granted 1, 선물 0, legacy 아님", () => {
+  const s = migrate(oldSave({ xp: 0, bytes: 5 }));
+  assert.deepEqual(s.levels, { granted: 1, pending_welcome: 0, legacy: false });
+  assert.equal(s.bytes, 5);
+});
+
+test("save: levels 없는 xp 9,000 저장 → 선물 200(상한)", () => {
+  const s = migrate(oldSave({ xp: 9000 }));
+  assert.equal(WELCOME_CAP, 200);
+  assert.equal(s.levels.granted, 30);
+  assert.equal(s.levels.pending_welcome, 200);
+  assert.equal(s.bytes, 200);
+});
+
+test("save: 망가진 levels → granted = levelOf(xp), 선물 없음", () => {
+  for (const bad of ["x", { granted: -1 }, null, 7, [], { granted: "a", pending_welcome: -9 }]) {
+    const s = migrate({ ...newSave(), xp: 1400, bytes: 10, levels: bad });
+    assert.equal(s.levels.granted, 13, JSON.stringify(bad));
+    assert.equal(s.levels.pending_welcome, 0, JSON.stringify(bad));
+    assert.equal(s.bytes, 10, JSON.stringify(bad));
+  }
+});
+
+test("save: 환영 선물은 한 번", () => {
+  const a = migrate(oldSave({ xp: 1400 }));
+  const b = migrate(JSON.parse(JSON.stringify(a)));
+  assert.equal(b.bytes, a.bytes);
+  assert.deepEqual(b.levels, a.levels);
+});
+
+test("save: takeWelcome은 한 번만 bytes>0", () => {
+  const s = migrate(oldSave({ xp: 1400 }));
+  const r1 = takeWelcome(s);
+  assert.equal(r1.bytes, 120);
+  assert.equal(r1.level, 13);
+  assert.equal(r1.save.levels.pending_welcome, 0);
+  assert.equal(r1.save.bytes, s.bytes, "바이트는 이미 들어가 있음 — 다시 더하지 않음");
+  assert.equal(s.levels.pending_welcome, 120, "원본 불변");
+  const r2 = takeWelcome(r1.save);
+  assert.equal(r2.bytes, 0);
+  assert.equal(r2.save, r1.save, "알릴 것 없으면 같은 저장");
+  // 저장 → 다시 읽기(새로 고침)해도 다시 나오지 않음
+  const st = fakeStorage();
+  store(st, r1.save);
+  assert.equal(takeWelcome(load(st)).bytes, 0);
+  assert.equal(takeWelcome(newSave()).bytes, 0);
+  assert.equal(takeWelcome({}).bytes, 0);
+});
+
+test("save: 옛 저장 가져오기", () => {
+  const raw = JSON.parse(JSON.stringify(oldSave({ xp: 1400, bytes: 33, completed_lessons: ["1-1"] })));
+  assert.equal(checkImport(raw).ok, true);
+  const viaImport = migrate(raw); // 설정 → 저장 가져오기는 checkImport 뒤 같은 migrate를 쓴다(src/ui/settings.js)
+  const viaLoad = load(fakeStorage({ [SAVE_KEY]: JSON.stringify(raw) }));
+  assert.deepEqual(viaImport.levels, { granted: 13, pending_welcome: 120, legacy: true });
+  assert.equal(viaImport.bytes, 33 + 120);
+  assert.deepEqual(viaLoad.levels, viaImport.levels);
+  assert.equal(viaLoad.bytes, viaImport.bytes);
+  assert.equal(xpForLevel(13) <= 1400, true);
 });

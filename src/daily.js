@@ -179,7 +179,7 @@ export function finishDaily(save, info = {}, now = new Date()) {
   s.stats.items += num(info.itemsSolved);
   s.submission_logs = [...(s.submission_logs || []), ...(info.logs || [])].slice(-50);
   s.last_active_at = now.toISOString();
-  const empty = { mode: "daily", xp: 0, lessonBytes: 0, bonusBytes: 0, questBytes: 0, milestoneBytes: 0, totalBytes: 0,
+  const empty = { mode: "daily", xp: 0, lessonBytes: 0, bonusBytes: 0, questBytes: 0, milestoneBytes: 0, levelBytes: 0, levelUp: null, totalBytes: 0,
     finished: [], chest: false, newBadges: [], milestone: null, streakUp: false, streak: s.streak.days,
     dailyStreak: d0.streak, firstTime: false, accuracy: info.accuracy };
   if (d0.last_done_date === day) return { save: s, result: empty };
@@ -188,7 +188,9 @@ export function finishDaily(save, info = {}, now = new Date()) {
   const bytesBefore = num(s.bytes);
   const earned = earnXp(s, DAILY_XP, today);
   s = earned.save;
-  const milestoneBytes = num(s.bytes) - bytesBefore;
+  // v0.22.0: 레벨 선물은 「레벨」 출처로 따로 센다(연속 기록 바이트에 섞지 않음)
+  const levelBytes = earned.levelUp ? earned.levelUp.bytes : 0;
+  const milestoneBytes = num(s.bytes) - bytesBefore - levelBytes;
   const streakUp = s.streak.lastGoalDate === today && goalBefore !== today;
 
   const streak = d0.last_done_date && isDate(day) && d0.last_done_date === prevDay(day) ? d0.streak + 1 : 1;
@@ -207,7 +209,7 @@ export function finishDaily(save, info = {}, now = new Date()) {
   const had = new Set(save.badges || []);
   return {
     save: s,
-    result: { ...empty, xp: DAILY_XP, lessonBytes: DAILY_BYTES, bonusBytes, questBytes, milestoneBytes,
+    result: { ...empty, xp: DAILY_XP, lessonBytes: DAILY_BYTES, bonusBytes, questBytes, milestoneBytes, levelBytes, levelUp: earned.levelUp,
       totalBytes: num(s.bytes) - num(save.bytes), finished: q.finished, chest: q.chest,
       newBadges: s.badges.filter((b) => !had.has(b)), milestone: earned.milestone, streakUp, streak: s.streak.days,
       dailyStreak: streak, firstTime: true },

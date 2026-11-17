@@ -8,6 +8,7 @@ import {
 } from "../../src/projects/state.js";
 import { newSave, migrate } from "../../src/save.js";
 import { localDate } from "../../src/today.js";
+import { xpForLevel, levelGift } from "../../src/levels.js";
 
 const INDEX = [
   { id: "P1", need: 3, icon: "play", steps: 4, title: { ko: "가위바위보", en: "Rock Paper Scissors" }, blurb: { ko: "a", en: "b" } },
@@ -275,4 +276,19 @@ test("setProjectIndex: 모양이 틀리면 던짐", () => {
   assert.throws(() => setProjectIndex([{ id: "X1", need: 3, steps: 2 }]), /project index/);
   setProjectIndex(INDEX);
   assert.equal(projectIndex().length, 2);
+});
+
+// v0.22.0(설계 §5-2): 결과에 levelUp·levelBytes
+test("passStep: 레벨이 오르면 levelUp·levelBytes", () => {
+  const s0 = { ...quietSave(), xp: xpForLevel(2) - 1 };
+  const r = pass(s0, 0, "print(1)");
+  assert.deepEqual(r.levelUp, { from: 1, to: 2, bytes: levelGift(2) });
+  assert.equal(r.levelBytes, levelGift(2));
+  assert.equal(r.save.bytes, s0.bytes + levelGift(2));
+  const r2 = pass(r.save, 0, "print(1)"); // 지금 단계가 아님: XP 없음
+  assert.equal(r2.levelUp, null);
+  assert.equal(r2.levelBytes, 0);
+  const r3 = pass(quietSave(), 0, "print(1)", { usedSolution: true }); // XP 0
+  assert.equal(r3.levelUp, null);
+  assert.equal(r3.levelBytes, 0);
 });

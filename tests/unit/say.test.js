@@ -120,7 +120,7 @@ test("outfit_short: 모든 의상에 short 이름이 있음 (C16)", () => {
   }
 });
 
-test("placeholders_outfit: 실제 의상 short 이름 10개 × {outfit} 줄 전부", () => {
+test("placeholders_outfit: 실제 의상 short 이름 전부(13개) × {outfit} 줄 전부", () => {
   const s = "outfit_bought";
   const idx = LINES[s].map((l, i) => (l.text.includes("{outfit}") ? i : -1)).filter((i) => i >= 0);
   assert.ok(idx.length >= 1);

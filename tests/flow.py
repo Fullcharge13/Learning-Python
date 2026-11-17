@@ -2953,7 +2953,7 @@ def _in_view(a, sel):
 
 def test_qa0121_closet_preview_in_view():
     """의상실(QA 1·3): 아래쪽 카드(마법사 망토)를 누르면 미리보기·「300바이트로 사기」가 화면 안, 초점은 사기 단추 →
-    사면 초점은 「입고 있어요」. 맨 끝 카드(졸업 가운)도 미리보기가 화면 안. 캡처: qa0121-closet-*.png (iPhone 17)"""
+    사면 초점은 「입고 있어요」. 아래쪽 판매 안 함 카드(졸업 가운)와 맨 끝 카드(v0.22.0 new3)도 미리보기가 화면 안. 캡처: qa0121-closet-*.png (iPhone 17)"""
     # v0.22.0: levels를 적어 둔다 — 없으면 옮기기가 환영 선물(+50)을 더한다. legacy라 Lv6에서도 마법사 망토(Lv20)를 산다
     seed = {"saveVer": 2, "xp": 500, "bytes": 1000, "completed_lessons": ["1-1"],
             "levels": {"granted": 6, "pending_welcome": 0, "legacy": True}}
@@ -2981,12 +2981,19 @@ def test_qa0121_closet_preview_in_view():
         a.page.click("#worn", force=True)   # aria-disabled: 눌러도 아무 일 없음
         assert a.save()["outfit"] == "wizard"
         a.shot("qa0121-closet-bought.png")
-        # 맨 끝 카드(판매 안 함): 미리보기가 화면 안, 초점은 이름
+        # 판매 안 함 카드(졸업 가운): 미리보기가 화면 안, 초점은 이름
         a.page.locator('[data-o="graduate"]').scroll_into_view_if_needed()
         a.page.click('[data-o="graduate"]')
         a.page.wait_for_timeout(900)
         assert _in_view(a, ".stage .lock-note") is True, _in_view(a, ".stage .lock-note")
         assert a.js("() => document.activeElement.closest('.stage') !== null")
+        # v0.22.0(검토 M3): 진짜 맨 끝 카드는 새 의상 자리 new3 — 미리보기·사기 단추가 화면 안
+        a.page.locator('[data-o="new3"]').scroll_into_view_if_needed()
+        a.page.click('[data-o="new3"]')
+        a.page.wait_for_selector('[data-o="new3"][aria-pressed="true"]')
+        a.page.wait_for_timeout(900)
+        assert _in_view(a, ".stage .ria-wrap") is True, _in_view(a, ".stage .ria-wrap")
+        assert _in_view(a, "#buy") is True, _in_view(a, "#buy")
         assert not a.errors, a.errors
     # 동작 줄이기: 바로 이동(부드러운 스크롤 없이)
     with App("iPhone 17", save=seed, reduced=True) as a:

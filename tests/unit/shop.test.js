@@ -205,6 +205,8 @@ test("shop: 가진 상품은 레벨과 상관없음 — 가진 꾸미기는 Lv1�
 test("shop: setDeco는 가지지 않은 것, 다른 공간의 id, 모르는 공간을 거절", () => {
   const s = atLv(30, { deco: { owned: ["gd_fence", "ed_sea"], on: { garden: null, guard: null, workshop: null, editor: null } } });
   assert.ok(setDeco(s, "garden", "gd_flowers") instanceof Error, "가지지 않음");
+  assert.equal(setDeco(s, "garden", "gd_flowers").reason, "notowned", "검토 M1: canBuy의 owned(이미 가짐)와 다른 이름");
+  assert.equal(setDeco(s, "editor", "gd_fence").reason, "space");
   assert.ok(setDeco(s, "editor", "gd_fence") instanceof Error, "다른 공간");
   assert.ok(setDeco(s, "garden", "casual") instanceof Error, "의상");
   assert.ok(setDeco(s, "kitchen", null) instanceof Error, "모르는 공간");

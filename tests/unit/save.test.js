@@ -642,3 +642,16 @@ test("save: 새 의상 id(new1~3)는 가진 의상으로 남는다", () => {
   assert.deepEqual(s.outfits, ["basic", "new1", "new2"]);
   assert.equal(s.outfit, "new2");
 });
+
+// 검토 I1: 켬 상태(on)만 망가지면 산 꾸미기(owned)는 남기고 on만 「없음」으로
+import { cleanDeco } from "../../src/deco.js";
+test("save: deco.on만 망가지면 owned는 지키고 on만 기본값", () => {
+  for (const badOn of [5, null, "x", [], true]) {
+    assert.deepEqual(cleanDeco({ owned: ["gd_fence", "ws_metal"], on: badOn }),
+      { owned: ["gd_fence", "ws_metal"], on: DECO_DEFAULT.on }, JSON.stringify(badOn));
+    assert.deepEqual(migrate({ ...newSave(), deco: { owned: ["gd_fence"], on: badOn } }).deco,
+      { owned: ["gd_fence"], on: DECO_DEFAULT.on }, "migrate " + JSON.stringify(badOn));
+  }
+  assert.deepEqual(cleanDeco({ owned: ["gd_fence"] }), { owned: ["gd_fence"], on: DECO_DEFAULT.on }, "on 없음");
+  assert.deepEqual(cleanDeco({ owned: 5, on: { garden: "gd_fence" } }), DECO_DEFAULT, "owned가 망가지면 전체 기본값");
+});

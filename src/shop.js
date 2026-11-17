@@ -61,13 +61,13 @@ export function buyItem(save, id) {
 /** 예전 이름(의상실 src/ui/closet.js가 씀). buyItem 그대로 */
 export const buy = (save, id) => buyItem(save, id);
 
-/** 공간의 꾸미기를 켠다(id) 또는 끈다(null). 가진 것, 그 공간의 것만. 레벨과 상관없음 */
+/** 공간의 꾸미기를 켠다(id) 또는 끈다(null). 가진 것, 그 공간의 것만. 레벨과 상관없음. Error.reason: "space"|"notowned" */
 export function setDeco(save, space, id) {
   if (!DECO_SPACES.includes(space)) return fail("space", t`모르는 꾸미기 자리예요: ${space}`);
   const deco = decoOf(save);
   if (id !== null) {
     if (decoSpaceOf(id) !== space) return fail("space", t`이 자리에 쓰는 꾸미기가 아니에요`);
-    if (!deco.owned.includes(id)) return fail("owned", t`아직 가지고 있지 않아요`);
+    if (!deco.owned.includes(id)) return fail("notowned", t`아직 가지고 있지 않아요`);
   }
   return { ...save, deco: { owned: deco.owned, on: { ...deco.on, [space]: id } } };
 }

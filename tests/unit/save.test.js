@@ -570,6 +570,8 @@ test("save: 망가진 levels → granted = levelOf(xp), 선물 없음", () => {
     assert.equal(s.levels.granted, 13, JSON.stringify(bad));
     assert.equal(s.levels.pending_welcome, 0, JSON.stringify(bad));
     assert.equal(s.bytes, 10, JSON.stringify(bad));
+    assert.equal(s.levels.legacy, true, JSON.stringify(bad));
+    assert.equal(migrate({ ...newSave(), xp: 0, levels: bad }).levels.legacy, false, JSON.stringify(bad));
   }
 });
 

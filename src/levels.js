@@ -53,7 +53,7 @@ export const newLevels = () => ({ granted: 1, pending_welcome: 0, legacy: false 
 
 /**
  * 저장의 levels 칸 정리(clean-or-default). 망가진 granted의 기본값은 levelOf(xp) — 지나간 선물을 다시 주지 않게.
- * 바른 granted는 그대로 둔다(지금 레벨보다 낮아도 applyLevels가 이전 XP의 레벨부터 세므로 다시 주지 않음).
+ * 망가진 legacy의 기본값은 xp > 0. 바른 granted는 그대로 둔다(지금 레벨보다 낮아도 applyLevels가 이전 XP의 레벨부터 세므로 다시 주지 않음).
  */
 export function cleanLevels(raw, xp) {
   const now = levelOf(xp);
@@ -62,7 +62,9 @@ export function cleanLevels(raw, xp) {
   const granted = Number.isInteger(g) && g >= 1 ? Math.min(LEVEL_MAX, g) : now;
   const w = r.pending_welcome;
   const pending_welcome = Number.isInteger(w) && w > 0 ? Math.min(w, WELCOME_CAP) : 0;
-  return { granted, pending_welcome, legacy: r.legacy === true };
+  // 망가진 levels(객체가 아니거나 legacy가 참·거짓이 아님)는 legacy = xp > 0 — 기존 학습자가 원래 8벌 예외를 잃지 않게(판정)
+  const legacy = isObj(raw) && typeof r.legacy === "boolean" ? r.legacy : okXp(xp) > 0;
+  return { granted, pending_welcome, legacy };
 }
 
 /**

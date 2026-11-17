@@ -111,10 +111,13 @@ test("levels: levels 칸이 없는 저장도 지나간 레벨 선물은 주지 �
 test("levels: newLevels·cleanLevels", () => {
   assert.deepEqual(newLevels(), { granted: 1, pending_welcome: 0, legacy: false });
   const L13 = xpForLevel(13);
-  assert.deepEqual(cleanLevels("x", L13), { granted: 13, pending_welcome: 0, legacy: false });
-  assert.deepEqual(cleanLevels(null, L13), { granted: 13, pending_welcome: 0, legacy: false });
-  assert.deepEqual(cleanLevels({ granted: -1 }, L13), { granted: 13, pending_welcome: 0, legacy: false });
-  assert.deepEqual(cleanLevels({ granted: 2.5, pending_welcome: -3, legacy: "y" }, L13), { granted: 13, pending_welcome: 0, legacy: false });
+  // 망가진 levels: legacy = xp > 0(기존 학습자가 원래 8벌 예외를 잃지 않게, 판정)
+  assert.deepEqual(cleanLevels("x", L13), { granted: 13, pending_welcome: 0, legacy: true });
+  assert.deepEqual(cleanLevels(null, L13), { granted: 13, pending_welcome: 0, legacy: true });
+  assert.deepEqual(cleanLevels({ granted: -1 }, L13), { granted: 13, pending_welcome: 0, legacy: true });
+  assert.deepEqual(cleanLevels({ granted: 2.5, pending_welcome: -3, legacy: "y" }, L13), { granted: 13, pending_welcome: 0, legacy: true });
+  assert.deepEqual(cleanLevels("x", 0), { granted: 1, pending_welcome: 0, legacy: false });
+  assert.equal(cleanLevels({ granted: 13, legacy: false }, L13).legacy, false, "바른 false는 그대로");
   assert.deepEqual(cleanLevels({ granted: 99 }, L13).granted, LEVEL_MAX);
   // 바른 값은 그대로(지금 레벨보다 낮은 granted도 — applyLevels가 이전 XP의 레벨부터 셈)
   assert.deepEqual(cleanLevels({ granted: 14, pending_welcome: 120, legacy: true }, L13), { granted: 14, pending_welcome: 120, legacy: true });

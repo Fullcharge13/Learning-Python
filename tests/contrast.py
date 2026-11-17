@@ -12,7 +12,7 @@
 - `build.py --dev-pyodide`로 만든 앱(tests/flow.py의 빌드·서버·Chromium 하나를 같이 씀)을 `localStorage["ria-python.theme"]`를
   주어 연다. 설계서 §4 화면 목록(인사, 튜토리얼 4장+실행 결과, 홈, 레슨 카드·고르기·빈칸·순서·코드 쓰기·오류 카드·맞음/틀림 설명·완료,
   배지, 의상실, 설정+확인 창, 텃밭(1장 통과 저장)+말풍선·노드 고르기 창·주문 완료 창, 경비실 빈칸·고르기 창·판정 칸·직접 쓰기,
-  v0.20.0 응용 꼬리표가 있는 사건 목록·응용 사건 처음 해결 창(사건 파일 카드))을 연다.
+  v0.20.0 응용 꼬리표가 있는 사건 목록·응용 사건 처음 해결 창(사건 파일 카드), v0.22.0 상점 세 탭)을 연다.
 - 화면마다 「보이는 글자가 있는 요소」의 글자색과 실제 바탕색의 대비를 재어, 기준 미달을 목록으로 낸다.
   기준: 글자 4.5:1, 큰 글씨(24px 이상, 또는 굵기 700 이상이고 19px 이상) 3:1.
 - 같은 화면 목록의 스크린숏을 tests/out/contrast/<theme>/<화면>.png 로 저장한다(밝게 회귀 비교의 기준 사진).
@@ -494,6 +494,20 @@ def sc_levels(r):
         r.cap(a, "garden-done-levelup")
 
 
+def sc_shop(r):
+    """v0.22.0 작업 5: 상점 세 탭 — 잠김·legacy 표시·바이트 모자람·가짐·켬이 섞인 Lv8 저장"""
+    import flow
+    with _app(r.theme, save=flow._shop_mixed()) as a:
+        flow._open_shop(a)
+        flow._pick_outfit(a, "wizard")
+        r.cap(a, "shop-outfit-legacy")
+        flow._pick_outfit(a, "new1")
+        r.cap(a, "shop-outfit-locked")
+        for tab in ("deco", "color"):
+            flow._shop_tab(a, tab)
+            r.cap(a, "shop-" + tab)
+
+
 def run_app(theme, skip_tokens, skip_art=False):
     import flow
     flow.env()
@@ -504,6 +518,7 @@ def run_app(theme, skip_tokens, skip_art=False):
     r.scenario("4장 통과·3장 기본 해결 저장: 경비실 응용 사건", lambda: sc_guard_field(r))
     r.scenario("5장 통과·P1 완성 저장: 프로젝트 공방", lambda: sc_workshop(r))
     r.scenario("레벨: 환영 알림·레벨 줄(v0.22.0)", lambda: sc_levels(r))
+    r.scenario("상점: 의상·꾸미기·편집기 색 탭(v0.22.0)", lambda: sc_shop(r))
     return r
 
 

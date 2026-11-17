@@ -566,6 +566,23 @@ html:lang(en) .stat-grid dd small.unit { margin-left: .25em; }
 .freeze-text h2 .ic { color: var(--teal-ink); }
 .freeze-text p { margin: 0; font-size: .85rem; color: var(--ink-2); }
 .freeze .btn { flex: none; }
+/* v0.22.0 상점: 탭, legacy 표시, 꾸미기·편집기 색 목록 */
+.shop-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 14px; }
+.shop-tabs button { padding: 6px 4px; line-height: 1.2; color: var(--ink); }
+.legacy-mark { display: flex; gap: 6px; align-items: center; margin: 0; font-weight: 800; font-size: .85rem; color: var(--teal-ink); }
+.legacy-mark .ic, .si-state .ic, .si-lock .ic { width: 16px; height: 16px; flex: none; }
+.outfit.locked .o-tag { color: var(--ink-2); }
+.shop-note { margin: 0 0 10px; font-size: .85rem; }
+.shop-space { font-size: 1rem; margin: 14px 0 8px; }
+.shop-list { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 8px; }
+.shop-item { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; background: var(--card); border: 2px solid var(--line); border-radius: 16px; }
+.si-swatch { display: flex; color: var(--ink); }
+.si-text { display: grid; gap: 2px; min-width: 0; }
+.si-state { display: inline-flex; align-items: center; gap: 4px; font-size: .82rem; font-weight: 700; color: var(--sun-ink); }
+.si-state.own { color: var(--teal-ink); }
+.si-lock { font-size: .85rem; }
+.si-need { font-size: .78rem; color: var(--ink-2); }
+.si-buy { min-height: 44px; padding: 8px 16px; font-size: .95rem; }
 
 /* ---------- 설정 ---------- */
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border: 0; margin: 0; }
@@ -584,8 +601,8 @@ html:lang(en) .stat-grid dd small.unit { margin-left: .25em; }
 .panel.devmode .switch[aria-checked="true"] span { background: var(--navy); }
 .dev-note { margin: 8px 0 0; font-size: .85rem; color: var(--sun-ink); background: var(--sun-soft); border-radius: 10px; padding: 6px 10px; }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
-.seg button { min-height: 48px; border-radius: 14px; background: var(--card); border: 2px solid var(--line); font-weight: 800; }
-.seg button[aria-checked="true"] { background: var(--teal-ink); color: #fff; border-color: var(--teal-ink); }
+.seg button, .shop-tabs button { min-height: 48px; border-radius: 14px; background: var(--card); border: 2px solid var(--line); font-weight: 800; }
+.seg button[aria-checked="true"], .shop-tabs [aria-selected="true"] { background: var(--teal-ink); color: #fff; border-color: var(--teal-ink); }
 .goal-note { margin: 8px 0 0; font-size: .88rem; color: var(--teal-ink); } /* v0.12.1 「내일부터 N XP」 */
 .import-warn { color: #9A3B12; }
 input[type="text"] { width: 100%; min-height: 48px; font-size: 16px; padding: 10px 14px; border-radius: 14px; border: 2px solid var(--line); background: #fff; margin-top: 6px; }
@@ -1128,7 +1145,7 @@ input[type="text"]:focus { border-color: var(--teal-ink); outline: 3px solid var
 [data-theme="dark"] .node.done { background: var(--teal-fill); border-color: var(--teal-fill-edge); box-shadow: 0 5px 0 var(--teal-fill-edge); }
 [data-theme="dark"] .result.ok .result-ic { background: var(--teal-fill); }
 [data-theme="dark"] .result.bad .result-ic { background: var(--coral-fill); }
-[data-theme="dark"] .seg button[aria-checked="true"] { background: var(--teal-fill); border-color: var(--teal-ink); }
+[data-theme="dark"] .seg button[aria-checked="true"], [data-theme="dark"] .shop-tabs [aria-selected="true"] { background: var(--teal-fill); border-color: var(--teal-ink); }
 /* 스위치 트랙: 카드·판 바탕과 3:1 이상(꺼짐 #66759A, 켜짐 #1A8F85). 개발자 모드 줄은 밝게 규칙(.panel.devmode …)이 더 세서 따로 */
 [data-theme="dark"] .switch[aria-checked="true"] span,
 [data-theme="dark"] .panel.devmode .switch[aria-checked="true"] span { background: #1A8F85; }

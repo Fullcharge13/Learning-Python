@@ -80,6 +80,10 @@
 - test_level_* / test_levelup_* / test_welcome_once: v0.22.0 작업 4. 상태 줄 「Lv n」+막대(목표 줄 끝, XP 바로 아래) /
                  레슨·경비실·텃밭·공방 레벨업 한 줄(새 창 없음, 소리 한 번, 바이트 출처 「레벨」, 새 상품 수) / 옛 저장·가져오기 환영 알림
                  한 번 / 영어·어둡게. 캡처: level-*.png (iPhone 17)
+- test_shop_*: v0.22.0 작업 5 상점(의상실 화면 "closet"). 탭 의상·꾸미기·편집기 색(role=tab)+보호권 / 새 저장 Lv1 화이트 코트
+                 「Lv 10에 열려요」·사기 단추 없음 / legacy Lv2 마법사 망토 사기·「예전부터 함께한 학습자」, new1 잠김 / 꾸미기 사서 켜고 끄기
+                 (공간마다 하나) / 가진 상품은 레벨이 모자라도 「가지고 있음」 / 들락날락·탭 바꾸기에도 한 번만 / 영어·어둡게·375px.
+                 캡처: shop-*.png (iPhone 17)
 """
 
 import atexit
@@ -2970,7 +2974,7 @@ def _in_view(a, sel):
 
 def test_qa0121_closet_preview_in_view():
     """의상실(QA 1·3): 아래쪽 카드(마법사 망토)를 누르면 미리보기·「300바이트로 사기」가 화면 안, 초점은 사기 단추 →
-    사면 초점은 「입고 있어요」. 아래쪽 판매 안 함 카드(졸업 가운)와 맨 끝 카드(v0.22.0 new3)도 미리보기가 화면 안. 캡처: qa0121-closet-*.png (iPhone 17)"""
+    사면 초점은 「입고 있어요」. 아래쪽 판매 안 함 카드(졸업 가운)와 맨 끝 카드(v0.22.0 new3, 잠김)도 미리보기가 화면 안. 캡처: qa0121-closet-*.png (iPhone 17)"""
     # v0.22.0: levels를 적어 둔다 — 없으면 옮기기가 환영 선물(+50)을 더한다. legacy라 Lv6에서도 마법사 망토(Lv20)를 산다
     seed = {"saveVer": 2, "xp": 500, "bytes": 1000, "completed_lessons": ["1-1"],
             "levels": {"granted": 6, "pending_welcome": 0, "legacy": True}}
@@ -3004,13 +3008,16 @@ def test_qa0121_closet_preview_in_view():
         a.page.wait_for_timeout(900)
         assert _in_view(a, ".stage .lock-note") is True, _in_view(a, ".stage .lock-note")
         assert a.js("() => document.activeElement.closest('.stage') !== null")
-        # v0.22.0(검토 M3): 진짜 맨 끝 카드는 새 의상 자리 new3 — 미리보기·사기 단추가 화면 안
+        # v0.22.0(검토 M3): 진짜 맨 끝 카드는 새 의상 자리 new3 — 미리보기와 잠김 글이 화면 안
+        # (작업 5: Lv6 저장에서 new3(Lv28)은 legacy 예외가 아니라 잠김 — 사기 단추 대신 「Lv 28에 열려요」)
         a.page.locator('[data-o="new3"]').scroll_into_view_if_needed()
         a.page.click('[data-o="new3"]')
         a.page.wait_for_selector('[data-o="new3"][aria-pressed="true"]')
         a.page.wait_for_timeout(900)
         assert _in_view(a, ".stage .ria-wrap") is True, _in_view(a, ".stage .ria-wrap")
-        assert _in_view(a, "#buy") is True, _in_view(a, "#buy")
+        assert _in_view(a, ".stage .lock-note") is True, _in_view(a, ".stage .lock-note")
+        assert "Lv 28에 열려요" in a.page.inner_text(".stage .lock-note")
+        assert not a.page.query_selector("#buy")
         assert not a.errors, a.errors
     # 동작 줄이기: 바로 이동(부드러운 스크롤 없이)
     with App("iPhone 17", save=seed, reduced=True) as a:
@@ -7142,6 +7149,253 @@ def test_level_dark():
         fails += res["fails"]
         a.shot("level-garden-dark.png")
     assert not fails, fails
+
+
+# ---------------------------------------------------------------- v0.22.0 상점 (작업 5)
+LV13_XP = 1020   # 30×12 + 5×12×11
+
+
+def _shop_seed(xp=0, levels=None, bytes_=1000, **kw):
+    s = {"saveVer": 2, "xp": xp, "bytes": bytes_, "completed_lessons": ["1-1"], "current_lesson": "1-2",
+         "levels": levels or _lv(1)}
+    s.update(kw)
+    return s
+
+
+def _open_shop(a, tab=None):
+    a.start()
+    a.page.click('[data-go="closet"]')
+    a.page.wait_for_selector(".screen.closet .shop-tabs")
+    if tab:
+        _shop_tab(a, tab)
+
+
+def _shop_tab(a, tab):
+    a.page.click('.shop-tabs [data-tab="%s"]' % tab)
+    a.page.wait_for_selector('.shop-tabs [data-tab="%s"][aria-selected="true"]' % tab)
+
+
+def _pick_outfit(a, oid):
+    a.page.locator('[data-o="%s"]' % oid).scroll_into_view_if_needed()
+    a.page.click('[data-o="%s"]' % oid)
+    a.page.wait_for_selector('[data-o="%s"][aria-pressed="true"]' % oid)
+
+
+def _item_text(a, iid):
+    return " ".join(a.page.inner_text('.shop-item[data-id="%s"]' % iid).split())
+
+
+def test_shop_tabs():
+    """상점: 제목 「상점」, 탭 세 개(role=tab, aria-selected 하나), 탭을 바꿔도 보호권이 보임"""
+    with App("iPhone 17", save=_shop_seed()) as a:
+        _open_shop(a)
+        assert a.page.inner_text(".screen.closet h1").strip() == "상점"
+        tabs = a.js("() => [...document.querySelectorAll('.shop-tabs [role=tab]')].map(b => [b.dataset.tab, b.innerText.trim(), b.getAttribute('aria-selected')])")
+        assert tabs == [["outfit", "의상", "true"], ["deco", "꾸미기", "false"], ["color", "편집기 색", "false"]], tabs
+        assert a.page.get_attribute(".shop-tabs", "role") == "tablist"
+        assert a.page.get_attribute("#shop-panel", "role") == "tabpanel"
+        for tab in ("outfit", "deco", "color"):
+            _shop_tab(a, tab)
+            assert a.page.is_visible("#freeze"), tab
+            assert a.page.get_attribute("#shop-panel", "aria-labelledby") == "shop-tab-" + tab
+            assert a.js("() => document.querySelectorAll('.shop-tabs [aria-selected=true]').length") == 1
+            a.shot("shop-tab-%s.png" % tab, full=True)
+        assert a.page.query_selector('.shop-item[data-id="ed_paper"]'), "editor colour list"
+        assert not a.page.query_selector('.shop-item[data-id="gd_fence"]'), "deco not in colour tab"
+        assert not a.errors, a.errors
+
+
+def test_shop_locked():
+    """새 저장 Lv1: 화이트 코트는 미리 「Lv 10에 열려요」(글자), 사기 단추 없음. 꾸미기 「야간 근무」도 같음"""
+    with App("iPhone 17", save=_shop_seed()) as a:
+        _open_shop(a)
+        tag = a.page.inner_text('[data-o="whitecoat"] .o-tag').strip()
+        assert tag == "Lv 10", tag
+        label = a.page.get_attribute('[data-o="whitecoat"]', "aria-label")
+        assert "Lv 10에 열려요" in label, label
+        _pick_outfit(a, "whitecoat")
+        info = " ".join(a.page.inner_text(".stage-info").split())
+        assert "Lv 10에 열려요" in info, info
+        assert not a.page.query_selector("#buy"), "locked item must not have a buy button"
+        a.shot("shop-locked.png")
+        _shop_tab(a, "deco")
+        t = _item_text(a, "gu_night")
+        assert "Lv 8에 열려요" in t, t
+        assert not a.page.query_selector('.shop-item[data-id="gu_night"] button'), "locked deco has no button"
+        assert a.page.query_selector('.shop-item[data-id="gd_fence"] .lock-note'), "Lv3 fence locked at Lv1"
+        assert not a.errors, a.errors
+
+
+def test_shop_legacy():
+    """legacy 저장 Lv2: 마법사 망토(Lv20)를 바이트로 산다, 「예전부터 함께한 학습자」 표시. 새 의상 new1은 잠김"""
+    with App("iPhone 17", save=_shop_seed(xp=LV2_XP, levels=_lv(2, legacy=True))) as a:
+        _open_shop(a)
+        assert a.page.inner_text('[data-o="wizard"] .o-tag').strip() == "300바이트"
+        _pick_outfit(a, "wizard")
+        info = " ".join(a.page.inner_text(".stage-info").split())
+        assert "예전부터 함께한 학습자" in info and "Lv 20" not in info, info
+        a.shot("shop-legacy.png")
+        a.page.click("#buy")
+        a.page.wait_for_selector("#worn")
+        s = a.save()
+        assert s["bytes"] == 700 and s["outfit"] == "wizard" and "wizard" in s["outfits"], s
+        _pick_outfit(a, "new1")
+        info = " ".join(a.page.inner_text(".stage-info").split())
+        assert "Lv 18에 열려요" in info and "예전부터" not in info, info
+        assert not a.page.query_selector("#buy")
+        assert not a.errors, a.errors
+
+
+def test_shop_buy_deco_toggle():
+    """Lv13: 텃밭 울타리·꽃길을 사서 켜면 텃밭 칸은 하나만 켜짐, 끄면 「없음」. 편집기 색 「종이」도 사서 켬"""
+    with App("iPhone 17", save=_shop_seed(xp=LV13_XP, levels=_lv(13))) as a:
+        _open_shop(a, "deco")
+        for iid, price in (("gd_fence", 100), ("gd_flowers", 140)):
+            b0 = a.save()["bytes"]
+            a.page.click('.shop-item[data-id="%s"] [data-buy]' % iid)
+            a.page.wait_for_selector('.shop-item[data-id="%s"] [role=switch]' % iid)
+            assert a.save()["bytes"] == b0 - price, a.save()["bytes"]
+            assert "가지고 있음" in _item_text(a, iid), _item_text(a, iid)
+        assert a.save()["deco"]["on"]["garden"] is None, "buying does not switch on"
+        sw = lambda iid: '.shop-item[data-id="%s"] [role=switch]' % iid
+        a.page.click(sw("gd_fence"))
+        a.page.wait_for_selector(sw("gd_fence") + '[aria-checked="true"]')
+        assert a.save()["deco"]["on"]["garden"] == "gd_fence"
+        a.page.click(sw("gd_flowers"))
+        a.page.wait_for_selector(sw("gd_flowers") + '[aria-checked="true"]')
+        assert a.page.get_attribute(sw("gd_fence"), "aria-checked") == "false"
+        assert a.save()["deco"]["on"]["garden"] == "gd_flowers"
+        assert a.js("() => document.activeElement && document.activeElement.dataset.on") == "gd_flowers"
+        a.shot("shop-deco-on.png", full=True)
+        a.page.click(sw("gd_flowers"))
+        a.page.wait_for_selector(sw("gd_flowers") + '[aria-checked="false"]')
+        assert a.save()["deco"]["on"]["garden"] is None
+        _shop_tab(a, "color")
+        a.page.click('.shop-item[data-id="ed_paper"] [data-buy]')
+        a.page.click('.shop-item[data-id="ed_paper"] [role=switch]')
+        a.page.wait_for_selector('.shop-item[data-id="ed_paper"] [role=switch][aria-checked="true"]')
+        s = a.save()
+        assert s["deco"]["on"] == {"garden": None, "guard": None, "workshop": None, "editor": "ed_paper"}, s["deco"]
+        assert s["deco"]["owned"] == ["ed_paper", "gd_fence", "gd_flowers"], s["deco"]
+        a.shot("shop-color-on.png", full=True)
+        assert not a.errors, a.errors
+
+
+def test_shop_owned_below_level():
+    """레벨이 모자라도 가진 것은 「가지고 있음」: 새 저장 Lv1이 가진 화이트 코트는 입을 수 있고, 가진 「야간 근무」는 켤 수 있다"""
+    deco = {"owned": ["gu_night"], "on": {"garden": None, "guard": None, "workshop": None, "editor": None}}
+    with App("iPhone 17", save=_shop_seed(outfits=["basic", "whitecoat"], deco=deco)) as a:
+        _open_shop(a)
+        tag = a.page.inner_text('[data-o="whitecoat"] .o-tag').strip()
+        assert tag == "가지고 있음", tag
+        _pick_outfit(a, "whitecoat")
+        a.page.click("#wear")
+        a.page.wait_for_selector("#worn")
+        assert a.save()["outfit"] == "whitecoat"
+        _shop_tab(a, "deco")
+        t = _item_text(a, "gu_night")
+        assert "가지고 있음" in t and "Lv 8" not in t, t
+        a.page.click('.shop-item[data-id="gu_night"] [role=switch]')
+        a.page.wait_for_selector('.shop-item[data-id="gu_night"] [role=switch][aria-checked="true"]')
+        assert a.save()["deco"]["on"]["guard"] == "gu_night"
+        assert not a.errors, a.errors
+
+
+def test_shop_reenter():
+    """v0.20.1 규칙: 탭을 여러 번 바꾸고 홈↔상점을 들락날락해도 사기 한 번 = 바이트 한 번·소리 한 번. params {tab}로 바로 그 탭"""
+    with App("iPhone 17", save=_shop_seed(xp=LV13_XP, levels=_lv(13))) as a:
+        _open_shop(a)
+        for _ in range(3):
+            for tab in ("deco", "color", "outfit"):
+                _shop_tab(a, tab)
+            a.page.click('.tabbar [data-go="home"]')
+            a.page.wait_for_selector(".screen.home")
+            a.page.click('[data-go="closet"]')
+            a.page.wait_for_selector(".screen.closet .shop-tabs")
+        _shop_tab(a, "deco")
+        _count_sounds(a)
+        a.page.click('.shop-item[data-id="gd_fence"] [data-buy]')
+        a.page.wait_for_timeout(300)
+        s = a.save()
+        assert s["bytes"] == 900 and s["deco"]["owned"] == ["gd_fence"], s
+        assert _plays(a, "buy") == 1, _plays(a, "buy")
+        a.page.click('.shop-item[data-id="gd_fence"] [role=switch]')
+        a.page.wait_for_timeout(200)
+        assert a.save()["deco"]["on"]["garden"] == "gd_fence", "one toggle = on (not on→off)"
+        a.js("() => window.__ria.ctx.show('closet', { tab: 'color' })")
+        a.page.wait_for_selector('.shop-tabs [data-tab="color"][aria-selected="true"]')
+        assert a.js("() => window.__ria.app.params.tab") == "color"
+        _shop_tab(a, "deco")
+        assert a.js("() => window.__ria.app.params.tab") == "deco", "tab state kept in params"
+        assert not a.errors, a.errors
+
+
+def test_shop_english():
+    """영어: 탭·잠김(Unlocks at Lv 10)·legacy 표시·꾸미기 이름 — 세 탭 모두 한글 없음"""
+    en = {"sound": False, "dailyGoal": 10, "name": "", "lang": "en", "langChosen": True}
+    with App("iPhone 17", save=_shop_seed(xp=LV2_XP, levels=_lv(2, legacy=True), settings=en), locale="en-US") as a:
+        _open_shop(a)
+        assert a.page.inner_text(".screen.closet h1").strip() == "Shop"
+        tabs = a.js("() => [...document.querySelectorAll('.shop-tabs [role=tab]')].map(b => b.innerText.trim())")
+        assert tabs == ["Outfits", "Decor", "Editor colors"], tabs
+        _pick_outfit(a, "wizard")
+        info = " ".join(a.page.inner_text(".stage-info").split())
+        assert "Here since the early days" in info, info
+        a.shot("shop-legacy-en.png")
+        _pick_outfit(a, "new1")
+        assert "Unlocks at Lv 18" in a.page.inner_text(".stage-info")
+        assert not _hangul_left(a), _hangul_left(a)
+        for tab in ("deco", "color"):
+            _shop_tab(a, tab)
+            assert not _hangul_left(a), (tab, _hangul_left(a))
+            a.shot("shop-%s-en.png" % tab, full=True)
+        assert "Unlocks at Lv 5" in _item_text(a, "ed_forest"), _item_text(a, "ed_forest")
+        assert not a.errors, a.errors
+
+
+def _shop_mixed():
+    """잠김·살 수 있음·바이트 모자람·가짐·켬이 섞인 Lv8 저장"""
+    deco = {"owned": ["gd_fence", "ed_paper"], "on": {"garden": "gd_fence", "guard": None, "workshop": None, "editor": "ed_paper"}}
+    return _shop_seed(xp=250 + 50 + 60 + 70, levels=_lv(8, legacy=True), bytes_=110, deco=deco, outfits=["basic", "casual"])
+
+
+def test_shop_dark():
+    """어둡게: 상점 세 탭(잠김·legacy·가짐·켬·모자람) 글자 대비 기준 통과"""
+    sys.path.insert(0, os.path.join(ROOT, "tests"))
+    import contrast
+    init = "localStorage.setItem(%s, 'dark');" % json.dumps(THEME_KEY)
+    fails = []
+    with App("iPhone 17", save=_shop_mixed(), init_js=init) as a:
+        _open_shop(a)
+        _pick_outfit(a, "wizard")
+        for tab in ("outfit", "deco", "color"):
+            _shop_tab(a, tab)
+            _settle_animations(a)
+            res = contrast.run_check(a.page, skip_art=True)
+            fails += [(tab, f["selector"], f["ratio"], f["text"]) for f in res["fails"]]
+            a.shot("shop-%s-dark.png" % tab, full=True)
+        assert not a.errors, a.errors
+    assert not fails, fails
+
+
+def test_shop_375():
+    """375px(iPhone SE)·영어·어둡게: 세 탭 가로 넘침 0, 화면 밖 단추 0, 터치 44px"""
+    en = {"sound": False, "dailyGoal": 10, "name": "", "lang": "en", "langChosen": True}
+    s = _shop_mixed()
+    s["settings"] = en
+    init = "localStorage.setItem(%s, 'dark');" % json.dumps(THEME_KEY)
+    with App("iPhone SE (3rd gen)", save=s, locale="en-US", init_js=init) as a:
+        _open_shop(a)
+        assert a.js("() => innerWidth") == 375
+        _pick_outfit(a, "wizard")
+        bad = []
+        for tab in ("outfit", "deco", "color"):
+            _shop_tab(a, tab)
+            m = measure(a, "shop-" + tab)
+            bad += m["problems"] + m["small"]
+            a.shot("shop-%s-375.png" % tab, full=True)
+        assert not bad, bad
+        assert not a.errors, a.errors
 
 
 if __name__ == "__main__":

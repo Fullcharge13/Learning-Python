@@ -10,6 +10,8 @@ import { t } from "./i18n.js";
 const ITEMS = new Map(SHOP_ITEMS.map((i) => [i.id, i]));
 const itemOf = (id) => (typeof id === "string" && ITEMS.has(id) ? ITEMS.get(id) : null);
 const decoOf = (save) => cleanDeco(save && save.deco);
+/** 상품 표의 한 줄(없으면 null). 상점 화면이 legacyFree를 볼 때 */
+export const shopItem = itemOf;
 const isLegacy = (save) => !!(save && save.levels && save.levels.legacy === true);
 
 /** 가지고 있나: 의상은 save.outfits, 꾸미기는 save.deco.owned */

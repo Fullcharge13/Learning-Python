@@ -1,6 +1,9 @@
-// 의상실: 10벌 미리보기, 바이트로 사기, 입기, 기록 보호권
+// 상점(화면 이름은 그대로 "closet", v0.22.0 설계 2026-11-17 §5-4·§5-5): 탭 의상·꾸미기·편집기 색 + 기록 보호권.
+// 의상 탭은 무대 미리보기·사기·입기. 잠긴 상품은 처음부터 「Lv N에 열려요」, 사기 단추 없음. 꾸미기·색 탭은 ./shopdeco.js
+// 탭 상태는 params.tab("outfit"|"deco"|"color"). #app 묶음 없음 — 단추마다 묶고 다시 그리면 함께 사라짐(v0.20.1)
 import { OUTFITS } from "../../data/outfits.js";
-import { buy } from "../shop.js";
+import { buy, canBuy, shopItem } from "../shop.js";
+import { decoPanelHTML, bindDeco } from "./shopdeco.js";
 import { buyFreeze, FREEZE_PRICE, FREEZE_MAX } from "../rules.js";
 import { checkBadges } from "../badges.js";
 import { riaSVG } from "../ria.js";
@@ -37,27 +40,29 @@ function focusAction(root) {
   if (target) target.focus({ preventScroll: true });
 }
 
+const TABS = ["outfit", "deco", "color"];
+const tabLabel = (k) => (k === "outfit" ? t`의상` : k === "deco" ? t`꾸미기` : t`편집기 색`);
+const isLegacyFree = (s, id) => !!(s.levels && s.levels.legacy === true && shopItem(id) && shopItem(id).legacyFree);
+
 export function render(root, ctx, params = {}) {
   let sel = params.sel || ctx.save.outfit;
   let line = params.line || null;
+  let tab = TABS.includes(params.tab) ? params.tab : "outfit";
 
-  function paint(after = null) {
-    const s = ctx.save;
+  function outfitPanel(s) {
     const o = OUTFITS.find((x) => x.id === sel) || OUTFITS[0];
     const own = s.outfits.includes(o.id);
     const wearing = s.outfit === o.id;
+    const c = canBuy(s, o.id);
     let action;
     // 「입고 있어요」는 초점을 받을 수 있게 aria-disabled(산 뒤·입은 뒤 초점이 여기로, QA 3)
     if (wearing) action = `<button class="btn ghost wide is-off" id="worn" aria-disabled="true">${t`입고 있어요`}</button>`;
     else if (own) action = `<button class="btn primary wide" id="wear">${t`입기`}</button>`;
     else if (o.price == null) action = `<p class="lock-note">${icon("lock")}${t`30일 연속 기록 보상`}</p>`;
-    else action = `<button class="btn sun wide" id="buy"${s.bytes < o.price ? " disabled" : ""}>${icon("byte")}<span>${t`${o.price}바이트로 사기`}</span></button>
+    else if (c.reason === "level") action = `<p class="lock-note">${icon("lock")}${esc(t`Lv ${c.needLevel}에 열려요`)}</p>`;
+    else action = `${isLegacyFree(s, o.id) ? `<p class="legacy-mark">${icon("star")}${t`예전부터 함께한 학습자`}</p>` : ""}<button class="btn sun wide" id="buy"${s.bytes < o.price ? " disabled" : ""}>${icon("byte")}<span>${t`${o.price}바이트로 사기`}</span></button>
       ${s.bytes < o.price ? `<p class="muted center">${t`${o.price - Math.max(0, s.bytes)}바이트 더 모으면 살 수 있어요`}</p>` : ""}`;
-    root.innerHTML = `<div class="screen closet with-tabs">
-      ${statusBar(s)}
-      <main>
-        <h1 class="page-title">${t`의상실`}</h1>
-        <section class="stage" aria-labelledby="stage-name">
+    return `<section class="stage" aria-labelledby="stage-name">
           <div class="ria-wrap big">${riaSVG({ outfit: o.id, face: wearing ? "smile" : "sparkle", size: 170 })}</div>
           <div class="stage-info">
             <h2 id="stage-name">${esc(oName(o))}</h2>
@@ -69,13 +74,27 @@ export function render(root, ctx, params = {}) {
         </section>
         <ul class="outfit-grid" aria-label="${esc(t`의상 목록`)}">${OUTFITS.map((x) => {
           const owned = s.outfits.includes(x.id);
-          const tag = s.outfit === x.id ? t`입는 중` : owned ? t`보유` : x.price == null ? t`30일 연속 기록 보상` : t`${x.price}바이트`;
-          return `<li><button class="outfit${x.id === sel ? " sel" : ""}${owned ? " owned" : ""}" data-o="${x.id}" aria-pressed="${x.id === sel}" aria-label="${esc(`${oLabel(x)}, ${tag}`)}">
+          const cb = owned || x.price == null ? null : canBuy(s, x.id);
+          const need = cb && cb.reason === "level" ? cb.needLevel : 0;
+          const tag = s.outfit === x.id ? t`입는 중` : owned ? t`가지고 있음` : x.price == null ? t`30일 연속 기록 보상` : need ? `Lv ${need}` : t`${x.price}바이트`;
+          const say = need ? t`Lv ${need}에 열려요` : tag;
+          return `<li><button class="outfit${x.id === sel ? " sel" : ""}${owned ? " owned" : ""}${need ? " locked" : ""}" data-o="${x.id}" aria-pressed="${x.id === sel}" aria-label="${esc(`${oLabel(x)}, ${say}`)}">
             ${riaSVG({ outfit: x.id, face: "smile", size: 74 })}
             <span class="o-name">${esc(oLabel(x))}</span>
-            <span class="o-tag${owned ? " own" : ""}">${!owned && x.price == null ? icon("lock") : ""}${esc(tag)}</span>
+            <span class="o-tag${owned ? " own" : ""}">${!owned && (x.price == null || need) ? icon("lock") : ""}${esc(tag)}</span>
           </button></li>`;
-        }).join("")}</ul>
+        }).join("")}</ul>`;
+  }
+
+  function paint(after = null) {
+    const s = ctx.save;
+    root.innerHTML = `<div class="screen closet with-tabs">
+      ${statusBar(s)}
+      <main>
+        <h1 class="page-title">${t`상점`}</h1>
+        <div class="shop-tabs" role="tablist" aria-label="${esc(t`상점`)}">${TABS.map((k) => `<button type="button" role="tab" id="shop-tab-${k}" data-tab="${k}"
+          aria-controls="shop-panel" aria-selected="${k === tab}" tabindex="${k === tab ? 0 : -1}">${esc(tabLabel(k))}</button>`).join("")}</div>
+        <div id="shop-panel" role="tabpanel" aria-labelledby="shop-tab-${tab}">${tab === "outfit" ? outfitPanel(s) : decoPanelHTML(s, tab)}</div>
         <section class="panel freeze">
           <div class="freeze-text">
             <h2>${icon("shield")}${t`기록 보호권`} <b>${s.freezes}/${FREEZE_MAX}</b></h2>
@@ -87,6 +106,20 @@ export function render(root, ctx, params = {}) {
       ${tabBar("closet", gardenTabOf(ctx))}
     </div>`;
     bindTabs(root, ctx);
+    const tabBtns = [...root.querySelectorAll(".shop-tabs [role=tab]")];
+    const toTab = (k) => { tab = k; params.tab = k; paint("tab"); };
+    tabBtns.forEach((b, i) => {
+      b.addEventListener("click", () => { if (b.dataset.tab !== tab) toTab(b.dataset.tab); });
+      // 탭 줄 화살표·Home/End(ARIA 탭 방식)
+      b.addEventListener("keydown", (e) => {
+        const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
+        if (j === undefined) return;
+        e.preventDefault();
+        toTab(TABS[(j + TABS.length) % TABS.length]);
+      });
+    });
+    if (tab !== "outfit") bindDeco(root, ctx, (sel) => paint(sel));
+    const o = OUTFITS.find((x) => x.id === sel) || OUTFITS[0];
     root.querySelectorAll("[data-o]").forEach((b) => b.addEventListener("click", () => { sel = b.dataset.o; line = null; paint("pick"); }));
     const wear = root.querySelector("#wear");
     if (wear) wear.addEventListener("click", () => {
@@ -118,6 +151,8 @@ export function render(root, ctx, params = {}) {
     });
     if (after === "pick") { focusAction(root); bringStage(root); }
     else if (after === "focus") focusAction(root);
+    else if (after === "tab") root.querySelector(`#shop-tab-${tab}`).focus({ preventScroll: true });
+    else if (after) { const f = root.querySelector(after); if (f) f.focus({ preventScroll: true }); }
   }
   paint();
 }

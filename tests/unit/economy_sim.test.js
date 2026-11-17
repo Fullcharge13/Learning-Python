@@ -1,7 +1,8 @@
 // 작업 12: 바이트 경제 시뮬레이션이 같은 씨앗에서 같은 결과를 내고, 숫자가 깨지지 않는지
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runSim } from "../sim/economy.js";
+import { runSim, buyOrder } from "../sim/economy.js";
+import { SHOP_ITEMS } from "../../data/shop.js";
 
 const NUM_KEYS = ["bytesPerActiveDay", "freezesUsed", "streakBroken", "finalStreak", "outfitsOwned", "activeDays"];
 
@@ -71,4 +72,34 @@ test("daily 옵션: 결정적, 도전한 날이 있고 바이트가 기준보다
   const fods = [1, 2, 3, 4, 5, 6].map((s) => runSim(s, { daily: true }).firstOutfitDay).sort((a, b) => a - b);
   const med = (fods[2] + fods[3]) / 2;
   assert.ok(med >= 3 && med <= 4, `first outfit median ${med}`);
+});
+
+// v0.22.0 작업 3 검토 I2: 사는 순서 지킴이. 첫 의상 판정이 「값이 같으면 의상 먼저」에 달려 있다(설계 §5-6).
+test("economy sim: 사는 순서는 값 오름차순, 값이 같으면 의상 먼저", () => {
+  const order = buyOrder(SHOP_ITEMS);
+  assert.equal(order.length, SHOP_ITEMS.length);
+  for (let i = 1; i < order.length; i++) {
+    const a = order[i - 1], b = order[i];
+    assert.ok(a.price <= b.price, `${a.id} ${a.price} > ${b.id} ${b.price}`);
+    if (a.price === b.price) assert.ok(!(a.kind !== "outfit" && b.kind === "outfit"), `${a.id}(${a.kind}) 가 의상 ${b.id} 앞`);
+  }
+});
+
+test("economy sim: 표 순서를 뒤집어도 같은 값의 의상이 먼저", () => {
+  const ids = (xs) => xs.map((i) => i.id);
+  const fwd = ids(buyOrder(SHOP_ITEMS)), rev = ids(buyOrder([...SHOP_ITEMS].reverse()));
+  const firstOf = (list, price) => SHOP_ITEMS.find((i) => i.id === list.find((id) => SHOP_ITEMS.find((x) => x.id === id).price === price));
+  for (const price of new Set(SHOP_ITEMS.map((i) => i.price))) {
+    const hasOutfit = SHOP_ITEMS.some((i) => i.price === price && i.kind === "outfit");
+    if (hasOutfit) {
+      assert.equal(firstOf(fwd, price).kind, "outfit", `값 ${price}`);
+      assert.equal(firstOf(rev, price).kind, "outfit", `값 ${price} (뒤집음)`);
+    }
+  }
+});
+
+test("economy sim: 기준 판 첫 의상 중앙값 3~4일째(설계 §5-6)", () => {
+  const days = Array.from({ length: 12 }, (_, i) => runSim(i + 1).firstOutfitDay).sort((a, b) => a - b);
+  const median = (days[5] + days[6]) / 2;
+  assert.ok(median >= 3 && median <= 4, `중앙값 ${median} (${days.join(",")})`);
 });

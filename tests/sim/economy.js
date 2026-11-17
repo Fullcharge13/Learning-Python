@@ -14,11 +14,12 @@
 // - 레슨마다 id, isExam, 쓰기 문제의 개념만 읽어 쓴다(터치 문제도 그 개념으로 표시).
 // - 쇼핑(v0.22.0 설계 §5-6)은 학습한 날 끝에: 보호권이 0개이고 200바이트 이상이면 보호권 1개를 먼저, 그다음
 //   src/shop.js canBuy가 ok인 상품(data/shop.js SHOP_ITEMS, 의상·꾸미기·편집기 색 종류 상관없이) 중 가장 싼 것을 하나씩 산다.
-//   값이 같으면 표 순서. 「첫 의상」은 의상(kind "outfit")을 처음 산 날로 따로 잰다. 시뮬레이션 학습자는 새 학습자(legacy 아님).
+//   값이 같으면 의상 먼저(설계 §5-6), 그다음 표 순서. tests/unit/economy_sim.test.js가 이 순서를 지킨다. 「첫 의상」은 의상(kind "outfit")을 처음 산 날로 따로 잰다. 시뮬레이션 학습자는 새 학습자(legacy 아님).
 //   (「strict」 방식: 보호권이 0개면 상품을 사지 않고 보호권 값을 먼저 모음 — 비교용으로만 계산)
 // - 레벨(v0.22.0): earnXp가 주는 레벨업 선물(levelUp.bytes)은 바이트 출처 「레벨」로 따로 센다(이정표·도전·텃밭에 섞지 않음).
 // - 날 수(v0.22.0, { days }): 기본 30. 빠지는 날은 30일 묶음마다 같은 규칙(3번, 그중 1번은 이틀)으로 뽑는다 — 30일 판은 예전과 같은 난수 흐름.
-// - 판정(기본 실행, --lessons 없이): 기준 판 B/active day 40~50, 첫 의상 3~4일째, 30일 레벨 10~14,
+//   30의 배수가 아닌 날 수는 끝 묶음이 10~29일이면 그 안에 4일이 빠져 더 촘촘하고, 10일 미만이면 빠지는 날이 없다(판정은 30·90일만 씀).
+// - 판정(기본 실행, --lessons 없이 또는 전체 과정): 기준 판 B/active day 40~50, 첫 의상 3~4일째, 30일 레벨 10~14,
 //   90일 판(심화 + 매일 도전 + 텃밭)의 남은 상품 1개 이상. 하나라도 밖이면 종료 코드 1.
 // - 심화(v0.7, --advanced / { advanced: true }): 장 평가를 끝내면 다음 차례에 그 장 심화 3개를 먼저 한다(새 본 과정 레슨보다 앞).
 //   장 파일의 ADVANCED를 쓰고, v0.7 계획의 1~6장 중 아직 ADVANCED가 없는 장은 자리 표시 3개(N-A1..3, 개념은 그 장 평가의 것)로 채운다.
@@ -104,7 +105,9 @@ function addDays(d, n) {
 }
 
 // 빠지는 날(0부터 센 날 번호) 4개: 1일짜리 2번 + 2일짜리 1번, 겹치거나 붙지 않게(span일 묶음 하나 안에서)
+// span이 10일보다 짧으면 빠지는 날 없음(7일 미만이면 넣을 자리가 없어 끝나지 않고, 짧은 묶음에 4일은 너무 촘촘함)
 function pickSkips(rng, span = DAYS) {
+  if (span < 10) return new Set();
   for (;;) {
     const lens = [2, 1, 1];
     const skip = new Set();
@@ -124,14 +127,16 @@ function pickAllSkips(rng, days) {
   const all = new Set();
   for (let b = 0; b < days; b += DAYS) {
     const span = Math.min(DAYS, days - b);
-    if (span < 10) break;   // 너무 짧은 끝 묶음은 빠지는 날 없이(3번을 띄워 넣을 자리가 없음)
     for (const x of pickSkips(rng, span)) all.add(b + x);
   }
   return all;
 }
 
-// 지금 살 수 있는(canBuy ok) 가장 싼 상품. 값이 같으면 표 순서(sort는 안정 정렬)
-const BY_PRICE = [...SHOP_ITEMS].sort((a, b) => a.price - b.price);
+// 사는 순서(설계 §5-6): 값이 싼 것부터, 값이 같으면 의상 먼저, 그다음 표 순서(sort는 안정 정렬).
+// 의상 먼저가 빠지면 「종이」·울타리(100)가 캐주얼룩(100)보다 먼저 팔려 첫 의상 판정이 밖으로 나간다(작업 3 검토 I2).
+export const buyOrder = (items) => [...items].sort((a, b) => a.price - b.price || (b.kind === "outfit") - (a.kind === "outfit"));
+const BY_PRICE = buyOrder(SHOP_ITEMS);
+// 지금 살 수 있는(canBuy ok) 가장 싼 상품
 const cheapestBuyable = (save) => BY_PRICE.find((i) => canBuy(save, i.id).ok) || null;
 
 export function runSim(seed, { policy = "plan", lessons = null, advanced = false, daily: withDaily = false, garden: withGarden = false, days = DAYS } = {}) {
@@ -425,7 +430,7 @@ function main() {
   console.log("12판뿐이라 중앙값은 판마다 흔들릴 수 있음(빠지는 날 위치·정확도 무작위).");
   const allOk = verdicts.every(([, ok]) => ok);
   // 종료 코드는 기준 판(--lessons 없이 전체 과정)에만 건다. --lessons N은 옛 판 재현용이라 목표가 다르다.
-  if (lessons === null) {
+  if (lessons === null || lessons >= FULL_COURSE.length) {
     console.log(allOk ? "판정 OK" : "판정 밖 — 종료 코드 1");
     if (!allOk) process.exitCode = 1;
   } else {

@@ -1,6 +1,7 @@
 // 작업 2: 하루 XP·연속 기록·보호권(rollDay) 시험 — 날짜는 언제나 문자열로 주입
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { levelGift } from "../../src/levels.js";
 import { addDailyXp, rollDay, applyMilestones, earnXp, isDate } from "../../src/rules.js";
 
 function fixture(over = {}) {
@@ -252,7 +253,8 @@ test("M7: 6 → 7일 달성하면 +50바이트, 한 번만", () => {
   assert.equal(r.save.bytes, 53);
   const r2 = earnXp(r.save, 20, "2026-10-29");
   assert.equal(r2.milestone, null);
-  assert.equal(r2.save.bytes, 53 + (r2.levelUp ? r2.levelUp.bytes : 0)); // v0.22.0: 레벨업 선물(XP 40 = Lv 2)은 이정표와 따로
+  assert.ok(r2.levelUp, "XP 40 = Lv 2");
+  assert.equal(r2.save.bytes, 53 + levelGift(2)); // v0.22.0: 레벨업 선물은 이정표와 따로
 });
 
 test("M7_again: 끊긴 뒤 다시 7일 (best ≥ 7) → 보상 없음", () => {
